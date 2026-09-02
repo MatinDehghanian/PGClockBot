@@ -178,17 +178,20 @@ class PanelStatusPageTests(unittest.TestCase):
             pwa_name="MrClockBot",
         )
         self.assertIn("panel-status", html)
+        self.assertIn("panel-status-card", html)
         self.assertIn("خطای داخلی سرور", html)
-        self.assertIn("ref abc12345", html)
+        self.assertIn("abc12345", html)
+        self.assertIn(">ref<", html)
         self.assertIn("fonts.css", html)
         self.assertIn("panel.css", html)
 
     def test_status_css_tokens(self):
         css = CSS.read_text(encoding="utf-8")
         self.assertIn(".panel-status {", css)
-        self.assertIn(".panel-status-glow", css)
-        self.assertIn(".panel-status-code", css)
-        self.assertIn("panel-status-in", css)
+        self.assertIn(".panel-status-card", css)
+        self.assertIn(".panel-status-watermark", css)
+        self.assertIn(".panel-status-badge", css)
+        self.assertIn("panel-status-card-in", css)
 
     def test_app_uses_branded_status_not_inline_tahoma(self):
         src = APP_PY.read_text(encoding="utf-8")

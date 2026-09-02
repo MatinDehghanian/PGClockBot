@@ -25,7 +25,12 @@
 </head>
 <body class="panel-status-body">
   <div class="panel-status" data-status="{{ code }}">
-    <div class="panel-status-glow" aria-hidden="true"></div>
+    <div class="panel-status-atmosphere" aria-hidden="true">
+      <span class="panel-status-orb panel-status-orb-a"></span>
+      <span class="panel-status-orb panel-status-orb-b"></span>
+      <span class="panel-status-grid"></span>
+    </div>
+
     <header class="panel-status-brand">
       <img class="panel-status-logo" src="/static/logo-64.png" alt="" width="40" height="40" />
       <div class="panel-status-brand-text">
@@ -34,21 +39,48 @@
       </div>
     </header>
 
-    <main class="panel-status-main">
-      <p class="panel-status-code" dir="ltr" aria-hidden="true">{{ code }}</p>
-      <h1 class="panel-status-title">{{ title }}</h1>
-      <p class="panel-status-msg muted">{{ message }}</p>
-      {% if ref %}
-      <p class="panel-status-ref muted" dir="ltr">ref {{ ref }}</p>
-      {% endif %}
-      <div class="panel-status-actions">
-        {% if primary_href %}
-        <a class="btn" href="{{ primary_href }}">{{ primary_label }}</a>
+    <main class="panel-status-stage">
+      <article class="panel-status-card" aria-labelledby="panel-status-title">
+        <div class="panel-status-card-accent" aria-hidden="true"></div>
+        <p class="panel-status-watermark" dir="ltr" aria-hidden="true">{{ code }}</p>
+
+        <div class="panel-status-badge" aria-hidden="true">
+          {% if code == 404 %}
+          <svg class="panel-status-badge-ico" viewBox="0 0 24 24" fill="none">
+            <circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.6"/>
+            <path d="M16 16l4.2 4.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+            <path d="M9 11h4M11 9v4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          </svg>
+          {% elif code == 500 %}
+          <svg class="panel-status-badge-ico" viewBox="0 0 24 24" fill="none">
+            <path d="M12 8v5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+            <circle cx="12" cy="16.2" r="1" fill="currentColor"/>
+            <path d="M10.2 4.8 3.6 17.1A2 2 0 0 0 5.4 20h13.2a2 2 0 0 0 1.8-2.9L13.8 4.8a2 2 0 0 0-3.6 0Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+          </svg>
+          {% else %}
+          <svg class="panel-status-badge-ico" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.6"/>
+            <path d="M12 8v5M12 16.2h.01" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+          </svg>
+          {% endif %}
+        </div>
+
+        <p class="panel-status-kicker muted" dir="ltr">HTTP {{ code }}</p>
+        <h1 class="panel-status-title" id="panel-status-title">{{ title }}</h1>
+        <p class="panel-status-msg muted">{{ message }}</p>
+        {% if ref %}
+        <p class="panel-status-ref" dir="ltr"><span class="muted">ref</span> {{ ref }}</p>
         {% endif %}
-        {% if secondary_href %}
-        <a class="btn btn-ghost" href="{{ secondary_href }}">{{ secondary_label }}</a>
-        {% endif %}
-      </div>
+
+        <div class="panel-status-actions">
+          {% if primary_href %}
+          <a class="btn" href="{{ primary_href }}">{{ primary_label }}</a>
+          {% endif %}
+          {% if secondary_href %}
+          <a class="btn btn-ghost" href="{{ secondary_href }}">{{ secondary_label }}</a>
+          {% endif %}
+        </div>
+      </article>
     </main>
 
     <footer class="panel-status-foot muted">

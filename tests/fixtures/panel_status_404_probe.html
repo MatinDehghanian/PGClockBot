@@ -8,22 +8,37 @@
 </head>
 <body class="panel-status-body">
   <div class="panel-status" data-status="404">
-    <div class="panel-status-glow" aria-hidden="true"></div>
+    <div class="panel-status-atmosphere" aria-hidden="true">
+      <span class="panel-status-orb panel-status-orb-a"></span>
+      <span class="panel-status-orb panel-status-orb-b"></span>
+      <span class="panel-status-grid"></span>
+    </div>
     <header class="panel-status-brand">
       <img class="panel-status-logo" src="../../app/web/static/logo-64.png" alt="" width="40" height="40" />
       <div class="panel-status-brand-text">
         <strong dir="ltr">MrClockBot</strong>
-        <span class="muted" dir="ltr">v9.0.0</span>
+        <span class="muted" dir="ltr">v9.0.1</span>
       </div>
     </header>
-    <main class="panel-status-main">
-      <p class="panel-status-code" dir="ltr">404</p>
-      <h1 class="panel-status-title">صفحه پیدا نشد</h1>
-      <p class="panel-status-msg muted">این آدرس وجود ندارد یا جابه‌جا شده است.</p>
-      <div class="panel-status-actions">
-        <a class="btn" href="#">بازگشت به داشبورد</a>
-        <a class="btn btn-ghost" href="#">صفحه ورود</a>
-      </div>
+    <main class="panel-status-stage">
+      <article class="panel-status-card">
+        <div class="panel-status-card-accent" aria-hidden="true"></div>
+        <p class="panel-status-watermark" dir="ltr" aria-hidden="true">404</p>
+        <div class="panel-status-badge" aria-hidden="true">
+          <svg class="panel-status-badge-ico" viewBox="0 0 24 24" fill="none">
+            <circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.6"/>
+            <path d="M16 16l4.2 4.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+            <path d="M9 11h4M11 9v4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <p class="panel-status-kicker muted" dir="ltr">HTTP 404</p>
+        <h1 class="panel-status-title">صفحه پیدا نشد</h1>
+        <p class="panel-status-msg muted">این آدرس وجود ندارد یا جابه‌جا شده است.</p>
+        <div class="panel-status-actions">
+          <a class="btn" href="#">بازگشت به داشبورد</a>
+          <a class="btn btn-ghost" href="#">صفحه ورود</a>
+        </div>
+      </article>
     </main>
     <footer class="panel-status-foot muted">اگر مشکل ادامه داشت، از حساب خارج شوید و دوباره وارد شوید.</footer>
   </div>
