@@ -22,6 +22,11 @@ class NumStepperUiTests(unittest.TestCase):
         self.assertIn(".num-stepper {", css)
         self.assertIn(".num-stepper-btn", css)
         self.assertIn(".num-stepper-input", css)
+        self.assertIn("text-align: center", css)
+        # Circular ± buttons inset inside the outer capsule
+        btn = css.split(".num-stepper-btn {", 1)[1].split("}", 1)[0]
+        self.assertIn("border-radius: 999px", btn)
+        self.assertIn("text-align: center", css.split(".num-stepper-input {", 1)[1].split("}", 1)[0])
 
         js = (ROOT / "app/web/static/panel.js").read_text(encoding="utf-8")
         self.assertIn("[data-num-stepper]", js)
