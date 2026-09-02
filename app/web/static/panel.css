@@ -1205,7 +1205,7 @@ textarea[dir="ltr"] {
   -webkit-text-fill-color: var(--placeholder);
 }
 /* Number / search / all text controls: force physical right (browser UA often left-biases) */
-input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="image"]),
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="image"]):not(.num-stepper-input),
 textarea {
   text-align: right;
 }
@@ -9854,7 +9854,10 @@ html[data-theme="light"] .table-bulk-op.btn-danger .table-bulk-op-count {
   outline-offset: 1px;
   z-index: 1;
 }
-.num-stepper-input {
+/* Beat global input[dir=ltr] { text-align: right } — value must stay centered */
+.num-stepper .num-stepper-input,
+.form-field > .num-stepper > .num-stepper-input,
+input.num-stepper-input[dir="ltr"] {
   flex: 1 1 auto;
   width: 4.5rem;
   min-width: 3rem;
@@ -9865,7 +9868,9 @@ html[data-theme="light"] .table-bulk-op.btn-danger .table-bulk-op-count {
   border-radius: 0;
   background: transparent;
   color: var(--foreground);
+  direction: ltr;
   text-align: center;
+  text-align-last: center;
   font-variant-numeric: tabular-nums;
   font-size: 13px;
   font-weight: 600;
@@ -9874,7 +9879,9 @@ html[data-theme="light"] .table-bulk-op.btn-danger .table-bulk-op-count {
   -moz-appearance: textfield;
   appearance: textfield;
 }
-.num-stepper-input:focus {
+.num-stepper .num-stepper-input:focus,
+.form-field > .num-stepper > .num-stepper-input:focus,
+input.num-stepper-input[dir="ltr"]:focus {
   outline: none;
   background: color-mix(in srgb, var(--primary) 8%, transparent);
   border-radius: 8px;
