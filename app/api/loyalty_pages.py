@@ -36,6 +36,7 @@ from app.services.lucky_wheel import (
     SETTING_WHEEL_ENABLED,
     archive_prize,
     clamp_int,
+    get_wheel_settings,
     list_prizes,
     list_recent_spins,
     overview_wheel_metrics,
@@ -74,6 +75,79 @@ def _reward_in_scope(reward: LoyaltyReward, scope: int | None) -> bool:
     return reward.reseller_id is not None and int(reward.reseller_id) == int(scope)
 
 
+def _empty_wheel_context() -> dict:
+    """Safe defaults when wheel tables/settings cannot be loaded."""
+    order = ",".join(DEFAULT_SUBMENU_ORDER)
+    return {
+        "wheel_metrics": {
+            "wheel_enabled": False,
+            "active_prizes": 0,
+            "total_spins": 0,
+            "spin_cost": 10,
+        },
+        "lucky_wheel_enabled": "0",
+        "lucky_wheel_spin_cost_points": 10,
+        "lucky_wheel_daily_limit": 3,
+        "lucky_wheel_cooldown_seconds": 0,
+        "lucky_wheel_free_spins_daily": 0,
+        "loyalty_submenu_order": order,
+        "wheel_prizes": [],
+        "wheel_spins": [],
+        "wheel_prize_type_labels": WHEEL_PRIZE_TYPE_LABELS,
+    }
+
+
+async def _wheel_panel_context(
+    session: AsyncSession, *, reseller_id: int | None
+) -> dict:
+    """Context for loyalty.html + wheel modal. Fail-soft if migration pending."""
+    import logging
+
+    try:
+        cfg = await get_wheel_settings(session, reseller_id=reseller_id)
+        metrics = await overview_wheel_metrics(session, reseller_id=reseller_id)
+        prizes = await list_prizes(
+            session, reseller_id=reseller_id, include_archived=True
+        )
+        spin_rows = await list_recent_spins(session, reseller_id=reseller_id, limit=40)
+        user_ids = {int(s.user_id) for s in spin_rows}
+        users: dict[int, BotUser] = {}
+        if user_ids:
+            rows = (
+                await session.execute(select(BotUser).where(BotUser.id.in_(user_ids)))
+            ).scalars().all()
+            users = {int(u.id): u for u in rows}
+        spins = [
+            {
+                "id": s.id,
+                "user_label": bot_user_panel_label(
+                    users.get(int(s.user_id)), fallback_id=int(s.user_id)
+                ),
+                "prize_label_snapshot": s.prize_label_snapshot,
+                "prize_type": s.prize_type,
+                "cost_points": s.cost_points,
+                "used_free_spin": bool(s.used_free_spin),
+                "status": s.status,
+            }
+            for s in spin_rows
+        ]
+        return {
+            "wheel_metrics": metrics,
+            "lucky_wheel_enabled": "1" if cfg["enabled"] else "0",
+            "lucky_wheel_spin_cost_points": int(cfg["spin_cost"]),
+            "lucky_wheel_daily_limit": int(cfg["daily_limit"]),
+            "lucky_wheel_cooldown_seconds": int(cfg["cooldown_seconds"]),
+            "lucky_wheel_free_spins_daily": int(cfg["free_spins_daily"]),
+            "loyalty_submenu_order": ",".join(cfg["submenu_order"]),
+            "wheel_prizes": prizes,
+            "wheel_spins": spins,
+            "wheel_prize_type_labels": WHEEL_PRIZE_TYPE_LABELS,
+        }
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "loyalty wheel context failed (migration pending?)"
+        )
+        return _empty_wheel_context()
 
 
 def _wheel_redirect(err: str | None = None, *, saved: bool = False) -> RedirectResponse:
@@ -158,7 +232,7 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
         )
         page_tab = tab or "overview"
         # Legacy page tabs moved into the settings modal.
-        if page_tab in {"settings", "rules", "rewards", "tiers"}:
+        if page_tab in {"settings", "rules", "rewards", "tiers", "wheel"}:
             settings_key = "1" if page_tab == "settings" else page_tab
             return RedirectResponse(
                 f"/loyalty?tab=overview&settings={settings_key}", status_code=303
@@ -174,9 +248,19 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
         )
         ref_names = (TAB_SETTING_GROUPS.get("loyalty") or []) if can_edit_referral_text else []
         settings_q = (request.query_params.get("settings") or "").strip()
-        settings_tabs = {"1", "true", "yes", "club", "referral", "rules", "rewards", "tiers"}
+        settings_tabs = {
+            "1",
+            "true",
+            "yes",
+            "club",
+            "referral",
+            "rules",
+            "rewards",
+            "tiers",
+            "wheel",
+        }
         open_settings = settings_q in settings_tabs
-        if settings_q in {"rules", "rewards", "tiers"}:
+        if settings_q in {"rules", "rewards", "tiers", "wheel"}:
             loyalty_settings_tab = settings_q
         elif settings_q == "referral" and can_edit_referral_text:
             loyalty_settings_tab = "referral"
@@ -195,6 +279,8 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
             flash_ok = request.query_params.get("msg") or "ذخیره شد."
         elif request.query_params.get("ok"):
             flash_ok = request.query_params.get("ok")
+
+        wheel_ctx = await _wheel_panel_context(session, reseller_id=scope)
 
         return render(
             request,
@@ -223,6 +309,7 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
                     n: SETTING_GROUPS[n] for n in ref_names if n in SETTING_GROUPS
                 },
                 "referral_text_action": referral_text_action,
+                **wheel_ctx,
             },
         )
 

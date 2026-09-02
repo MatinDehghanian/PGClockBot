@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="color-scheme" content="dark light" />
+  <meta name="theme-color" content="#09090b" id="meta-theme-color" />
+  <title>{{ title }} · {{ pwa_name|default('MrClockBot') }}</title>
+  <script>
+  (function () {
+    try {
+      var d = document.documentElement;
+      var pref = localStorage.getItem("panel-theme") || "system";
+      var dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      var theme = pref === "light" ? "light" : pref === "dark" ? "dark" : dark ? "dark" : "light";
+      d.setAttribute("data-theme", theme);
+      var meta = document.getElementById("meta-theme-color");
+      if (meta) meta.setAttribute("content", theme === "light" ? "#fafafa" : "#09090b");
+    } catch (e) {}
+  })();
+  </script>
+  <link rel="stylesheet" href="/static/fonts.css?v={{ app_version }}" />
+  <link rel="stylesheet" href="/static/panel.css?v={{ app_version }}" />
+  <link rel="icon" href="/static/logo-64.png" type="image/png" />
+</head>
+<body class="panel-status-body">
+  <div class="panel-status" data-status="{{ code }}">
+    <div class="panel-status-glow" aria-hidden="true"></div>
+    <header class="panel-status-brand">
+      <img class="panel-status-logo" src="/static/logo-64.png" alt="" width="40" height="40" />
+      <div class="panel-status-brand-text">
+        <strong dir="ltr">{{ pwa_name|default('MrClockBot') }}</strong>
+        <span class="muted" dir="ltr">v{{ app_version }}</span>
+      </div>
+    </header>
+
+    <main class="panel-status-main">
+      <p class="panel-status-code" dir="ltr" aria-hidden="true">{{ code }}</p>
+      <h1 class="panel-status-title">{{ title }}</h1>
+      <p class="panel-status-msg muted">{{ message }}</p>
+      {% if ref %}
+      <p class="panel-status-ref muted" dir="ltr">ref {{ ref }}</p>
+      {% endif %}
+      <div class="panel-status-actions">
+        {% if primary_href %}
+        <a class="btn" href="{{ primary_href }}">{{ primary_label }}</a>
+        {% endif %}
+        {% if secondary_href %}
+        <a class="btn btn-ghost" href="{{ secondary_href }}">{{ secondary_label }}</a>
+        {% endif %}
+      </div>
+    </main>
+
+    <footer class="panel-status-foot muted">
+      اگر مشکل ادامه داشت، از حساب خارج شوید و دوباره وارد شوید.
+    </footer>
+  </div>
+</body>
+</html>

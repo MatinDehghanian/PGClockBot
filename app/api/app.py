@@ -18,6 +18,7 @@ from itsdangerous import BadSignature, BadTimeSignature, URLSafeTimedSerializer
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.config import DATA_DIR, get_settings, normalize_pg_base_url
 from app.db.models import (
@@ -919,6 +920,92 @@ def create_api_app(lifespan=None) -> FastAPI:
             return RedirectResponse("/home", status_code=303)
         return RedirectResponse("/home", status_code=303)
 
+    def _status_page(
+        request: Request,
+        *,
+        code: int,
+        title: str,
+        message: str,
+        ref: str | None = None,
+        primary_href: str = "/home",
+        primary_label: str = "بازگشت به داشبورد",
+        secondary_href: str = "/logout",
+        secondary_label: str = "خروج",
+    ):
+        from app.version import __version__ as _ver
+
+        try:
+            from app.services.pwa import panel_display_name
+
+            pname = panel_display_name()
+        except Exception:
+            pname = "MrClockBot"
+        return templates.TemplateResponse(
+            request,
+            "panel_status.html",
+            {
+                "code": code,
+                "title": title,
+                "message": message,
+                "ref": ref,
+                "primary_href": primary_href,
+                "primary_label": primary_label,
+                "secondary_href": secondary_href,
+                "secondary_label": secondary_label,
+                "app_version": _ver,
+                "pwa_name": pname,
+            },
+            status_code=code,
+        )
+
+    @app.exception_handler(StarletteHTTPException)
+    async def _http_exc(request: Request, exc: StarletteHTTPException):
+        accept = (request.headers.get("accept") or "").lower()
+        wants_json = (
+            "application/json" in accept
+            or request.url.path.startswith("/api")
+            or request.url.path.endswith(".json")
+        )
+        if wants_json:
+            detail = exc.detail if isinstance(exc.detail, (str, dict, list)) else "خطا"
+            return JSONResponse({"detail": detail}, status_code=exc.status_code)
+        if exc.status_code == 404:
+            return _status_page(
+                request,
+                code=404,
+                title="صفحه پیدا نشد",
+                message="این آدرس وجود ندارد یا جابه‌جا شده است.",
+                primary_href="/home",
+                primary_label="بازگشت به داشبورد",
+                secondary_href="/login",
+                secondary_label="صفحه ورود",
+            )
+        if exc.status_code in {401, 403}:
+            return _status_page(
+                request,
+                code=exc.status_code,
+                title="دسترسی مجاز نیست",
+                message="برای دیدن این بخش وارد شوید یا سطح دسترسی کافی ندارید.",
+                primary_href="/login",
+                primary_label="صفحه ورود",
+                secondary_href="/logout",
+                secondary_label="خروج",
+            )
+        # Other HTTP errors → branded status without leaking details
+        msg = "درخواست قابل انجام نیست."
+        if isinstance(exc.detail, str) and exc.detail and len(exc.detail) < 120:
+            # Only safe short Persian product messages (no traces)
+            if not any(c in exc.detail for c in ("\n", "Traceback", "/", "\\")):
+                msg = exc.detail
+        return _status_page(
+            request,
+            code=exc.status_code,
+            title="خطا",
+            message=msg,
+            primary_href="/home",
+            primary_label="بازگشت به داشبورد",
+        )
+
     @app.exception_handler(Exception)
     async def _unhandled(request: Request, exc: Exception):
         """Last-resort HTML/JSON 500 — log server-side only; never echo secrets/traces."""
@@ -944,19 +1031,16 @@ def create_api_app(lifespan=None) -> FastAPI:
             return JSONResponse(
                 {"detail": "خطای داخلی سرور", "ref": ref}, status_code=500
             )
-        return HTMLResponse(
-            "<!DOCTYPE html><html lang='fa' dir='rtl'><head><meta charset='utf-8'/>"
-            "<meta name='viewport' content='width=device-width,initial-scale=1'/>"
-            "<title>خطای داخلی</title></head><body style='font-family:Tahoma,sans-serif;"
-            "max-width:28rem;margin:4rem auto;padding:0 1rem;line-height:1.8;color:#18181b;"
-            "text-align:center'>"
-            "<h1 style='font-size:1.35rem'>خطای داخلی سرور</h1>"
-            "<p style='color:#52525b'>مشکلی پیش آمد. چند لحظه دیگر دوباره تلاش کنید.</p>"
-            f"<p style='color:#a1a1aa;font-size:13px' dir='ltr'>ref {ref}</p>"
-            "<p><a href='/login' style='color:#2563eb'>صفحه ورود</a>"
-            " · <a href='/logout' style='color:#2563eb'>خروج</a></p>"
-            "</body></html>",
-            status_code=500,
+        return _status_page(
+            request,
+            code=500,
+            title="خطای داخلی سرور",
+            message="مشکلی پیش آمد. چند لحظه دیگر دوباره تلاش کنید.",
+            ref=ref,
+            primary_href="/login",
+            primary_label="صفحه ورود",
+            secondary_href="/logout",
+            secondary_label="خروج",
         )
 
     register_home_pages(
