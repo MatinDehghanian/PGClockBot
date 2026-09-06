@@ -116,6 +116,10 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "buy_continue", "label": "ادامه خرید / تأیید پلن", "group": "فروشگاه", "default": "primary"},
     {"id": "force_join_check", "label": "عضو شدم (کانال اجباری)", "group": "فروشگاه", "default": "primary"},
     {"id": "one_tap_renew", "label": "تمدید یک‌ضربی (هشدار انقضا)", "group": "فروشگاه", "default": "primary"},
+    # Terms/rules accept buttons — own group (also editable on تنظیمات ← قوانین)
+    {"id": "terms_entry", "label": "موافقم (قوانین ورود)", "group": "قوانین", "default": "primary"},
+    {"id": "terms_buy_user", "label": "موافقم (قوانین خرید کاربر)", "group": "قوانین", "default": "primary"},
+    {"id": "terms_buy_reseller", "label": "موافقم (قوانین خرید نماینده)", "group": "قوانین", "default": "primary"},
     # Reseller audience plans (admin configures kinds; submenu rows inherit these colors)
     {
         "id": "plan_res_fixed",
@@ -474,6 +478,7 @@ SHARED_GROUPS: frozenset[str] = frozenset(
         "منوی اصلی",
         "زیرمنوها",
         "فروشگاه",
+        "قوانین",
         "پرداخت",
         "باشگاه مشتریان",
     }
@@ -646,6 +651,7 @@ def sectioned_catalog(
         "منوی اصلی",
         "زیرمنوها",
         "فروشگاه",
+        "قوانین",
         "پرداخت",
         "باشگاه مشتریان",
     ]
@@ -682,7 +688,7 @@ def sectioned_catalog(
 
 
 COLORS_PAGE_TABS: list[tuple[str, str, list[str]]] = [
-    ("user", "کاربر", ["دکمه‌های سراسری", "منوی اصلی", "زیرمنوها", "فروشگاه", "باشگاه مشتریان"]),
+    ("user", "کاربر", ["دکمه‌های سراسری", "منوی اصلی", "زیرمنوها", "فروشگاه", "قوانین", "باشگاه مشتریان"]),
     ("payment", "پرداخت", ["پرداخت"]),
     ("admin", "ادمین", [
         "پلن نمایندگی",
@@ -726,7 +732,7 @@ def colors_page_grouped_sections(
         if not groups:
             continue
         if tab_id == "user":
-            caption = "منوی اصلی، خرید و باشگاه مشتریان."
+            caption = "منوی اصلی، خرید، قوانین و باشگاه مشتریان."
         elif tab_id == "payment":
             caption = "روش‌های پرداخت و شارژ کیف پول."
         elif tab_id == "admin":
