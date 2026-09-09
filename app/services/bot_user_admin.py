@@ -16,7 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.db.models import BotUser, Plan, UserService, WalletTransaction
+from app.db.models import BotUser, Plan, Role, UserService, WalletTransaction
 from app.services.formatting import (
     expire_remaining_days,
     format_bytes,
@@ -37,6 +37,8 @@ GB = 1024**3
 MAX_ADMIN_WALLET_CREDIT = 50_000_000  # 50M toman hard cap per op
 MAX_EXTEND_DAYS = 3650
 MAX_EXTEND_GB = 10_000
+MIN_TELEGRAM_ID = 1
+MAX_TELEGRAM_ID = 9_007_199_254_740_991  # signed int64 safe upper bound
 
 
 @dataclass(frozen=True)
@@ -163,6 +165,230 @@ async def list_service_snapshots(
         out.append(await service_snapshot(session, svc))
     await session.commit()  # persist refreshed subscription urls
     return out
+
+
+def _plan_matches_user_shop(plan: Plan, user: BotUser) -> bool:
+    """Plan catalog tenant must match the bot user's shop ownership."""
+    user_rid = user.reseller_id
+    plan_rid = plan.owner_reseller_id
+    if user_rid is None:
+        return plan_rid is None
+    return plan_rid is not None and int(plan_rid) == int(user_rid)
+
+
+def _normalize_telegram_username(raw: str | None) -> str | None:
+    if not raw:
+        return None
+    name = str(raw).strip().lstrip("@")[:64]
+    return name or None
+
+
+async def admin_create_bot_user(
+    session: AsyncSession,
+    *,
+    telegram_id: int,
+    username: str | None = None,
+    full_name: str | None = None,
+    reseller_id: int | None = None,
+) -> BotUser:
+    """Create a shop BotUser manually (web panel). Always role=user."""
+    import secrets
+    import string
+
+    try:
+        tid = int(telegram_id)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("شناسه تلگرام نامعتبر است") from exc
+    if tid < MIN_TELEGRAM_ID or tid > MAX_TELEGRAM_ID:
+        raise ValueError("شناسه تلگرام نامعتبر است")
+
+    from app.services.platform_identity import deliverable_telegram_id
+
+    if deliverable_telegram_id(tid) is None:
+        raise ValueError("شناسه تلگرام باید عدد مثبت واقعی باشد")
+
+    existing = (
+        await session.execute(select(BotUser).where(BotUser.telegram_id == tid))
+    ).scalar_one_or_none()
+    if existing is not None:
+        raise ValueError("این شناسه تلگرام قبلاً ثبت شده است")
+
+    if reseller_id is not None:
+        try:
+            rid = int(reseller_id)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("فروشگاه نامعتبر است") from exc
+        if rid <= 0:
+            raise ValueError("فروشگاه نامعتبر است")
+        owner = await session.get(BotUser, rid)
+        if owner is None or owner.role != Role.RESELLER.value:
+            raise ValueError("نماینده فروشگاه یافت نشد")
+        assign_reseller = rid
+    else:
+        assign_reseller = None
+
+    alphabet = string.ascii_uppercase + string.digits
+    referral_code = "".join(secrets.choice(alphabet) for _ in range(8))
+
+    user = BotUser(
+        telegram_id=tid,
+        username=_normalize_telegram_username(username),
+        full_name=(str(full_name).strip()[:255] if full_name else None) or None,
+        role=Role.USER.value,
+        referral_code=referral_code,
+        reseller_id=assign_reseller,
+    )
+    session.add(user)
+    await session.commit()
+    await session.refresh(user)
+    return user
+
+
+async def admin_provision_service(
+    session: AsyncSession,
+    user: BotUser,
+    plan: Plan,
+    *,
+    staff: dict | None = None,
+    actor: str | None = None,
+) -> UserService:
+    """Assign a new VPN service (PG user + UserService) without an order."""
+    import time
+
+    from app.services.orders import _reseller_pg_link, generate_pg_username
+    from app.services.pasarguard import (
+        build_user_create_payload,
+        extract_sub_token,
+        parse_group_ids,
+    )
+    from app.services.plans_catalog import plan_belongs_to_staff
+    from app.services.provision_gate import ProvisionError, assert_provision_create
+
+    if not plan.is_active:
+        raise ValueError("پلن غیرفعال است")
+    if plan.is_trial:
+        raise ValueError("پلن تست برای اختصاص دستی مجاز نیست")
+    if not _plan_matches_user_shop(plan, user):
+        raise ValueError("این پلن متعلق به فروشگاه این کاربر نیست")
+    if staff is not None and not plan_belongs_to_staff(plan, staff):
+        raise ValueError("دسترسی به این پلن ندارید")
+
+    shop_rid = int(user.reseller_id) if user.reseller_id else None
+    if shop_rid:
+        from app.services.pasarguard import get_pg_for_reseller
+
+        pg = await get_pg_for_reseller(session, shop_rid)
+    else:
+        from app.services.pasarguard import get_pg
+
+        pg = get_pg()
+
+    pg_owner, pg_role_id = await _reseller_pg_link(session, shop_rid)
+    data_limit = None
+    expire = None
+    if plan.data_limit_gb is not None:
+        data_limit = int(float(plan.data_limit_gb) * GB)
+    if plan.duration_days:
+        expire = int(time.time()) + int(plan.duration_days) * 86400
+
+    if shop_rid:
+        try:
+            await assert_provision_create(
+                session,
+                staff=staff,
+                reseller_user_id=shop_rid,
+                pg_admin_username=pg_owner,
+                pg_role_id=pg_role_id,
+                data_limit=data_limit,
+                expire_ts=expire,
+                from_template=bool(plan.pg_template_id),
+                quantity=1,
+            )
+        except ProvisionError as e:
+            raise ValueError(e.message) from e
+
+    group_ids = None
+    if not plan.pg_template_id:
+        group_ids = parse_group_ids(getattr(plan, "pg_group_ids", None))
+        if not group_ids:
+            raise ValueError(
+                "هیچ گروهی برای ساخت کاربر انتخاب نشده — در وب‌پنل برای پلن، گروه پاسارگارد را انتخاب کنید"
+            )
+
+    actor_label = (actor or "admin")[:64]
+    note = f"PGClockBot manual assign by {actor_label}"
+
+    username = await generate_pg_username(
+        session,
+        user_id=int(user.id),
+        plan=plan,
+        reseller_id=shop_rid,
+    )
+
+    pg_uid: int | None = None
+    try:
+        if plan.pg_template_id:
+            pg_user = await pg.create_user_from_template(
+                {
+                    "username": username,
+                    "user_template_id": plan.pg_template_id,
+                    "note": note,
+                }
+            )
+        else:
+            pg_user = await pg.create_user(
+                build_user_create_payload(
+                    username=username,
+                    group_ids=group_ids or [],
+                    data_limit=data_limit,
+                    expire_ts=expire,
+                    note=note,
+                )
+            )
+        raw_uid = pg_user.get("id") if isinstance(pg_user, dict) else None
+        if raw_uid:
+            pg_uid = int(raw_uid)
+
+        if shop_rid and getattr(pg, "_login_username", None) is None:
+            owner_name = (pg_owner or "").strip()
+            if not owner_name or not pg_uid:
+                raise ValueError(
+                    "کاربر ساخته شد ولی مالکیت قابل تنظیم نیست — اختصاص لغو شد"
+                )
+            await pg.set_owner_by_id(int(pg_uid), owner_name)
+        elif shop_rid and not pg_uid:
+            raise ValueError("ساخت کاربر پاسارگارد شناسه برنگرداند — اختصاص لغو شد")
+
+        sub_url = pg_user.get("subscription_url") if isinstance(pg_user, dict) else None
+        service = UserService(
+            bot_user_id=int(user.id),
+            plan_id=int(plan.id),
+            pg_user_id=pg_uid,
+            pg_username=(pg_user.get("username", username) if isinstance(pg_user, dict) else username),
+            subscription_url=sub_url,
+            subscription_token=extract_sub_token(sub_url),
+            remark=f"manual:{actor_label}",
+        )
+        if isinstance(pg_user, dict):
+            sync_service_quota_cache(service, pg_user)
+        else:
+            sync_service_quota_cache(
+                service, expire_ts=expire, data_limit_bytes=data_limit
+            )
+        session.add(service)
+        await session.commit()
+        await session.refresh(service)
+        return service
+    except Exception:
+        if pg_uid:
+            try:
+                await pg.delete_user_by_id(int(pg_uid))
+            except Exception:
+                logger.debug(
+                    "rollback PG user failed uid=%s", pg_uid, exc_info=True
+                )
+        await session.rollback()
+        raise
 
 
 async def admin_credit_user_wallet(

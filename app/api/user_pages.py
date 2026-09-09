@@ -86,6 +86,87 @@ async def _require_scoped_user(
 def register_user_pages(app, *, render, require_admin, get_db, require_perm=None) -> None:
     require_ops = require_perm("dashboard") if require_perm else require_admin
 
+    @app.post("/users/create")
+    async def user_create(
+        request: Request,
+        staff: dict = Depends(require_admin),
+        session: AsyncSession = Depends(get_db),
+    ):
+        from app.services.bot_user_admin import admin_create_bot_user
+        from app.services.shop_scope import ShopScopeError, resolve_shop_scope_id
+        from app.services.users_ops import users_list_href
+
+        try:
+            scope = resolve_shop_scope_id(staff)
+        except ShopScopeError as e:
+            return RedirectResponse(f"/users?err={_q(e.message)}", status_code=303)
+
+        form = await request.form()
+        raw_tid = str(form.get("telegram_id") or "").strip()
+        username = str(form.get("username") or "").strip() or None
+        full_name = str(form.get("full_name") or "").strip() or None
+        try:
+            telegram_id = int(raw_tid)
+        except (TypeError, ValueError):
+            return _redirect_list_form(form, err="شناسه تلگرام نامعتبر است")
+
+        try:
+            user = await admin_create_bot_user(
+                session,
+                telegram_id=telegram_id,
+                username=username,
+                full_name=full_name,
+                reseller_id=scope,
+            )
+        except ValueError as e:
+            return _redirect_list_form(form, err=str(e), uid=None)
+        except Exception:
+            return _redirect_list_form(form, err="ساخت کاربر ناموفق بود")
+
+        fk, q = _list_return_from_form(form)
+        href = users_list_href(filter_key=fk, uid=int(user.id), q=q)
+        href += ("&" if "?" in href else "?") + f"ok={_q('کاربر جدید ساخته شد')}&edit={int(user.id)}"
+        return RedirectResponse(href, status_code=303)
+
+    @app.post("/users/{user_id}/services")
+    async def user_provision_service(
+        user_id: int,
+        request: Request,
+        staff: dict = Depends(require_admin),
+        session: AsyncSession = Depends(get_db),
+    ):
+        from app.services.bot_user_admin import admin_provision_service
+        from app.services.notifications import actor_label_from_staff
+        from app.services.plans_catalog import get_owned_plan
+
+        loaded = await _require_scoped_user(session, staff, user_id)
+        if isinstance(loaded, RedirectResponse):
+            return loaded
+        user = loaded
+
+        form = await request.form()
+        plan_raw = str(form.get("plan_id") or "").strip()
+        if not plan_raw.isdigit():
+            return _redirect_user(user_id, err="پلن را انتخاب کنید")
+        plan = await get_owned_plan(session, int(plan_raw), staff)
+        if plan is None:
+            return _redirect_user(user_id, err="پلن یافت نشد")
+
+        try:
+            svc = await admin_provision_service(
+                session,
+                user,
+                plan,
+                staff=staff,
+                actor=actor_label_from_staff(staff),
+            )
+        except ValueError as e:
+            return _redirect_user(user_id, err=str(e))
+        except Exception as e:
+            return _redirect_user(user_id, err=f"اختصاص پلن ناموفق: {e}")
+        label = plan.name or f"#{svc.id}"
+        return _redirect_user(user_id, ok=f"پلن «{label}» اختصاص داده شد (سرویس #{svc.id})")
+
     @app.get("/users/{user_id}/edit", response_class=HTMLResponse)
     async def user_edit_page(
         user_id: int,
@@ -95,6 +176,7 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
     ):
         from app.services.bot_user_admin import list_service_snapshots, list_wallet_txs
         from app.services.formatting import format_toman
+        from app.services.plans_catalog import list_catalog_plans
 
         as_fragment = request.query_params.get("fragment") == "1"
         loaded = await _require_scoped_user(
@@ -106,16 +188,7 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
 
         snaps = await list_service_snapshots(session, int(user_id))
         wallet_txs = await list_wallet_txs(session, int(user_id), limit=20)
-        plans = list(
-            (
-                await session.execute(
-                    select(Plan)
-                    .where(Plan.is_active.is_(True), Plan.owner_reseller_id.is_(None))
-                    .order_by(Plan.id.desc())
-                    .limit(80)
-                )
-            ).scalars().all()
-        )
+        plans = await list_catalog_plans(session, staff, include_trial=False)
         ctx = {
             "staff": staff,
             "user": user,
@@ -301,10 +374,12 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
         except ValueError as e:
             return _redirect_user(user_id, err=str(e))
 
+        from app.services.plans_catalog import get_owned_plan
+
         plan = None
         plan_raw = str(form.get("plan_id") or "").strip()
         if plan_raw.isdigit():
-            plan = await session.get(Plan, int(plan_raw))
+            plan = await get_owned_plan(session, int(plan_raw), staff)
             if plan is None or not plan.is_active:
                 return _redirect_user(user_id, err="پلن یافت نشد")
         if plan is None and svc.plan_id:

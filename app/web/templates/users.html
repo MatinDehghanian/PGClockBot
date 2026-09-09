@@ -16,13 +16,16 @@
     {{ page_title('users', 'کاربران بات') }}
     <p class="muted page-sub">سرویس، حجم و انقضا · فیلتر و اعلان‌های عملیاتی</p>
   </div>
-  {% if ops and flt != 'all' and bulk_count > 0 %}
   <div class="page-head-actions">
+    {% if manage %}
+    <button type="button" class="btn" data-modal-open="modal-user-create">کاربر جدید</button>
+    {% endif %}
+    {% if ops and flt != 'all' and bulk_count > 0 %}
     <button type="button" class="btn btn-ghost"
             data-modal-open="modal-users-bulk"
             data-bulk-count="{{ bulk_count }}">پیام گروهی ({{ bulk_count | num }})</button>
+    {% endif %}
   </div>
-  {% endif %}
 </div>
 {# flash_ok / flash_err rendered once in base.html (above title) #}
 
@@ -289,6 +292,39 @@
 {% endif %}
 
 {% if manage %}
+<div class="ui-modal" id="modal-user-create" hidden>
+  <div class="ui-modal-backdrop" data-modal-close></div>
+  <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="user-create-title">
+    <div class="ui-modal-head">
+      <h2 id="user-create-title">ساخت کاربر بات</h2>
+      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <form method="post" action="/users/create" class="form-stack"
+          data-confirm="کاربر جدید با این شناسه تلگرام ساخته شود؟"
+          data-confirm-title="تأیید ساخت کاربر"
+          data-confirm-label="ساخت کاربر">
+      <input type="hidden" name="return_filter" value="{{ flt }}" />
+      {% if q %}<input type="hidden" name="return_q" value="{{ q }}" />{% endif %}
+      <p class="muted">کاربر با نقش «کاربر» ساخته می‌شود. اگر بعداً در ربات /start بزند، پروفایل تلگرام به‌روز می‌شود.</p>
+      <label class="form-field">شناسه تلگرام (عددی)
+        <input name="telegram_id" type="number" required min="1" step="1" inputmode="numeric"
+               placeholder="مثلاً 123456789" dir="ltr" autocomplete="off" />
+        <small class="muted">همان عددی که در @userinfobot یا پروفایل تلگرام می‌بینید — نه @username</small>
+      </label>
+      <label class="form-field">نام کاربری تلگرام
+        <input name="username" type="text" maxlength="64" placeholder="@username (اختیاری)" dir="ltr" autocomplete="off" />
+      </label>
+      <label class="form-field">نام نمایشی
+        <input name="full_name" type="text" maxlength="255" placeholder="نام کامل (اختیاری)" autocomplete="off" />
+      </label>
+      <div class="actions">
+        <button class="btn" type="submit">ساخت کاربر</button>
+        <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <div class="ui-modal" id="modal-user-edit" hidden
      data-modal-strip-keys="edit,ok,err,_">
   <div class="ui-modal-backdrop" data-modal-close-strip></div>
