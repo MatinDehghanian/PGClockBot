@@ -7,6 +7,7 @@
 {% set flt = filter or 'all' %}
 {% set c = counts or {} %}
 {% set manage = can_manage_users if can_manage_users is defined else is_admin %}
+{% set provision = can_provision_users if can_provision_users is defined else manage %}
 {% set ops = can_user_ops if can_user_ops is defined else true %}
 {% set bulk_count = rows|length if flt != 'all' else 0 %}
 {% block title %}کاربران بات{% endblock %}
@@ -17,7 +18,7 @@
     <p class="muted page-sub">سرویس، حجم و انقضا · فیلتر و اعلان‌های عملیاتی</p>
   </div>
   <div class="page-head-actions">
-    {% if manage %}
+    {% if provision %}
     <button type="button" class="btn" data-modal-open="modal-user-create">کاربر جدید</button>
     {% endif %}
     {% if ops and flt != 'all' and bulk_count > 0 %}
@@ -113,7 +114,7 @@
         <th class="col-exp" data-sort-type="num">انقضا</th>
         <th class="col-wallet col-hide-sm" data-sort-type="num">کیف پول</th>
         <th class="col-status" data-sort-type="text">وضعیت</th>
-        {% if ops or manage %}<th class="col-actions"></th>{% endif %}
+        {% if ops or manage or provision %}<th class="col-actions"></th>{% endif %}
       </tr>
     </thead>
     <tbody>
@@ -179,7 +180,7 @@
           <span class="badge active">فعال</span>
           {% endif %}
         </td>
-        {% if ops or manage %}
+        {% if ops or manage or provision %}
         <td class="col-actions">
           {% call row_actions() %}
             {% if ops and not u.is_blocked %}
@@ -198,13 +199,15 @@
               <button class="btn btn-sm" type="submit">تمدید</button>
             </form>
             {% endif %}
-            {% if manage %}
+            {% if provision %}
             <button type="button" class="btn btn-ghost btn-sm"
                     data-modal-open="modal-user-edit"
                     data-modal-load="/users/{{ u.id }}/edit?fragment=1"
                     data-modal-load-target="user-edit-body"
                     data-edit-url="/users/{{ u.id }}/edit?fragment=1"
                     data-edit-title="ویرایش کاربر #{{ u.id }}">ویرایش</button>
+            {% endif %}
+            {% if manage %}
             <form method="post" action="/users/{{ u.id }}/block"
                   data-confirm="{% if u.is_blocked %}مسدودیت این کاربر برداشته شود؟ پیام برای کاربر ارسال می‌شود.{% else %}این کاربر مسدود شود؟ پیام برای کاربر ارسال می‌شود.{% endif %}"
                   data-confirm-title="{% if u.is_blocked %}رفع مسدودی{% else %}تأیید مسدودسازی{% endif %}"
@@ -234,7 +237,7 @@
         {% endif %}
       </tr>
     {% else %}
-      <tr><td colspan="{% if manage or ops %}10{% else %}8{% endif %}" class="muted">کاربری نیست</td></tr>
+      <tr><td colspan="{% if manage or ops or provision %}10{% else %}8{% endif %}" class="muted">کاربری نیست</td></tr>
     {% endfor %}
     </tbody>
   </table>
@@ -291,7 +294,7 @@
 </div>
 {% endif %}
 
-{% if manage %}
+{% if provision %}
 <div class="ui-modal" id="modal-user-create" hidden>
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="user-create-title">
@@ -391,7 +394,7 @@
     });
   }
 
-  {% if manage %}
+  {% if provision %}
   var titleEl = document.getElementById('user-edit-title');
   var loadSeq = 0;
 

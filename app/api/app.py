@@ -3257,6 +3257,8 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "flash_err": request.query_params.get("err"),
                 "open_edit": request.query_params.get("edit"),
                 "can_manage_users": is_explicit_owner_staff(staff),
+                # Owner or shop-scoped reseller (page already fail-closed on scope).
+                "can_provision_users": is_explicit_owner_staff(staff) or scope is not None,
                 "can_user_ops": True,
             },
         )

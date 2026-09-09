@@ -162,7 +162,10 @@ class ManualUserProvisionUiTests(unittest.TestCase):
         fn = src.split("async def user_create", 1)[1].split("\n    @app.", 1)[0]
         self.assertIn("resolve_shop_scope_id", fn)
         self.assertIn("admin_create_bot_user", fn)
-        self.assertIn("require_admin", src.split("async def user_create")[0])
+        self.assertIn("is_explicit_owner_staff", fn)
+        # Reseller-capable: dashboard ops dep, not Owner-only require_admin
+        self.assertIn("Depends(require_ops)", fn)
+        self.assertNotIn("Depends(require_admin)", fn)
 
     def test_provision_route_checks_scope(self):
         src = Path("app/api/user_pages.py").read_text(encoding="utf-8")
@@ -172,7 +175,92 @@ class ManualUserProvisionUiTests(unittest.TestCase):
         self.assertIn("_require_scoped_user", fn)
         self.assertIn("get_owned_plan", fn)
         self.assertIn("admin_provision_service", fn)
+        self.assertIn("Depends(require_ops)", fn)
+        self.assertNotIn("Depends(require_admin)", fn)
+
+    def test_reseller_ui_provision_without_owner_manage(self):
+        users = Path("app/web/templates/users.html").read_text(encoding="utf-8")
+        self.assertIn("can_provision_users", users)
+        self.assertIn("{% if provision %}", users)
+        # Create/edit for provision; block/delete remain manage (Owner)
+        create_btn = users.split('modal-user-create', 1)[0]
+        self.assertIn("provision", create_btn[-200:])
+        edit = Path("app/web/templates/_user_edit_body.html").read_text(encoding="utf-8")
+        self.assertIn("can_manage_users", edit)
+        self.assertIn("اختصاص پلن جدید", edit)
+        # Plan assign must stay outside Owner-only gate
+        gated = edit.split("{% if manage_user %}", 1)[1].split("{% endif %}", 1)[0]
+        self.assertNotIn("اختصاص پلن جدید", gated)
+        after = edit.split("{% endif %}", 1)[1]
+        self.assertIn("اختصاص پلن جدید", after)
+
+    def test_create_forces_staff_shop_scope(self):
+        src = Path("app/services/bot_user_admin.py").read_text(encoding="utf-8")
+        fn = src.split("async def admin_create_bot_user", 1)[1].split(
+            "\nasync def ", 1
+        )[0]
+        self.assertIn("staff: dict | None = None", fn)
+        self.assertIn("is_explicit_owner_staff", fn)
+        self.assertIn("resolve_shop_scope_id", fn)
 
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AdminCreateStaffScopeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_reseller_staff_forces_own_shop(self):
+        from app.services.bot_user_admin import admin_create_bot_user
+
+        session = AsyncMock()
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = None
+        session.execute = AsyncMock(return_value=result)
+        session.commit = AsyncMock()
+        session.refresh = AsyncMock(side_effect=lambda u: u)
+        session.add = MagicMock()
+        owner = SimpleNamespace(id=77, role="reseller")
+        session.get = AsyncMock(return_value=owner)
+
+        staff = {"role": "reseller", "bot_user_id": 77}
+        with patch(
+            "app.services.platform_identity.is_explicit_owner_staff",
+            return_value=False,
+        ), patch(
+            "app.services.shop_scope.resolve_shop_scope_id",
+            return_value=77,
+        ):
+            # Even if caller tries reseller_id=None / wrong id, staff wins.
+            user = await admin_create_bot_user(
+                session,
+                telegram_id=111222333,
+                reseller_id=None,
+                staff=staff,
+            )
+        self.assertEqual(user.reseller_id, 77)
+        self.assertEqual(user.role, "user")
+
+    async def test_owner_staff_forces_platform_shop(self):
+        from app.services.bot_user_admin import admin_create_bot_user
+
+        session = AsyncMock()
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = None
+        session.execute = AsyncMock(return_value=result)
+        session.commit = AsyncMock()
+        session.refresh = AsyncMock(side_effect=lambda u: u)
+        session.add = MagicMock()
+
+        staff = {"role": "admin", "principal_id": 1}
+        with patch(
+            "app.services.platform_identity.is_explicit_owner_staff",
+            return_value=True,
+        ):
+            user = await admin_create_bot_user(
+                session,
+                telegram_id=444555666,
+                reseller_id=99,  # must be ignored for Owner
+                staff=staff,
+            )
+        self.assertIsNone(user.reseller_id)
+

@@ -20,6 +20,8 @@
   </div>
 </section>
 
+{% set manage_user = can_manage_users if can_manage_users is defined else false %}
+{% if manage_user %}
 <section class="edit-section">
   <header class="edit-section-head">
     <h3>یادداشت داخلی و ریسک</h3>
@@ -93,6 +95,7 @@
   </form>
 </section>
 
+{% endif %}
 <section class="edit-section">
   <header class="edit-section-head">
     <h3>اختصاص پلن جدید</h3>

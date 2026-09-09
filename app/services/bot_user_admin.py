@@ -190,10 +190,34 @@ async def admin_create_bot_user(
     username: str | None = None,
     full_name: str | None = None,
     reseller_id: int | None = None,
+    staff: dict | None = None,
 ) -> BotUser:
-    """Create a shop BotUser manually (web panel). Always role=user."""
+    """Create a shop BotUser manually (web panel). Always role=user.
+
+    When ``staff`` is provided, shop ownership is forced from session scope:
+    Owner → platform (``reseller_id=None``); reseller → own shop id only.
+    """
     import secrets
     import string
+
+    from app.services.platform_identity import (
+        deliverable_telegram_id,
+        is_explicit_owner_staff,
+    )
+
+    if staff is not None:
+        from app.services.shop_scope import ShopScopeError, resolve_shop_scope_id
+
+        if is_explicit_owner_staff(staff):
+            reseller_id = None
+        else:
+            try:
+                scope = resolve_shop_scope_id(staff)
+            except ShopScopeError as exc:
+                raise ValueError(exc.message) from exc
+            if not scope:
+                raise ValueError("محدوده فروشگاه مشخص نیست")
+            reseller_id = int(scope)
 
     try:
         tid = int(telegram_id)
@@ -201,8 +225,6 @@ async def admin_create_bot_user(
         raise ValueError("شناسه تلگرام نامعتبر است") from exc
     if tid < MIN_TELEGRAM_ID or tid > MAX_TELEGRAM_ID:
         raise ValueError("شناسه تلگرام نامعتبر است")
-
-    from app.services.platform_identity import deliverable_telegram_id
 
     if deliverable_telegram_id(tid) is None:
         raise ValueError("شناسه تلگرام باید عدد مثبت واقعی باشد")

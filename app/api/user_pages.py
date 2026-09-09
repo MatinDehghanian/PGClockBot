@@ -89,10 +89,12 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
     @app.post("/users/create")
     async def user_create(
         request: Request,
-        staff: dict = Depends(require_admin),
+        staff: dict = Depends(require_ops),
         session: AsyncSession = Depends(get_db),
     ):
+        """Owner or shop-scoped reseller may create BotUser in their own shop only."""
         from app.services.bot_user_admin import admin_create_bot_user
+        from app.services.platform_identity import is_explicit_owner_staff
         from app.services.shop_scope import ShopScopeError, resolve_shop_scope_id
         from app.services.users_ops import users_list_href
 
@@ -100,6 +102,12 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
             scope = resolve_shop_scope_id(staff)
         except ShopScopeError as e:
             return RedirectResponse(f"/users?err={_q(e.message)}", status_code=303)
+        # Defense-in-depth: never let reseller create platform (NULL) users.
+        if not is_explicit_owner_staff(staff):
+            if not scope:
+                return RedirectResponse(
+                    f"/users?err={_q('محدوده فروشگاه مشخص نیست')}", status_code=303
+                )
 
         form = await request.form()
         raw_tid = str(form.get("telegram_id") or "").strip()
@@ -116,7 +124,9 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
                 telegram_id=telegram_id,
                 username=username,
                 full_name=full_name,
-                reseller_id=scope,
+                # Owner → None (platform shop); reseller → forced own scope id.
+                reseller_id=None if is_explicit_owner_staff(staff) else int(scope),
+                staff=staff,
             )
         except ValueError as e:
             return _redirect_list_form(form, err=str(e), uid=None)
@@ -132,9 +142,10 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
     async def user_provision_service(
         user_id: int,
         request: Request,
-        staff: dict = Depends(require_admin),
+        staff: dict = Depends(require_ops),
         session: AsyncSession = Depends(get_db),
     ):
+        """Owner/reseller assign plan — scoped user + owned catalog plan + provision gate."""
         from app.services.bot_user_admin import admin_provision_service
         from app.services.notifications import actor_label_from_staff
         from app.services.plans_catalog import get_owned_plan
@@ -171,12 +182,13 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
     async def user_edit_page(
         user_id: int,
         request: Request,
-        staff: dict = Depends(require_admin),
+        staff: dict = Depends(require_ops),
         session: AsyncSession = Depends(get_db),
     ):
         from app.services.bot_user_admin import list_service_snapshots, list_wallet_txs
         from app.services.formatting import format_toman
         from app.services.plans_catalog import list_catalog_plans
+        from app.services.platform_identity import is_explicit_owner_staff
 
         as_fragment = request.query_params.get("fragment") == "1"
         loaded = await _require_scoped_user(
@@ -198,6 +210,9 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
             "format_toman": format_toman,
             "flash_ok": request.query_params.get("ok"),
             "flash_err": request.query_params.get("err"),
+            # Owner-only sections (role / wallet / risk note); resellers get provision UI.
+            "can_manage_users": is_explicit_owner_staff(staff),
+            "can_provision_users": True,
         }
         if as_fragment:
             return render(request, "_user_edit_body.html", ctx)
@@ -357,7 +372,7 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
         user_id: int,
         service_id: int,
         request: Request,
-        staff: dict = Depends(require_admin),
+        staff: dict = Depends(require_ops),
         session: AsyncSession = Depends(get_db),
     ):
         from app.services.bot_user_admin import admin_renew_service, get_owned_service
@@ -407,7 +422,7 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
         user_id: int,
         service_id: int,
         request: Request,
-        staff: dict = Depends(require_admin),
+        staff: dict = Depends(require_ops),
         session: AsyncSession = Depends(get_db),
     ):
         from app.services.bot_user_admin import admin_extend_service, get_owned_service
@@ -446,7 +461,7 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
     async def user_service_delete(
         user_id: int,
         service_id: int,
-        staff: dict = Depends(require_admin),
+        staff: dict = Depends(require_ops),
         session: AsyncSession = Depends(get_db),
     ):
         from app.services.bot_user_admin import admin_delete_service, get_owned_service
@@ -477,7 +492,7 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
     async def user_service_link(
         user_id: int,
         service_id: int,
-        staff: dict = Depends(require_admin),
+        staff: dict = Depends(require_ops),
         session: AsyncSession = Depends(get_db),
     ):
         from fastapi.responses import JSONResponse
