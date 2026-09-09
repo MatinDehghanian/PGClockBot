@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "9.2.0": [
+        "ساخت دستی کاربر بات و اختصاص پلن از وب‌پنل (بدون سفارش)",
+        "نماینده: عملیات سرویس طبق ACL پاسارگارد (create/update/delete) + ایزوله فروشگاه",
+        "تمدید سریع/گروهی هم از ACL پاسارگارد عبور می‌کند؛ CRM نقش/کیف‌پول/مسدود/حذف فقط Owner",
+        "ریستور: restore/pre-v9.2.0-v9.1.0",
+    ],
     "9.1.0": [
         "قوانین ربات: سه گیت ورود / خرید کاربر / خرید نماینده (سوئیچ + متن + دکمه)",
         "رنگ دکمه موافقت در تب قوانین و دسته رنگ‌بندی «قوانین»",
