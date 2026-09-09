@@ -9,6 +9,7 @@
 {% set manage = can_manage_users if can_manage_users is defined else is_admin %}
 {% set provision = can_provision_users if can_provision_users is defined else manage %}
 {% set edit_svc = can_edit_user_services if can_edit_user_services is defined else provision %}
+{% set pg_update = can_pg_update if can_pg_update is defined else false %}
 {% set ops = can_user_ops if can_user_ops is defined else true %}
 {% set bulk_count = rows|length if flt != 'all' else 0 %}
 {% block title %}کاربران بات{% endblock %}
@@ -84,11 +85,17 @@
     </label>
     <button class="btn btn-ghost" type="submit">جستجو</button>
   </form>
-  {% if manage and ops %}
+  {% if manage and ops and pg_update %}
   {{ table_bulk_bar('/users/bulk-action', [
     {'key': 'block', 'label': 'مسدود', 'class': 'btn-warn', 'confirm': '{n} کاربر مسدود شوند؟ پیام برای کاربر ارسال می‌شود.', 'confirm_title': 'مسدودسازی گروهی', 'confirm_label': 'مسدود کردن', 'warn': true},
     {'key': 'unblock', 'label': 'رفع مسدودی', 'confirm': 'مسدودیت {n} کاربر برداشته شود؟', 'confirm_title': 'رفع مسدودی گروهی', 'confirm_label': 'رفع مسدودی'},
     {'key': 'renew', 'label': 'تمدید', 'confirm': 'سرویس بحرانی {n} کاربر با پلن فعلی تمدید شود؟ مصرف ریست می‌شود.', 'confirm_title': 'تمدید گروهی', 'confirm_label': 'تمدید'},
+    {'key': 'delete', 'label': 'حذف', 'class': 'btn-danger', 'confirm': '{n} کاربر و داده‌های مرتبط کامل حذف شوند؟ این عمل برگشت‌ناپذیر است.', 'confirm_title': 'حذف گروهی', 'confirm_label': 'حذف', 'danger': true, 'reason': true, 'reason_label': 'علت حذف'},
+  ]) }}
+  {% elif manage and ops %}
+  {{ table_bulk_bar('/users/bulk-action', [
+    {'key': 'block', 'label': 'مسدود', 'class': 'btn-warn', 'confirm': '{n} کاربر مسدود شوند؟ پیام برای کاربر ارسال می‌شود.', 'confirm_title': 'مسدودسازی گروهی', 'confirm_label': 'مسدود کردن', 'warn': true},
+    {'key': 'unblock', 'label': 'رفع مسدودی', 'confirm': 'مسدودیت {n} کاربر برداشته شود؟', 'confirm_title': 'رفع مسدودی گروهی', 'confirm_label': 'رفع مسدودی'},
     {'key': 'delete', 'label': 'حذف', 'class': 'btn-danger', 'confirm': '{n} کاربر و داده‌های مرتبط کامل حذف شوند؟ این عمل برگشت‌ناپذیر است.', 'confirm_title': 'حذف گروهی', 'confirm_label': 'حذف', 'danger': true, 'reason': true, 'reason_label': 'علت حذف'},
   ]) }}
   {% elif manage %}
@@ -97,7 +104,7 @@
     {'key': 'unblock', 'label': 'رفع مسدودی', 'confirm': 'مسدودیت {n} کاربر برداشته شود؟', 'confirm_title': 'رفع مسدودی گروهی', 'confirm_label': 'رفع مسدودی'},
     {'key': 'delete', 'label': 'حذف', 'class': 'btn-danger', 'confirm': '{n} کاربر و داده‌های مرتبط کامل حذف شوند؟ این عمل برگشت‌ناپذیر است.', 'confirm_title': 'حذف گروهی', 'confirm_label': 'حذف', 'danger': true, 'reason': true, 'reason_label': 'علت حذف'},
   ]) }}
-  {% elif ops %}
+  {% elif ops and pg_update %}
   {{ table_bulk_bar('/users/bulk-action', [
     {'key': 'renew', 'label': 'تمدید', 'confirm': 'سرویس بحرانی {n} کاربر با پلن فعلی تمدید شود؟ مصرف ریست می‌شود.', 'confirm_title': 'تمدید گروهی', 'confirm_label': 'تمدید'},
   ]) }}
@@ -124,7 +131,7 @@
       <tr class="users-row{% if focus_uid and u.id == focus_uid %} is-focus{% endif %}{% if row.has_alert %} has-alert{% endif %}"
           data-uid="{{ u.id }}"
           id="user-{{ u.id }}"
-          data-bulk-ops="{% if manage and not u.is_blocked %}block,{% endif %}{% if manage and u.is_blocked %}unblock,{% endif %}{% if ops and row.service_count > 0 %}renew,{% endif %}{% if manage and u.role != 'admin' %}delete{% endif %}">
+          data-bulk-ops="{% if manage and not u.is_blocked %}block,{% endif %}{% if manage and u.is_blocked %}unblock,{% endif %}{% if ops and pg_update and row.service_count > 0 %}renew,{% endif %}{% if manage and u.role != 'admin' %}delete{% endif %}">
         {% if manage or ops %}{{ table_select_cell(u.id) }}{% endif %}
         <td class="mono col-hide-sm" dir="ltr" data-sort-value="{{ u.id }}">{{ u.id }}</td>
         <td class="mono col-tg col-hide-sm" dir="ltr" data-sort-value="{{ u.telegram_id }}">{{ u.telegram_id }}</td>
@@ -190,7 +197,7 @@
                     data-msg-uid="{{ u.id }}"
                     data-msg-name="{{ u.full_name or u.username or u.telegram_id }}">پیام</button>
             {% endif %}
-            {% if ops and row.service_count > 0 %}
+            {% if ops and pg_update and row.service_count > 0 %}
             <form method="post" action="/users/{{ u.id }}/quick-renew"
                   data-confirm="سرویس بحرانی (نزدیک‌ترین انقضا) با پلن فعلی تمدید شود؟ مصرف ریست می‌شود."
                   data-confirm-title="تمدید سریع"

@@ -296,17 +296,23 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
         staff: dict = Depends(require_ops),
         session: AsyncSession = Depends(get_db),
     ):
+        from app.services.pg_access import staff_user_actions
         from app.services.users_quick import quick_renew_user
+
+        form = await request.form()
+        if not staff_user_actions(staff).get("update"):
+            return _redirect_list_form(
+                form, err="نقش پاسارگارد شما اجازه تمدید ندارد", uid=user_id
+            )
 
         loaded = await _require_scoped_user(session, staff, user_id)
         if isinstance(loaded, RedirectResponse):
             return loaded
         user = loaded
-        form = await request.form()
         sid_raw = str(form.get("service_id") or "").strip()
         service_id = int(sid_raw) if sid_raw.isdigit() else None
         try:
-            svc, label = await quick_renew_user(session, user, service_id=service_id)
+            svc, label = await quick_renew_user(session, user, service_id=service_id, staff=staff)
             await session.commit()
         except ValueError as e:
             return _redirect_list_form(form, err=str(e), uid=user_id)

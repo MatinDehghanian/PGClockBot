@@ -322,3 +322,15 @@ class ShopPgAclGateTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("_pg_client_for_bot_service", src)
         self.assertNotIn("def _pg_client_for_service", src)
 
+    def test_quick_renew_threads_staff(self):
+        src = Path("app/services/users_quick.py").read_text(encoding="utf-8")
+        fn = src.split("async def quick_renew_user", 1)[1].split("\nasync def ", 1)[0]
+        self.assertIn("staff: dict | None = None", fn)
+        self.assertIn("staff=staff", fn)
+        pages = Path("app/api/user_pages.py").read_text(encoding="utf-8")
+        qfn = pages.split("async def user_quick_renew", 1)[1].split("\n    @app.", 1)[0]
+        self.assertIn("staff_user_actions", qfn)
+        self.assertIn("staff=staff", qfn)
+        users = Path("app/web/templates/users.html").read_text(encoding="utf-8")
+        self.assertIn("pg_update and row.service_count", users)
+

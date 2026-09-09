@@ -235,7 +235,7 @@ async def bulk_renew_users(
             fail += 1
             continue
         try:
-            await quick_renew_user(session, user, service_id=None)
+            await quick_renew_user(session, user, service_id=None, staff=staff)
             ok += 1
         except Exception:
             logger.debug("bulk renew failed uid=%s", uid, exc_info=True)
