@@ -90,8 +90,12 @@ async def quick_renew_user(
     user: BotUser,
     *,
     service_id: int | None = None,
+    staff: dict | None = None,
 ) -> tuple[UserService, str]:
-    """Renew critical (or specified) service with its current plan. Returns (svc, label)."""
+    """Renew critical (or specified) service with its current plan. Returns (svc, label).
+
+    Web callers must pass ``staff`` so PasarGuard users.update/reset_usage ACL applies.
+    """
     from app.services.bot_user_admin import admin_renew_service, get_owned_service
 
     by = await load_services_by_user_ids(session, [int(user.id)])
@@ -121,7 +125,7 @@ async def quick_renew_user(
     if plan.is_trial:
         raise ValueError("پلن تست برای تمدید سریع مجاز نیست")
 
-    await admin_renew_service(session, svc, plan=plan, reset_traffic=True)
+    await admin_renew_service(session, svc, plan=plan, reset_traffic=True, staff=staff)
     label = (plan.name or svc.pg_username or f"#{svc.id}").strip()
     return svc, label
 

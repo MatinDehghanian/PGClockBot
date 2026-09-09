@@ -16,7 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.db.models import BotUser, Plan, UserService, WalletTransaction
+from app.db.models import BotUser, Plan, Role, UserService, WalletTransaction
 from app.services.formatting import (
     expire_remaining_days,
     format_bytes,
@@ -37,6 +37,8 @@ GB = 1024**3
 MAX_ADMIN_WALLET_CREDIT = 50_000_000  # 50M toman hard cap per op
 MAX_EXTEND_DAYS = 3650
 MAX_EXTEND_GB = 10_000
+MIN_TELEGRAM_ID = 1
+MAX_TELEGRAM_ID = 9_007_199_254_740_991  # signed int64 safe upper bound
 
 
 @dataclass(frozen=True)
@@ -54,12 +56,44 @@ class ServiceSnapshot:
     error: str | None = None
 
 
-def _pg_client_for_service(service: UserService):
-    """Platform owner PG client — bot-shop services are provisioned under owner/reseller link.
+def assert_staff_pg_user_action(staff: dict | None, action: str) -> None:
+    """Fail closed when web staff lacks the PasarGuard users.* action.
 
-    Admin panel ops always use the platform client; reseller-scoped bot customers
-    still have pg_user_id on the same PG instance.
+    Bot/internal callers pass ``staff=None`` and skip this check (they have their
+    own auth). Web panel must always pass the live staff session.
     """
+    if staff is None:
+        return
+    from app.services.pg_access import staff_user_actions
+
+    acts = staff_user_actions(staff)
+    if acts.get(action):
+        return
+    labels = {
+        "create": "ساخت کاربر پاسارگارد",
+        "update": "ویرایش کاربر پاسارگارد",
+        "delete": "حذف کاربر پاسارگارد",
+        "disable": "غیرفعال‌سازی کاربر پاسارگارد",
+        "reset_usage": "ریست مصرف پاسارگارد",
+    }
+    raise ValueError(
+        f"نقش پاسارگارد شما اجازه {labels.get(action, action)} را ندارد"
+    )
+
+
+async def _pg_client_for_bot_service(
+    session: AsyncSession, service: UserService
+):
+    """PG client for a shop service — reseller shop uses that shop's PG admin.
+
+    Never fall through to the Owner env token for tenant services (isolation).
+    """
+    bot_user = await session.get(BotUser, int(service.bot_user_id))
+    rid = int(bot_user.reseller_id) if bot_user and bot_user.reseller_id else None
+    if rid:
+        from app.services.pasarguard import get_pg_for_reseller
+
+        return await get_pg_for_reseller(session, rid)
     return get_pg()
 
 
@@ -97,7 +131,7 @@ async def service_snapshot(session: AsyncSession, service: UserService) -> Servi
             error="سرویس به پاسارگارد وصل نیست",
         )
     try:
-        pg = _pg_client_for_service(service)
+        pg = await _pg_client_for_bot_service(session, service)
         # Cap wait so edit-modal fragment never hangs on slow PG (client timeout is 30s).
         info = await asyncio.wait_for(pg.get_user_by_id(int(service.pg_user_id)), timeout=3.0)
         if not isinstance(info, dict):
@@ -163,6 +197,256 @@ async def list_service_snapshots(
         out.append(await service_snapshot(session, svc))
     await session.commit()  # persist refreshed subscription urls
     return out
+
+
+def _plan_matches_user_shop(plan: Plan, user: BotUser) -> bool:
+    """Plan catalog tenant must match the bot user's shop ownership."""
+    user_rid = user.reseller_id
+    plan_rid = plan.owner_reseller_id
+    if user_rid is None:
+        return plan_rid is None
+    return plan_rid is not None and int(plan_rid) == int(user_rid)
+
+
+def _normalize_telegram_username(raw: str | None) -> str | None:
+    if not raw:
+        return None
+    name = str(raw).strip().lstrip("@")[:64]
+    return name or None
+
+
+async def admin_create_bot_user(
+    session: AsyncSession,
+    *,
+    telegram_id: int,
+    username: str | None = None,
+    full_name: str | None = None,
+    reseller_id: int | None = None,
+    staff: dict | None = None,
+) -> BotUser:
+    """Create a shop BotUser manually (web panel). Always role=user.
+
+    When ``staff`` is provided, shop ownership is forced from session scope:
+    Owner → platform (``reseller_id=None``); reseller → own shop id only.
+    """
+    import secrets
+    import string
+
+    from app.services.platform_identity import (
+        deliverable_telegram_id,
+        is_explicit_owner_staff,
+    )
+
+    if staff is not None:
+        from app.services.shop_scope import ShopScopeError, resolve_shop_scope_id
+
+        if is_explicit_owner_staff(staff):
+            reseller_id = None
+        else:
+            try:
+                scope = resolve_shop_scope_id(staff)
+            except ShopScopeError as exc:
+                raise ValueError(exc.message) from exc
+            if not scope:
+                raise ValueError("محدوده فروشگاه مشخص نیست")
+            reseller_id = int(scope)
+
+    try:
+        tid = int(telegram_id)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("شناسه تلگرام نامعتبر است") from exc
+    if tid < MIN_TELEGRAM_ID or tid > MAX_TELEGRAM_ID:
+        raise ValueError("شناسه تلگرام نامعتبر است")
+
+    if deliverable_telegram_id(tid) is None:
+        raise ValueError("شناسه تلگرام باید عدد مثبت واقعی باشد")
+
+    existing = (
+        await session.execute(select(BotUser).where(BotUser.telegram_id == tid))
+    ).scalar_one_or_none()
+    if existing is not None:
+        raise ValueError("این شناسه تلگرام قبلاً ثبت شده است")
+
+    if reseller_id is not None:
+        try:
+            rid = int(reseller_id)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("فروشگاه نامعتبر است") from exc
+        if rid <= 0:
+            raise ValueError("فروشگاه نامعتبر است")
+        owner = await session.get(BotUser, rid)
+        if owner is None or owner.role != Role.RESELLER.value:
+            raise ValueError("نماینده فروشگاه یافت نشد")
+        assign_reseller = rid
+    else:
+        assign_reseller = None
+
+    alphabet = string.ascii_uppercase + string.digits
+    referral_code = "".join(secrets.choice(alphabet) for _ in range(8))
+
+    user = BotUser(
+        telegram_id=tid,
+        username=_normalize_telegram_username(username),
+        full_name=(str(full_name).strip()[:255] if full_name else None) or None,
+        role=Role.USER.value,
+        referral_code=referral_code,
+        reseller_id=assign_reseller,
+    )
+    session.add(user)
+    await session.commit()
+    await session.refresh(user)
+    return user
+
+
+async def admin_provision_service(
+    session: AsyncSession,
+    user: BotUser,
+    plan: Plan,
+    *,
+    staff: dict | None = None,
+    actor: str | None = None,
+) -> UserService:
+    """Assign a new VPN service (PG user + UserService) without an order."""
+    import time
+
+    from app.services.orders import _reseller_pg_link, generate_pg_username
+    from app.services.pasarguard import (
+        build_user_create_payload,
+        extract_sub_token,
+        parse_group_ids,
+    )
+    from app.services.plans_catalog import plan_belongs_to_staff
+    from app.services.provision_gate import ProvisionError, assert_provision_create
+
+    if not plan.is_active:
+        raise ValueError("پلن غیرفعال است")
+    if plan.is_trial:
+        raise ValueError("پلن تست برای اختصاص دستی مجاز نیست")
+    if not _plan_matches_user_shop(plan, user):
+        raise ValueError("این پلن متعلق به فروشگاه این کاربر نیست")
+    if staff is not None and not plan_belongs_to_staff(plan, staff):
+        raise ValueError("دسترسی به این پلن ندارید")
+    # Shop isolation ∧ PasarGuard ACL (same axis as /pg/users create).
+    assert_staff_pg_user_action(staff, "create")
+
+    shop_rid = int(user.reseller_id) if user.reseller_id else None
+    if shop_rid:
+        from app.services.pasarguard import get_pg_for_reseller
+
+        pg = await get_pg_for_reseller(session, shop_rid)
+    else:
+        from app.services.pasarguard import get_pg
+
+        pg = get_pg()
+
+    pg_owner, pg_role_id = await _reseller_pg_link(session, shop_rid)
+    data_limit = None
+    expire = None
+    if plan.data_limit_gb is not None:
+        data_limit = int(float(plan.data_limit_gb) * GB)
+    if plan.duration_days:
+        expire = int(time.time()) + int(plan.duration_days) * 86400
+
+    # Always run provision gate when staff is present (Owner Hybrid limited role too).
+    # Reseller shop also passes username/role for quota ownership checks.
+    if staff is not None or shop_rid:
+        try:
+            await assert_provision_create(
+                session,
+                staff=staff,
+                reseller_user_id=shop_rid,
+                pg_admin_username=pg_owner,
+                pg_role_id=pg_role_id,
+                data_limit=data_limit,
+                expire_ts=expire,
+                from_template=bool(plan.pg_template_id),
+                quantity=1,
+            )
+        except ProvisionError as e:
+            raise ValueError(e.message) from e
+
+    group_ids = None
+    if not plan.pg_template_id:
+        group_ids = parse_group_ids(getattr(plan, "pg_group_ids", None))
+        if not group_ids:
+            raise ValueError(
+                "هیچ گروهی برای ساخت کاربر انتخاب نشده — در وب‌پنل برای پلن، گروه پاسارگارد را انتخاب کنید"
+            )
+
+    actor_label = (actor or "admin")[:64]
+    note = f"PGClockBot manual assign by {actor_label}"
+
+    username = await generate_pg_username(
+        session,
+        user_id=int(user.id),
+        plan=plan,
+        reseller_id=shop_rid,
+    )
+
+    pg_uid: int | None = None
+    try:
+        if plan.pg_template_id:
+            pg_user = await pg.create_user_from_template(
+                {
+                    "username": username,
+                    "user_template_id": plan.pg_template_id,
+                    "note": note,
+                }
+            )
+        else:
+            pg_user = await pg.create_user(
+                build_user_create_payload(
+                    username=username,
+                    group_ids=group_ids or [],
+                    data_limit=data_limit,
+                    expire_ts=expire,
+                    note=note,
+                )
+            )
+        raw_uid = pg_user.get("id") if isinstance(pg_user, dict) else None
+        if raw_uid:
+            pg_uid = int(raw_uid)
+
+        if shop_rid and getattr(pg, "_login_username", None) is None:
+            owner_name = (pg_owner or "").strip()
+            if not owner_name or not pg_uid:
+                raise ValueError(
+                    "کاربر ساخته شد ولی مالکیت قابل تنظیم نیست — اختصاص لغو شد"
+                )
+            await pg.set_owner_by_id(int(pg_uid), owner_name)
+        elif shop_rid and not pg_uid:
+            raise ValueError("ساخت کاربر پاسارگارد شناسه برنگرداند — اختصاص لغو شد")
+
+        sub_url = pg_user.get("subscription_url") if isinstance(pg_user, dict) else None
+        service = UserService(
+            bot_user_id=int(user.id),
+            plan_id=int(plan.id),
+            pg_user_id=pg_uid,
+            pg_username=(pg_user.get("username", username) if isinstance(pg_user, dict) else username),
+            subscription_url=sub_url,
+            subscription_token=extract_sub_token(sub_url),
+            remark=f"manual:{actor_label}",
+        )
+        if isinstance(pg_user, dict):
+            sync_service_quota_cache(service, pg_user)
+        else:
+            sync_service_quota_cache(
+                service, expire_ts=expire, data_limit_bytes=data_limit
+            )
+        session.add(service)
+        await session.commit()
+        await session.refresh(service)
+        return service
+    except Exception:
+        if pg_uid:
+            try:
+                await pg.delete_user_by_id(int(pg_uid))
+            except Exception:
+                logger.debug(
+                    "rollback PG user failed uid=%s", pg_uid, exc_info=True
+                )
+        await session.rollback()
+        raise
 
 
 async def admin_credit_user_wallet(
@@ -280,12 +564,22 @@ async def admin_set_service_quota(
     expire_ts: int | None = None,
     reset_traffic: bool = False,
     activate: bool = True,
+    staff: dict | None = None,
 ) -> ServiceSnapshot:
     """Set absolute quota on the linked PG user and refresh local link + list cache."""
     if not service.pg_user_id:
         raise ValueError("سرویس به پاسارگارد وصل نیست")
-    pg = _pg_client_for_service(service)
-    if reset_traffic:
+    assert_staff_pg_user_action(staff, "update")
+    pg = await _pg_client_for_bot_service(session, service)
+    # Reset is a separate PG ACL (users.reset_usage). Without it, still allow
+    # quota update — never use Owner token to bypass a missing reset right.
+    do_reset = bool(reset_traffic)
+    if do_reset and staff is not None:
+        from app.services.pg_access import staff_user_actions
+
+        if not staff_user_actions(staff).get("reset_usage"):
+            do_reset = False
+    if do_reset:
         try:
             await pg.reset_user_by_id(int(service.pg_user_id))
         except Exception:
@@ -342,6 +636,7 @@ async def admin_renew_service(
     data_limit_gb: float | None = None,
     plan: Plan | None = None,
     reset_traffic: bool = True,
+    staff: dict | None = None,
 ) -> ServiceSnapshot:
     """Admin renew: set expire from now + days and optional data limit (from plan or args)."""
     if plan is not None:
@@ -375,6 +670,7 @@ async def admin_renew_service(
         expire_ts=expire_ts,
         reset_traffic=reset_traffic,
         activate=True,
+        staff=staff,
     )
 
 
@@ -384,6 +680,7 @@ async def admin_extend_service(
     *,
     extra_days: int = 0,
     extra_gb: float = 0,
+    staff: dict | None = None,
 ) -> ServiceSnapshot:
     """Adjust days/GB on current PG remaining (admin). Signed deltas allowed (±MAX)."""
     days_n = int(extra_days or 0)
@@ -397,7 +694,7 @@ async def admin_extend_service(
     if not service.pg_user_id:
         raise ValueError("سرویس به پاسارگارد وصل نیست")
 
-    pg = _pg_client_for_service(service)
+    pg = await _pg_client_for_bot_service(session, service)
     info = await pg.get_user_by_id(int(service.pg_user_id))
     if not isinstance(info, dict):
         raise ValueError("کاربر پاسارگارد یافت نشد")
@@ -440,6 +737,7 @@ async def admin_extend_service(
         expire_ts=expire_ts,
         reset_traffic=False,
         activate=True,
+        staff=staff,
     )
 
 
@@ -448,11 +746,14 @@ async def admin_delete_service(
     service: UserService,
     *,
     delete_pg: bool = True,
+    staff: dict | None = None,
 ) -> dict[str, Any]:
     """Hard-delete one shop service and optionally its linked PasarGuard user.
 
     Caller must verify ownership / shop scope before invoking. Nulls FK refs on
     orders / loyalty / wheel spins, then removes the ``UserService`` row.
+    Web staff must have PasarGuard ``users.delete`` (disable fallback needs
+    ``users.disable`` / update).
     """
     from sqlalchemy import delete, update
 
@@ -465,7 +766,8 @@ async def admin_delete_service(
     pg_disabled = False
 
     if delete_pg and pg_uid:
-        pg = _pg_client_for_service(service)
+        assert_staff_pg_user_action(staff, "delete")
+        pg = await _pg_client_for_bot_service(session, service)
         try:
             await pg.delete_user_by_id(pg_uid)
             pg_deleted = True
@@ -477,8 +779,11 @@ async def admin_delete_service(
                 exc_info=True,
             )
             try:
+                assert_staff_pg_user_action(staff, "disable")
                 await pg.set_disabled_by_id(pg_uid, True)
                 pg_disabled = True
+            except ValueError:
+                raise
             except Exception:
                 logger.debug("PG disable fallback failed uid=%s", pg_uid, exc_info=True)
 

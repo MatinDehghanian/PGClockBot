@@ -56,6 +56,13 @@ def register_bulk_pages(
         manage = is_explicit_owner_staff(staff)
         if action in {"block", "unblock", "delete"} and not manage:
             return redirect_bulk(return_to, err="اجازه این عملیات را ندارید")
+        if action == "renew":
+            from app.services.pg_access import staff_user_actions
+
+            if not staff_user_actions(staff).get("update"):
+                return redirect_bulk(
+                    return_to, err="نقش پاسارگارد شما اجازه تمدید ندارد"
+                )
 
         if action == "block":
             ok, fail = await bulk_toggle_block(session, staff, ids, block=True)

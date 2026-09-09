@@ -7,6 +7,9 @@
 {% set flt = filter or 'all' %}
 {% set c = counts or {} %}
 {% set manage = can_manage_users if can_manage_users is defined else is_admin %}
+{% set provision = can_provision_users if can_provision_users is defined else manage %}
+{% set edit_svc = can_edit_user_services if can_edit_user_services is defined else provision %}
+{% set pg_update = can_pg_update if can_pg_update is defined else false %}
 {% set ops = can_user_ops if can_user_ops is defined else true %}
 {% set bulk_count = rows|length if flt != 'all' else 0 %}
 {% block title %}کاربران بات{% endblock %}
@@ -16,13 +19,16 @@
     {{ page_title('users', 'کاربران بات') }}
     <p class="muted page-sub">سرویس، حجم و انقضا · فیلتر و اعلان‌های عملیاتی</p>
   </div>
-  {% if ops and flt != 'all' and bulk_count > 0 %}
   <div class="page-head-actions">
+    {% if provision %}
+    <button type="button" class="btn" data-modal-open="modal-user-create">کاربر جدید</button>
+    {% endif %}
+    {% if ops and flt != 'all' and bulk_count > 0 %}
     <button type="button" class="btn btn-ghost"
             data-modal-open="modal-users-bulk"
             data-bulk-count="{{ bulk_count }}">پیام گروهی ({{ bulk_count | num }})</button>
+    {% endif %}
   </div>
-  {% endif %}
 </div>
 {# flash_ok / flash_err rendered once in base.html (above title) #}
 
@@ -79,11 +85,17 @@
     </label>
     <button class="btn btn-ghost" type="submit">جستجو</button>
   </form>
-  {% if manage and ops %}
+  {% if manage and ops and pg_update %}
   {{ table_bulk_bar('/users/bulk-action', [
     {'key': 'block', 'label': 'مسدود', 'class': 'btn-warn', 'confirm': '{n} کاربر مسدود شوند؟ پیام برای کاربر ارسال می‌شود.', 'confirm_title': 'مسدودسازی گروهی', 'confirm_label': 'مسدود کردن', 'warn': true},
     {'key': 'unblock', 'label': 'رفع مسدودی', 'confirm': 'مسدودیت {n} کاربر برداشته شود؟', 'confirm_title': 'رفع مسدودی گروهی', 'confirm_label': 'رفع مسدودی'},
     {'key': 'renew', 'label': 'تمدید', 'confirm': 'سرویس بحرانی {n} کاربر با پلن فعلی تمدید شود؟ مصرف ریست می‌شود.', 'confirm_title': 'تمدید گروهی', 'confirm_label': 'تمدید'},
+    {'key': 'delete', 'label': 'حذف', 'class': 'btn-danger', 'confirm': '{n} کاربر و داده‌های مرتبط کامل حذف شوند؟ این عمل برگشت‌ناپذیر است.', 'confirm_title': 'حذف گروهی', 'confirm_label': 'حذف', 'danger': true, 'reason': true, 'reason_label': 'علت حذف'},
+  ]) }}
+  {% elif manage and ops %}
+  {{ table_bulk_bar('/users/bulk-action', [
+    {'key': 'block', 'label': 'مسدود', 'class': 'btn-warn', 'confirm': '{n} کاربر مسدود شوند؟ پیام برای کاربر ارسال می‌شود.', 'confirm_title': 'مسدودسازی گروهی', 'confirm_label': 'مسدود کردن', 'warn': true},
+    {'key': 'unblock', 'label': 'رفع مسدودی', 'confirm': 'مسدودیت {n} کاربر برداشته شود؟', 'confirm_title': 'رفع مسدودی گروهی', 'confirm_label': 'رفع مسدودی'},
     {'key': 'delete', 'label': 'حذف', 'class': 'btn-danger', 'confirm': '{n} کاربر و داده‌های مرتبط کامل حذف شوند؟ این عمل برگشت‌ناپذیر است.', 'confirm_title': 'حذف گروهی', 'confirm_label': 'حذف', 'danger': true, 'reason': true, 'reason_label': 'علت حذف'},
   ]) }}
   {% elif manage %}
@@ -92,7 +104,7 @@
     {'key': 'unblock', 'label': 'رفع مسدودی', 'confirm': 'مسدودیت {n} کاربر برداشته شود؟', 'confirm_title': 'رفع مسدودی گروهی', 'confirm_label': 'رفع مسدودی'},
     {'key': 'delete', 'label': 'حذف', 'class': 'btn-danger', 'confirm': '{n} کاربر و داده‌های مرتبط کامل حذف شوند؟ این عمل برگشت‌ناپذیر است.', 'confirm_title': 'حذف گروهی', 'confirm_label': 'حذف', 'danger': true, 'reason': true, 'reason_label': 'علت حذف'},
   ]) }}
-  {% elif ops %}
+  {% elif ops and pg_update %}
   {{ table_bulk_bar('/users/bulk-action', [
     {'key': 'renew', 'label': 'تمدید', 'confirm': 'سرویس بحرانی {n} کاربر با پلن فعلی تمدید شود؟ مصرف ریست می‌شود.', 'confirm_title': 'تمدید گروهی', 'confirm_label': 'تمدید'},
   ]) }}
@@ -110,7 +122,7 @@
         <th class="col-exp" data-sort-type="num">انقضا</th>
         <th class="col-wallet col-hide-sm" data-sort-type="num">کیف پول</th>
         <th class="col-status" data-sort-type="text">وضعیت</th>
-        {% if ops or manage %}<th class="col-actions"></th>{% endif %}
+        {% if ops or manage or provision or edit_svc %}<th class="col-actions"></th>{% endif %}
       </tr>
     </thead>
     <tbody>
@@ -119,7 +131,7 @@
       <tr class="users-row{% if focus_uid and u.id == focus_uid %} is-focus{% endif %}{% if row.has_alert %} has-alert{% endif %}"
           data-uid="{{ u.id }}"
           id="user-{{ u.id }}"
-          data-bulk-ops="{% if manage and not u.is_blocked %}block,{% endif %}{% if manage and u.is_blocked %}unblock,{% endif %}{% if ops and row.service_count > 0 %}renew,{% endif %}{% if manage and u.role != 'admin' %}delete{% endif %}">
+          data-bulk-ops="{% if manage and not u.is_blocked %}block,{% endif %}{% if manage and u.is_blocked %}unblock,{% endif %}{% if ops and pg_update and row.service_count > 0 %}renew,{% endif %}{% if manage and u.role != 'admin' %}delete{% endif %}">
         {% if manage or ops %}{{ table_select_cell(u.id) }}{% endif %}
         <td class="mono col-hide-sm" dir="ltr" data-sort-value="{{ u.id }}">{{ u.id }}</td>
         <td class="mono col-tg col-hide-sm" dir="ltr" data-sort-value="{{ u.telegram_id }}">{{ u.telegram_id }}</td>
@@ -176,7 +188,7 @@
           <span class="badge active">فعال</span>
           {% endif %}
         </td>
-        {% if ops or manage %}
+        {% if ops or manage or provision or edit_svc %}
         <td class="col-actions">
           {% call row_actions() %}
             {% if ops and not u.is_blocked %}
@@ -185,7 +197,7 @@
                     data-msg-uid="{{ u.id }}"
                     data-msg-name="{{ u.full_name or u.username or u.telegram_id }}">پیام</button>
             {% endif %}
-            {% if ops and row.service_count > 0 %}
+            {% if ops and pg_update and row.service_count > 0 %}
             <form method="post" action="/users/{{ u.id }}/quick-renew"
                   data-confirm="سرویس بحرانی (نزدیک‌ترین انقضا) با پلن فعلی تمدید شود؟ مصرف ریست می‌شود."
                   data-confirm-title="تمدید سریع"
@@ -195,13 +207,15 @@
               <button class="btn btn-sm" type="submit">تمدید</button>
             </form>
             {% endif %}
-            {% if manage %}
+            {% if edit_svc %}
             <button type="button" class="btn btn-ghost btn-sm"
                     data-modal-open="modal-user-edit"
                     data-modal-load="/users/{{ u.id }}/edit?fragment=1"
                     data-modal-load-target="user-edit-body"
                     data-edit-url="/users/{{ u.id }}/edit?fragment=1"
                     data-edit-title="ویرایش کاربر #{{ u.id }}">ویرایش</button>
+            {% endif %}
+            {% if manage %}
             <form method="post" action="/users/{{ u.id }}/block"
                   data-confirm="{% if u.is_blocked %}مسدودیت این کاربر برداشته شود؟ پیام برای کاربر ارسال می‌شود.{% else %}این کاربر مسدود شود؟ پیام برای کاربر ارسال می‌شود.{% endif %}"
                   data-confirm-title="{% if u.is_blocked %}رفع مسدودی{% else %}تأیید مسدودسازی{% endif %}"
@@ -231,7 +245,7 @@
         {% endif %}
       </tr>
     {% else %}
-      <tr><td colspan="{% if manage or ops %}10{% else %}8{% endif %}" class="muted">کاربری نیست</td></tr>
+      <tr><td colspan="{% if manage or ops or provision or edit_svc %}10{% else %}8{% endif %}" class="muted">کاربری نیست</td></tr>
     {% endfor %}
     </tbody>
   </table>
@@ -288,7 +302,42 @@
 </div>
 {% endif %}
 
-{% if manage %}
+{% if provision %}
+<div class="ui-modal" id="modal-user-create" hidden>
+  <div class="ui-modal-backdrop" data-modal-close></div>
+  <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="user-create-title">
+    <div class="ui-modal-head">
+      <h2 id="user-create-title">ساخت کاربر بات</h2>
+      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <form method="post" action="/users/create" class="form-stack"
+          data-confirm="کاربر جدید با این شناسه تلگرام ساخته شود؟"
+          data-confirm-title="تأیید ساخت کاربر"
+          data-confirm-label="ساخت کاربر">
+      <input type="hidden" name="return_filter" value="{{ flt }}" />
+      {% if q %}<input type="hidden" name="return_q" value="{{ q }}" />{% endif %}
+      <p class="muted">کاربر با نقش «کاربر» ساخته می‌شود. اگر بعداً در ربات /start بزند، پروفایل تلگرام به‌روز می‌شود.</p>
+      <label class="form-field">شناسه تلگرام (عددی)
+        <input name="telegram_id" type="number" required min="1" step="1" inputmode="numeric"
+               placeholder="مثلاً 123456789" dir="ltr" autocomplete="off" />
+        <small class="muted">همان عددی که در @userinfobot یا پروفایل تلگرام می‌بینید — نه @username</small>
+      </label>
+      <label class="form-field">نام کاربری تلگرام
+        <input name="username" type="text" maxlength="64" placeholder="@username (اختیاری)" dir="ltr" autocomplete="off" />
+      </label>
+      <label class="form-field">نام نمایشی
+        <input name="full_name" type="text" maxlength="255" placeholder="نام کامل (اختیاری)" autocomplete="off" />
+      </label>
+      <div class="actions">
+        <button class="btn" type="submit">ساخت کاربر</button>
+        <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endif %}
+{% if edit_svc %}
 <div class="ui-modal" id="modal-user-edit" hidden
      data-modal-strip-keys="edit,ok,err,_">
   <div class="ui-modal-backdrop" data-modal-close-strip></div>
@@ -355,7 +404,7 @@
     });
   }
 
-  {% if manage %}
+  {% if edit_svc %}
   var titleEl = document.getElementById('user-edit-title');
   var loadSeq = 0;
 

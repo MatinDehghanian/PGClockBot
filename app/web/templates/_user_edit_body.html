@@ -20,6 +20,8 @@
   </div>
 </section>
 
+{% set manage_user = can_manage_users if can_manage_users is defined else false %}
+{% if manage_user %}
 <section class="edit-section">
   <header class="edit-section-head">
     <h3>یادداشت داخلی و ریسک</h3>
@@ -93,6 +95,38 @@
   </form>
 </section>
 
+{% endif %}
+{% if can_pg_create %}
+<section class="edit-section">
+  <header class="edit-section-head">
+    <h3>اختصاص پلن جدید</h3>
+    <p class="muted">ساخت سرویس پاسارگارد و لینک اشتراک — بدون سفارش و پرداخت</p>
+  </header>
+  {% if plans %}
+  <form method="post" action="/users/{{ user.id }}/services" class="form-stack"
+        data-confirm="پلن انتخابی برای این کاربر فعال شود؟ کاربر پاسارگارد جدید ساخته می‌شود."
+        data-confirm-title="تأیید اختصاص پلن"
+        data-confirm-label="اختصاص پلن">
+    <div class="user-edit-inline-row">
+      <label class="form-field user-edit-grow">پلن
+        <select name="plan_id" required class="select-block">
+          <option value="" disabled selected>انتخاب پلن…</option>
+          {% for p in plans %}
+          <option value="{{ p.id }}">
+            {{ p.name }} · {{ p.duration_days or '∞' }}روز · {% if p.data_limit_gb is not none %}{{ p.data_limit_gb | gb }}{% else %}نامحدود{% endif %}
+          </option>
+          {% endfor %}
+        </select>
+      </label>
+      <button class="btn" type="submit">اختصاص پلن</button>
+    </div>
+  </form>
+  {% else %}
+  <p class="muted user-edit-empty">پلن فعالی در کاتالوگ این فروشگاه نیست.</p>
+  {% endif %}
+</section>
+
+{% endif %}
 <section class="edit-section">
   <header class="edit-section-head">
     <h3>سرویس‌ها</h3>
@@ -131,6 +165,7 @@
         {% endif %}
       </div>
       <div class="svc-item-ops">
+{% if can_pg_update %}
         <form method="post" action="/users/{{ user.id }}/services/{{ s.service.id }}/renew" class="form-stack"
               data-confirm="سرویس با پلن انتخابی تمدید شود؟ مصرف ریست می‌شود."
               data-confirm-title="تمدید با پلن"
@@ -148,6 +183,8 @@
             <button class="btn btn-sm" type="submit">تمدید</button>
           </div>
         </form>
+{% endif %}
+{% if can_pg_update %}
         <form method="post" action="/users/{{ user.id }}/services/{{ s.service.id }}/extend" class="form-stack"
               data-confirm="روز/حجم سرویس فعلی تغییر کند؟ (مثبت = افزایش، منفی = کاهش)"
               data-confirm-title="تغییر مانده سرویس"
@@ -164,6 +201,8 @@
             <button class="btn btn-sm" type="submit">تغییر مانده</button>
           </div>
         </form>
+{% endif %}
+{% if can_pg_delete %}
         <form method="post" action="/users/{{ user.id }}/services/{{ s.service.id }}/delete" class="form-stack"
               data-confirm="سرویس #{{ s.service.id }}{% if s.service.pg_username %} ({{ s.service.pg_username }}){% endif %} و کاربر پاسارگارد مرتبط برای همیشه حذف شوند؟ این عمل برگشت‌ناپذیر است."
               data-confirm-title="تأیید حذف سرویس"
@@ -173,6 +212,7 @@
             <button class="btn btn-sm btn-danger" type="submit">حذف سرویس</button>
           </div>
         </form>
+{% endif %}
       </div>
     </li>
     {% endfor %}
