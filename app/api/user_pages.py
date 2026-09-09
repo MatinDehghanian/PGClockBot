@@ -187,6 +187,7 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
     ):
         from app.services.bot_user_admin import list_service_snapshots, list_wallet_txs
         from app.services.formatting import format_toman
+        from app.services.pg_access import staff_user_actions
         from app.services.plans_catalog import list_catalog_plans
         from app.services.platform_identity import is_explicit_owner_staff
 
@@ -201,6 +202,10 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
         snaps = await list_service_snapshots(session, int(user_id))
         wallet_txs = await list_wallet_txs(session, int(user_id), limit=20)
         plans = await list_catalog_plans(session, staff, include_trial=False)
+        pg_acts = staff_user_actions(staff)
+        can_pg_create = bool(pg_acts.get("create"))
+        can_pg_update = bool(pg_acts.get("update"))
+        can_pg_delete = bool(pg_acts.get("delete"))
         ctx = {
             "staff": staff,
             "user": user,
@@ -210,9 +215,13 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
             "format_toman": format_toman,
             "flash_ok": request.query_params.get("ok"),
             "flash_err": request.query_params.get("err"),
-            # Owner-only sections (role / wallet / risk note); resellers get provision UI.
+            # CRM identity ops stay Owner-only (not PG ACL).
             "can_manage_users": is_explicit_owner_staff(staff),
-            "can_provision_users": True,
+            # Plan assign / service mutate follow PasarGuard users.* ACL.
+            "can_provision_users": can_pg_create,
+            "can_pg_create": can_pg_create,
+            "can_pg_update": can_pg_update,
+            "can_pg_delete": can_pg_delete,
         }
         if as_fragment:
             return render(request, "_user_edit_body.html", ctx)
@@ -410,6 +419,7 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
                 data_limit_gb=None,
                 plan=plan,
                 reset_traffic=True,
+                staff=staff,
             )
         except ValueError as e:
             return _redirect_user(user_id, err=str(e))
@@ -449,7 +459,11 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
             return _redirect_user(user_id, err="مقادیر تغییر مانده نامعتبر است")
         try:
             await admin_extend_service(
-                session, svc, extra_days=extra_days, extra_gb=extra_gb
+                session,
+                svc,
+                extra_days=extra_days,
+                extra_gb=extra_gb,
+                staff=staff,
             )
         except ValueError as e:
             return _redirect_user(user_id, err=str(e))
@@ -478,7 +492,9 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
             return _redirect_user(user_id, err=str(e))
 
         try:
-            info = await admin_delete_service(session, svc, delete_pg=True)
+            info = await admin_delete_service(
+                session, svc, delete_pg=True, staff=staff
+            )
         except ValueError as e:
             return _redirect_user(user_id, err=str(e))
         except Exception as e:

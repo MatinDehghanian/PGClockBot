@@ -8,6 +8,7 @@
 {% set c = counts or {} %}
 {% set manage = can_manage_users if can_manage_users is defined else is_admin %}
 {% set provision = can_provision_users if can_provision_users is defined else manage %}
+{% set edit_svc = can_edit_user_services if can_edit_user_services is defined else provision %}
 {% set ops = can_user_ops if can_user_ops is defined else true %}
 {% set bulk_count = rows|length if flt != 'all' else 0 %}
 {% block title %}کاربران بات{% endblock %}
@@ -114,7 +115,7 @@
         <th class="col-exp" data-sort-type="num">انقضا</th>
         <th class="col-wallet col-hide-sm" data-sort-type="num">کیف پول</th>
         <th class="col-status" data-sort-type="text">وضعیت</th>
-        {% if ops or manage or provision %}<th class="col-actions"></th>{% endif %}
+        {% if ops or manage or provision or edit_svc %}<th class="col-actions"></th>{% endif %}
       </tr>
     </thead>
     <tbody>
@@ -180,7 +181,7 @@
           <span class="badge active">فعال</span>
           {% endif %}
         </td>
-        {% if ops or manage or provision %}
+        {% if ops or manage or provision or edit_svc %}
         <td class="col-actions">
           {% call row_actions() %}
             {% if ops and not u.is_blocked %}
@@ -199,7 +200,7 @@
               <button class="btn btn-sm" type="submit">تمدید</button>
             </form>
             {% endif %}
-            {% if provision %}
+            {% if edit_svc %}
             <button type="button" class="btn btn-ghost btn-sm"
                     data-modal-open="modal-user-edit"
                     data-modal-load="/users/{{ u.id }}/edit?fragment=1"
@@ -237,7 +238,7 @@
         {% endif %}
       </tr>
     {% else %}
-      <tr><td colspan="{% if manage or ops or provision %}10{% else %}8{% endif %}" class="muted">کاربری نیست</td></tr>
+      <tr><td colspan="{% if manage or ops or provision or edit_svc %}10{% else %}8{% endif %}" class="muted">کاربری نیست</td></tr>
     {% endfor %}
     </tbody>
   </table>
@@ -328,6 +329,8 @@
   </div>
 </div>
 
+{% endif %}
+{% if edit_svc %}
 <div class="ui-modal" id="modal-user-edit" hidden
      data-modal-strip-keys="edit,ok,err,_">
   <div class="ui-modal-backdrop" data-modal-close-strip></div>
@@ -394,7 +397,7 @@
     });
   }
 
-  {% if provision %}
+  {% if edit_svc %}
   var titleEl = document.getElementById('user-edit-title');
   var loadSeq = 0;
 

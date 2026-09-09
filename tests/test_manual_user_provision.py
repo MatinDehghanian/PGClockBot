@@ -264,3 +264,61 @@ class AdminCreateStaffScopeTests(unittest.IsolatedAsyncioTestCase):
             )
         self.assertIsNone(user.reseller_id)
 
+
+class ShopPgAclGateTests(unittest.IsolatedAsyncioTestCase):
+    async def test_provision_denied_without_pg_create(self):
+        from app.services.bot_user_admin import admin_provision_service
+
+        user = SimpleNamespace(id=10, reseller_id=7)
+        plan = SimpleNamespace(
+            id=5,
+            is_active=True,
+            is_trial=False,
+            owner_reseller_id=7,
+            data_limit_gb=10.0,
+            duration_days=30,
+            pg_template_id=None,
+            pg_group_ids="1",
+            name="P",
+        )
+        staff = {"role": "reseller", "bot_user_id": 7, "pg_user_actions": {"create": False}}
+        with patch(
+            "app.services.pg_access.staff_user_actions",
+            return_value={"create": False, "update": False, "delete": False},
+        ), patch(
+            "app.services.plans_catalog.plan_belongs_to_staff",
+            return_value=True,
+        ):
+            with self.assertRaisesRegex(ValueError, "پاسارگارد"):
+                await admin_provision_service(
+                    AsyncMock(), user, plan, staff=staff, actor="r"
+                )
+
+    async def test_delete_denied_without_pg_delete(self):
+        from app.services.bot_user_admin import admin_delete_service
+
+        svc = SimpleNamespace(
+            id=3, bot_user_id=10, pg_user_id=99, pg_username="u"
+        )
+        staff = {"role": "reseller", "bot_user_id": 7}
+        session = AsyncMock()
+        with patch(
+            "app.services.pg_access.staff_user_actions",
+            return_value={"create": True, "update": True, "delete": False, "disable": False},
+        ):
+            with self.assertRaisesRegex(ValueError, "حذف"):
+                await admin_delete_service(session, svc, delete_pg=True, staff=staff)
+
+    def test_ui_gates_follow_pg_actions(self):
+        edit = Path("app/web/templates/_user_edit_body.html").read_text(encoding="utf-8")
+        self.assertIn("can_pg_create", edit)
+        self.assertIn("can_pg_update", edit)
+        self.assertIn("can_pg_delete", edit)
+        pages = Path("app/api/user_pages.py").read_text(encoding="utf-8")
+        self.assertIn("staff_user_actions", pages)
+        self.assertIn("staff=staff", pages)
+        src = Path("app/services/bot_user_admin.py").read_text(encoding="utf-8")
+        self.assertIn("assert_staff_pg_user_action", src)
+        self.assertIn("_pg_client_for_bot_service", src)
+        self.assertNotIn("def _pg_client_for_service", src)
+
