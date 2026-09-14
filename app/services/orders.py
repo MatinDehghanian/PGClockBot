@@ -1226,8 +1226,30 @@ async def approve_payment(session: AsyncSession, payment: Payment, reviewer_tg: 
 
     if payment.is_wallet_topup:
         user = await session.get(BotUser, payment.user_id)
-        if user:
-            await credit_wallet(session, user, payment.amount, f"شارژ کیف پول #{payment.id}")
+        if not user:
+            # Never leave an APPROVED top-up without a credit. Roll the claim
+            # back so panel/bot can retry after the user row is restored.
+            payment.status = PaymentStatus.PENDING.value
+            payment.reviewed_by = None
+            payment.review_note = (
+                payment.review_note or "wallet topup blocked: bot user missing"
+            )
+            await session.commit()
+            raise ValueError(
+                "کاربر پرداخت‌کننده برای شارژ کیف پول یافت نشد — تأیید لغو شد"
+            )
+        try:
+            await credit_wallet(
+                session, user, payment.amount, f"شارژ کیف پول #{payment.id}"
+            )
+        except Exception:
+            payment.status = PaymentStatus.PENDING.value
+            payment.reviewed_by = None
+            payment.review_note = (
+                payment.review_note or "wallet topup blocked: credit failed"
+            )
+            await session.commit()
+            raise
         await session.commit()
         return None
     order = await session.get(Order, payment.order_id)

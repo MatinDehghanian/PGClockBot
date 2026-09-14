@@ -1015,7 +1015,26 @@ async def _do_redeem(
     reward_id: int,
     service_id: int | None,
 ) -> None:
-    key = f"tg:{callback.id}:{db_user.id}:{reward_id}:{service_id or 0}"
+    # Stable slot key (not callback.id): double-tap shares the same next slot
+    # so uniqueness + IntegrityError replay prevent double spend.
+    from sqlalchemy import func, select
+
+    from app.db.models import RewardRedemption
+
+    used = int(
+        (
+            await session.execute(
+                select(func.count())
+                .select_from(RewardRedemption)
+                .where(
+                    RewardRedemption.user_id == int(db_user.id),
+                    RewardRedemption.reward_id == int(reward_id),
+                )
+            )
+        ).scalar_one()
+        or 0
+    )
+    key = f"tg:redeem:{db_user.id}:{reward_id}:{service_id or 0}:{used}"
     try:
         red = await redeem_reward(
             session,
@@ -1088,11 +1107,25 @@ async def loyalty_wheel_hub(callback: CallbackQuery, session: AsyncSession, db_u
 
 @router.callback_query(F.data == "loy:wheel:spin")
 async def loyalty_wheel_spin(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
-    """Server-side spin — callback id used for idempotency only, never as prize id."""
+    """Server-side spin — stable slot key (not callback.id) prevents double-tap."""
     if not await wheel_feature_enabled(session, reseller_id=db_user.reseller_id):
         await callback.answer("چرخ شانس غیرفعال است", show_alert=True)
         return
-    key = f"tg_wheel:{callback.id}:{db_user.id}"
+    from sqlalchemy import func, select
+
+    from app.db.models import LuckyWheelSpin
+
+    spins_done = int(
+        (
+            await session.execute(
+                select(func.count())
+                .select_from(LuckyWheelSpin)
+                .where(LuckyWheelSpin.user_id == int(db_user.id))
+            )
+        ).scalar_one()
+        or 0
+    )
+    key = f"tg:wheel:{db_user.id}:{spins_done}"
     if callback.message:
         await safe_edit_text(
             callback.message,
