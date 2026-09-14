@@ -16,6 +16,13 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "10.1.1": [
+        "داشبورد: اسکریپت‌های اینلاین زیر CSP nonce دوباره اجرا می‌شوند (ویجت‌ها لود می‌شوند)",
+        "حذف کاربر/نماینده/ادمین: علت حذف پایدار؛ پذیرش confirm_reason؛ پیام حداقل طول واضح",
+        "CSP: حفظ همه Set-Cookie هنگام بازنویسی HTML (setup_gate / session)",
+        "نمایندگان: دکمه بازگشت آدرس به پیش‌فرض بدون onclick (سازگار با CSP)",
+        "بدون مایگریشن DB؛ ریستور: restore/pre-v10.1.1-v10.1.0",
+    ],
     "10.1.0": [
         "راهنمای فارسی داخل پنل روی /help با ظاهر هم‌سبک وب‌پنل و سرچ",
         "آیکون دایره‌ای ؟ کنار تیتر صفحات: خلاصه کوتاه + لینک مطالعه کامل",
