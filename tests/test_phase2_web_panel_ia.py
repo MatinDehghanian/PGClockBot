@@ -54,9 +54,22 @@ class Phase2NavAccordionTests(unittest.TestCase):
         self.assertIn(".nav-label-toggle", css)
         js = JS.read_text(encoding="utf-8")
         self.assertIn("initNavWorkModes", js)
-        self.assertIn("panel-nav-collapsed", js)
+        self.assertIn("activeSectionKey", js)
+        self.assertIn("setOpenSection", js)
+        self.assertIn(".nav-item.active", js)
+        self.assertNotIn("panel-nav-collapsed", js)
         self.assertNotIn("data-nav-mode-tab", js)
         self.assertNotIn("data-active-mode", js)
+
+    def test_sections_default_collapsed_until_js(self):
+        html = BASE.read_text(encoding="utf-8")
+        self.assertGreaterEqual(html.count("is-collapsed"), 3)
+        self.assertIn('data-nav-collapse="system" aria-expanded="false"', html)
+
+    def test_sections_default_collapsed_until_js(self):
+        html = BASE.read_text(encoding="utf-8")
+        self.assertGreaterEqual(html.count("is-collapsed"), 3)
+        self.assertIn('data-nav-collapse="system" aria-expanded="false"', html)
 
     def test_persian_pg_role_chrome(self):
         html = BASE.read_text(encoding="utf-8")

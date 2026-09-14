@@ -120,8 +120,8 @@
         {% set settings_tab = request.query_params.get('tab') or 'welcome' %}
         {% set is_panel_settings = path.startswith('/settings') and settings_tab in ['backup','pwa','ssl','update'] %}
         {% if is_owner %}
-        <div class="nav-section nav-section-home" data-nav-mode="system" id="nav-panel-system">
-          <button type="button" class="nav-label nav-label-home nav-label-toggle" data-nav-collapse="system" aria-expanded="true">
+        <div class="nav-section is-collapsed nav-section-home" data-nav-mode="system" id="nav-panel-system">
+          <button type="button" class="nav-label nav-label-home nav-label-toggle" data-nav-collapse="system" aria-expanded="false">
             <span>وب پنل</span>
             <svg class="nav-label-caret" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5"/></svg>
           </button>
@@ -139,8 +139,8 @@
           </a>
         </div>
         {% else %}
-        <div class="nav-section nav-section-home" data-nav-mode="system" id="nav-panel-system">
-          <button type="button" class="nav-label nav-label-home nav-label-toggle" data-nav-collapse="system" aria-expanded="true">
+        <div class="nav-section is-collapsed nav-section-home" data-nav-mode="system" id="nav-panel-system">
+          <button type="button" class="nav-label nav-label-home nav-label-toggle" data-nav-collapse="system" aria-expanded="false">
             <span>وب پنل</span>
             <svg class="nav-label-caret" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5"/></svg>
           </button>
@@ -171,8 +171,8 @@
         </div>
         {% endif %}
         {% if has_bot %}
-        <div class="nav-section nav-section-bot" data-nav-mode="shop" id="nav-panel-shop">
-          <button type="button" class="nav-label nav-label-bot nav-label-toggle" data-nav-collapse="shop" aria-expanded="true">
+        <div class="nav-section is-collapsed nav-section-bot" data-nav-mode="shop" id="nav-panel-shop">
+          <button type="button" class="nav-label nav-label-bot nav-label-toggle" data-nav-collapse="shop" aria-expanded="false">
             <span>پنل ربات</span>
             <svg class="nav-label-caret" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5"/></svg>
           </button>
@@ -248,8 +248,8 @@
         {% endif %}
 
         {% if has_pg %}
-        <div class="nav-section nav-section-pg" data-nav-mode="pg" id="nav-panel-pg">
-          <button type="button" class="nav-label nav-label-pg nav-label-toggle" data-nav-collapse="pg" aria-expanded="true">
+        <div class="nav-section is-collapsed nav-section-pg" data-nav-mode="pg" id="nav-panel-pg">
+          <button type="button" class="nav-label nav-label-pg nav-label-toggle" data-nav-collapse="pg" aria-expanded="false">
             <span>پنل پاسارگارد</span>
             <svg class="nav-label-caret" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5"/></svg>
           </button>
@@ -305,8 +305,8 @@
         </div>
         {% endif %}
 
-        <div class="nav-section nav-section-help" data-nav-mode="help">
-          <button type="button" class="nav-label nav-label-help nav-label-toggle" data-nav-collapse="help" aria-expanded="true">
+        <div class="nav-section is-collapsed nav-section-help" data-nav-mode="help">
+          <button type="button" class="nav-label nav-label-help nav-label-toggle" data-nav-collapse="help" aria-expanded="false">
             <span>راهنما</span>
             <svg class="nav-label-caret" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5"/></svg>
           </button>

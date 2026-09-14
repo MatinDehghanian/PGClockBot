@@ -3448,40 +3448,69 @@ const root = document.getElementById('upd-root');
   }
 })();
 
-/* === Sidebar section accordion (no work-mode tabs) === */
+/* === Sidebar section accordion (no work-mode tabs) ===
+   Only the section that owns the current page stays open; others stay collapsed. */
 (function initNavWorkModes() {
   function boot() {
     var nav = document.querySelector('[data-side-nav]');
     if (!nav) return;
 
-    var COLLAPSE_KEY = 'panel-nav-collapsed';
-
-    function readCollapsed() {
-      try {
-        return JSON.parse(localStorage.getItem(COLLAPSE_KEY) || '{}') || {};
-      } catch (_) {
-        return {};
+    function sectionFromPath(pathname, search) {
+      var path = pathname || '/';
+      var q = search || '';
+      if (path.indexOf('/help') === 0) return 'help';
+      if (path.indexOf('/pg') === 0) return 'pg';
+      if (path === '/home' || path.indexOf('/inbox') === 0 || path.indexOf('/security') === 0) {
+        return 'system';
       }
+      if (path.indexOf('/settings') === 0) {
+        var tab = 'welcome';
+        try { tab = new URLSearchParams(q).get('tab') || 'welcome'; } catch (_) {}
+        if (['backup', 'pwa', 'ssl', 'update'].indexOf(tab) >= 0) return 'system';
+        return 'shop';
+      }
+      if (path.indexOf('/shop-settings') === 0) return 'shop';
+      var shopPrefixes = [
+        '/dashboard', '/users', '/finance', '/orders', '/payments', '/plans',
+        '/broadcast', '/loyalty', '/message-variables', '/resellers', '/tickets'
+      ];
+      for (var i = 0; i < shopPrefixes.length; i++) {
+        if (path === shopPrefixes[i] || path.indexOf(shopPrefixes[i] + '/') === 0) return 'shop';
+      }
+      return 'system';
     }
 
-    function writeCollapsed(map) {
-      try { localStorage.setItem(COLLAPSE_KEY, JSON.stringify(map || {})); } catch (_) {}
+    function activeSectionKey() {
+      var active = nav.querySelector('.nav-item.active');
+      if (active) {
+        var parent = active.closest('.nav-section[data-nav-mode]');
+        if (parent) return parent.getAttribute('data-nav-mode');
+      }
+      return sectionFromPath(location.pathname, location.search);
     }
 
-    function applyCollapsed() {
-      var map = readCollapsed();
+    function setOpenSection(openKey) {
       var sections = nav.querySelectorAll('.nav-section[data-nav-mode]');
+      var found = false;
       for (var i = 0; i < sections.length; i++) {
-        var section = sections[i];
+        if (sections[i].getAttribute('data-nav-mode') === openKey) found = true;
+      }
+      if (!found && sections.length) openKey = sections[0].getAttribute('data-nav-mode');
+      for (var j = 0; j < sections.length; j++) {
+        var section = sections[j];
         var key = section.getAttribute('data-nav-mode');
         var btn = section.querySelector('[data-nav-collapse]');
-        var collapsed = !!map[key];
+        var collapsed = key !== openKey;
         section.classList.toggle('is-collapsed', collapsed);
         if (btn) btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
       }
+      var active = nav.querySelector('.nav-item.active');
+      if (active && typeof active.scrollIntoView === 'function') {
+        try { active.scrollIntoView({ block: 'nearest' }); } catch (_) {}
+      }
     }
 
-    applyCollapsed();
+    setOpenSection(activeSectionKey());
 
     nav.addEventListener('click', function (e) {
       var btn = e.target.closest('[data-nav-collapse]');
@@ -3490,12 +3519,14 @@ const root = document.getElementById('upd-root');
       var key = btn.getAttribute('data-nav-collapse');
       var section = btn.closest('.nav-section');
       if (!section || !key) return;
-      var map = readCollapsed();
-      var next = !section.classList.contains('is-collapsed');
-      if (next) map[key] = true; else delete map[key];
-      writeCollapsed(map);
-      section.classList.toggle('is-collapsed', next);
-      btn.setAttribute('aria-expanded', next ? 'false' : 'true');
+      /* Exclusive accordion: opening one closes the rest; collapsing the
+         open one is allowed so the user can peek without leaving the page. */
+      if (section.classList.contains('is-collapsed')) {
+        setOpenSection(key);
+      } else {
+        section.classList.add('is-collapsed');
+        btn.setAttribute('aria-expanded', 'false');
+      }
     });
   }
 
