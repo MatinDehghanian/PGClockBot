@@ -5,9 +5,9 @@
 <div class="page-head">
   <div>
     {% if owner_view %}
-    {{ page_title('resellers', 'نمایندگان') }}
+    {{ page_title('resellers', 'نمایندگان', help='resellers') }}
     {% else %}
-    {{ page_title('users', 'نمایندگان من') }}
+    {{ page_title('users', 'نمایندگان من', help='resellers') }}
     {% endif %}
   </div>
   {% if owner_view %}

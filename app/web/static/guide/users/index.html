@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>کاربران ربات · راهنمای PGClockBot</title>
+  <meta name="description" content="مشتریان تلگرام، موجودی کیف پول، سرویس‌ها و فیلترهای انقضا/حجم کم." />
+  <link rel="stylesheet" href="../fonts.css" />
+  <link rel="stylesheet" href="../guide.css" />
+  <link rel="icon" href="../logo-64.png" type="image/png" />
+</head>
+<body>
+  <button type="button" class="guide-menu-toggle" id="guide-menu-toggle" aria-label="فهرست راهنما">☰</button>
+  <div class="guide-backdrop" id="guide-backdrop" hidden></div>
+  <div class="guide-shell">
+    <aside class="guide-side" id="guide-side" aria-label="فهرست راهنما">
+      <a class="guide-brand" href="../index.html">
+        <img src="../logo-64.png" alt="" width="36" height="36" />
+        <span>راهنمای PGClockBot</span>
+      </a>
+      <div class="guide-search">
+        <span class="guide-search-ico" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+        </span>
+        <input type="search" id="guide-search-input" placeholder="جستجو در راهنما…" autocomplete="off" aria-label="جستجو در راهنما" />
+        <div class="guide-search-panel" id="guide-search-panel" role="listbox" aria-label="نتایج جستجو"></div>
+      </div>
+      <nav class="guide-nav" aria-label="بخش‌ها">
+        
+        <div class="guide-nav-group">
+          <span class="guide-nav-label">شروع</span>
+          
+          <a href="../start/index.html" class="">شروع سریع</a>
+          
+          <a href="../roles/index.html" class="">نقش‌ها و دسترسی‌ها</a>
+          
+        </div>
+        
+        <div class="guide-nav-group">
+          <span class="guide-nav-label">وب پنل</span>
+          
+          <a href="../home/index.html" class="">داشبورد وب پنل</a>
+          
+          <a href="../inbox/index.html" class="">اعلان‌ها و مرکز اقدام</a>
+          
+          <a href="../settings-panel/index.html" class="">تنظیمات وب پنل</a>
+          
+        </div>
+        
+        <div class="guide-nav-group">
+          <span class="guide-nav-label">پنل ربات</span>
+          
+          <a href="../bot-dashboard/index.html" class="">نمای کلی ربات</a>
+          
+          <a href="../users/index.html" class="active">کاربران ربات</a>
+          
+          <a href="../finance/index.html" class="">مدیریت مالی</a>
+          
+          <a href="../plans/index.html" class="">پلن‌ها</a>
+          
+          <a href="../tickets/index.html" class="">پشتیبانی</a>
+          
+          <a href="../broadcast/index.html" class="">پیام گروهی</a>
+          
+          <a href="../loyalty/index.html" class="">باشگاه مشتریان</a>
+          
+          <a href="../message-variables/index.html" class="">متغیرهای پیام</a>
+          
+          <a href="../settings-bot/index.html" class="">تنظیمات ربات و فروشگاه</a>
+          
+          <a href="../resellers/index.html" class="">نمایندگان</a>
+          
+          <a href="../reseller-applications/index.html" class="">درخواست‌های نمایندگی</a>
+          
+          <a href="../funnel/index.html" class="">رفتار کاربر</a>
+          
+        </div>
+        
+        <div class="guide-nav-group">
+          <span class="guide-nav-label">پاسارگارد</span>
+          
+          <a href="../pg-overview/index.html" class="">نمای کلی پاسارگارد</a>
+          
+          <a href="../pg-users/index.html" class="">کاربران پاسارگارد</a>
+          
+          <a href="../pg-admins/index.html" class="">ادمین پاسارگارد</a>
+          
+          <a href="../pg-nodes/index.html" class="">نودها</a>
+          
+          <a href="../pg-groups/index.html" class="">گروه‌ها</a>
+          
+          <a href="../pg-inbounds/index.html" class="">اینباندها</a>
+          
+          <a href="../pg-hosts/index.html" class="">هاست‌ها</a>
+          
+          <a href="../pg-templates/index.html" class="">تمپلیت‌های کاربر</a>
+          
+        </div>
+        
+        <div class="guide-nav-group">
+          <span class="guide-nav-label">کمک</span>
+          
+          <a href="../troubleshooting/index.html" class="">عیب‌یابی سریع</a>
+          
+          <a href="../deploy-docs/index.html" class="">انتشار راهنما روی دامنه خودتان</a>
+          
+        </div>
+        
+      </nav>
+    </aside>
+    <main class="guide-main">
+      <article class="guide-article">
+        <div class="guide-crumb">
+          <a href="../index.html">راهنما</a>
+          <span aria-hidden="true">/</span>
+          <span>کاربران ربات</span>
+        </div>
+        <h1>کاربران ربات</h1>
+        <p class="guide-lead">مشتریان تلگرام، موجودی کیف پول، سرویس‌ها و فیلترهای انقضا/حجم کم.</p>
+        <div class="guide-meta">
+          
+          <span class="guide-chip">در پنل: <a href="/users" data-panel-path="/users">/users</a></span>
+          
+          
+          <span class="guide-chip">مخاطب: مالک، ادمین، نماینده</span>
+          
+        </div>
+        <div class="guide-body">
+          <h2 id="کاربران-ربات-چه-کسانیاند؟">کاربران ربات چه کسانی‌اند؟</h2>
+<p>کاربرانی که در تلگرام <code>/start</code> زده‌اند و در فروشگاه شما ثبت شده‌اند — جدا از «کاربران پاسارگارد».</p>
+<h2 id="کارهای-رایج">کارهای رایج</h2>
+<ul><li>دیدن کیف پول و سرویس‌ها</li><li>فیلتر نزدیک‌انقضا یا حجم کم</li><li>ویرایش دستی کاربر</li></ul>
+<h3 id="مثال">مثال</h3>
+<p>می‌خواهید کاربرانی که تا ۳ روز دیگر منقضی می‌شوند را ببینید:</p>
+<ol><li>بروید به <code>/users</code></li><li>فیلتر انقضا را بزنید</li><li>در صورت نیاز پیام یادآوری بفرستید (از ابزارهای پنل/ربات)</li></ol>
+<div class="guide-callout guide-callout--error"><strong class="guide-callout-label">خطای رایج</strong><p><strong>مشکل:</strong> کاربر در تلگرام هست ولی در لیست نیست.</p>
+<p><strong>علت رایج:</strong> هنوز <code>/start</code> نزده، یا در ربات نماینده دیگری است.</p>
+<p><strong>راه حل:</strong> از او بخواهید دوباره <code>/start</code> بزند؛ مطمئن شوید همان ربات متصل به این پنل است.</p></div>
+        </div>
+        <nav class="guide-pager" aria-label="صفحه قبل و بعد">
+          
+          <a href="../bot-dashboard/index.html">
+            <span class="muted">قبلی</span>
+            <strong>نمای کلی ربات</strong>
+          </a>
+          
+          
+          <a class="next" href="../finance/index.html">
+            <span class="muted">بعدی</span>
+            <strong>مدیریت مالی</strong>
+          </a>
+          
+        </nav>
+      </article>
+    </main>
+  </div>
+  <script src="../guide.js" defer></script>
+</body>
+</html>

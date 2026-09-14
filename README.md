@@ -104,6 +104,18 @@ After Install, open a single URL:
 
 Then configure texts, buttons, card number, and plans from **Settings**.
 
+### Persian help / docs
+
+In-panel guide (all roles): `http://SERVER_IP:9000/help/`
+
+Circular **؟** next to page titles opens a short summary and links to the full article.
+
+To host the same docs on your own domain, copy `app/web/static/guide/` to your web root (see `docs/guide/README.md`). Optional:
+
+```env
+DOCS_BASE_URL="https://docs.example.com"
+```
+
 ### Login / health issues
 
 ```bash

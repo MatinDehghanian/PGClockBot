@@ -7,9 +7,9 @@
 <div class="page-head">
   <div>
     {% if is_panel_settings %}
-    {{ page_title('panel-settings', 'تنظیمات وب پنل', 'neutral') }}
+    {{ page_title('panel-settings', 'تنظیمات وب پنل', 'neutral', help='settings-panel') }}
     {% else %}
-    {{ page_title('bot-settings', 'تنظیمات ربات') }}
+    {{ page_title('bot-settings', 'تنظیمات ربات', help='settings-bot') }}
     {% endif %}
   </div>
 </div>

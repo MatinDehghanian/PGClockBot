@@ -2920,4 +2920,13 @@
         applyStep(root, btn.hasAttribute('data-num-stepper-dec') ? -1 : 1);
       });
     })();
+
+    /* Page-title help (?) — close other/open on outside click */
+    document.addEventListener('click', (e) => {
+      const openHelp = document.querySelectorAll('details.page-help[open]');
+      if (!openHelp.length) return;
+      openHelp.forEach((el) => {
+        if (!el.contains(e.target)) el.removeAttribute('open');
+      });
+    });
   })();

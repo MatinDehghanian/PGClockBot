@@ -12,7 +12,7 @@
 {% set finance_tab = finance_tab or 'reports' %}
 <div class="page-head">
   <div>
-    {{ page_title('orders', 'مدیریت مالی') }}
+    {{ page_title('orders', 'مدیریت مالی', help='finance') }}
     {% if finance_tab == 'reports' %}
     <p class="muted page-sub">گزارش فروش و کاربران · امروز · ۷ روز · ۳۰ روز</p>
     {% endif %}

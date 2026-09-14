@@ -121,6 +121,7 @@ templates.env.globals["order_status_fa"] = order_status_fa
 templates.env.globals["ticket_status_fa"] = ticket_status_fa
 templates.env.globals["format_bytes"] = format_bytes
 templates.env.globals["format_bytes_ratio"] = format_bytes_ratio
+templates.env.globals["guide_topics"] = {}
 
 
 
@@ -185,6 +186,14 @@ def render(request: Request, name: str, context: dict | None = None, status_code
         ctx["tickets_unread"] = int(getattr(request.state, "panel_tickets_unread", 0) or 0)
     if "inbox_alert" not in ctx:
         ctx["inbox_alert"] = bool(getattr(request.state, "panel_inbox_alert", False))
+    if "guide_topics" not in ctx:
+        try:
+            from app.services.guide_catalog import panel_help_payload
+
+            panel_help_payload.cache_clear()
+            ctx["guide_topics"] = panel_help_payload()
+        except Exception:
+            ctx["guide_topics"] = {}
     if ctx.get("staff") and "identity" not in ctx:
         try:
             from app.services.identity_chrome import hierarchy_identity
@@ -316,6 +325,14 @@ def create_api_app(lifespan=None) -> FastAPI:
             return await super().get_response(path, scope)
 
     app.mount("/static", _CachedStatic(directory=str(WEB_DIR / "static")), name="static")
+    guide_dir = WEB_DIR / "static" / "guide"
+    if guide_dir.is_dir():
+        app.mount(
+            "/help",
+            _CachedStatic(directory=str(guide_dir), html=True),
+            name="help_docs",
+        )
+
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     try:
         DATA_DIR.chmod(0o700)
@@ -716,6 +733,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             or path == "/setup"
             or path.startswith("/setup/")
             or path.startswith("/static")
+            or path.startswith("/help")
             or path.startswith("/.well-known/")
             or path.startswith("/pwa/")
             or path == "/health"
@@ -1222,6 +1240,10 @@ def create_api_app(lifespan=None) -> FastAPI:
             {"ok": True},
             headers={"Access-Control-Allow-Origin": "*"},
         )
+
+    @app.get("/help")
+    async def help_docs_redirect():
+        return RedirectResponse("/help/", status_code=307)
 
     @app.get("/health/detail")
     async def health_detail(staff: dict = Depends(require_admin)):
