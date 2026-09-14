@@ -270,8 +270,10 @@ pre code {
 }
 
 .guide-layout {
+  /* No z-index here: a stacking context would trap the mobile drawer
+     under .guide-scrim and make sidebar links untappable. */
   position: relative;
-  z-index: 1;
+  z-index: auto;
   display: grid;
   grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
   min-height: calc(100dvh - var(--topbar-h) - var(--safe-top));
@@ -393,46 +395,44 @@ pre code {
 
 .guide-callout {
   margin: 1.15rem 0;
-  padding: 0.95rem 1rem 1rem;
+  padding: 0.9rem 1rem;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
-  background: rgba(15, 23, 42, 0.55);
+  border-right-width: 3px;
+  background: var(--panel);
 }
 
 .guide-callout-label {
   display: inline-block;
-  margin-bottom: 0.45rem;
+  margin-bottom: 0.4rem;
   font-size: 0.78rem;
   font-weight: 800;
+  color: var(--muted);
 }
 
 .guide-callout--tip {
-  border-color: rgba(34, 197, 94, 0.35);
-  background: rgba(34, 197, 94, 0.08);
+  border-right-color: var(--ok);
 }
 
 .guide-callout--tip .guide-callout-label { color: var(--ok); }
 
 .guide-callout--warn {
-  border-color: rgba(245, 158, 11, 0.4);
-  background: rgba(245, 158, 11, 0.08);
+  border-right-color: var(--warn);
 }
 
 .guide-callout--warn .guide-callout-label { color: var(--warn); }
 
 .guide-callout--error {
-  border-color: rgba(239, 68, 68, 0.4);
-  background: rgba(239, 68, 68, 0.08);
+  border-right-color: var(--danger);
 }
 
 .guide-callout--error .guide-callout-label { color: var(--danger); }
 
 .guide-callout--info {
-  border-color: rgba(56, 189, 248, 0.35);
-  background: rgba(56, 189, 248, 0.08);
+  border-right-color: var(--border-strong);
 }
 
-.guide-callout--info .guide-callout-label { color: #38bdf8; }
+.guide-callout--info .guide-callout-label { color: var(--muted); }
 
 .guide-callout > :last-child {
   margin-bottom: 0;
@@ -647,23 +647,22 @@ pre code {
 .guide-chip {
   display: inline-flex;
   align-items: center;
-  min-height: 30px;
-  padding: 0.2rem 0.7rem;
-  border-radius: 999px;
+  min-height: 28px;
+  padding: 0.15rem 0.6rem;
+  border-radius: 8px;
   border: 1px solid var(--border);
-  background: rgba(11, 18, 32, 0.55);
+  background: var(--panel-2);
   color: var(--muted);
   font-size: 0.78rem;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .guide-content {
   border: 1px solid var(--border);
-  border-radius: calc(var(--radius) + 2px);
-  background: rgba(17, 24, 39, 0.72);
-  backdrop-filter: blur(10px);
-  padding: 1.35rem 1.25rem 1.5rem;
-  box-shadow: 0 12px 36px rgba(2, 6, 23, 0.28);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  padding: 1.2rem 1.1rem 1.35rem;
+  box-shadow: none;
 }
 
 .guide-content > :first-child {
@@ -714,9 +713,9 @@ pre code {
 .guide-content blockquote {
   margin: 1.1rem 0;
   padding: 0.85rem 1rem;
-  border-right: 3px solid var(--brand);
+  border-right: 3px solid var(--border-strong);
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-  background: rgba(249, 115, 22, 0.08);
+  background: var(--panel-2);
   color: var(--text-soft);
 }
 
@@ -739,8 +738,8 @@ pre code {
 }
 
 .guide-content th {
-  background: rgba(15, 23, 42, 0.9);
-  color: #fff;
+  background: var(--panel-2);
+  color: var(--text);
   font-weight: 700;
 }
 
@@ -765,22 +764,22 @@ pre code {
   flex-direction: column;
   justify-content: center;
   gap: 0.28rem;
-  min-height: 88px;
+  min-height: 76px;
   height: 100%;
-  padding: 0.95rem 1rem;
-  border-radius: var(--radius);
+  padding: 0.85rem 0.95rem;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border);
-  background: rgba(17, 24, 39, 0.78);
+  background: var(--panel);
   color: var(--text);
   text-decoration: none;
-  box-shadow: 0 10px 28px rgba(2, 6, 23, 0.22);
-  transition: border-color 0.15s ease, transform 0.15s ease, background 0.15s ease;
+  box-shadow: none;
+  transition: border-color 0.15s ease, background 0.15s ease;
 }
 
 .guide-pager-btn:hover {
-  border-color: rgba(249, 115, 22, 0.4);
-  background: rgba(249, 115, 22, 0.08);
-  transform: translateY(-1px);
+  border-color: var(--border-strong);
+  background: var(--panel-2);
+  transform: none;
   text-decoration: none;
 }
 
@@ -866,35 +865,34 @@ pre code {
 .guide-feature-card {
   display: flex;
   flex-direction: column;
-  gap: 0.55rem;
-  min-height: 168px;
-  padding: 1.1rem 1.05rem;
-  border-radius: var(--radius);
+  gap: 0.45rem;
+  min-height: 0;
+  padding: 0.95rem 1rem;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border);
-  background:
-    radial-gradient(circle at top right, rgba(249, 115, 22, 0.12), transparent 42%),
-    rgba(17, 24, 39, 0.78);
+  background: var(--panel);
   color: var(--text);
   text-decoration: none;
-  box-shadow: 0 12px 32px rgba(2, 6, 23, 0.25);
-  transition: border-color 0.15s ease, transform 0.15s ease;
+  box-shadow: none;
+  transition: border-color 0.15s ease, background 0.15s ease;
 }
 
 .guide-feature-card:hover {
-  border-color: rgba(249, 115, 22, 0.4);
-  transform: translateY(-2px);
+  border-color: var(--border-strong);
+  background: var(--panel-2);
+  transform: none;
   text-decoration: none;
 }
 
 .guide-feature-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 11px;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
   display: grid;
   place-items: center;
-  background: var(--brand-soft);
-  border: 1px solid rgba(249, 115, 22, 0.28);
-  color: var(--brand-2);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  color: var(--muted);
 }
 
 .guide-feature-icon svg {
@@ -917,9 +915,9 @@ pre code {
 }
 
 .guide-feature-cta {
-  color: var(--brand-2);
+  color: var(--muted);
   font-size: 0.84rem;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .guide-group-block + .guide-group-block {
@@ -955,25 +953,26 @@ pre code {
   padding: 0.9rem 0.95rem;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
-  background: rgba(17, 24, 39, 0.72);
+  background: var(--panel);
   color: var(--text);
   text-decoration: none;
+  box-shadow: none;
   transition: border-color 0.15s ease, background 0.15s ease;
 }
 
 .guide-topic-link:hover {
-  border-color: rgba(249, 115, 22, 0.35);
-  background: rgba(249, 115, 22, 0.06);
+  border-color: var(--border-strong);
+  background: var(--panel-2);
   text-decoration: none;
 }
 
 .guide-topic-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 11px;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
   display: grid;
   place-items: center;
-  background: rgba(15, 23, 42, 0.8);
+  background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--border);
   color: var(--muted);
 }
@@ -1023,7 +1022,8 @@ pre code {
     top: 0;
     right: 0;
     bottom: 0;
-    z-index: 60;
+    /* Above scrim (50) and topbar (55) so drawer links receive taps */
+    z-index: 70;
     width: min(86vw, 300px);
     height: 100dvh;
     max-height: 100dvh;
@@ -1035,10 +1035,21 @@ pre code {
     padding-bottom: calc(var(--space-2) + var(--safe-bottom));
     padding-inline: var(--space-1);
     background: var(--panel);
+    /* Closed drawer must not steal taps from the page */
+    pointer-events: none;
+    -webkit-overflow-scrolling: touch;
   }
 
   .guide-shell.nav-open .guide-sidebar {
     transform: translateX(0);
+    pointer-events: auto;
+  }
+
+  .guide-sidebar a,
+  .guide-sidebar button,
+  .guide-sidebar input {
+    pointer-events: auto;
+    touch-action: manipulation;
   }
 
   .guide-sidebar-head {

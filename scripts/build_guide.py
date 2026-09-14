@@ -145,6 +145,20 @@ def md_to_html(src: str) -> str:
                 i += 1
             out.append(f"<blockquote>{md_to_html(chr(10).join(buf))}</blockquote>")
             continue
+        if _is_table_row(line) and i + 1 < len(lines) and _is_table_sep(lines[i + 1]):
+            header = _split_table_row(line)
+            i += 2  # skip header + separator
+            rows: list[list[str]] = []
+            while i < len(lines) and _is_table_row(lines[i]):
+                rows.append(_split_table_row(lines[i]))
+                i += 1
+            thead = "<tr>" + "".join(f"<th>{inline_md(c)}</th>" for c in header) + "</tr>"
+            tbody = "".join(
+                "<tr>" + "".join(f"<td>{inline_md(c)}</td>" for c in row) + "</tr>"
+                for row in rows
+            )
+            out.append(f"<table><thead>{thead}</thead><tbody>{tbody}</tbody></table>")
+            continue
         buf = [line]
         i += 1
         while i < len(lines) and lines[i].strip() and not _starts_block(lines[i]):
@@ -152,6 +166,28 @@ def md_to_html(src: str) -> str:
             i += 1
         out.append(f"<p>{inline_md(' '.join(x.strip() for x in buf))}</p>")
     return "\n".join(out)
+
+
+def _is_table_row(line: str) -> bool:
+    s = line.strip()
+    return s.startswith("|") and s.endswith("|") and s.count("|") >= 3
+
+
+def _is_table_sep(line: str) -> bool:
+    s = line.strip()
+    if not _is_table_row(s):
+        return False
+    cells = _split_table_row(s)
+    return bool(cells) and all(re.fullmatch(r":?-{3,}:?", c.replace(" ", "")) for c in cells)
+
+
+def _split_table_row(line: str) -> list[str]:
+    s = line.strip()
+    if s.startswith("|"):
+        s = s[1:]
+    if s.endswith("|"):
+        s = s[:-1]
+    return [c.strip() for c in s.split("|")]
 
 
 def _starts_block(line: str) -> bool:
@@ -162,6 +198,7 @@ def _starts_block(line: str) -> bool:
         or line.startswith("> ")
         or re.match(r"^[-*] ", line)
         or re.match(r"^\d+\. ", line)
+        or (_is_table_row(line))
     )
 
 
@@ -177,7 +214,7 @@ ROLE_FA = {
     "admin": "ادمین",
     "reseller": "نماینده",
     "pg_staff": "ادمین پاسارگارد",
-    "principal": "نماینده ارشد",
+    "principal": "سلسله‌مراتب",
 }
 
 # Stroke icons (24×24) — shared by sidebar + page titles

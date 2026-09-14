@@ -254,30 +254,43 @@
               <span class="guide-chip">در پنل: <a href="/home" data-panel-path="/home">/home</a></span>
               
               
-              <span class="guide-chip">مخاطب: مالک، ادمین، نماینده، ادمین پاسارگارد، نماینده ارشد</span>
+              <span class="guide-chip">مخاطب: مالک، ادمین، نماینده، ادمین پاسارگارد، سلسله‌مراتب</span>
               
             </div>
           </header>
 
           <div class="guide-content">
             <h2 id="عیبیابی-سریع">عیب‌یابی سریع</h2>
-<p>اول این سه دستور:</p>
+<p>وقتی چیزی کار نمی‌کند، اول وضعیت سرویس را بگیرید؛ بعد سراغ حدس تنظیمات بروید.</p>
 <pre><code class="language-bash">bash pgclock.sh status
 bash pgclock.sh service
 curl http://127.0.0.1:9000/health</code></pre>
+<p>اگر <code>health</code> جواب ندهد، تا سرویس و پورت ۹۰۰۰ درست نشده‌اند سراغ پلن و متن ربات نروید.</p>
 <h2 id="ربات-جواب-start-نمیدهد">ربات جواب <code>/start</code> نمی‌دهد</h2>
-<p><strong>علت‌های رایج:</strong> سرویس پایین است، دو پروسه هم‌زمان، توکن غلط، یا <code>ADMIN_IDS</code> اشتباه.</p>
+<p><strong>علت‌های رایج:</strong> سرویس پایین است، دو پروسه هم‌زمان، توکن غلط، یا تنظیمات ادمین/<code>ADMIN_IDS</code> اشتباه.</p>
 <p><strong>راه حل:</strong></p>
 <pre><code class="language-bash">journalctl -u pgclockbot -f</code></pre>
-<p>باید چیزی شبیه <code>Bot online as @...</code> ببینید.</p>
-<h2 id="وبپنل-لاگین-نمیشود">وب‌پنل لاگین نمی‌شود</h2>
-<ul><li>رمز را از <code>pgclock.sh web</code> ریست کنید</li><li>اگر پشت پروکسی هستید، <code>TRUST_PROXY</code> را فقط با آگاهی تنظیم کنید</li></ul>
+<p>باید چیزی شبیه <code>Bot online as @...</code> ببینید. اگر توکن را عوض کرده‌اید، ذخیره تنظیمات و ری‌استارت را فراموش نکنید.</p>
+<div class="guide-callout guide-callout--error"><strong class="guide-callout-label">خطای رایج</strong><p><strong>مشکل:</strong> گاهی جواب می‌دهد گاهی نه.</p>
+<p><strong>علت رایج:</strong> بیش از یک نمونه ربات با یک توکن، یا ری‌استارت مکرر.</p>
+<p><strong>راه حل:</strong> فقط یک سرویس فعال نگه دارید؛ پروسه اضافه را متوقف کنید؛ لاگ را برای خطای conflict تلگرام ببینید.</p></div>
+<h2 id="وبپنل-لاگین-نمیشود--باز-نمیشود">وب‌پنل لاگین نمی‌شود / باز نمی‌شود</h2>
+<ul><li>آدرس را با پورت درست امتحان کنید: <code>http://SERVER_IP:9000/</code></li><li>رمز را از <code>pgclock.sh web</code> ریست کنید</li><li>فایروال: <code>sudo ufw allow 9000/tcp</code></li><li>اگر پشت پروکسی هستید، <code>TRUST_PROXY</code> را فقط با آگاهی تنظیم کنید</li></ul>
+<div class="guide-callout guide-callout--tip"><strong class="guide-callout-label">نکته</strong><p>از خود سرور <code>curl http://127.0.0.1:9000/health</code> بگیرید. اگر لوکال سالم است و از بیرون نه، مشکل شبکه/فایروال است نه اپ.</p></div>
 <h2 id="پاسارگارد-قطع-است">پاسارگارد قطع است</h2>
-<ul><li><code>PG_BASE_URL</code> را بدون مسیر اضافی اشتباه چک کنید</li><li>یوزر/رمز یا توکن را عوض کنید و ذخیره کنید</li><li>از سرور به آدرس پنل PG پینگ/curl بگیرید</li></ul>
+<ul><li><code>PG_BASE_URL</code> را بدون مسیر اضافی اشتباه چک کنید</li><li>یوزر/رمز یا توکن را عوض کنید و ذخیره کنید</li><li>از سرور به آدرس پنل PG پینگ/curl بگیرید</li><li>منوی آبی PG را با اکانت مالک مقایسه کنید</li></ul>
+<p>علائم رایج در فروشگاه: تأیید رسید می‌شود ولی سرویس ساخته نمی‌شود؛ تمپلیت در پلن خالی است.</p>
+<h2 id="منو-خالی--صفحه-با-لینک-مستقیم-باز-نمیشود">منو خالی / صفحه با لینک مستقیم باز نمی‌شود</h2>
+<p>بیشتر «باگ‌های عجیب منو» در واقع <a href="../roles/index.html">نقش و دسترسی</a> هستند:</p>
+<table><thead><tr><th>علامت</th><th>احتمال</th></tr></thead><tbody><tr><td>بکاپ/آپدیت نیست</td><td>نقش غیرمالک است → <code>/security</code></td></tr><tr><td>پیام گروهی نیست</td><td>فقط <code>admin</code> دارد</td></tr><tr><td>تیکت نیست</td><td>نقش <code>principal</code> معمولاً تیکت ندارد</td></tr><tr><td>فروشگاه CRM نیست</td><td><code>principal</code>/<code>pg_staff</code> بدون <code>reseller</code></td></tr><tr><td>مشتریان خالی</td><td>ربات فروشگاه دیگری است</td></tr></tbody></table>
+<p>اول ببینید با اکانت مالک همان صفحه باز می‌شود یا نه؛ بعد از تغییر نقش یک‌بار <strong>خروج</strong> و ورود کنید.</p>
+<h2 id="صف-رسید-و-تحویل-سرویس">صف رسید و تحویل سرویس</h2>
+<ol><li>فیلتر مالی روی «منتظر تأیید»</li><li>پیام خطا روی سفارش را بخوانید</li><li>پلن → تمپلیت/گروه</li><li>اتصال <code>/pg</code></li><li>سقف نماینده/ادمین</li></ol>
 <h2 id="آپدیت-خراب-شد">آپدیت خراب شد</h2>
 <pre><code class="language-bash">bash pgclock.sh update</code></pre>
-<p>اگر پوشه خراب شد، از بکاپ برگردانید؛ در بدترین حالت پوشه را با نام بکاپ جابه‌جا کنید و نصب تمیز بگیرید.</p>
+<p>اگر پوشه خراب شد، از بکاپ برگردانید؛ در بدترین حالت پوشه را با نام بکاپ جابه‌جا کنید و نصب تمیز بگیرید. قبل از آپدیت بعدی حتماً از <a href="../settings-panel/index.html">تنظیمات وب پنل</a> بکاپ بگیرید (فقط مالک).</p>
 <div class="guide-callout guide-callout--tip"><strong class="guide-callout-label">نکته</strong><p>برای تشخیص عمیق‌تر، در صورت نصب CLI سراسری: <code>pgclock doctor</code></p></div>
+<div class="guide-callout guide-callout--info"><strong class="guide-callout-label">راهنما</strong><p>برچسب پاورقی منو «مالک / ادمین / نماینده / زیرنماینده / ادمین پاسارگارد» است — «نماینده ارشد» برچسب واقعی UI نیست.</p></div>
           </div>
 
           <nav class="guide-pager" aria-label="صفحه قبل و بعد">
