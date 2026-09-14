@@ -919,6 +919,14 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "font-src 'self' data:; connect-src 'self'; "
                 f"{frame_ancestors}; base-uri 'self'; form-action 'self'",
             )
+            # Browsers ignore 'unsafe-inline' when a nonce is present — stamp every
+            # <script> tag so deferred dashboard widgets and page scripts still run.
+            try:
+                from app.services.csp_nonce import buffer_and_inject_nonce
+
+                response = await buffer_and_inject_nonce(response, nonce)
+            except Exception:
+                pass
         path = request.url.path
         ct = (response.headers.get("content-type") or "").lower()
         # Authenticated panel HTML must never be cached — flash + table must stay in sync
@@ -3525,8 +3533,10 @@ def create_api_app(lifespan=None) -> FastAPI:
         from app.services.users import delete_bot_user, friendly_user_delete_error
 
         form = await request.form()
-        reason = str(form.get("reason") or "").strip()
-        if len(reason) < 3:
+        from app.services.delete_reason import delete_reason_too_short, extract_delete_reason
+
+        reason = extract_delete_reason(form)
+        if delete_reason_too_short(reason):
             return _redirect_msg("/users", err="علت حذف کاربر الزامی است (حداقل ۳ کاراکتر)")
 
         actor_id = None

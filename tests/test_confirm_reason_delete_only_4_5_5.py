@@ -109,7 +109,8 @@ class ConfirmReasonBackendEnforced(unittest.TestCase):
     def test_users_delete_requires_reason(self):
         api = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
         block = api.split("async def users_delete", 1)[1].split("\n    @app.", 1)[0]
-        self.assertIn('form.get("reason")', block)
+        self.assertIn("extract_delete_reason", block)
+        self.assertIn("delete_reason_too_short", block)
         self.assertIn("علت حذف کاربر الزامی است", block)
         self.assertIn("notify_account_edit", block)
         self.assertIn('event="user_delete"', block)
@@ -119,11 +120,13 @@ class ConfirmReasonBackendEnforced(unittest.TestCase):
         self.assertIn("علت حذف نمایندگی الزامی است", api)
         self.assertIn("علت حذف کاربر الزامی است", api)
         self.assertIn("notify_reseller_revoked", api)
+        self.assertIn("extract_delete_reason", api)
 
     def test_pg_admin_delete_requires_reason(self):
         api = (ROOT / "app/api/pg_pages.py").read_text(encoding="utf-8")
         block = api.split("async def pg_admins_delete", 1)[1].split("\n    @app.", 1)[0]
-        self.assertIn('form.get("reason")', block)
+        self.assertIn("extract_delete_reason", block)
+        self.assertIn("delete_reason_too_short", block)
         self.assertIn("علت حذف ادمین الزامی است", block)
         self.assertIn("reason=reason", block)
         self.assertNotIn('reason="حذف ادمین پاسارگارد از وب‌پنل"', block)
