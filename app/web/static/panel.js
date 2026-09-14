@@ -3448,76 +3448,13 @@ const root = document.getElementById('upd-root');
   }
 })();
 
-/* === Phase 2 nav work-modes === */
+/* === Sidebar section accordion (no work-mode tabs) === */
 (function initNavWorkModes() {
   function boot() {
     var nav = document.querySelector('[data-side-nav]');
     if (!nav) return;
 
-    var modesRoot = nav.querySelector('[data-nav-modes]');
-    var MODE_KEY = 'panel-nav-mode';
     var COLLAPSE_KEY = 'panel-nav-collapsed';
-
-    function availableModes() {
-      var out = ['system'];
-      if (!modesRoot) return out;
-      if (modesRoot.getAttribute('data-has-shop') === '1') out.push('shop');
-      if (modesRoot.getAttribute('data-has-pg') === '1') out.push('pg');
-      return out;
-    }
-
-    function modeFromPath(pathname, search) {
-      var path = pathname || '/';
-      var q = search || '';
-      if (path.indexOf('/pg') === 0) return 'pg';
-      if (path.indexOf('/help') === 0) return null;
-      if (path === '/home' || path.indexOf('/inbox') === 0 || path.indexOf('/security') === 0) {
-        return 'system';
-      }
-      if (path.indexOf('/settings') === 0) {
-        var tab = 'welcome';
-        try { tab = new URLSearchParams(q).get('tab') || 'welcome'; } catch (_) {}
-        if (['backup', 'pwa', 'ssl', 'update'].indexOf(tab) >= 0) return 'system';
-        return 'shop';
-      }
-      if (path.indexOf('/shop-settings') === 0) return 'shop';
-      if (path.indexOf('/resellers') === 0) {
-        return (modesRoot && modesRoot.getAttribute('data-resellers-mode')) || 'shop';
-      }
-      if (path.indexOf('/tickets') === 0) {
-        return (modesRoot && modesRoot.getAttribute('data-tickets-mode')) || 'shop';
-      }
-      var shopPrefixes = [
-        '/dashboard', '/users', '/finance', '/orders', '/payments', '/plans',
-        '/broadcast', '/loyalty', '/message-variables'
-      ];
-      for (var i = 0; i < shopPrefixes.length; i++) {
-        if (path === shopPrefixes[i] || path.indexOf(shopPrefixes[i] + '/') === 0) return 'shop';
-      }
-      return 'system';
-    }
-
-    function setMode(mode, persist) {
-      var allowed = availableModes();
-      if (allowed.indexOf(mode) < 0) mode = allowed[0] || 'system';
-      nav.setAttribute('data-active-mode', mode);
-      if (modesRoot) {
-        var tabs = modesRoot.querySelectorAll('[data-nav-mode-tab]');
-        for (var i = 0; i < tabs.length; i++) {
-          var tab = tabs[i];
-          var on = tab.getAttribute('data-nav-mode-tab') === mode;
-          tab.setAttribute('aria-selected', on ? 'true' : 'false');
-          tab.tabIndex = on ? 0 : -1;
-        }
-      }
-      if (persist) {
-        try { localStorage.setItem(MODE_KEY, mode); } catch (_) {}
-      }
-      var active = nav.querySelector('.nav-item.active');
-      if (active && typeof active.scrollIntoView === 'function') {
-        try { active.scrollIntoView({ block: 'nearest' }); } catch (_) {}
-      }
-    }
 
     function readCollapsed() {
       try {
@@ -3544,22 +3481,7 @@ const root = document.getElementById('upd-root');
       }
     }
 
-    var pathMode = modeFromPath(location.pathname, location.search);
-    var initial = pathMode;
-    if (!initial) {
-      try { initial = localStorage.getItem(MODE_KEY); } catch (_) { initial = null; }
-    }
-    setMode(initial || 'system', false);
     applyCollapsed();
-
-    if (modesRoot) {
-      modesRoot.addEventListener('click', function (e) {
-        var btn = e.target.closest('[data-nav-mode-tab]');
-        if (!btn || !modesRoot.contains(btn)) return;
-        e.preventDefault();
-        setMode(btn.getAttribute('data-nav-mode-tab'), true);
-      });
-    }
 
     nav.addEventListener('click', function (e) {
       var btn = e.target.closest('[data-nav-collapse]');

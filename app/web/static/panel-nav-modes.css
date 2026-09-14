@@ -1,54 +1,4 @@
-/* Phase 2 — additive nav work-modes + collapse (no visual rewrite of panel.css) */
-
-.nav-modes {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
-  gap: 4px;
-  margin: 0 0 var(--space-2, 0.5rem);
-  padding: 4px;
-  border: 1px solid var(--border);
-  border-radius: var(--control-radius, 8px);
-  background: color-mix(in srgb, var(--muted) 55%, transparent);
-}
-
-.nav-mode-btn {
-  appearance: none;
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--muted-fg);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1.2;
-  min-height: 32px;
-  padding: 0.35rem 0.4rem;
-  border-radius: calc(var(--control-radius, 8px) - 2px);
-  cursor: pointer;
-  transition:
-    background var(--motion-fast, 0.15s) var(--ease-standard, ease),
-    color var(--motion-fast, 0.15s) var(--ease-standard, ease),
-    border-color var(--motion-fast, 0.15s) var(--ease-standard, ease);
-}
-
-.nav-mode-btn:hover {
-  color: var(--foreground);
-  background: var(--control-bg-hover);
-}
-
-.nav-mode-btn[aria-selected="true"] {
-  color: var(--foreground);
-  background: var(--muted);
-  border-color: transparent;
-}
-
-.side-nav[data-active-mode="system"] .nav-section[data-nav-mode="shop"],
-.side-nav[data-active-mode="system"] .nav-section[data-nav-mode="pg"],
-.side-nav[data-active-mode="shop"] .nav-section[data-nav-mode="system"],
-.side-nav[data-active-mode="shop"] .nav-section[data-nav-mode="pg"],
-.side-nav[data-active-mode="pg"] .nav-section[data-nav-mode="system"],
-.side-nav[data-active-mode="pg"] .nav-section[data-nav-mode="shop"] {
-  display: none;
-}
+/* Sidebar section accordion (no work-mode tabs) */
 
 .nav-label-toggle {
   display: flex;
@@ -102,21 +52,4 @@
 
 .nav-section:not(:has(.nav-item)) > .nav-empty {
   display: block;
-}
-
-@media (max-width: 900px) {
-  .nav-modes {
-    position: sticky;
-    top: 0;
-    z-index: 2;
-    backdrop-filter: blur(8px);
-  }
-
-  .nav-mode-btn {
-    min-height: 36px;
-  }
-}
-
-html[data-theme="light"] .nav-modes {
-  background: color-mix(in srgb, var(--muted) 70%, #fff);
 }
