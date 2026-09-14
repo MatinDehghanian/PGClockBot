@@ -21,6 +21,7 @@ from app.services.resellers import (
     complete_reseller_setup,
 )
 from app.services.users import (
+from app.services.secret_box import reveal_bot_token
     IMAGE_KEYS,
     SECRET_KEYS,
     TAB_SETTING_GROUPS,
@@ -236,7 +237,7 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
             ctx["colors_page_sections"] = colors_page_grouped_sections(for_reseller=True)
             ctx["style_options"] = STYLE_OPTIONS
         elif tab == "bot":
-            token = (profile.bot_token if profile else "") or ""
+            token = (reveal_bot_token(profile.bot_token) if profile else "") or ""
             ctx["bot_status"] = await _bot_token_status(token)
             ctx["bot_token_masked"] = ("••••" + token[-6:]) if len(token) > 8 else ("••••" if token else "")
             ctx["bot_username"] = (profile.bot_username if profile else "") or ""
@@ -247,7 +248,7 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         elif tab == "appearance":
             from app.services.bot_appearance import load_appearance_context
 
-            token = (profile.bot_token if profile else "") or ""
+            token = (reveal_bot_token(profile.bot_token) if profile else "") or ""
             uname = (profile.bot_username if profile else "") or ""
             ctx["bot_username"] = uname
             ctx.update(
@@ -361,7 +362,7 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         if tab == "appearance":
             from app.services.bot_appearance import save_appearance_from_form
 
-            token = (profile.bot_token or "").strip()
+            token = (reveal_bot_token(profile.bot_token) or "").strip()
             if not token:
                 return RedirectResponse(
                     "/shop-settings?tab=appearance&err="

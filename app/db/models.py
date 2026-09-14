@@ -439,6 +439,8 @@ class ResellerProfile(Base):
     setup_token_expires: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     setup_completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     bot_token: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # SHA-256 hex of plaintext token for unique lookup without storing/searching ciphertext
+    bot_token_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, unique=True, index=True)
     bot_username: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     bot_telegram_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True, index=True)
     # Extra Telegram IDs that get reseller panel on THIS shop's dedicated bot only

@@ -6,6 +6,7 @@ from typing import Any, Optional
 import httpx
 
 from app.config import get_settings, pg_api_base_candidates
+from app.services.security_policy import UnsafePgUrlError, assert_safe_pg_base_url
 
 logger = logging.getLogger(__name__)
 
@@ -168,6 +169,13 @@ class PasarGuardClient:
         self.settings = get_settings()
         # Use settings value as-is (already normalized with path preserved)
         self.base_url = (self.settings.pg_base_url or "").rstrip("/")
+        if self.base_url:
+            try:
+                self.base_url = assert_safe_pg_base_url(self.base_url)
+            except UnsafePgUrlError:
+                # Keep empty so ensure_token fails closed instead of dialing SSRF targets
+                logger.error("Refusing unsafe PG_BASE_URL=%s", self.settings.pg_base_url)
+                self.base_url = ""
         # Optional per-admin credentials (reseller shop) — never fall back to owner silently
         self._login_username = (username or "").strip() or None
         self._login_password = (password or "").replace("\r", "").strip() or None
@@ -193,6 +201,10 @@ class PasarGuardClient:
         base = (base or "").rstrip("/")
         if not base or base == self.base_url:
             return
+        try:
+            base = assert_safe_pg_base_url(base)
+        except UnsafePgUrlError as exc:
+            raise PasarGuardError(str(exc)) from exc
         logger.warning(
             "PasarGuard API root adjusted %s → %s (path was dashboard UI, not API)",
             self.base_url,

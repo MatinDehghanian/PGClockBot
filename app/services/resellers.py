@@ -1015,15 +1015,31 @@ async def complete_reseller_setup(
         main_token = (get_settings().bot_token or "").strip()
         if main_token and token == main_token:
             raise ValueError("نمی‌توانید توکن ربات اصلی ادمین را ثبت کنید — ربات اختصاصی بسازید")
+        from app.services.secret_box import hash_bot_token, seal_bot_token
+
+        token_hash = hash_bot_token(token)
         clash_bot = await session.execute(
             select(ResellerProfile).where(
-                ResellerProfile.bot_token == token,
+                ResellerProfile.bot_token_hash == token_hash,
                 ResellerProfile.id != profile.id,
             )
         )
         if clash_bot.scalar_one_or_none():
             raise ValueError("این توکن ربات قبلاً برای نماینده دیگری ثبت شده")
-        profile.bot_token = token
+        # Legacy plaintext clash (pre-encryption rows) — still block reuse
+        clash_plain = await session.execute(
+            select(ResellerProfile).where(
+                ResellerProfile.bot_token == token,
+                ResellerProfile.id != profile.id,
+            )
+        )
+        if clash_plain.scalar_one_or_none():
+            raise ValueError("این توکن ربات قبلاً برای نماینده دیگری ثبت شده")
+        sealed = seal_bot_token(token)
+        if not sealed:
+            raise ValueError("رمزنگاری توکن ربات ناموفق بود — WEB_SECRET را بررسی کنید")
+        profile.bot_token = sealed
+        profile.bot_token_hash = token_hash
         profile.bot_username = (bot_username or "").lstrip("@") or None
         if bot_telegram_id:
             profile.bot_telegram_id = int(bot_telegram_id)

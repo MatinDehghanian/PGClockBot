@@ -123,3 +123,138 @@ def pg_url_has_userinfo(url: str) -> bool:
         return bool(urlparse(url).username or urlparse(url).password)
     except Exception:
         return False
+
+# Hostnames that must never be used as PasarGuard targets (SSRF / metadata).
+_BLOCKED_PG_HOSTNAMES = frozenset(
+    {
+        "localhost",
+        "localhost.localdomain",
+        "metadata.google.internal",
+        "metadata.google.com",
+        "metadata",
+        "instance-data",
+        "kubernetes.default",
+        "kubernetes.default.svc",
+    }
+)
+_BLOCKED_PG_HOSTNAME_SUFFIXES = (
+    ".metadata.google.internal",
+)
+
+
+def is_loopback_ip(host: str | None) -> bool:
+    """True only for IPv4/IPv6 loopback (127.0.0.0/8, ::1)."""
+    raw = (host or "").strip()
+    if not raw:
+        return False
+    try:
+        return ipaddress.ip_address(raw).is_loopback
+    except ValueError:
+        return raw.lower() in {"localhost", "localhost.localdomain"}
+
+
+def _hostname_blocked_for_pg(hostname: str) -> bool:
+    h = (hostname or "").strip().lower().rstrip(".")
+    if not h:
+        return True
+    if h in _BLOCKED_PG_HOSTNAMES:
+        return True
+    return any(h.endswith(suf) for suf in _BLOCKED_PG_HOSTNAME_SUFFIXES)
+
+
+def _ip_unsafe_for_pg(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    """Reject link-local / metadata / multicast / unspecified. Allow loopback + RFC1918."""
+    if ip.is_link_local or ip.is_multicast or ip.is_unspecified or ip.is_reserved:
+        return True
+    # IPv4 link-local already covered; explicitly block AWS/GCP/Azure metadata IP.
+    if ip.version == 4 and str(ip) == "169.254.169.254":
+        return True
+    return False
+
+
+class UnsafePgUrlError(ValueError):
+    """Raised when a PasarGuard base URL is not safe to dial (SSRF guard)."""
+
+
+def assert_safe_pg_base_url(
+    raw: str,
+    *,
+    resolve_dns: bool = True,
+    allow_private: bool = True,
+) -> str:
+    """Normalize and reject SSRF-prone PasarGuard URLs.
+
+    Allows loopback and RFC1918 by default (common same-host / LAN panels).
+    Always rejects link-local/metadata hosts, userinfo, and non-http(s) schemes.
+    Set ``allow_private=False`` (or env ``PG_URL_PUBLIC_ONLY=1``) to require a
+    public IP / hostname that resolves only to public addresses.
+    """
+    import os
+    import socket
+    from app.config import normalize_pg_base_url
+
+    if os.environ.get("PG_URL_PUBLIC_ONLY", "").strip() in {"1", "true", "yes"}:
+        allow_private = False
+
+    url = normalize_pg_base_url((raw or "").strip())
+    if not url:
+        raise UnsafePgUrlError("آدرس پاسارگارد خالی است")
+    if pg_url_has_userinfo(raw) or pg_url_has_userinfo(url):
+        raise UnsafePgUrlError("آدرس پاسارگارد نباید شامل نام کاربری/رمز در URL باشد")
+
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"}:
+        raise UnsafePgUrlError("آدرس پاسارگارد باید http یا https باشد")
+    host = (parsed.hostname or "").strip().lower()
+    if not host:
+        raise UnsafePgUrlError("آدرس پاسارگارد نامعتبر است")
+    if _hostname_blocked_for_pg(host):
+        # localhost is blocked as hostname label; loopback IPs still allowed below
+        if host not in {"localhost", "localhost.localdomain"}:
+            raise UnsafePgUrlError("هدف پاسارگارد مجاز نیست (metadata/blocked host)")
+        if not allow_private:
+            raise UnsafePgUrlError("آدرس localhost در حالت فقط-عمومی مجاز نیست")
+        # Map localhost → loopback for dialing policy
+        host = "127.0.0.1"
+
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        ip = None
+
+    if ip is not None:
+        if _ip_unsafe_for_pg(ip):
+            raise UnsafePgUrlError("آدرس IP پاسارگارد برای اتصال مجاز نیست")
+        if not allow_private and (ip.is_private or ip.is_loopback):
+            raise UnsafePgUrlError("در حالت فقط-عمومی، IP خصوصی/لوکال مجاز نیست")
+        return url
+
+    if not resolve_dns:
+        return url
+
+    try:
+        infos = socket.getaddrinfo(host, parsed.port or 443, type=socket.SOCK_STREAM)
+    except socket.gaierror as exc:
+        raise UnsafePgUrlError("نام میزبان پاسارگارد قابل resolve نیست") from exc
+
+    if not infos:
+        raise UnsafePgUrlError("نام میزبان پاسارگارد قابل resolve نیست")
+
+    saw_public = False
+    for info in infos:
+        addr = info[4][0]
+        try:
+            resolved = ipaddress.ip_address(addr)
+        except ValueError:
+            continue
+        if _ip_unsafe_for_pg(resolved):
+            raise UnsafePgUrlError("میزبان پاسارگارد به IP ناامن resolve می‌شود")
+        if resolved.is_private or resolved.is_loopback:
+            if not allow_private:
+                raise UnsafePgUrlError("میزبان پاسارگارد به IP خصوصی resolve می‌شود")
+        else:
+            saw_public = True
+    if not allow_private and not saw_public:
+        raise UnsafePgUrlError("میزبان پاسارگارد باید به IP عمومی resolve شود")
+    return url
+

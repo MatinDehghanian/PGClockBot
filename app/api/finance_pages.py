@@ -17,6 +17,7 @@ from app.services.authz import authz_from_staff, can_shop
 from app.services.list_query import filter_by_search, normalize_search_q
 from app.services.shop_scope import is_platform_admin, shop_owner_id
 from app.services.users import SETTING_GROUPS, TAB_SETTING_GROUPS, get_all_settings
+from app.services.secret_box import reveal_bot_token
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +44,7 @@ async def _payment_bot_token(
                 )
             )
         ).scalar_one_or_none()
-        return ((profile.bot_token if profile else None) or "").strip()
+        return ((reveal_bot_token(profile.bot_token) if profile else None) or "").strip()
 
     if payer_reseller_id:
         profile = (
@@ -53,7 +54,7 @@ async def _payment_bot_token(
                 )
             )
         ).scalar_one_or_none()
-        return ((profile.bot_token if profile else None) or "").strip()
+        return ((reveal_bot_token(profile.bot_token) if profile else None) or "").strip()
 
     return (get_settings().bot_token or "").strip()
 

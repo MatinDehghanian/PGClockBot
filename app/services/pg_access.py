@@ -11,6 +11,8 @@ menus/actions are clamped to the env ``PG_USERNAME`` role (fail-closed).
 import time
 from typing import Any, Mapping
 
+from app.services.security_policy import UnsafePgUrlError, assert_safe_pg_base_url
+
 # Our panel feature keys (shown in sidebar under «پاسارگارد»)
 PG_FEATURE_KEYS = (
     "pg_overview",
@@ -221,7 +223,11 @@ async def resolve_platform_pg_capabilities(
             # Construct with explicit login overrides (token via password grant).
             client = PasarGuardClient(username=uname, password=pwd)
             if base_url:
-                client.base_url = str(base_url).rstrip("/")
+                try:
+                    client.base_url = assert_safe_pg_base_url(str(base_url).rstrip("/"))
+                except UnsafePgUrlError as exc:
+                    empty["error"] = str(exc)
+                    return empty
                 # Rebind httpx client base
                 import httpx
 

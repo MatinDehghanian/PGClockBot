@@ -70,6 +70,8 @@ from app.services.setup_wizard import (
     update_env_keys,
 )
 from app.services.security_policy import (
+    UnsafePgUrlError,
+    assert_safe_pg_base_url,
     PUBLIC_FORM_MAX_BODY_BYTES,
     content_length_ok,
     request_host_allowed,
@@ -115,10 +117,71 @@ templates.env.globals["ticket_status_fa"] = ticket_status_fa
 templates.env.globals["format_bytes"] = format_bytes
 templates.env.globals["format_bytes_ratio"] = format_bytes_ratio
 
-# Login brute-force tracking: ip -> list of failure timestamps
+# Login brute-force tracking: ip -> list of failure timestamps.
+# Persisted under DATA_DIR so restarts / multi-worker boots share a lockout window.
 _LOGIN_FAILURES: dict[str, list[float]] = defaultdict(list)
 _LOGIN_WINDOW_SEC = 15 * 60
 _LOGIN_MAX_FAILURES = 8
+_LOGIN_LOCK_FILE = DATA_DIR / "login_lockouts.json"
+_LOGIN_LOCK_MAX_KEYS = 5000
+
+
+def _login_lock_load() -> None:
+    """Best-effort hydrate of in-memory lockouts from disk."""
+    try:
+        if not _LOGIN_LOCK_FILE.is_file():
+            return
+        import json
+
+        raw = json.loads(_LOGIN_LOCK_FILE.read_text(encoding="utf-8") or "{}")
+        if not isinstance(raw, dict):
+            return
+        now = time.time()
+        for key, stamps in raw.items():
+            if not isinstance(key, str) or not isinstance(stamps, list):
+                continue
+            kept = [float(t) for t in stamps if isinstance(t, (int, float)) and now - float(t) < _LOGIN_WINDOW_SEC]
+            if kept:
+                _LOGIN_FAILURES[key] = kept
+    except Exception:
+        logging.getLogger(__name__).debug("login lockout load failed", exc_info=True)
+
+
+def _login_lock_save() -> None:
+    """Persist pruned lockouts (chmod 0600). Caps key count to bound disk growth."""
+    try:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        now = time.time()
+        pruned: dict[str, list[float]] = {}
+        # Prefer most recently failing keys when capping
+        items = sorted(
+            _LOGIN_FAILURES.items(),
+            key=lambda kv: max(kv[1]) if kv[1] else 0.0,
+            reverse=True,
+        )
+        for key, stamps in items:
+            kept = [float(t) for t in stamps if now - float(t) < _LOGIN_WINDOW_SEC]
+            if kept:
+                pruned[key] = kept
+            if len(pruned) >= _LOGIN_LOCK_MAX_KEYS:
+                break
+        _LOGIN_FAILURES.clear()
+        _LOGIN_FAILURES.update(pruned)
+        import json
+        import os
+
+        tmp = _LOGIN_LOCK_FILE.with_suffix(".tmp")
+        tmp.write_text(json.dumps(pruned, ensure_ascii=False), encoding="utf-8")
+        os.replace(tmp, _LOGIN_LOCK_FILE)
+        try:
+            _LOGIN_LOCK_FILE.chmod(0o600)
+        except OSError:
+            pass
+    except Exception:
+        logging.getLogger(__name__).debug("login lockout save failed", exc_info=True)
+
+
+_login_lock_load()
 
 
 class NotAuthenticated(Exception):
@@ -241,10 +304,12 @@ def _login_fail(ip: str) -> None:
     stamps = [t for t in _LOGIN_FAILURES.get(ip, []) if now - t < _LOGIN_WINDOW_SEC]
     stamps.append(now)
     _LOGIN_FAILURES[ip] = stamps
+    _login_lock_save()
 
 
 def _login_success(ip: str) -> None:
     _LOGIN_FAILURES.pop(ip, None)
+    _login_lock_save()
 
 
 def _cookie_secure(request: Request) -> bool:
@@ -281,12 +346,16 @@ def _panel_redirect(request: Request, path: str, *, status_code: int = 303) -> R
                 return RedirectResponse(f"{base}{path}", status_code=status_code)
     except Exception:
         logging.getLogger(__name__).exception("_panel_redirect https probe failed")
+    # Never trust the request Host header for absolute redirects (open-redirect /
+    # cache-poisoning). Prefer configured PUBLIC_BASE_URL, else a relative redirect.
     try:
-        host = (request.headers.get("host") or getattr(request.url, "netloc", None) or "").strip()
-        if host:
-            return RedirectResponse(f"http://{host}{path}", status_code=status_code)
+        from app.services.ssl_certs import public_panel_base_url
+
+        base = (public_panel_base_url() or "").rstrip("/")
+        if base:
+            return RedirectResponse(f"{base}{path}", status_code=status_code)
     except Exception:
-        logging.getLogger(__name__).exception("_panel_redirect host fallback failed")
+        logging.getLogger(__name__).exception("_panel_redirect public base fallback failed")
     return RedirectResponse(path, status_code=status_code)
 
 
@@ -772,7 +841,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "<p><code style='background:#f4f4f5;padding:6px 10px;border-radius:4px;display:block'>"
                 "bash pgclock.sh status</code></p>"
                 "<p style='font-size:14px;color:#71717a'>"
-                "اگر از همان سرور با <code>127.0.0.1</code> باز کنید، معمولاً بدون لینک هم باز می‌شود."
+                "فقط از خود سرور با <code>127.0.0.1</code> / <code>::1</code> بدون لینک باز می‌شود؛ دسترسی از شبکه داخلی/اینترنت فقط با لینک یک‌بارمصرف."
                 "</p></body></html>",
                 status_code=403,
             )
@@ -790,10 +859,27 @@ def create_api_app(lifespan=None) -> FastAPI:
                 # Require Origin or Referer for cookie-authenticated mutations
                 if not origin and not referer:
                     return HTMLResponse("CSRF rejected", status_code=403)
-                if not (
+                allowed = (
                     request_host_allowed(host, origin)
                     or request_host_allowed(host, referer)
-                ):
+                )
+                if not allowed:
+                    # Prefer configured public host over raw Host (Host can be spoofed
+                    # when the panel is reached via an unexpected name).
+                    try:
+                        from urllib.parse import urlparse
+                        from app.services.ssl_certs import public_panel_base_url
+
+                        pub = (public_panel_base_url() or "").strip()
+                        pub_host = urlparse(pub).netloc if pub else ""
+                        if pub_host and (
+                            request_host_allowed(pub_host, origin)
+                            or request_host_allowed(pub_host, referer)
+                        ):
+                            allowed = True
+                    except Exception:
+                        pass
+                if not allowed:
                     return HTMLResponse("CSRF rejected", status_code=403)
         path = request.url.path
         if request.method == "POST" and path in {"/login", "/setup", "/setup/save", "/"}:
@@ -1399,6 +1485,10 @@ def create_api_app(lifespan=None) -> FastAPI:
         base = normalize_pg_base_url((pg_base_url or "").strip())
         if not base:
             return await fail("آدرس پاسارگارد الزامی است.")
+        try:
+            base = assert_safe_pg_base_url(base)
+        except UnsafePgUrlError as exc:
+            return await fail(str(exc))
         if not (pg_username or "").strip():
             return await fail("نام کاربری پاسارگارد الزامی است.")
         if not (pg_password or "").strip():
@@ -4097,6 +4187,11 @@ def create_api_app(lifespan=None) -> FastAPI:
             uname = str(form.get("BOT_USERNAME") or "").strip().lstrip("@")
             ids_raw = str(form.get("ADMIN_IDS") or "").strip()
             pg_base = normalize_pg_base_url(str(form.get("PG_BASE_URL") or "").strip())
+            if pg_base:
+                try:
+                    pg_base = assert_safe_pg_base_url(pg_base)
+                except UnsafePgUrlError as exc:
+                    return _bot_err(str(exc))
             pg_user = str(form.get("PG_USERNAME") or "").strip()
             pg_pass = str(form.get("PG_PASSWORD") or "").strip()
             web_port = str(form.get("WEB_PORT") or "9000").strip()
