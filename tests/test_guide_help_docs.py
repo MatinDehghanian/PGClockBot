@@ -37,6 +37,9 @@ class GuideCatalogTests(unittest.TestCase):
         html = (guide / "plans" / "index.html").read_text(encoding="utf-8")
         self.assertIn("پلن‌ها", html)
         self.assertIn("guide-search", html)
+        self.assertIn("guide-nav-group-title", html)
+        self.assertIn("guide-pager-btn", html)
+        self.assertIn("guide-hero-icon", html)
         self.assertIn('class="guide-callout guide-callout--error"', html)
         self.assertNotIn("&lt;div", html)
         self.assertNotIn("{% for", html)
@@ -51,6 +54,27 @@ class GuideCatalogTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn("help='plans'", plans)
+
+    def test_page_title_macro_renders_help_from_globals(self):
+        """Macros imported without ``with context`` must see guide_topics globals."""
+        from jinja2 import Environment, FileSystemLoader, select_autoescape
+
+        from app.services.guide_catalog import panel_help_payload
+
+        env = Environment(
+            loader=FileSystemLoader(str(ROOT / "app" / "web" / "templates")),
+            autoescape=select_autoescape(["html"]),
+        )
+        panel_help_payload.cache_clear()
+        env.globals["guide_topics"] = panel_help_payload()
+        tpl = env.from_string(
+            '{% from "macros.html" import page_title %}'
+            "{{ page_title('plans', 'پلن‌ها', help='plans') }}"
+        )
+        html = tpl.render()
+        self.assertIn("page-help-btn", html)
+        self.assertIn("مطالعه کامل", html)
+        self.assertIn("/help/plans", html)
 
     def test_help_mounted_in_app_factory(self):
         src = (ROOT / "app" / "api" / "app.py").read_text(encoding="utf-8")

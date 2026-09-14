@@ -25,6 +25,7 @@ TOPICS: dict[str, dict[str, Any]] = {
         "panel": "/",
         "roles": list(ROLE_ALL),
         "nav_group": "شروع",
+        "icon": "rocket",
         "aliases": ["نصب", "راه‌اندازی", "ویزارد", "setup", "install"],
     },
     "roles": {
@@ -34,6 +35,7 @@ TOPICS: dict[str, dict[str, Any]] = {
         "panel": "/home",
         "roles": list(ROLE_ALL),
         "nav_group": "شروع",
+        "icon": "shield",
         "aliases": ["دسترسی", "ادمین", "نماینده", "مالک", "pg_staff"],
     },
     "home": {
@@ -43,6 +45,7 @@ TOPICS: dict[str, dict[str, Any]] = {
         "panel": "/home",
         "roles": list(ROLE_ALL),
         "nav_group": "وب پنل",
+        "icon": "home",
         "aliases": ["خانه", "داشبورد", "overview"],
     },
     "inbox": {
@@ -52,6 +55,7 @@ TOPICS: dict[str, dict[str, Any]] = {
         "panel": "/inbox",
         "roles": list(ROLE_ALL),
         "nav_group": "وب پنل",
+        "icon": "bell",
         "aliases": ["اعلان", "هشدار", "مرکز اقدام", "inbox"],
     },
     "settings-panel": {
@@ -61,6 +65,7 @@ TOPICS: dict[str, dict[str, Any]] = {
         "panel": "/settings?tab=backup",
         "roles": ["owner", "admin", "reseller", "pg_staff", "principal"],
         "nav_group": "وب پنل",
+        "icon": "sliders",
         "aliases": ["بکاپ", "امنیت", "ssl", "pwa", "آپدیت", "رمز عبور"],
     },
     "bot-dashboard": {
@@ -70,6 +75,7 @@ TOPICS: dict[str, dict[str, Any]] = {
         "panel": "/dashboard",
         "roles": ["owner", "admin", "reseller"],
         "nav_group": "پنل ربات",
+        "icon": "gauge",
         "aliases": ["آمار ربات", "نمای کلی", "dashboard"],
     },
     "users": {
@@ -79,6 +85,7 @@ TOPICS: dict[str, dict[str, Any]] = {
         "panel": "/users",
         "roles": ["owner", "admin", "reseller"],
         "nav_group": "پنل ربات",
+        "icon": "users",
         "aliases": ["مشتری", "کاربر بات", "کیف پول"],
     },
     "finance": {
@@ -88,6 +95,7 @@ TOPICS: dict[str, dict[str, Any]] = {
         "panel": "/finance",
         "roles": ["owner", "admin", "reseller"],
         "nav_group": "پنل ربات",
+        "icon": "wallet",
         "aliases": ["پرداخت", "رسید", "سفارش", "کارت به کارت", "درگاه"],
     },
     "plans": {
@@ -97,6 +105,7 @@ TOPICS: dict[str, dict[str, Any]] = {
         "panel": "/plans",
         "roles": ["owner", "admin", "reseller"],
         "nav_group": "پنل ربات",
+        "icon": "layers",
         "aliases": ["تعرفه", "پکیج", "تمپلیت", "هدیه"],
     },
     "tickets": {
@@ -106,6 +115,7 @@ TOPICS: dict[str, dict[str, Any]] = {
         "panel": "/tickets",
         "roles": ["owner", "admin", "reseller", "pg_staff"],
         "nav_group": "پنل ربات",
+        "icon": "life-buoy",
         "aliases": ["تیکت", "پشتیبانی", "چت"],
     },
     "broadcast": {
@@ -115,6 +125,7 @@ TOPICS: dict[str, dict[str, Any]] = {
         "panel": "/broadcast",
         "roles": ["owner", "admin"],
         "nav_group": "پنل ربات",
+        "icon": "megaphone",
         "aliases": ["همگانی", "برودکست", "اعلان گروهی"],
     },
     "loyalty": {
@@ -124,6 +135,7 @@ TOPICS: dict[str, dict[str, Any]] = {
         "panel": "/loyalty",
         "roles": ["owner", "admin", "reseller"],
         "nav_group": "پنل ربات",
+        "icon": "star",
         "aliases": ["امتیاز", "گردونه", "سطح", "پاداش"],
     },
     "message-variables": {
@@ -133,6 +145,7 @@ TOPICS: dict[str, dict[str, Any]] = {
         "panel": "/message-variables",
         "roles": ["owner", "admin", "reseller"],
         "nav_group": "پنل ربات",
+        "icon": "braces",
         "aliases": ["متغیر", "پلیس‌هولدر", "قالب پیام"],
     },
     "settings-bot": {
@@ -142,6 +155,7 @@ TOPICS: dict[str, dict[str, Any]] = {
         "panel": "/settings",
         "roles": ["owner", "admin", "reseller"],
         "nav_group": "پنل ربات",
+        "icon": "bot",
         "aliases": ["تنظیمات فروشگاه", "متن ربات", "پرداخت", "منو"],
     },
     "resellers": {
@@ -151,6 +165,7 @@ TOPICS: dict[str, dict[str, Any]] = {
         "panel": "/resellers",
         "roles": ["owner", "admin", "principal"],
         "nav_group": "پنل ربات",
+        "icon": "network",
         "aliases": ["نمایندگی", "ریسلر", "زیرمجموعه"],
     },
     "reseller-applications": {
@@ -160,6 +175,7 @@ TOPICS: dict[str, dict[str, Any]] = {
         "panel": "/reseller-applications",
         "roles": ["owner", "admin"],
         "nav_group": "پنل ربات",
+        "icon": "inbox",
         "aliases": ["درخواست نماینده", "تأیید نمایندگی"],
     },
     "pg-overview": {
@@ -169,6 +185,7 @@ TOPICS: dict[str, dict[str, Any]] = {
         "panel": "/pg",
         "roles": ["owner", "admin", "pg_staff", "reseller"],
         "nav_group": "پاسارگارد",
+        "icon": "server",
         "aliases": ["pasarguard", "اتصال pg"],
     },
     "pg-users": {
@@ -178,6 +195,7 @@ TOPICS: dict[str, dict[str, Any]] = {
         "panel": "/pg/users",
         "roles": ["owner", "admin", "pg_staff", "reseller"],
         "nav_group": "پاسارگارد",
+        "icon": "user",
         "aliases": ["یوزر vpn", "حجم", "انقضا"],
     },
     "pg-admins": {
@@ -187,6 +205,7 @@ TOPICS: dict[str, dict[str, Any]] = {
         "panel": "/pg/admins",
         "roles": ["owner", "admin"],
         "nav_group": "پاسارگارد",
+        "icon": "key",
         "aliases": ["ادمین فرعی", "sudo", "نقش pg"],
     },
     "pg-nodes": {
@@ -196,6 +215,7 @@ TOPICS: dict[str, dict[str, Any]] = {
         "panel": "/pg/nodes",
         "roles": ["owner", "admin", "pg_staff"],
         "nav_group": "پاسارگارد",
+        "icon": "cpu",
         "aliases": ["سرور", "نود", "node"],
     },
     "pg-groups": {
@@ -205,6 +225,7 @@ TOPICS: dict[str, dict[str, Any]] = {
         "panel": "/pg/groups",
         "roles": ["owner", "admin", "pg_staff"],
         "nav_group": "پاسارگارد",
+        "icon": "boxes",
         "aliases": ["گروه", "group"],
     },
     "pg-inbounds": {
@@ -214,6 +235,7 @@ TOPICS: dict[str, dict[str, Any]] = {
         "panel": "/pg/inbounds",
         "roles": ["owner", "admin", "pg_staff"],
         "nav_group": "پاسارگارد",
+        "icon": "git-branch",
         "aliases": ["inbound", "ورود"],
     },
     "pg-hosts": {
@@ -223,6 +245,7 @@ TOPICS: dict[str, dict[str, Any]] = {
         "panel": "/pg/hosts",
         "roles": ["owner", "admin", "pg_staff"],
         "nav_group": "پاسارگارد",
+        "icon": "globe",
         "aliases": ["host", "هاست"],
     },
     "pg-templates": {
@@ -232,6 +255,7 @@ TOPICS: dict[str, dict[str, Any]] = {
         "panel": "/pg/templates",
         "roles": ["owner", "admin", "pg_staff", "reseller"],
         "nav_group": "پاسارگارد",
+        "icon": "layout",
         "aliases": ["تمپلیت", "template"],
     },
     "funnel": {
@@ -241,6 +265,7 @@ TOPICS: dict[str, dict[str, Any]] = {
         "panel": "/funnel",
         "roles": ["owner", "admin"],
         "nav_group": "پنل ربات",
+        "icon": "filter",
         "aliases": ["فانل", "ریزش", "تبدیل"],
     },
     "troubleshooting": {
@@ -250,15 +275,18 @@ TOPICS: dict[str, dict[str, Any]] = {
         "panel": "/home",
         "roles": list(ROLE_ALL),
         "nav_group": "کمک",
+        "icon": "wrench",
         "aliases": ["خطا", "مشکل", "لاگ", "health", "doctor"],
     },
     "deploy-docs": {
         "title": "انتشار راهنما روی دامنه خودتان",
         "summary": "چطور خروجی راهنما را روی سرور و دامنه شخصی بالا بیاورید.",
         "slug": "deploy-docs",
+        "icon": "upload",
         "panel": "/help/",
         "roles": ["owner", "admin"],
         "nav_group": "کمک",
+        "icon": "upload",
         "aliases": ["دامنه", "nginx", "host", "github pages", "docs"],
     },
 }
