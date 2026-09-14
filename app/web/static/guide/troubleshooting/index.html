@@ -282,7 +282,7 @@ curl http://127.0.0.1:9000/health</code></pre>
 <p>علائم رایج در فروشگاه: تأیید رسید می‌شود ولی سرویس ساخته نمی‌شود؛ تمپلیت در پلن خالی است.</p>
 <h2 id="منو-خالی--صفحه-با-لینک-مستقیم-باز-نمیشود">منو خالی / صفحه با لینک مستقیم باز نمی‌شود</h2>
 <p>بیشتر «باگ‌های عجیب منو» در واقع <a href="../roles/index.html">نقش و دسترسی</a> هستند:</p>
-<table><thead><tr><th>علامت</th><th>احتمال</th></tr></thead><tbody><tr><td>بکاپ/آپدیت نیست</td><td>نقش غیرمالک است → <code>/security</code></td></tr><tr><td>پیام گروهی نیست</td><td>فقط <code>admin</code> دارد</td></tr><tr><td>تیکت نیست</td><td>نقش <code>principal</code> معمولاً تیکت ندارد</td></tr><tr><td>فروشگاه CRM نیست</td><td><code>principal</code>/<code>pg_staff</code> بدون <code>reseller</code></td></tr><tr><td>مشتریان خالی</td><td>ربات فروشگاه دیگری است</td></tr></tbody></table>
+<div class="guide-table-scroll" role="region" aria-label="جدول" tabindex="0"><table><thead><tr><th>علامت</th><th>احتمال</th></tr></thead><tbody><tr><td>بکاپ/آپدیت نیست</td><td>نقش غیرمالک است → <code>/security</code></td></tr><tr><td>پیام گروهی نیست</td><td>فقط <code>admin</code> دارد</td></tr><tr><td>تیکت نیست</td><td>نقش <code>principal</code> معمولاً تیکت ندارد</td></tr><tr><td>فروشگاه CRM نیست</td><td><code>principal</code>/<code>pg_staff</code> بدون <code>reseller</code></td></tr><tr><td>مشتریان خالی</td><td>ربات فروشگاه دیگری است</td></tr></tbody></table></div>
 <p>اول ببینید با اکانت مالک همان صفحه باز می‌شود یا نه؛ بعد از تغییر نقش یک‌بار <strong>خروج</strong> و ورود کنید.</p>
 <h2 id="صف-رسید-و-تحویل-سرویس">صف رسید و تحویل سرویس</h2>
 <ol><li>فیلتر مالی روی «منتظر تأیید»</li><li>پیام خطا روی سفارش را بخوانید</li><li>پلن → تمپلیت/گروه</li><li>اتصال <code>/pg</code></li><li>سقف نماینده/ادمین</li></ol>

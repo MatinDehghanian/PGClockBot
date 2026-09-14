@@ -157,7 +157,12 @@ def md_to_html(src: str) -> str:
                 "<tr>" + "".join(f"<td>{inline_md(c)}</td>" for c in row) + "</tr>"
                 for row in rows
             )
-            out.append(f"<table><thead>{thead}</thead><tbody>{tbody}</tbody></table>")
+            out.append(
+                '<div class="guide-table-scroll" role="region" '
+                'aria-label="جدول" tabindex="0">'
+                f"<table><thead>{thead}</thead><tbody>{tbody}</tbody></table>"
+                "</div>"
+            )
             continue
         buf = [line]
         i += 1

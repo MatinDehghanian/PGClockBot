@@ -541,6 +541,8 @@ pre code {
 .guide-article,
 .guide-home {
   width: min(100%, var(--content-max));
+  max-width: 100%;
+  min-width: 0;
   margin-inline: auto;
 }
 
@@ -552,6 +554,7 @@ pre code {
   margin-bottom: 1.15rem;
   color: var(--muted);
   font-size: 0.84rem;
+  max-width: 100%;
 }
 
 .guide-breadcrumb a {
@@ -663,6 +666,9 @@ pre code {
   background: var(--panel);
   padding: 1.2rem 1.1rem 1.35rem;
   box-shadow: none;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: clip;
 }
 
 .guide-content > :first-child {
@@ -719,37 +725,97 @@ pre code {
   color: var(--text-soft);
 }
 
-.guide-content table {
+.guide-table-scroll {
   width: 100%;
-  border-collapse: collapse;
+  max-width: 100%;
   margin: 1.1rem 0;
-  font-size: 0.92rem;
-  overflow: hidden;
-  border-radius: var(--radius-sm);
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
   border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+}
+
+.guide-table-scroll:focus-visible {
+  outline: 2px solid var(--brand-ring);
+  outline-offset: 2px;
+}
+
+.guide-content table,
+.guide-table-scroll table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  margin: 0;
+  font-size: 0.92rem;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .guide-content th,
-.guide-content td {
+.guide-content td,
+.guide-table-scroll th,
+.guide-table-scroll td {
   border-bottom: 1px solid var(--border);
   padding: 0.7rem 0.8rem;
   text-align: right;
   vertical-align: top;
+  white-space: nowrap;
 }
 
-.guide-content th {
+.guide-content th,
+.guide-table-scroll th {
   background: var(--panel-2);
   color: var(--text);
   font-weight: 700;
 }
 
-.guide-content tr:last-child td {
+.guide-content th:first-child,
+.guide-content td:first-child,
+.guide-table-scroll th:first-child,
+.guide-table-scroll td:first-child {
+  white-space: normal;
+  min-width: 7.5rem;
+  max-width: 14rem;
+  position: sticky;
+  right: 0;
+  z-index: 1;
+  background: var(--panel-2);
+}
+
+.guide-content td:first-child,
+.guide-table-scroll td:first-child {
+  background: var(--panel);
+}
+
+.guide-content tr:last-child td,
+.guide-table-scroll tr:last-child td {
   border-bottom: 0;
 }
 
 .guide-content img {
   max-width: 100%;
-  border-radius: var(--radius-sm);
+  height: auto;
+}
+
+.guide-content pre {
+  max-width: 100%;
+}
+
+.guide-content .guide-callout,
+.guide-content blockquote {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.guide-content p,
+.guide-content li {
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .guide-pager {
@@ -860,6 +926,26 @@ pre code {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.9rem;
   margin-bottom: 1.75rem;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.guide-topic-list,
+.guide-pager {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.guide-feature-card,
+.guide-topic-link,
+.guide-pager-btn {
+  max-width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.guide-search-panel {
+  max-width: min(100vw - 2rem, 420px);
 }
 
 .guide-feature-card {
