@@ -832,11 +832,30 @@ def wallet_purchase_reason(order: Order) -> str:
     return f"خرید سفارش #{order.id}"
 
 
+async def _resume_paid_wallet_order(session: AsyncSession, order: Order, user) -> Order:
+    """Continue delivery for an already-PAID wallet order (crash recovery)."""
+    if order.note and order.note.startswith("reseller_app:"):
+        from app.services.resellers import mark_application_paid
+
+        await mark_application_paid(session, order)
+        order.status = OrderStatus.DELIVERED.value
+        await session.commit()
+        await session.refresh(order)
+        return order
+    if order.note and order.note.startswith("renew:"):
+        if not (order.service_id and order.plan_id):
+            raise ValueError("سفارش تمدید ناقص است")
+        service = await session.get(UserService, order.service_id)
+        plan = await session.get(Plan, order.plan_id)
+        if not service or not plan:
+            raise ValueError("سرویس یا پلن تمدید یافت نشد")
+        return await apply_renewal(session, order, service, plan)
+    return await deliver_order(session, order)
+
+
 async def pay_with_wallet(session: AsyncSession, order: Order, user) -> Order:
     if order.status == OrderStatus.DELIVERED.value:
         return order
-    if order.status not in _PAYABLE_ORDER_STATUSES:
-        raise ValueError("این سفارش قابل پرداخت با کیف پول نیست")
     # Fail-closed: never debit one user for another user's order
     try:
         oid_user = int(order.user_id)
@@ -845,6 +864,30 @@ async def pay_with_wallet(session: AsyncSession, order: Order, user) -> Order:
         raise ValueError("سفارش متعلق به این کاربر نیست") from exc
     if payer <= 0 or oid_user != payer:
         raise ValueError("سفارش متعلق به این کاربر نیست")
+
+    # Crash recovery: PAID wallet order with approved payment, delivery never finished.
+    if (
+        order.status == OrderStatus.PAID.value
+        and (order.payment_method or "") == PaymentMethod.WALLET.value
+    ):
+        existing = (
+            await session.execute(
+                select(Payment)
+                .where(
+                    Payment.order_id == order.id,
+                    Payment.method == PaymentMethod.WALLET.value,
+                    Payment.status == PaymentStatus.APPROVED.value,
+                )
+                .order_by(Payment.id.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if existing is not None:
+            return await _resume_paid_wallet_order(session, order, user)
+
+    if order.status not in _PAYABLE_ORDER_STATUSES:
+        raise ValueError("این سفارش قابل پرداخت با کیف پول نیست")
+
     payment: Payment | None = None
     debited = False
     order = await _claim_payable_order(
@@ -853,8 +896,16 @@ async def pay_with_wallet(session: AsyncSession, order: Order, user) -> Order:
     if order.status == OrderStatus.DELIVERED.value:
         return order
     try:
+        # Single DB transaction for claim + debit + payment row (commit=False debit).
+        # Prevents: wallet drained / order PAID / no payment row after a mid-flow crash.
         if order.amount > 0:
-            await debit_wallet(session, user, order.amount, wallet_purchase_reason(order))
+            await debit_wallet(
+                session,
+                user,
+                order.amount,
+                wallet_purchase_reason(order),
+                commit=False,
+            )
             debited = True
         payment = Payment(
             order_id=order.id,
@@ -867,23 +918,7 @@ async def pay_with_wallet(session: AsyncSession, order: Order, user) -> Order:
         await session.commit()
         await session.refresh(order)
         await session.refresh(payment)
-        if order.note and order.note.startswith("reseller_app:"):
-            from app.services.resellers import mark_application_paid
-
-            await mark_application_paid(session, order)
-            order.status = OrderStatus.DELIVERED.value
-            await session.commit()
-            await session.refresh(order)
-            return order
-        if order.note and order.note.startswith("renew:"):
-            if not (order.service_id and order.plan_id):
-                raise ValueError("سفارش تمدید ناقص است")
-            service = await session.get(UserService, order.service_id)
-            plan = await session.get(Plan, order.plan_id)
-            if not service or not plan:
-                raise ValueError("سرویس یا پلن تمدید یافت نشد")
-            return await apply_renewal(session, order, service, plan)
-        return await deliver_order(session, order)
+        return await _resume_paid_wallet_order(session, order, user)
     except Exception:
         # Only refund when we actually debited — never mint balance on debit failure.
         if debited and order.amount > 0:
@@ -931,25 +966,9 @@ async def revert_failed_free_delivery(session: AsyncSession, order: Order) -> No
     for p in pays.scalars().all():
         p.status = PaymentStatus.REJECTED.value
         p.review_note = p.review_note or "delivery_failed"
-    # Release trial claim so a failed first attempt does not permanently burn the trial
-    plan = await session.get(Plan, order.plan_id) if order.plan_id else None
-    if plan and plan.is_trial:
-        shop_key = (
-            str(int(order.reseller_id)) if order.reseller_id is not None else "platform"
-        )
-        claim = (
-            await session.execute(
-                select(TrialClaim).where(
-                    TrialClaim.user_id == order.user_id,
-                    TrialClaim.shop_key == shop_key,
-                )
-            )
-        ).scalar_one_or_none()
-        if claim:
-            await session.delete(claim)
-    # Release reserved discount use if any
-    if order.discount_code:
-        await _release_order_discount(session, order)
+    # Release trial + reserved discount so a failed first attempt does not burn them
+    await _release_trial_claim_for_order(session, order)
+    await _release_order_discount(session, order)
     await session.commit()
 
 
@@ -986,6 +1005,35 @@ async def _release_order_discount(session: AsyncSession, order: Order) -> None:
     order.amount = int(order.amount) + int(order.discount_amount or 0)
     order.discount_amount = 0
     order.discount_code = None
+
+
+def _trial_shop_key_for_order(order: Order) -> str:
+    """Canonical TrialClaim.shop_key — must match create_order ('platform' / str(rid))."""
+    return str(int(order.reseller_id)) if order.reseller_id is not None else "platform"
+
+
+async def _release_trial_claim_for_order(session: AsyncSession, order: Order) -> None:
+    """Drop unpaid trial claim so the user can retry after cancel/reject/stale cleanup."""
+    claim = (
+        await session.execute(
+            select(TrialClaim).where(TrialClaim.order_id == int(order.id))
+        )
+    ).scalar_one_or_none()
+    if claim is None:
+        shop_key = _trial_shop_key_for_order(order)
+        claim = (
+            await session.execute(
+                select(TrialClaim).where(
+                    TrialClaim.user_id == order.user_id,
+                    TrialClaim.shop_key == shop_key,
+                )
+            )
+        ).scalar_one_or_none()
+        # Only release unlinked or matching claims — never burn another order's claim.
+        if claim is not None and claim.order_id is not None and int(claim.order_id) != int(order.id):
+            return
+    if claim is not None:
+        await session.delete(claim)
 
 
 async def start_card_payment(session: AsyncSession, order: Order, user_id: int) -> Payment:
@@ -1121,20 +1169,8 @@ async def cancel_stale_pending_orders(
                 await release_loyalty_discount_for_order(session, order)
             else:
                 await _release_discount_code(session, order.discount_code)
-        # Drop unpaid trial claim so user can retry
-        note = (order.note or "").strip()
-        if note.startswith("trial:"):
-            shop_key = int(order.reseller_id) if order.reseller_id else 0
-            claim_row = (
-                await session.execute(
-                    select(TrialClaim).where(
-                        TrialClaim.user_id == order.user_id,
-                        TrialClaim.shop_key == shop_key,
-                    )
-                )
-            ).scalar_one_or_none()
-            if claim_row:
-                await session.delete(claim_row)
+        # Always attempt trial release (create_order never sets note="trial:…").
+        await _release_trial_claim_for_order(session, order)
         cancelled += 1
 
     if cancelled:
@@ -1372,6 +1408,10 @@ async def reject_payment(session: AsyncSession, payment: Payment, reviewer_tg: i
             .values(status=OrderStatus.REJECTED.value)
             .execution_options(synchronize_session=False)
         )
+        rejected_order = await session.get(Order, int(payment.order_id))
+        if rejected_order is not None:
+            await _release_order_discount(session, rejected_order)
+            await _release_trial_claim_for_order(session, rejected_order)
     await session.commit()
 
 
@@ -1443,6 +1483,7 @@ async def cancel_order(session: AsyncSession, order: Order, *, note: str = "") -
             await release_loyalty_discount_for_order(session, order)
         else:
             await _release_discount_code(session, order.discount_code)
+    await _release_trial_claim_for_order(session, order)
     await session.commit()
     await session.refresh(order)
     return order
@@ -1479,6 +1520,9 @@ async def reject_order(session: AsyncSession, order: Order, *, note: str = "") -
         .values(status=PaymentStatus.REJECTED.value, review_note=reject_note)
         .execution_options(synchronize_session=False)
     )
+    await session.refresh(order)
+    await _release_order_discount(session, order)
+    await _release_trial_claim_for_order(session, order)
     await session.commit()
     await session.refresh(order)
     return order

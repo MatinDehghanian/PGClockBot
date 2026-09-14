@@ -523,6 +523,9 @@ async def redeem_charge_code(
     code: str,
 ) -> tuple[ChargeCode, int]:
     """Credit wallet from a gift/charge code. Returns (code_row, new_balance)."""
+    from app.services.users import current_shop_reseller_id
+    from app.services.wallet import credit_wallet
+
     key = normalize_charge_code(code)
     if not key:
         raise ValueError("کد نامعتبر است")
@@ -531,9 +534,9 @@ async def redeem_charge_code(
     ).scalar_one_or_none()
     if not row or not row.is_active:
         raise ValueError("کد نامعتبر یا غیرفعال است")
-    # Shop scoping: platform codes (reseller_id NULL) for platform users;
-    # shop codes only for that shop's customers.
-    user_rid = int(user.reseller_id) if user.reseller_id else None
+    # Scope by current shop bot context — not sticky first-touch user.reseller_id.
+    shop_rid = current_shop_reseller_id()
+    user_rid = int(shop_rid) if shop_rid is not None else None
     code_rid = int(row.reseller_id) if row.reseller_id else None
     if code_rid != user_rid:
         raise ValueError("این کد برای فروشگاه شما نیست")
@@ -555,9 +558,17 @@ async def redeem_charge_code(
     )
     if claim.rowcount != 1:
         raise ValueError("کد قابل استفاده نیست")
-    user.wallet_balance = int(user.wallet_balance or 0) + amount
+    # Atomic SQL increment + ledger row (never ORM overwrite under concurrency)
+    await credit_wallet(
+        session,
+        user,
+        amount,
+        f"کد هدیه {row.code}",
+        commit=False,
+    )
     await session.flush()
     await session.refresh(row)
+    await session.refresh(user)
     return row, int(user.wallet_balance)
 
 

@@ -1,0 +1,122 @@
+/* Phase 2 — additive nav work-modes + collapse (no visual rewrite of panel.css) */
+
+.nav-modes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  gap: 4px;
+  margin: 0 0 var(--space-2, 0.5rem);
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--control-radius, 8px);
+  background: color-mix(in srgb, var(--muted) 55%, transparent);
+}
+
+.nav-mode-btn {
+  appearance: none;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted-fg);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  min-height: 32px;
+  padding: 0.35rem 0.4rem;
+  border-radius: calc(var(--control-radius, 8px) - 2px);
+  cursor: pointer;
+  transition:
+    background var(--motion-fast, 0.15s) var(--ease-standard, ease),
+    color var(--motion-fast, 0.15s) var(--ease-standard, ease),
+    border-color var(--motion-fast, 0.15s) var(--ease-standard, ease);
+}
+
+.nav-mode-btn:hover {
+  color: var(--foreground);
+  background: var(--control-bg-hover);
+}
+
+.nav-mode-btn[aria-selected="true"] {
+  color: var(--foreground);
+  background: var(--muted);
+  border-color: transparent;
+}
+
+.side-nav[data-active-mode="system"] .nav-section[data-nav-mode="shop"],
+.side-nav[data-active-mode="system"] .nav-section[data-nav-mode="pg"],
+.side-nav[data-active-mode="shop"] .nav-section[data-nav-mode="system"],
+.side-nav[data-active-mode="shop"] .nav-section[data-nav-mode="pg"],
+.side-nav[data-active-mode="pg"] .nav-section[data-nav-mode="system"],
+.side-nav[data-active-mode="pg"] .nav-section[data-nav-mode="shop"] {
+  display: none;
+}
+
+.nav-label-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-1, 0.25rem);
+  width: 100%;
+  margin: 0;
+  padding: var(--space-1, 0.25rem);
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.25;
+  text-align: inherit;
+  cursor: pointer;
+}
+
+.nav-label-caret {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.7;
+  transition: transform var(--motion-fast, 0.15s) var(--ease-standard, ease);
+}
+
+.nav-section.is-collapsed .nav-label-caret {
+  transform: rotate(90deg);
+}
+
+.nav-section.is-collapsed > .nav-item,
+.nav-section.is-collapsed > .nav-empty {
+  display: none;
+}
+
+.nav-empty {
+  display: none;
+  margin: 0;
+  padding: var(--space-1, 0.25rem);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.nav-section:not(:has(.nav-item)) > .nav-empty {
+  display: block;
+}
+
+@media (max-width: 900px) {
+  .nav-modes {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    backdrop-filter: blur(8px);
+  }
+
+  .nav-mode-btn {
+    min-height: 36px;
+  }
+}
+
+html[data-theme="light"] .nav-modes {
+  background: color-mix(in srgb, var(--muted) 70%, #fff);
+}

@@ -35,8 +35,15 @@ def parse_bulk_ids(raw: Iterable[str | int]) -> list[int]:
 
 
 def sanitize_return_to(raw: str, *, default: str) -> str:
+    """Allow only same-origin relative paths (no open redirects / scheme-relative)."""
     path = (raw or "").strip() or default
-    if not path.startswith("/") or path.startswith("//"):
+    if (
+        not path.startswith("/")
+        or path.startswith("//")
+        or "://" in path
+        or "\\" in path
+        or any(ord(ch) < 32 for ch in path)
+    ):
         return default
     parts = urlsplit(path)
     # Drop flash/cache bust params so we can re-append cleanly

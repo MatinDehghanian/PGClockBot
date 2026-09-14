@@ -114,7 +114,8 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
                 }
             return {"ok": False, "error": data.get("description") or "توکن نامعتبر"}
         except Exception as exc:
-            return {"ok": False, "error": f"عدم اتصال به تلگرام: {exc}"}
+            from app.services.redact import redact
+            return {"ok": False, "error": f"عدم اتصال به تلگرام: {redact(exc)}"}
 
     def _rid(staff: dict) -> int | None:
         """Server-side shop tenant only (session → shop_owner_id). Never form/query."""

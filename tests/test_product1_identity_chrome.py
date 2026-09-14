@@ -281,7 +281,7 @@ class PrincipalPageSourceContracts(unittest.TestCase):
     def test_identity_chrome_labels_in_footer(self) -> None:
         base = (ROOT / "app/web/templates/base.html").read_text(encoding="utf-8")
         self.assertIn("مالک", base)
-        self.assertIn("PG Role:", base)
+        self.assertIn("نقش پاسارگارد:", base)
         self.assertIn("role-tag-owner", base)
         self.assertIn("role-tag-principal", base)
 

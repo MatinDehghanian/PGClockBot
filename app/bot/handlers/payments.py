@@ -7,6 +7,7 @@ from aiogram.types import CallbackQuery, Message, PreCheckoutQuery
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, Payment, PaymentMethod, PaymentStatus
+from app.services.redact import user_safe_error
 from app.services.delivery import send_delivery_to_user
 from app.services.formatting import format_message
 from app.services.orders import approve_payment, reject_payment, stars_amount_for_toman
@@ -256,7 +257,7 @@ async def pay_approve(callback: CallbackQuery, session: AsyncSession, db_user: B
     try:
         order = await approve_payment(session, payment, db_user.telegram_id)
     except Exception as e:
-        await callback.answer(f"خطا: {e}", show_alert=True)
+        await callback.answer(f"خطا: {user_safe_error(e)}", show_alert=True)
         return
     await callback.answer("تأیید شد ✅")
     if callback.message:

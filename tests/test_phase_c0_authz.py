@@ -188,8 +188,9 @@ class HasPermParityTests(unittest.TestCase):
         self.assertTrue(has_perm(profile, "payments", role="admin"))
 
     def test_bot_approve_receipts_alias(self):
+        # payments alone is enough for the approve_receipts alias (no full-shop expand).
         profile = SimpleNamespace(is_active=True, web_permissions="payments")
-        # empty string would deny; with payments only, with_shop_settings expands
+        self.assertTrue(has_bot_perm(profile, "approve_receipts"))
         profile2 = SimpleNamespace(is_active=True, web_permissions="payments,dashboard")
         self.assertTrue(has_bot_perm(profile2, "approve_receipts"))
         # Explicit empty stays empty — alias still denied

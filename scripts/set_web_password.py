@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reset web panel login (writes data/web_admin.json and syncs .env)."""
+"""Reset web panel login (writes data/web_admin.json; clears plaintext .env password)."""
 from __future__ import annotations
 
 import getpass
@@ -13,7 +13,12 @@ sys.path.insert(0, str(ROOT))
 from app.services.web_auth import save_web_admin, validate_password_strength  # noqa: E402
 
 
-def _sync_env(user: str, password: str) -> None:
+def _sync_env(user: str) -> None:
+    """Keep WEB_ADMIN_USER in sync; never persist plaintext WEB_ADMIN_PASSWORD.
+
+    Canonical credentials live in data/web_admin.json (bcrypt). Leaving a
+    plaintext password in .env is a backup/leak risk.
+    """
     env_path = ROOT / ".env"
     if not env_path.exists():
         return
@@ -29,14 +34,20 @@ def _sync_env(user: str, password: str) -> None:
             return pattern.sub(line, src)
         return src.rstrip() + "\n" + line + "\n"
 
+    def clear_password(src: str) -> str:
+        pattern = re.compile(r"^WEB_ADMIN_PASSWORD=.*$", re.M)
+        if pattern.search(src):
+            return pattern.sub('WEB_ADMIN_PASSWORD=""', src)
+        return src
+
     text = upsert(text, "WEB_ADMIN_USER", user)
-    text = upsert(text, "WEB_ADMIN_PASSWORD", password)
+    text = clear_password(text)
     env_path.write_text(text, encoding="utf-8")
 
 
 def main() -> None:
     print("Reset web panel login")
-    print("(saved to data/web_admin.json and .env)")
+    print("(saved to data/web_admin.json; .env password cleared)")
     user = input("Web username [admin]: ").strip() or "admin"
     while True:
         p1 = getpass.getpass("New password: ").replace("\r", "").strip()
@@ -53,7 +64,7 @@ def main() -> None:
             continue
         break
     path = save_web_admin(user, p1)
-    _sync_env(user, p1)
+    _sync_env(user)
     print(f"Saved: {path}")
     print("Restart recommended:")
     print("  sudo systemctl restart pgclockbot")

@@ -134,13 +134,45 @@ async def check_expiring_services(bot: Bot) -> None:
                 ).scalars().all()
                 users_by_id = {u.id: u for u in rows}
 
-            eligible: list[tuple[UserService, BotUser, dict, int, int]] = []
+            # Prefer shop of the fulfilling order (remark order:{id}) over sticky
+            # BotUser.reseller_id — first-touch attribution must not leak alerts.
+            order_ids: set[int] = set()
+            for svc in services:
+                remark = (getattr(svc, "remark", None) or "").strip()
+                if remark.startswith("order:"):
+                    try:
+                        order_ids.add(int(remark.split(":", 1)[1].split()[0]))
+                    except (TypeError, ValueError):
+                        pass
+            order_shop_by_id: dict[int, int | None] = {}
+            if order_ids:
+                from app.db.models import Order
+
+                for oid, orid in (
+                    await session.execute(
+                        select(Order.id, Order.reseller_id).where(Order.id.in_(order_ids))
+                    )
+                ).all():
+                    order_shop_by_id[int(oid)] = int(orid) if orid is not None else None
+
+            def _shop_rid_for(svc: UserService, user: BotUser) -> int | None:
+                remark = (getattr(svc, "remark", None) or "").strip()
+                if remark.startswith("order:"):
+                    try:
+                        oid = int(remark.split(":", 1)[1].split()[0])
+                    except (TypeError, ValueError):
+                        oid = 0
+                    if oid in order_shop_by_id:
+                        return order_shop_by_id[oid]
+                return int(user.reseller_id) if user.reseller_id else None
+
+            eligible: list[tuple[UserService, BotUser, dict, int, int, int | None]] = []
             for svc in services:
                 user = users_by_id.get(svc.bot_user_id)
                 if not user or user.is_blocked:
                     continue
 
-                rid = int(user.reseller_id) if user.reseller_id else None
+                rid = _shop_rid_for(svc, user)
                 if not platform_on:
                     if rid is None or rid not in reseller_ids_with_alerts:
                         continue
@@ -151,7 +183,7 @@ async def check_expiring_services(bot: Bot) -> None:
 
                 traffic_pct = max(1, min(99, _as_int(ui.get("user_alert_low_traffic_pct"), 20)))
                 time_pct = max(1, min(99, _as_int(ui.get("user_alert_low_time_pct"), 20)))
-                eligible.append((svc, user, ui, traffic_pct, time_pct))
+                eligible.append((svc, user, ui, traffic_pct, time_pct, rid))
 
             if not eligible:
                 if len(services) < batch_size:
@@ -172,10 +204,10 @@ async def check_expiring_services(bot: Bot) -> None:
                 *[_fetch_info(svc.subscription_token) for svc, *_rest in eligible]
             )
 
-            for (svc, user, _ui, traffic_pct, time_pct), info in zip(eligible, infos):
+            for (svc, user, _ui, traffic_pct, time_pct, shop_rid), info in zip(eligible, infos):
                 if not info:
                     continue
-                send_bot = _resolve_send_bot(bot, user.reseller_id, profile_by_user)
+                send_bot = _resolve_send_bot(bot, shop_rid, profile_by_user)
 
                 # --- remaining TIME percent ---
                 if not svc.notified_expire:
@@ -472,7 +504,11 @@ async def run_admin_daily_report(bot: Bot) -> None:
                         try:
                             await shop_bot.session.close()
                         except Exception:
-                            pass
+                            logger.debug(
+                                "daily report shop bot session close failed rid=%s",
+                                rid,
+                                exc_info=True,
+                            )
         except Exception:
             logger.exception("admin daily report failed")
 

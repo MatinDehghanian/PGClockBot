@@ -60,13 +60,16 @@ class TicketManageTests(unittest.TestCase):
         src = (ROOT / "app/bot/handlers/reseller.py").read_text(encoding="utf-8")
         self.assertIn("Ticket.reseller_id == owner_id", src)
 
-    def test_with_shop_settings_injects_tickets(self):
+    def test_with_shop_settings_keeps_home_only(self):
         from app.services.resellers import with_shop_settings
 
+        # Empty / intentional subsets must not be force-expanded to full shop ACL.
         perms = with_shop_settings([])
-        self.assertIn("tickets", perms)
-        self.assertIn("shop_settings", perms)
-        self.assertIn("dashboard", perms)
+        self.assertEqual(perms, ["dashboard"])
+        subset = with_shop_settings(["tickets"])
+        self.assertEqual(subset, ["tickets", "dashboard"])
+        self.assertNotIn("shop_settings", subset)
+        self.assertNotIn("plans", subset)
 
 
 class ShopSettingsCompletenessTests(unittest.TestCase):

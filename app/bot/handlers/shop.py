@@ -11,6 +11,7 @@ from app.bot import keyboards as kb
 from app.bot.tg_utils import safe_edit_text
 from app.config import get_settings
 from app.db.models import BotUser, Order, PaymentMethod, UserService
+from app.services.redact import user_safe_error
 from app.services.delivery import send_delivery_to_user
 from app.services.formatting import format_message, format_toman, kv_line
 from app.services.orders import (
@@ -661,7 +662,7 @@ async def custom_buy(callback: CallbackQuery, session: AsyncSession, db_user: Bo
                 pass
             if callback.message:
                 await safe_edit_text(callback.message, 
-                    format_message("❌ خطا در تحویل", str(e)),
+                    format_message("❌ خطا در تحویل", user_safe_error(e)),
                     reply_markup=kb.back_home(ui),
                 )
             return
@@ -1110,7 +1111,7 @@ async def shop_buy(callback: CallbackQuery, session: AsyncSession, db_user: BotU
                 pass
             if callback.message:
                 await safe_edit_text(callback.message, 
-                    format_message("❌ خطا در تحویل", str(e)),
+                    format_message("❌ خطا در تحویل", user_safe_error(e)),
                     reply_markup=kb.back_home(ui),
                 )
             return
@@ -1297,7 +1298,7 @@ async def pay_wallet_cb(
         await callback.answer(str(e), show_alert=True)
         return
     except Exception as e:
-        await callback.answer(f"خطا در تحویل: {e}", show_alert=True)
+        await callback.answer(f"خطا در تحویل: {user_safe_error(e)}", show_alert=True)
         return
 
     await callback.answer()
@@ -1761,7 +1762,7 @@ async def pay_stars_cb(
                 pass
     except Exception as e:
         if callback.message:
-            await callback.message.answer(f"خطا در ساخت فاکتور استارز: {e}")
+            await callback.message.answer(f"خطا در ساخت فاکتور استارز: {user_safe_error(e)}")
 
 
 @router.callback_query(F.data.startswith("pay:psp:"))

@@ -110,11 +110,14 @@ def parse_perms(raw: str | None) -> list[str]:
 
 
 def with_shop_settings(perms: list[str] | None) -> list[str]:
-    """Ensure core shop capabilities are present for resellers."""
+    """Keep a usable home surface; do not force-inject the full shop ACL.
+
+    Empty input still expands via ``normalize_feature_perms`` → defaults.
+    Intentional subsets (e.g. tickets-only) must remain subsets.
+    """
     out = list(perms or [])
-    for key in ("dashboard", "shop_settings", "plans", "tickets", "orders", "payments"):
-        if key not in out:
-            out.append(key)
+    if "dashboard" not in out:
+        out.append("dashboard")
     return out
 
 

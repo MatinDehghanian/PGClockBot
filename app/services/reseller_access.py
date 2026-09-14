@@ -96,7 +96,12 @@ async def effective_menu_role(
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ) -> str:
-    """Role used for Telegram main menus on the current bot."""
+    """Role used for Telegram main menus on the current bot.
+
+    Phase 3: platform admin hub chrome requires membership in ``ADMIN_IDS``.
+    Sticky ``BotUser.role=admin`` alone must not unlock the admin keyboard
+    (same intent as Phase 1 web Owner chrome).
+    """
     owner_id, profile = await load_reseller_actor(
         session,
         db_user,
@@ -110,6 +115,19 @@ async def effective_menu_role(
         return Role.USER.value
     # Main bot: shop owners see the user menu (+ credentials button), not a second panel
     if db_user.role == Role.RESELLER.value:
+        return Role.USER.value
+
+    try:
+        tid = int(getattr(db_user, "telegram_id", 0) or 0)
+    except (TypeError, ValueError):
+        tid = 0
+    if tid > 0:
+        from app.config import get_settings
+
+        if tid in set(get_settings().admin_ids or ()):
+            return Role.ADMIN.value
+    # Sticky role=admin without ADMIN_IDS → customer chrome
+    if db_user.role == Role.ADMIN.value:
         return Role.USER.value
     return db_user.role
 

@@ -12,6 +12,7 @@ from app.bot import keyboards as kb
 from app.bot.tg_utils import safe_edit_text
 from app.config import get_settings
 from app.db.models import BotUser, Payment, PaymentMethod, PaymentStatus
+from app.services.redact import user_safe_error
 from app.services.formatting import format_message, format_toman, kv_line
 from app.services.orders import attach_receipt, create_wallet_topup
 from app.services.receipts import process_receipt
@@ -75,7 +76,7 @@ async def redeem_gift_for_user(
         await message.answer(format_message("⚠️ کد هدیه", str(e)))
         return False
     except Exception as e:
-        await message.answer(format_message("❌ خطا", str(e)))
+        await message.answer(format_message("❌ خطا", user_safe_error(e)))
         return False
     if state is not None:
         await state.clear()
@@ -414,7 +415,7 @@ async def wtop_choose_method(
                 session, payment, description=f"شارژ کیف پول #{payment.id}"
             )
         except ValueError as e:
-            await callback.answer(str(e), show_alert=True)
+            await callback.answer(user_safe_error(e), show_alert=True)
             return
         await callback.answer()
         amount_txt = format_toman(amount, get_settings().currency)
@@ -503,7 +504,7 @@ async def wtop_choose_method(
 
             await create_card_auto_awaiting(session, payment)
         except ValueError as e:
-            await callback.answer(str(e), show_alert=True)
+            await callback.answer(user_safe_error(e), show_alert=True)
             return
     await callback.answer()
     text, markup = await _topup_instructions(

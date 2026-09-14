@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # Provision a local PostgreSQL role/database for PGClock production.
 # Usage: sudo bash scripts/setup_postgres.sh [db_name] [db_user] [db_password]
+#
+# Identifiers and the password are passed via psql variables and quoted with
+# format(%I) / format(%L) — never string-interpolated into SQL.
 set -euo pipefail
 
 DB_NAME="${1:-pgclock}"
@@ -16,25 +19,31 @@ if ! command -v psql >/dev/null 2>&1; then
   exit 1
 fi
 
-sudo -u postgres psql -v ON_ERROR_STOP=1 <<SQL
-DO \$\$
-BEGIN
-  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${DB_USER}') THEN
-    CREATE ROLE ${DB_USER} LOGIN PASSWORD '${DB_PASS}';
-  ELSE
-    ALTER ROLE ${DB_USER} LOGIN PASSWORD '${DB_PASS}';
-  END IF;
-END
-\$\$;
-SELECT 'CREATE DATABASE ${DB_NAME} OWNER ${DB_USER}'
-WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '${DB_NAME}')\gexec
-GRANT ALL PRIVILEGES ON DATABASE ${DB_NAME} TO ${DB_USER};
+# Basic charset guard (defense in depth; quoting still applied below).
+if [[ ! "$DB_NAME" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || [[ ! "$DB_USER" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+  echo "ERROR: db_name and db_user must be simple SQL identifiers (letters, digits, underscore)." >&2
+  exit 1
+fi
+
+sudo -u postgres psql -v ON_ERROR_STOP=1 \
+  -v db_user="$DB_USER" \
+  -v db_pass="$DB_PASS" \
+  -v db_name="$DB_NAME" <<'SQL'
+SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'db_user', :'db_pass')
+WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = :'db_user')\gexec
+SELECT format('ALTER ROLE %I LOGIN PASSWORD %L', :'db_user', :'db_pass')
+WHERE EXISTS (SELECT FROM pg_roles WHERE rolname = :'db_user')\gexec
+SELECT format('CREATE DATABASE %I OWNER %I', :'db_name', :'db_user')
+WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = :'db_name')\gexec
+SELECT format('GRANT ALL PRIVILEGES ON DATABASE %I TO %I', :'db_name', :'db_user')\gexec
 SQL
 
 # Schema privileges (PG15+)
-sudo -u postgres psql -d "$DB_NAME" -v ON_ERROR_STOP=1 <<SQL
-GRANT ALL ON SCHEMA public TO ${DB_USER};
-ALTER DATABASE ${DB_NAME} OWNER TO ${DB_USER};
+sudo -u postgres psql -d "$DB_NAME" -v ON_ERROR_STOP=1 \
+  -v db_user="$DB_USER" \
+  -v db_name="$DB_NAME" <<'SQL'
+SELECT format('GRANT ALL ON SCHEMA public TO %I', :'db_user')\gexec
+SELECT format('ALTER DATABASE %I OWNER TO %I', :'db_name', :'db_user')\gexec
 SQL
 
 echo

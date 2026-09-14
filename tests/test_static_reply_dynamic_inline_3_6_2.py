@@ -110,7 +110,7 @@ class StaticReplyDynamicInline362Tests(unittest.TestCase):
         from types import SimpleNamespace
 
         ui = {"btn_back": "⬅️ بازگشت", "btn_menu_home": "🏠 منوی اصلی"}
-        # orders+payments only (shop_settings/plans still soft-injected by has_bot_perm)
+        # orders+payments only — no soft-inject of plans/shop_settings.
         profile = SimpleNamespace(
             is_active=True,
             web_permissions="orders,payments",
@@ -124,12 +124,10 @@ class StaticReplyDynamicInline362Tests(unittest.TestCase):
         )
         self.assertIn("🛒 سفارش‌های مشتریان", mapping)
         self.assertIn("🧾 رسیدهای در انتظار", mapping)
-        # soft-injected by with_shop_settings — still present by design
-        self.assertIn("💎 پلن‌های فروش", mapping)
-        self.assertIn("⚙️ تنظیمات فروشگاه", mapping)
-        # dashboard is soft-injected with other core shop keys
+        self.assertNotIn("💎 پلن‌های فروش", mapping)
+        self.assertNotIn("⚙️ تنظیمات فروشگاه", mapping)
+        # dashboard remains the only soft home key
         self.assertIn("🏠 خانه نماینده", mapping)
-        # stats is NOT soft-injected
         self.assertNotIn("📊 آمار", mapping)
         self.assertNotIn("📊 آمار و کمیسیون", mapping)
 
