@@ -4,6 +4,10 @@
 **Scope:** PostgreSQL + Alembic + SQLite→PG tooling + engine-aware backup/restore  
 **Out of scope:** global CLI, identity sync, permissions parity, node ops
 
+**Runtime model:** one `DATABASE_URL` per process. SQLite is lab/legacy and the
+ETL *source* for cutover; PostgreSQL is the production target. There is no
+dual-write / dual-runtime path — migrate offline, then point `.env` at Postgres.
+
 ---
 
 ## Phase 0 — Baseline (required before cutover)

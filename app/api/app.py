@@ -5,7 +5,6 @@ import hmac
 import json
 import logging
 import time
-from collections import defaultdict
 from pathlib import Path
 from typing import Optional
 from urllib.parse import parse_qsl, quote
@@ -96,6 +95,12 @@ from app.services.web_auth import (
 )
 from app.api.home_pages import register_home_pages
 from app.api.pg_pages import register_pg_pages
+from app.api.login_guard import (
+    client_ip as _client_ip,
+    login_blocked as _login_blocked,
+    login_fail as _login_fail,
+    login_success as _login_success,
+)
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 templates = Jinja2Templates(directory=str(WEB_DIR / "templates"))
@@ -115,10 +120,6 @@ templates.env.globals["ticket_status_fa"] = ticket_status_fa
 templates.env.globals["format_bytes"] = format_bytes
 templates.env.globals["format_bytes_ratio"] = format_bytes_ratio
 
-# Login brute-force tracking: ip -> list of failure timestamps
-_LOGIN_FAILURES: dict[str, list[float]] = defaultdict(list)
-_LOGIN_WINDOW_SEC = 15 * 60
-_LOGIN_MAX_FAILURES = 8
 
 
 class NotAuthenticated(Exception):
@@ -201,51 +202,6 @@ def _redirect_msg(path: str, *, ok: str | None = None, err: str | None = None) -
 SESSION_MAX_AGE = 60 * 60 * 24 * 7
 
 
-def _client_ip(request: Request) -> str:
-    """Best-effort real client IP, resistant to X-Forwarded-For spoofing.
-
-    X-Forwarded-For is fully attacker-controlled except for the hop(s) your
-    own trusted reverse proxy appends. Reading the LEFT-most entry (the
-    classic mistake) lets any client claim to be any IP — including
-    loopback/private ranges, which would bypass login lockouts and the
-    setup-wizard local-IP auto-open gate. Instead we read the entry counted
-    from the RIGHT that corresponds to ``trust_proxy_hops`` (default: a
-    single reverse proxy directly in front of the app).
-    """
-    try:
-        settings = get_settings()
-        if settings.trust_proxy:
-            raw = request.headers.get("x-forwarded-for") or ""
-            parts = [p.strip() for p in raw.split(",") if p.strip()]
-            hops = max(1, int(getattr(settings, "trust_proxy_hops", 1) or 1))
-            if len(parts) >= hops:
-                candidate = parts[-hops]
-                if candidate:
-                    return candidate
-    except Exception:
-        pass
-    if request.client and request.client.host:
-        return request.client.host
-    return "unknown"
-
-
-def _login_blocked(ip: str) -> bool:
-    now = time.time()
-    stamps = [t for t in _LOGIN_FAILURES.get(ip, []) if now - t < _LOGIN_WINDOW_SEC]
-    _LOGIN_FAILURES[ip] = stamps
-    return len(stamps) >= _LOGIN_MAX_FAILURES
-
-
-def _login_fail(ip: str) -> None:
-    now = time.time()
-    stamps = [t for t in _LOGIN_FAILURES.get(ip, []) if now - t < _LOGIN_WINDOW_SEC]
-    stamps.append(now)
-    _LOGIN_FAILURES[ip] = stamps
-
-
-def _login_success(ip: str) -> None:
-    _LOGIN_FAILURES.pop(ip, None)
-
 
 def _cookie_secure(request: Request) -> bool:
     try:
@@ -291,6 +247,12 @@ def _panel_redirect(request: Request, path: str, *, status_code: int = 303) -> R
 
 
 def create_api_app(lifespan=None) -> FastAPI:
+    """Build the panel FastAPI app (routing + middleware factory).
+
+    Prefer extracting cohesive helpers into ``app.api.*`` modules (e.g.
+    ``login_guard``) rather than growing this file further. Domain page
+    routers already live under ``register_*_pages``.
+    """
     app = FastAPI(title="PGClockBot Panel", docs_url=None, redoc_url=None, lifespan=lifespan)
     from starlette.middleware.gzip import GZipMiddleware
 

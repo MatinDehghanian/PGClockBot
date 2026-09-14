@@ -62,8 +62,8 @@ async def _pg_object_gate(
     callback_data: str | None = None,
     notify: bool = True,
 ):
-    """Phase 4D — Principal + AuthzContext + object-scope gate (not ``_is_admin``)."""
-    from app.services.bot_pg_object_pilot import authorize_bot_pg_object_op
+    """Principal + AuthzContext + object-scope gate (not ``_is_admin``)."""
+    from app.services.bot_pg_object_authz import authorize_bot_pg_object_op
 
     data = callback_data
     if data is None and callback is not None:
@@ -175,7 +175,7 @@ def _node_detail_text(n: dict) -> str:
 
 
 async def _render_nodes_list(callback: CallbackQuery, gate) -> None:
-    from app.services.bot_pg_object_pilot import list_scoped_pg_objects
+    from app.services.bot_pg_object_authz import list_scoped_pg_objects
 
     try:
         items = await list_scoped_pg_objects(gate, kind="nodes")
@@ -439,7 +439,7 @@ async def pg_node_toggle(
     reseller_profile_id: int | None = None,
     reseller_owner_id: int | None = None,
 ):
-    from app.services.bot_pg_object_pilot import sanitize_pg_object_write_payload
+    from app.services.bot_pg_object_authz import sanitize_pg_object_write_payload
 
     gate = await _pg_object_gate(
         db_user,
@@ -853,7 +853,7 @@ async def pg_node_create_server_ca(
     reseller_profile_id: int | None = None,
     reseller_owner_id: int | None = None,
 ):
-    from app.services.bot_pg_object_pilot import (
+    from app.services.bot_pg_object_authz import (
         list_scoped_pg_objects,
         sanitize_pg_object_write_payload,
     )
