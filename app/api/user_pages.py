@@ -479,6 +479,7 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
 
     @app.post("/users/{user_id}/services/{service_id}/delete")
     async def user_service_delete(
+        request: Request,
         user_id: int,
         service_id: int,
         staff: dict = Depends(require_ops),
@@ -496,6 +497,15 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
             )
         except ValueError as e:
             return _redirect_user(user_id, err=str(e))
+
+        form = await request.form()
+        phrase = str(form.get("confirm_phrase") or "").strip()
+        expected = str((svc.pg_username or service_id)).strip()
+        if not phrase or phrase != expected:
+            return _redirect_user(
+                user_id,
+                err="برای حذف دائمی سرویس باید نام کاربری را دقیق تایپ کنید",
+            )
 
         try:
             info = await admin_delete_service(

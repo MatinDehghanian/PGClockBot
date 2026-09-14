@@ -863,19 +863,36 @@ async def pg_user_del_ask(
     if not gate.allowed:
         return
     uid = int(gate.pg_user["id"]) if gate.pg_user and gate.pg_user.get("id") is not None else 0
+    uname = str((gate.pg_user or {}).get("username") or uid)
     await callback.answer()
     markup = InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="🗑 بله، حذف شود", callback_data=f"adm:pg:u:{uid}:del"),
+                InlineKeyboardButton(
+                    text="🚫 فقط غیرفعال (پیشنهادی)",
+                    callback_data=f"adm:pg:dis:{uid}",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🗑 حذف دائمی",
+                    callback_data=f"adm:pg:u:{uid}:del",
+                ),
                 InlineKeyboardButton(text="انصراف", callback_data=f"adm:pg:u:{uid}"),
-            ]
+            ],
         ]
     )
     if callback.message:
         await safe_edit_text(
             callback.message,
-            format_message("⚠️ حذف کاربر", f"کاربر #{uid} برای همیشه حذف شود؟"),
+            format_message(
+                "⚠️ حذف کاربر VPN",
+                (
+                    f"کاربر <code>{html.escape(uname)}</code> (#{uid})\n\n"
+                    "برای قطع موقت، «غیرفعال» را بزنید.\n"
+                    "حذف دائمی برگشت‌ناپذیر است و لینک اشتراک از کار می‌افتد."
+                ),
+            ),
             reply_markup=markup,
         )
 

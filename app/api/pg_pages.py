@@ -1029,6 +1029,7 @@ def register_pg_pages(
 
     @app.post("/pg/users/{user_id}/delete")
     async def pg_users_delete(
+        request: Request,
         user_id: int,
         staff: dict = Depends(require_pg_perm("pg_users")),
         session: AsyncSession = Depends(get_db),
@@ -1040,6 +1041,15 @@ def register_pg_pages(
             if denied is not None:
                 return denied
             pg, _ = await _staff_pg(session, staff)
+            form = await request.form()
+            phrase = str(form.get("confirm_phrase") or "").strip()
+            info = await pg.get_user_by_id(user_id)
+            expected = str((info or {}).get("username") or user_id).strip()
+            if not phrase or phrase != expected:
+                return RedirectResponse(
+                    f"/pg/users?err={_q('برای حذف دائمی باید نام کاربری را دقیق تایپ کنید')}",
+                    status_code=303,
+                )
             await pg.delete_user_by_id(user_id)
             from app.services.bot_user_admin import detach_local_services_for_pg_user
 

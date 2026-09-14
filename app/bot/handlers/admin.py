@@ -2275,7 +2275,8 @@ async def adm_users_service_delete_ask(
             (
                 f"⚠️ <b>حذف سرویس #{service_id}</b>\n\n"
                 f"سرویس <code>{html.escape(str(label))}</code> و کاربر پاسارگارد مرتبط "
-                f"برای همیشه حذف شوند؟\nاین عمل برگشت‌ناپذیر است."
+                f"برای همیشه حذف شوند؟\nاین عمل برگشت‌ناپذیر است.\n"
+                f"برای قطع موقت، از غیرفعال‌سازی در پنل/ربات استفاده کنید."
             ),
             reply_markup=kb.admin_user_service_delete_confirm(user_id, service_id),
         )
