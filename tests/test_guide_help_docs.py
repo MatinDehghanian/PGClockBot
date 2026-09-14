@@ -37,6 +37,8 @@ class GuideCatalogTests(unittest.TestCase):
         html = (guide / "plans" / "index.html").read_text(encoding="utf-8")
         self.assertIn("پلن‌ها", html)
         self.assertIn("guide-search", html)
+        self.assertIn('class="guide-callout guide-callout--error"', html)
+        self.assertNotIn("&lt;div", html)
         self.assertNotIn("{% for", html)
 
     def test_page_title_macro_has_help(self):

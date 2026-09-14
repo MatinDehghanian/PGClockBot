@@ -24,6 +24,7 @@ from collections import OrderedDict
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
+from markupsafe import Markup
 
 ROOT = Path(__file__).resolve().parents[1]
 PAGES = ROOT / "docs" / "guide" / "pages"
@@ -221,8 +222,6 @@ def main() -> int:
         loader=FileSystemLoader(str(THEME)),
         autoescape=select_autoescape(["html"]),
     )
-    # body_html is trusted (built from our markdown)
-    env.filters["safe"] = lambda v: v
 
     page_files = {p.stem: p for p in PAGES.glob("*.md")}
     built: list[dict] = []
@@ -246,7 +245,7 @@ def main() -> int:
                 "summary": meta["summary"],
                 "panel": meta.get("panel") or "",
                 "roles": meta.get("roles") or [],
-                "body_html": body_html,
+                "body_html": Markup(body_html),
                 "body_text": re.sub(r"<[^>]+>", " ", body_html),
                 "aliases": meta.get("aliases") or [],
             }
@@ -286,9 +285,9 @@ def main() -> int:
     index_md = PAGES / "index.md"
     if index_md.is_file():
         _, index_body = parse_frontmatter(index_md.read_text(encoding="utf-8"))
-        index_html_body = md_to_html(index_body)
+        index_html_body = Markup(md_to_html(index_body))
     else:
-        index_html_body = "<p>از فهرست کناری یا کارت‌های زیر موضوع را انتخاب کنید.</p>"
+        index_html_body = Markup("<p>از فهرست کناری یا کارت‌های زیر موضوع را انتخاب کنید.</p>")
 
     featured_ids = ["start", "plans", "finance", "users", "resellers", "troubleshooting"]
     featured = [p for p in built if p["id"] in featured_ids]

@@ -126,18 +126,18 @@
           
         </div>
         <div class="guide-body">
-          &lt;h2 id=&#34;فرق-تنظیمات-وبپنل-با-تنظیمات-ربات&#34;&gt;فرق تنظیمات وب‌پنل با تنظیمات ربات&lt;/h2&gt;
-&lt;ul&gt;&lt;li&gt;&lt;strong&gt;تنظیمات وب پنل:&lt;/strong&gt; بکاپ، امنیت ورود، PWA، SSL، آپدیت نرم‌افزار&lt;/li&gt;&lt;li&gt;&lt;strong&gt;تنظیمات ربات:&lt;/strong&gt; متن‌ها، دکمه‌ها، پرداخت، ظاهر فروشگاه&lt;/li&gt;&lt;/ul&gt;
-&lt;h2 id=&#34;بکاپ&#34;&gt;بکاپ&lt;/h2&gt;
-&lt;p&gt;قبل از تغییر بزرگ یا آپدیت، از تب بکاپ خروجی بگیرید و جای امن نگه دارید.&lt;/p&gt;
-&lt;h2 id=&#34;امنیت&#34;&gt;امنیت&lt;/h2&gt;
-&lt;p&gt;رمز وب را قوی بگذارید. در صورت قفل شدن ورود، از منوی &lt;code&gt;pgclock.sh&lt;/code&gt; → Web panel رمز را ریست کنید.&lt;/p&gt;
-&lt;div class=&#34;guide-callout guide-callout--error&#34;&gt;&lt;strong class=&#34;guide-callout-label&#34;&gt;خطای رایج&lt;/strong&gt;&lt;p&gt;&lt;strong&gt;مشکل:&lt;/strong&gt; رمز را فراموش کردم و وارد نمی‌شوم.&lt;/p&gt;
-&lt;p&gt;&lt;strong&gt;علت رایج:&lt;/strong&gt; رمز فقط در &lt;code&gt;data/web_admin.json&lt;/code&gt; است و در &lt;code&gt;.env&lt;/code&gt; کامل نیست.&lt;/p&gt;
-&lt;p&gt;&lt;strong&gt;راه حل:&lt;/strong&gt;&lt;/p&gt;
-&lt;pre&gt;&lt;code class=&#34;language-bash&#34;&gt;bash pgclock.sh web&lt;/code&gt;&lt;/pre&gt;
-&lt;p&gt;گزینه ریست رمز را بزنید.&lt;/p&gt;&lt;/div&gt;
-&lt;div class=&#34;guide-callout guide-callout--warn&#34;&gt;&lt;strong class=&#34;guide-callout-label&#34;&gt;هشدار&lt;/strong&gt;&lt;p&gt;آپدیت را از مسیر رسمی (&lt;code&gt;pgclock.sh update&lt;/code&gt;) انجام دهید تا &lt;code&gt;.env&lt;/code&gt; و دیتابیس حفظ شود.&lt;/p&gt;&lt;/div&gt;
+          <h2 id="فرق-تنظیمات-وبپنل-با-تنظیمات-ربات">فرق تنظیمات وب‌پنل با تنظیمات ربات</h2>
+<ul><li><strong>تنظیمات وب پنل:</strong> بکاپ، امنیت ورود، PWA، SSL، آپدیت نرم‌افزار</li><li><strong>تنظیمات ربات:</strong> متن‌ها، دکمه‌ها، پرداخت، ظاهر فروشگاه</li></ul>
+<h2 id="بکاپ">بکاپ</h2>
+<p>قبل از تغییر بزرگ یا آپدیت، از تب بکاپ خروجی بگیرید و جای امن نگه دارید.</p>
+<h2 id="امنیت">امنیت</h2>
+<p>رمز وب را قوی بگذارید. در صورت قفل شدن ورود، از منوی <code>pgclock.sh</code> → Web panel رمز را ریست کنید.</p>
+<div class="guide-callout guide-callout--error"><strong class="guide-callout-label">خطای رایج</strong><p><strong>مشکل:</strong> رمز را فراموش کردم و وارد نمی‌شوم.</p>
+<p><strong>علت رایج:</strong> رمز فقط در <code>data/web_admin.json</code> است و در <code>.env</code> کامل نیست.</p>
+<p><strong>راه حل:</strong></p>
+<pre><code class="language-bash">bash pgclock.sh web</code></pre>
+<p>گزینه ریست رمز را بزنید.</p></div>
+<div class="guide-callout guide-callout--warn"><strong class="guide-callout-label">هشدار</strong><p>آپدیت را از مسیر رسمی (<code>pgclock.sh update</code>) انجام دهید تا <code>.env</code> و دیتابیس حفظ شود.</p></div>
         </div>
         <nav class="guide-pager" aria-label="صفحه قبل و بعد">
           

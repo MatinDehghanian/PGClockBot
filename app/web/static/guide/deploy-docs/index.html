@@ -126,16 +126,16 @@
           
         </div>
         <div class="guide-body">
-          &lt;h2 id=&#34;راهنما-را-روی-دامنه-خودتان-بالا-بیاورید&#34;&gt;راهنما را روی دامنه خودتان بالا بیاورید&lt;/h2&gt;
-&lt;p&gt;خروجی آماده در پروژه اینجاست:&lt;/p&gt;
-&lt;p&gt;&lt;code&gt;app/web/static/guide/&lt;/code&gt;&lt;/p&gt;
-&lt;p&gt;همین پوشه یک سایت استاتیک کامل است (HTML/CSS/JS/فونت).&lt;/p&gt;
-&lt;h2 id=&#34;روش-۱--آپلود-روی-هاست&#34;&gt;روش ۱ — آپلود روی هاست&lt;/h2&gt;
-&lt;ol&gt;&lt;li&gt;داخل پروژه:&lt;/li&gt;&lt;/ol&gt;
-&lt;pre&gt;&lt;code class=&#34;language-bash&#34;&gt;python scripts/build_guide.py&lt;/code&gt;&lt;/pre&gt;
-&lt;ol&gt;&lt;li&gt;محتویات &lt;code&gt;app/web/static/guide/&lt;/code&gt; را روی هاست دامنه خودتان بریزید.&lt;/li&gt;&lt;li&gt;دامنه را به همان پوشه اشاره دهید؛ مثلاً &lt;code&gt;https://docs.example.com&lt;/code&gt;&lt;/li&gt;&lt;/ol&gt;
-&lt;h2 id=&#34;روش-۲--nginx-روی-vps&#34;&gt;روش ۲ — Nginx روی VPS&lt;/h2&gt;
-&lt;pre&gt;&lt;code class=&#34;language-nginx&#34;&gt;server {
+          <h2 id="راهنما-را-روی-دامنه-خودتان-بالا-بیاورید">راهنما را روی دامنه خودتان بالا بیاورید</h2>
+<p>خروجی آماده در پروژه اینجاست:</p>
+<p><code>app/web/static/guide/</code></p>
+<p>همین پوشه یک سایت استاتیک کامل است (HTML/CSS/JS/فونت).</p>
+<h2 id="روش-۱--آپلود-روی-هاست">روش ۱ — آپلود روی هاست</h2>
+<ol><li>داخل پروژه:</li></ol>
+<pre><code class="language-bash">python scripts/build_guide.py</code></pre>
+<ol><li>محتویات <code>app/web/static/guide/</code> را روی هاست دامنه خودتان بریزید.</li><li>دامنه را به همان پوشه اشاره دهید؛ مثلاً <code>https://docs.example.com</code></li></ol>
+<h2 id="روش-۲--nginx-روی-vps">روش ۲ — Nginx روی VPS</h2>
+<pre><code class="language-nginx">server {
   listen 80;
   server_name docs.example.com;
   root /var/www/pgclock-docs;
@@ -143,14 +143,14 @@
   location / {
     try_files $uri $uri/ $uri/index.html =404;
   }
-}&lt;/code&gt;&lt;/pre&gt;
-&lt;p&gt;محتویات &lt;code&gt;guide/&lt;/code&gt; را در &lt;code&gt;/var/www/pgclock-docs&lt;/code&gt; کپی کنید.&lt;/p&gt;
-&lt;h2 id=&#34;وصل-کردن-آیکون-؟-پنل-به-دامنه-شما&#34;&gt;وصل کردن آیکون ؟ پنل به دامنه شما&lt;/h2&gt;
-&lt;p&gt;در &lt;code&gt;.env&lt;/code&gt; سرور ربات:&lt;/p&gt;
-&lt;pre&gt;&lt;code class=&#34;language-env&#34;&gt;DOCS_BASE_URL=&amp;quot;https://docs.example.com&amp;quot;&lt;/code&gt;&lt;/pre&gt;
-&lt;p&gt;سرویس را ری‌استارت کنید. از این به بعد لینک‌های راهنمای داخل پنل به دامنه شما می‌روند.&lt;/p&gt;
-&lt;div class=&#34;guide-callout guide-callout--tip&#34;&gt;&lt;strong class=&#34;guide-callout-label&#34;&gt;نکته&lt;/strong&gt;&lt;p&gt;اگر &lt;code&gt;DOCS_BASE_URL&lt;/code&gt; خالی باشد، همان &lt;code&gt;/help&lt;/code&gt; روی سرور کاربر استفاده می‌شود.&lt;/p&gt;&lt;/div&gt;
-&lt;div class=&#34;guide-callout guide-callout--info&#34;&gt;&lt;strong class=&#34;guide-callout-label&#34;&gt;راهنما&lt;/strong&gt;&lt;p&gt;بعد از هر تغییر در فایل‌های &lt;code&gt;docs/guide/pages/&lt;/code&gt; باید دوباره &lt;code&gt;python scripts/build_guide.py&lt;/code&gt; را اجرا کنید و خروجی را هم در گیت/سرور docs آپدیت کنید.&lt;/p&gt;&lt;/div&gt;
+}</code></pre>
+<p>محتویات <code>guide/</code> را در <code>/var/www/pgclock-docs</code> کپی کنید.</p>
+<h2 id="وصل-کردن-آیکون-؟-پنل-به-دامنه-شما">وصل کردن آیکون ؟ پنل به دامنه شما</h2>
+<p>در <code>.env</code> سرور ربات:</p>
+<pre><code class="language-env">DOCS_BASE_URL=&quot;https://docs.example.com&quot;</code></pre>
+<p>سرویس را ری‌استارت کنید. از این به بعد لینک‌های راهنمای داخل پنل به دامنه شما می‌روند.</p>
+<div class="guide-callout guide-callout--tip"><strong class="guide-callout-label">نکته</strong><p>اگر <code>DOCS_BASE_URL</code> خالی باشد، همان <code>/help</code> روی سرور کاربر استفاده می‌شود.</p></div>
+<div class="guide-callout guide-callout--info"><strong class="guide-callout-label">راهنما</strong><p>بعد از هر تغییر در فایل‌های <code>docs/guide/pages/</code> باید دوباره <code>python scripts/build_guide.py</code> را اجرا کنید و خروجی را هم در گیت/سرور docs آپدیت کنید.</p></div>
         </div>
         <nav class="guide-pager" aria-label="صفحه قبل و بعد">
           

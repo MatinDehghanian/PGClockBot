@@ -126,32 +126,32 @@
           
         </div>
         <div class="guide-body">
-          &lt;h2 id=&#34;این-بخش-برای-کیست؟&#34;&gt;این بخش برای کیست؟&lt;/h2&gt;
-&lt;p&gt;همه نقش‌ها — مخصوصاً کسی که ربات را روی سرور نصب می‌کند.&lt;/p&gt;
-&lt;h2 id=&#34;نصب-سریع&#34;&gt;نصب سریع&lt;/h2&gt;
-&lt;p&gt;روی اوبونتو ۲۲٫۰۴ یا جدیدتر:&lt;/p&gt;
-&lt;pre&gt;&lt;code class=&#34;language-bash&#34;&gt;bash &amp;lt;(curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockBot/main/get.sh)&lt;/code&gt;&lt;/pre&gt;
-&lt;p&gt;منوی انگلیسی باز می‌شود. گزینهٔ &lt;strong&gt;Install&lt;/strong&gt; را بزنید، بعد در مرورگر ویزارد را کامل کنید.&lt;/p&gt;
-&lt;h3 id=&#34;مثال-واقعی&#34;&gt;مثال واقعی&lt;/h3&gt;
-&lt;p&gt;فرض کنید IP سرور شما &lt;code&gt;203.0.113.10&lt;/code&gt; است:&lt;/p&gt;
-&lt;ol&gt;&lt;li&gt;نصب را تمام کنید.&lt;/li&gt;&lt;li&gt;بروید به &lt;code&gt;http://203.0.113.10:9000/&lt;/code&gt;&lt;/li&gt;&lt;li&gt;ویزارد: یوزر/رمز وب، توکن ربات، اتصال پاسارگارد را پر کنید.&lt;/li&gt;&lt;li&gt;Finish بزنید و با همان یوزر وارد پنل شوید.&lt;/li&gt;&lt;/ol&gt;
-&lt;h2 id=&#34;اگر-پروژه-از-قبل-هست&#34;&gt;اگر پروژه از قبل هست&lt;/h2&gt;
-&lt;pre&gt;&lt;code class=&#34;language-bash&#34;&gt;cd PGClockBot
+          <h2 id="این-بخش-برای-کیست؟">این بخش برای کیست؟</h2>
+<p>همه نقش‌ها — مخصوصاً کسی که ربات را روی سرور نصب می‌کند.</p>
+<h2 id="نصب-سریع">نصب سریع</h2>
+<p>روی اوبونتو ۲۲٫۰۴ یا جدیدتر:</p>
+<pre><code class="language-bash">bash &lt;(curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockBot/main/get.sh)</code></pre>
+<p>منوی انگلیسی باز می‌شود. گزینهٔ <strong>Install</strong> را بزنید، بعد در مرورگر ویزارد را کامل کنید.</p>
+<h3 id="مثال-واقعی">مثال واقعی</h3>
+<p>فرض کنید IP سرور شما <code>203.0.113.10</code> است:</p>
+<ol><li>نصب را تمام کنید.</li><li>بروید به <code>http://203.0.113.10:9000/</code></li><li>ویزارد: یوزر/رمز وب، توکن ربات، اتصال پاسارگارد را پر کنید.</li><li>Finish بزنید و با همان یوزر وارد پنل شوید.</li></ol>
+<h2 id="اگر-پروژه-از-قبل-هست">اگر پروژه از قبل هست</h2>
+<pre><code class="language-bash">cd PGClockBot
 bash get.sh
 # یا
-bash pgclock.sh&lt;/code&gt;&lt;/pre&gt;
-&lt;p&gt;آپدیت: منو → &lt;strong&gt;Update&lt;/strong&gt; (فایل &lt;code&gt;.env&lt;/code&gt; حفظ می‌شود).&lt;/p&gt;
-&lt;h2 id=&#34;اولین-کار-بعد-از-نصب&#34;&gt;اولین کار بعد از نصب&lt;/h2&gt;
-&lt;ol&gt;&lt;li&gt;در &lt;strong&gt;تنظیمات ربات&lt;/strong&gt; متن خوش‌آمد و دکمه‌ها را ببینید.&lt;/li&gt;&lt;li&gt;یک &lt;strong&gt;پلن&lt;/strong&gt; بسازید و به تمپلیت پاسارگارد وصل کنید.&lt;/li&gt;&lt;li&gt;روش پرداخت (مثلاً کارت‌به‌کارت) را در تنظیمات پرداخت پر کنید.&lt;/li&gt;&lt;li&gt;در تلگرام به ربات &lt;code&gt;/start&lt;/code&gt; بزنید و خرید آزمایشی کنید.&lt;/li&gt;&lt;/ol&gt;
-&lt;div class=&#34;guide-callout guide-callout--error&#34;&gt;&lt;strong class=&#34;guide-callout-label&#34;&gt;خطای رایج&lt;/strong&gt;&lt;p&gt;&lt;strong&gt;مشکل:&lt;/strong&gt; صفحهٔ وب باز نمی‌شود یا Timeout می‌دهد.&lt;/p&gt;
-&lt;p&gt;&lt;strong&gt;علت رایج:&lt;/strong&gt; فایروال پورت ۹۰۰۰ را بسته، یا سرویس بالا نیست.&lt;/p&gt;
-&lt;p&gt;&lt;strong&gt;راه حل:&lt;/strong&gt;&lt;/p&gt;
-&lt;pre&gt;&lt;code class=&#34;language-bash&#34;&gt;bash pgclock.sh service
+bash pgclock.sh</code></pre>
+<p>آپدیت: منو → <strong>Update</strong> (فایل <code>.env</code> حفظ می‌شود).</p>
+<h2 id="اولین-کار-بعد-از-نصب">اولین کار بعد از نصب</h2>
+<ol><li>در <strong>تنظیمات ربات</strong> متن خوش‌آمد و دکمه‌ها را ببینید.</li><li>یک <strong>پلن</strong> بسازید و به تمپلیت پاسارگارد وصل کنید.</li><li>روش پرداخت (مثلاً کارت‌به‌کارت) را در تنظیمات پرداخت پر کنید.</li><li>در تلگرام به ربات <code>/start</code> بزنید و خرید آزمایشی کنید.</li></ol>
+<div class="guide-callout guide-callout--error"><strong class="guide-callout-label">خطای رایج</strong><p><strong>مشکل:</strong> صفحهٔ وب باز نمی‌شود یا Timeout می‌دهد.</p>
+<p><strong>علت رایج:</strong> فایروال پورت ۹۰۰۰ را بسته، یا سرویس بالا نیست.</p>
+<p><strong>راه حل:</strong></p>
+<pre><code class="language-bash">bash pgclock.sh service
 curl http://127.0.0.1:9000/health
-sudo ufw allow 9000/tcp&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
-&lt;div class=&#34;guide-callout guide-callout--error&#34;&gt;&lt;strong class=&#34;guide-callout-label&#34;&gt;خطای رایج&lt;/strong&gt;&lt;p&gt;&lt;strong&gt;مشکل:&lt;/strong&gt; ویزارد می‌گوید فقط با لینک یک‌بارمصرف.&lt;/p&gt;
-&lt;p&gt;&lt;strong&gt;علت رایج:&lt;/strong&gt; از اینترنت بدون توکن gate باز کرده‌اید.&lt;/p&gt;
-&lt;p&gt;&lt;strong&gt;راه حل:&lt;/strong&gt; روی سرور &lt;code&gt;bash pgclock.sh status&lt;/code&gt; بزنید و لینک کامل را کپی کنید، یا از خود سرور با &lt;code&gt;127.0.0.1&lt;/code&gt; باز کنید.&lt;/p&gt;&lt;/div&gt;
+sudo ufw allow 9000/tcp</code></pre></div>
+<div class="guide-callout guide-callout--error"><strong class="guide-callout-label">خطای رایج</strong><p><strong>مشکل:</strong> ویزارد می‌گوید فقط با لینک یک‌بارمصرف.</p>
+<p><strong>علت رایج:</strong> از اینترنت بدون توکن gate باز کرده‌اید.</p>
+<p><strong>راه حل:</strong> روی سرور <code>bash pgclock.sh status</code> بزنید و لینک کامل را کپی کنید، یا از خود سرور با <code>127.0.0.1</code> باز کنید.</p></div>
         </div>
         <nav class="guide-pager" aria-label="صفحه قبل و بعد">
           <span></span>
