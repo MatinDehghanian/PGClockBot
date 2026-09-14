@@ -121,9 +121,18 @@ templates.env.globals["order_status_fa"] = order_status_fa
 templates.env.globals["ticket_status_fa"] = ticket_status_fa
 templates.env.globals["format_bytes"] = format_bytes
 templates.env.globals["format_bytes_ratio"] = format_bytes_ratio
-templates.env.globals["guide_topics"] = {}
+def _load_guide_topics() -> dict:
+    """Populate Jinja globals so macros see help topics without ``with context``."""
+    try:
+        from app.services.guide_catalog import panel_help_payload
+
+        panel_help_payload.cache_clear()
+        return panel_help_payload()
+    except Exception:
+        return {}
 
 
+templates.env.globals["guide_topics"] = _load_guide_topics()
 
 
 class NotAuthenticated(Exception):
@@ -186,14 +195,10 @@ def render(request: Request, name: str, context: dict | None = None, status_code
         ctx["tickets_unread"] = int(getattr(request.state, "panel_tickets_unread", 0) or 0)
     if "inbox_alert" not in ctx:
         ctx["inbox_alert"] = bool(getattr(request.state, "panel_inbox_alert", False))
-    if "guide_topics" not in ctx:
-        try:
-            from app.services.guide_catalog import panel_help_payload
-
-            panel_help_payload.cache_clear()
-            ctx["guide_topics"] = panel_help_payload()
-        except Exception:
-            ctx["guide_topics"] = {}
+    # Keep env global fresh too — macros import without ``with context``.
+    topics = _load_guide_topics()
+    templates.env.globals["guide_topics"] = topics
+    ctx.setdefault("guide_topics", topics)
     if ctx.get("staff") and "identity" not in ctx:
         try:
             from app.services.identity_chrome import hierarchy_identity

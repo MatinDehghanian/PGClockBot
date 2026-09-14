@@ -180,13 +180,73 @@ ROLE_FA = {
     "principal": "نماینده ارشد",
 }
 
+# Stroke icons (24×24) — shared by sidebar + page titles
+ICON_PATHS: dict[str, str] = {
+    "rocket": '<path d="M5 15c1.5 2 4 4 7 4"/><path d="M9 19c0-3 2-5 4-6"/><path d="M14 13c3-1 5-4 6-8-3 1-6 3-8 6"/><path d="M9 15l-3 3"/><path d="M12 9l1.5-1.5"/>',
+    "shield": '<path d="M12 3 5 6v5c0 4.2 2.8 7.2 7 8.5 4.2-1.3 7-4.3 7-8.5V6l-7-3z"/>',
+    "home": '<path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5z"/>',
+    "bell": '<path d="M12 4a5 5 0 0 1 5 5v2.2l1.8 3.3H5.2L7 11.2V9a5 5 0 0 1 5-5z"/><path d="M10 18a2 2 0 0 0 4 0"/>',
+    "sliders": '<path d="M4 7h9M17 5v4M19 7h1"/><path d="M4 12h3M11 10v4M13 12h7"/><path d="M4 17h11M19 15v4M21 17h-1"/>',
+    "gauge": '<path d="M12 3 4.5 6.5v5.2c0 4.7 3.2 8 7.5 9.3 4.3-1.3 7.5-4.6 7.5-9.3V6.5L12 3z"/><path d="M9 12l2 2 4-4"/>',
+    "users": '<circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9" r="2.4"/><path d="M15.2 19c.4-2.2 2-3.8 4.3-4.2"/>',
+    "wallet": '<path d="M7 7h13l-1.2 9.2a2 2 0 0 1-2 1.8H9.4a2 2 0 0 1-2-1.7L6 4H3"/><circle cx="10" cy="20" r="1.2"/><circle cx="17" cy="20" r="1.2"/>',
+    "layers": '<path d="M4 7h16M4 12h16M4 17h10"/><path d="M18 15v4M16 17h4"/>',
+    "life-buoy": '<path d="M5 6h14a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-3a2 2 0 0 0 0-4V8a2 2 0 0 1 2-2z"/><path d="M12 9v6"/>',
+    "megaphone": '<path d="M4 10v4h3l5 4V6L7 10H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M18.8 6.2a8.5 8.5 0 0 1 0 11.6"/>',
+    "star": '<path d="M12 3l2.2 4.5 5 .7-3.6 3.5.9 5L12 14.8 7.5 16.7l.9-5L4.8 8.2l5-.7L12 3z"/>',
+    "braces": '<path d="M7 7h10v10H7z"/><path d="M10 10h4M10 14h2"/><path d="M4 12h2M18 12h2"/>',
+    "bot": '<rect x="4" y="8" width="16" height="11" rx="2.5"/><path d="M12 8V5H9"/><path d="M2 14h2M20 14h2"/><circle cx="9.5" cy="13.5" r="1.1"/><circle cx="14.5" cy="13.5" r="1.1"/><path d="M9.5 17h5"/>',
+    "network": '<circle cx="8" cy="9" r="3"/><circle cx="16" cy="9" r="3"/><path d="M2.8 19a5.2 5.2 0 0 1 10.4 0M10.8 19a5.2 5.2 0 0 1 10.4 0"/>',
+    "inbox": '<path d="M4 8h16l-1.2 10.2A2 2 0 0 1 16.8 21H7.2a2 2 0 0 1-2-1.8L4 8z"/><path d="M8 8V6a4 4 0 0 1 8 0v2"/>',
+    "server": '<rect x="3" y="4" width="7" height="7" rx="1.5"/><rect x="14" y="4" width="7" height="7" rx="1.5"/><rect x="8.5" y="13" width="7" height="7" rx="1.5"/>',
+    "user": '<circle cx="12" cy="8" r="3.2"/><path d="M5 19a7 7 0 0 1 14 0"/>',
+    "key": '<path d="M12 3 5 6v5c0 4.2 2.8 7.2 7 8.5 4.2-1.3 7-4.3 7-8.5V6l-7-3z"/>',
+    "cpu": '<rect x="3" y="4" width="7" height="7" rx="1.5"/><rect x="14" y="4" width="7" height="7" rx="1.5"/><rect x="8.5" y="13" width="7" height="7" rx="1.5"/>',
+    "boxes": '<path d="M12 3 4.5 6.5v5.2c0 4.7 3.2 8 7.5 9.3 4.3-1.3 7.5-4.6 7.5-9.3V6.5L12 3z"/>',
+    "git-branch": '<path d="M4 12h16M12 4v16"/><circle cx="12" cy="12" r="3"/>',
+    "globe": '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18"/>',
+    "layout": '<path d="M4 7h16M4 12h16M4 17h10"/><path d="M18 15v4M16 17h4"/>',
+    "filter": '<path d="M4 6h16l-5.5 7v5l-5 2v-7L4 6z"/>',
+    "wrench": '<path d="M14.5 5.5a4 4 0 0 1 4 4L12 16l-3-3 6.5-6.5z"/><path d="M9 13 5 17l2 2 4-4"/>',
+    "upload": '<path d="M12 16V6M8.5 9.5 12 6l3.5 3.5"/><path d="M5 18h14"/>',
+    "book": '<path d="M5 5.5A2.5 2.5 0 0 1 7.5 3H19v16H7.5A2.5 2.5 0 0 0 5 21.5z"/><path d="M5 5.5V21.5"/>',
+}
+
+
+def icon_svg(name: str) -> Markup:
+    paths = ICON_PATHS.get(name) or ICON_PATHS["book"]
+    return Markup(
+        f'<svg class="guide-ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" '
+        f'stroke="currentColor" stroke-width="1.7" stroke-linecap="round" '
+        f'stroke-linejoin="round">{paths}</svg>'
+    )
+
+
+GROUP_ICONS: dict[str, str] = {
+    "شروع": "rocket",
+    "وب پنل": "layout",
+    "پنل ربات": "bot",
+    "پاسارگارد": "server",
+    "کمک": "life-buoy",
+    "سایر": "book",
+}
+
 
 def nav_groups_list():
     groups: OrderedDict[str, list] = OrderedDict()
     for t in nav_topics():
         g = t.get("nav_group") or "سایر"
-        groups.setdefault(g, []).append(t)
-    return list(groups.items())
+        item = dict(t)
+        item["icon_svg"] = icon_svg(item.get("icon") or "book")
+        groups.setdefault(g, []).append(item)
+    return [
+        {
+            "title": title,
+            "icon_svg": icon_svg(GROUP_ICONS.get(title, "book")),
+            "topics": items,
+        }
+        for title, items in groups.items()
+    ]
 
 
 def roles_label(roles: list[str]) -> str:
@@ -245,6 +305,8 @@ def main() -> int:
                 "summary": meta["summary"],
                 "panel": meta.get("panel") or "",
                 "roles": meta.get("roles") or [],
+                "icon": meta.get("icon") or "book",
+                "icon_svg": icon_svg(meta.get("icon") or "book"),
                 "body_html": Markup(body_html),
                 "body_text": re.sub(r"<[^>]+>", " ", body_html),
                 "aliases": meta.get("aliases") or [],
@@ -262,6 +324,7 @@ def main() -> int:
             summary=page["summary"],
             body_html=page["body_html"],
             page_id=page["id"],
+            icon_svg=page["icon_svg"],
             root="../",
             nav_groups=groups,
             panel_path=page["panel"],

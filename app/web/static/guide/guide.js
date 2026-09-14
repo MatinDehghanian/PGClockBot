@@ -1,37 +1,49 @@
 (function () {
   'use strict';
 
+  var shell = document.getElementById('guide-shell') || document.body;
   var toggle = document.getElementById('guide-menu-toggle');
-  var backdrop = document.getElementById('guide-backdrop');
-  function setNav(open) {
-    document.body.classList.toggle('guide-nav-open', !!open);
-    if (backdrop) backdrop.hidden = !open;
-    if (toggle) toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
-  }
-  if (toggle) toggle.addEventListener('click', function () {
-    setNav(!document.body.classList.contains('guide-nav-open'));
-  });
-  if (backdrop) backdrop.addEventListener('click', function () { setNav(false); });
+  var closeBtn = document.getElementById('guide-side-close');
+  var scrim = document.getElementById('guide-scrim');
 
-  /* Panel deep-links: on same host use path; on public docs site keep path as hint */
+  function setNav(open) {
+    shell.classList.toggle('nav-open', !!open);
+    if (scrim) {
+      if (open) scrim.removeAttribute('hidden');
+      else scrim.setAttribute('hidden', '');
+    }
+    if (toggle) toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    document.documentElement.style.overflow = open ? 'hidden' : '';
+  }
+
+  if (toggle) {
+    toggle.addEventListener('click', function () {
+      setNav(!shell.classList.contains('nav-open'));
+    });
+  }
+  if (closeBtn) closeBtn.addEventListener('click', function () { setNav(false); });
+  if (scrim) scrim.addEventListener('click', function () { setNav(false); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') setNav(false);
+  });
+  window.addEventListener('resize', function () {
+    if (window.matchMedia('(min-width: 961px)').matches) setNav(false);
+  });
+
   document.querySelectorAll('[data-panel-path]').forEach(function (el) {
     var path = el.getAttribute('data-panel-path') || '';
     if (!path) return;
-    var onPanel = /\/help(\/|$)/.test(location.pathname) && location.port === '9000';
-    // If docs are served under the bot panel (/help), make chip a real in-app link.
     if (location.pathname.indexOf('/help') === 0 || location.pathname.indexOf('/static/guide') === 0) {
       el.setAttribute('href', path);
-      el.addEventListener('click', function (e) {
-        // allow normal navigation inside panel
-      });
     } else {
       el.setAttribute('title', 'این مسیر را در وب‌پنل خودتان باز کنید');
       el.addEventListener('click', function (e) {
         e.preventDefault();
         try {
           navigator.clipboard.writeText(path);
+          var old = el.textContent;
           el.textContent = 'کپی شد: ' + path;
-          setTimeout(function () { el.textContent = path; }, 1600);
+          setTimeout(function () { el.textContent = old; }, 1600);
         } catch (err) {
           window.prompt('مسیر صفحه در وب‌پنل:', path);
         }
@@ -95,12 +107,12 @@
     panel.innerHTML = '';
     if (!hits.length) {
       panel.innerHTML = '<div class="guide-search-empty">نتیجه‌ای پیدا نشد. کلمه ساده‌تری مثل «رسید» یا «پلن» را امتحان کنید.</div>';
-      panel.classList.add('open');
+      panel.classList.add('is-open');
       return;
     }
     hits.slice(0, 8).forEach(function (h, i) {
       var a = document.createElement('a');
-      a.className = 'guide-search-hit' + (i === active ? ' active' : '');
+      a.className = 'guide-search-hit' + (i === active ? ' is-active' : '');
       a.href = h.href;
       a.setAttribute('role', 'option');
       a.innerHTML = '<strong></strong><span></span>';
@@ -108,14 +120,14 @@
       a.querySelector('span').textContent = h.summary || '';
       panel.appendChild(a);
     });
-    panel.classList.add('open');
+    panel.classList.add('is-open');
   }
 
   function runSearch() {
     var q = input.value.trim();
     active = -1;
     if (!q) {
-      panel.classList.remove('open');
+      panel.classList.remove('is-open');
       panel.innerHTML = '';
       return;
     }
@@ -137,7 +149,7 @@
   input.addEventListener('keydown', function (e) {
     var hits = panel.querySelectorAll('.guide-search-hit');
     if (e.key === 'Escape') {
-      panel.classList.remove('open');
+      panel.classList.remove('is-open');
       input.blur();
       return;
     }
@@ -145,17 +157,17 @@
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       active = Math.min(hits.length - 1, active + 1);
-      hits.forEach(function (h, i) { h.classList.toggle('active', i === active); });
+      hits.forEach(function (h, i) { h.classList.toggle('is-active', i === active); });
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       active = Math.max(0, active - 1);
-      hits.forEach(function (h, i) { h.classList.toggle('active', i === active); });
+      hits.forEach(function (h, i) { h.classList.toggle('is-active', i === active); });
     } else if (e.key === 'Enter' && active >= 0 && hits[active]) {
       e.preventDefault();
       location.href = hits[active].href;
     }
   });
   document.addEventListener('click', function (e) {
-    if (!e.target.closest('.guide-search')) panel.classList.remove('open');
+    if (!e.target.closest('.guide-search')) panel.classList.remove('is-open');
   });
 })();
