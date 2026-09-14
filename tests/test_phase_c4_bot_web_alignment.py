@@ -98,8 +98,12 @@ class SourceGuardAlignmentTests(unittest.TestCase):
         self.assertIn("if not _is_admin(db_user):", src)
 
     def test_keyboards_use_authz_shop_feature(self):
-        src = Path("app/bot/keyboards.py").read_text(encoding="utf-8")
-        self.assertIn("shop_feature_allowed", src)
+        # Reply ACL builders live in reply_keyboards (re-exported from keyboards).
+        reply_src = Path("app/bot/reply_keyboards.py").read_text(encoding="utf-8")
+        self.assertIn("shop_feature_allowed", reply_src)
+        self.assertIn("from app.services.authz import shop_feature_allowed", reply_src)
+        kb_src = Path("app/bot/keyboards.py").read_text(encoding="utf-8")
+        self.assertIn("from app.bot.reply_keyboards import", kb_src)
 
     def test_no_db_schema_change_in_c4(self):
         # Guard: C4 must not touch alembic versions
