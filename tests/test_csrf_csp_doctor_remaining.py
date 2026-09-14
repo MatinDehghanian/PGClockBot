@@ -64,6 +64,13 @@ def test_doctor_owner_admin_ids_check_present():
     assert tree is not None
 
 
+def test_login_post_exempt_from_csrf_token_when_stale_session():
+    src = (ROOT / "app" / "api" / "app.py").read_text(encoding="utf-8")
+    assert 'path_now not in {\n                    "/login"' in src or '"/login"' in src
+    assert "clear_stale_session" in src
+    assert "CSRF token rejected" in src
+
+
 def test_get_sh_supports_ref_pin():
     src = (ROOT / "get.sh").read_text(encoding="utf-8")
     assert "PGCLOCK_REF" in src

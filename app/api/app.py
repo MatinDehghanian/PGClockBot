@@ -916,8 +916,14 @@ def create_api_app(lifespan=None) -> FastAPI:
                         pass
                 if not allowed:
                     return HTMLResponse("CSRF rejected", status_code=403)
-                # Token check only for logged-in panel sessions (not setup_gate / webhooks).
-                if request.cookies.get("session"):
+                # Token check for logged-in panel sessions only — never for /login
+                # (stale/expired session cookies must not block re-authentication).
+                path_now = request.url.path
+                if request.cookies.get("session") and path_now not in {
+                    "/login",
+                    "/setup",
+                    "/setup/save",
+                }:
                     from app.services.csrf import (
                         CSRF_COOKIE,
                         csrf_tokens_match,
@@ -1646,6 +1652,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             return RedirectResponse("/", status_code=303)
         err = request.query_params.get("err")
         # With an error (often after cookie clear), always show the form.
+        clear_stale_session = False
         if not err:
             sess = get_session_user(request)
             if sess:
@@ -1655,6 +1662,9 @@ def create_api_app(lifespan=None) -> FastAPI:
                     return _panel_redirect(request, "/pg")
                 # Reseller / sub-admin: web dashboard
                 return _panel_redirect(request, "/home")
+            # Cookie present but invalid/expired — drop it so re-login is not CSRF-blocked.
+            if request.cookies.get("session"):
+                clear_stale_session = True
         page = render(
             request,
             "login.html",
@@ -1664,11 +1674,10 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "flash_ok": request.query_params.get("ok"),
             },
         )
-        if err:
-            # Belt-and-suspenders: drop any leftover session when showing an auth error.
+        if err or clear_stale_session:
+            # Belt-and-suspenders: drop leftover session when showing the login form.
             page.delete_cookie("session", path="/")
         return page
-
     @app.post("/login")
     async def login_submit(
         request: Request,
