@@ -1255,10 +1255,16 @@
       closeModal(el);
       if (keys && keys.length) stripQueryParams(keys);
     }
-    function openModal(id){
+    function openModal(id, opts){
       const el = document.getElementById(id);
       if (!el) return;
-      document.querySelectorAll('.ui-modal.open').forEach((m) => closeModal(m, { instant: true }));
+      /* opts.stack: open on top without dismissing the caller (confirm over edit). */
+      const stack = !!(opts && opts.stack);
+      if (!stack) {
+        document.querySelectorAll('.ui-modal.open').forEach((m) => {
+          if (m !== el) closeModal(m, { instant: true });
+        });
+      }
       ensureModalPorted(el);
       /* Fresh open: clear prior form errors unless SSR keep flag is set */
       el.querySelectorAll('.flash.err[id$="-form-err"]').forEach((err) => {
@@ -1947,7 +1953,9 @@
     /* Shared confirm modal — replaces native confirm()/prompt() for panel mutations.
        Reason field is RENDERED only when requireReason=true (delete user/reseller/admin).
        Phrase field is RENDERED when confirmPhrase is set (VPN hard-delete type-to-confirm).
-       Never leave a hidden .form-field in the DOM — author CSS display:flex beats [hidden]. */
+       Never leave a hidden .form-field in the DOM — author CSS display:flex beats [hidden].
+       Root-fix (v10.1.13): do not use HTML minlength (Persian IME false "too short");
+       commit composition before read; mirror confirm_reason; stack over edit modals. */
     (function setupPanelConfirm(){
       const modal = document.getElementById('modal-confirm');
       if (!modal) return;
@@ -1960,10 +1968,14 @@
       let activeRequireReason = false;
       let activeReasonMin = 3;
       let activeConfirmPhrase = '';
+      let reasonComposing = false;
+
+      if (formEl) formEl.setAttribute('novalidate', '');
 
       function clearExtraFields(){
         activeRequireReason = false;
         activeConfirmPhrase = '';
+        reasonComposing = false;
         if (reasonSlot) {
           reasonSlot.innerHTML = '';
           reasonSlot.hidden = true;
@@ -1974,20 +1986,69 @@
         clearExtraFields();
       }
 
+      function reasonCharLen(s){
+        try { return Array.from(String(s || '')).length; }
+        catch (_) { return String(s || '').length; }
+      }
+
+      function showReasonError(input, message){
+        if (!input) return;
+        const wrap = document.getElementById('confirm-reason-wrap') || input.closest('.form-field');
+        if (wrap) {
+          wrap.classList.add('is-invalid');
+          let err = wrap.querySelector(':scope > .field-error');
+          if (!err) {
+            err = document.createElement('small');
+            err.className = 'field-error';
+            err.setAttribute('role', 'alert');
+            wrap.appendChild(err);
+          }
+          err.textContent = message;
+        }
+        try { input.focus(); } catch (_) {}
+      }
+
+      function clearReasonError(){
+        const wrap = document.getElementById('confirm-reason-wrap');
+        if (!wrap) return;
+        wrap.classList.remove('is-invalid');
+        wrap.querySelectorAll(':scope > .field-error').forEach((n) => n.remove());
+      }
+
+      function commitReasonInput(input){
+        if (!input) return '';
+        try {
+          if (document.activeElement === input) {
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+            input.blur();
+          }
+        } catch (_) {}
+        return String(input.value || '').trim();
+      }
+
       function renderReasonField(opts){
         if (!reasonSlot) return null;
         const label = opts.reasonLabel || 'علت حذف';
         const min = Math.max(1, parseInt(opts.reasonMin, 10) || 3);
         activeRequireReason = true;
         activeReasonMin = min;
+        reasonComposing = false;
         reasonSlot.hidden = false;
+        /* No HTML required/minlength — Persian IME composition made browsers
+           report "too short" even after a valid reason was typed. */
         reasonSlot.innerHTML =
           '<label class="form-field" id="confirm-reason-wrap">' +
-            '<span id="confirm-reason-label">' + label.replace(/</g, '&lt;') + '</span>' +
-            '<textarea id="confirm-reason" name="confirm_reason" rows="3" required minlength="' + min + '" ' +
+            '<span id="confirm-reason-label">' + String(label).replace(/</g, '&lt;') + '</span>' +
+            '<textarea id="confirm-reason" name="confirm_reason" rows="3" ' +
               'placeholder="حداقل ' + min + ' کاراکتر" autocomplete="off"></textarea>' +
           '</label>';
-        return document.getElementById('confirm-reason');
+        const input = document.getElementById('confirm-reason');
+        if (input) {
+          input.addEventListener('compositionstart', () => { reasonComposing = true; });
+          input.addEventListener('compositionend', () => { reasonComposing = false; clearReasonError(); });
+          input.addEventListener('input', () => { if (!reasonComposing) clearReasonError(); });
+        }
+        return input;
       }
 
       function renderPhraseField(opts){
@@ -2000,7 +2061,7 @@
         reasonSlot.innerHTML =
           '<label class="form-field" id="confirm-phrase-wrap">' +
             '<span id="confirm-phrase-label">' + label.replace(/</g, '&lt;') + '</span>' +
-            '<input id="confirm-phrase" name="confirm_phrase" type="text" required autocomplete="off" ' +
+            '<input id="confirm-phrase" name="confirm_phrase" type="text" autocomplete="off" ' +
               'spellcheck="false" dir="ltr" placeholder="' + phrase.replace(/"/g, '&quot;') + '" />' +
           '</label>';
         const input = document.getElementById('confirm-phrase');
@@ -2043,7 +2104,8 @@
           clearExtraFields();
           if (phrase) renderPhraseField(opts);
           else if (requireReason) renderReasonField(opts);
-          openModal('modal-confirm');
+          /* Stack over edit modals so the originating delete form stays mounted. */
+          openModal('modal-confirm', { stack: true });
         });
       };
 
@@ -2053,7 +2115,7 @@
           if (!resolver) return;
           if (activeConfirmPhrase) {
             const phraseInput = document.getElementById('confirm-phrase');
-            const v = (phraseInput && phraseInput.value || '').trim();
+            const v = commitReasonInput(phraseInput);
             if (v !== activeConfirmPhrase) {
               if (phraseInput) phraseInput.focus();
               return;
@@ -2063,19 +2125,24 @@
           }
           if (activeRequireReason) {
             const reasonInput = document.getElementById('confirm-reason');
-            const v = (reasonInput && reasonInput.value || '').trim();
-            const min = activeReasonMin || 3;
-            if (v.length < min) {
-              if (reasonInput) {
-                reasonInput.focus();
-                try {
-                  reasonInput.setCustomValidity('علت حذف باید حداقل ' + min + ' کاراکتر باشد.');
-                  reasonInput.reportValidity();
-                  reasonInput.setCustomValidity('');
-                } catch (_) {}
-              }
+            if (reasonComposing) {
+              const once = () => {
+                if (reasonInput) reasonInput.removeEventListener('compositionend', once);
+                reasonComposing = false;
+                if (typeof formEl.requestSubmit === 'function') formEl.requestSubmit();
+                else formEl.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+              };
+              if (reasonInput) reasonInput.addEventListener('compositionend', once);
+              else reasonComposing = false;
               return;
             }
+            const v = commitReasonInput(reasonInput);
+            const min = activeReasonMin || 3;
+            if (reasonCharLen(v) < min) {
+              showReasonError(reasonInput, 'علت حذف باید حداقل ' + min + ' کاراکتر باشد.');
+              return;
+            }
+            clearReasonError();
             finish({ ok: true, reason: v });
             return;
           }
@@ -2130,29 +2197,46 @@
         };
       }
 
+      function stripNamedFields(form, name){
+        form.querySelectorAll(
+          'input[name="' + name + '"], textarea[name="' + name + '"]'
+        ).forEach((el) => el.parentNode && el.parentNode.removeChild(el));
+        /* Also drop form-associated fields living outside the form tree. */
+        try {
+          Array.from(form.elements || []).forEach((el) => {
+            if (el && el.name === name && el.parentNode) el.parentNode.removeChild(el);
+          });
+        } catch (_) {}
+      }
+
       function applyReason(form, opts, reason){
         const text = String(reason || '').trim();
         if (!text) return;
         const name = (opts && opts.reasonName) || 'reason';
         /* Replace any prior empty/stale reason fields so the POST body cannot
-           keep a blank "reason=" that shadows the confirmed value. */
-        form.querySelectorAll(
-          'input[name="' + name + '"], textarea[name="' + name + '"]'
-        ).forEach((el) => el.parentNode && el.parentNode.removeChild(el));
+           keep a blank "reason=" that shadows the confirmed value (Starlette
+           FormData.get is last-wins). Also mirror confirm_reason as backup. */
+        stripNamedFields(form, name);
+        stripNamedFields(form, 'confirm_reason');
         const hidden = document.createElement('input');
         hidden.type = 'hidden';
         hidden.name = name;
         hidden.value = text;
         form.appendChild(hidden);
+        if (name !== 'confirm_reason') {
+          const mirror = document.createElement('input');
+          mirror.type = 'hidden';
+          mirror.name = 'confirm_reason';
+          mirror.value = text;
+          form.appendChild(mirror);
+        }
       }
 
       function applyPhrase(form, opts, phrase){
         const text = String(phrase || '').trim();
         if (!opts.confirmPhrase || !text) return;
         const name = (opts && opts.phraseName) || 'confirm_phrase';
-        form.querySelectorAll(
-          'input[name="' + name + '"], textarea[name="' + name + '"]'
-        ).forEach((el) => el.parentNode && el.parentNode.removeChild(el));
+        stripNamedFields(form, name);
         const hidden = document.createElement('input');
         hidden.type = 'hidden';
         hidden.name = name;
@@ -2214,7 +2298,7 @@
           }
         });
       }, true);
-        })();
+    })();
 
     /* Normalize Persian/Arabic digits in numeric fields before submit / blur */
     (function(){
