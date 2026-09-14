@@ -2364,7 +2364,7 @@ def register_pg_pages(
         reason = extract_delete_reason(form)
         if delete_reason_too_short(reason):
             return RedirectResponse(
-                f"/pg/admins?err={_q(\'علت حذف ادمین الزامی است (حداقل ۳ کاراکتر)\')}",
+                f"/pg/admins?err={_q('علت حذف ادمین الزامی است (حداقل ۳ کاراکتر)')}",
                 status_code=303,
             )
 

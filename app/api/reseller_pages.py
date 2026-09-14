@@ -795,7 +795,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         reason = extract_delete_reason(form)
         if delete_reason_too_short(reason):
             return RedirectResponse(
-                f"/resellers?err={_q(\'علت حذف نمایندگی الزامی است (حداقل ۳ کاراکتر)\')}",
+                f"/resellers?err={_q('علت حذف نمایندگی الزامی است (حداقل ۳ کاراکتر)')}",
                 status_code=303,
             )
         try:
@@ -942,7 +942,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         reason = extract_delete_reason(form)
         if delete_reason_too_short(reason):
             return RedirectResponse(
-                f"/resellers?err={_q(\'علت حذف کاربر الزامی است\')}",
+                f"/resellers?err={_q('علت حذف کاربر الزامی است')}",
                 status_code=303,
             )
         from app.services.users import delete_bot_user, friendly_user_delete_error
