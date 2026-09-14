@@ -3532,29 +3532,18 @@ const root = document.getElementById('upd-root');
   }
 })();
 
-/* === Phase 2 nav work-modes === */
+/* === Sidebar section accordion (no work-mode tabs) ===
+   Only the section that owns the current page stays open; others stay collapsed. */
 (function initNavWorkModes() {
   function boot() {
     var nav = document.querySelector('[data-side-nav]');
     if (!nav) return;
 
-    var modesRoot = nav.querySelector('[data-nav-modes]');
-    var MODE_KEY = 'panel-nav-mode';
-    var COLLAPSE_KEY = 'panel-nav-collapsed';
-
-    function availableModes() {
-      var out = ['system'];
-      if (!modesRoot) return out;
-      if (modesRoot.getAttribute('data-has-shop') === '1') out.push('shop');
-      if (modesRoot.getAttribute('data-has-pg') === '1') out.push('pg');
-      return out;
-    }
-
-    function modeFromPath(pathname, search) {
+    function sectionFromPath(pathname, search) {
       var path = pathname || '/';
       var q = search || '';
+      if (path.indexOf('/help') === 0) return 'help';
       if (path.indexOf('/pg') === 0) return 'pg';
-      if (path.indexOf('/help') === 0) return null;
       if (path === '/home' || path.indexOf('/inbox') === 0 || path.indexOf('/security') === 0) {
         return 'system';
       }
@@ -3565,15 +3554,9 @@ const root = document.getElementById('upd-root');
         return 'shop';
       }
       if (path.indexOf('/shop-settings') === 0) return 'shop';
-      if (path.indexOf('/resellers') === 0) {
-        return (modesRoot && modesRoot.getAttribute('data-resellers-mode')) || 'shop';
-      }
-      if (path.indexOf('/tickets') === 0) {
-        return (modesRoot && modesRoot.getAttribute('data-tickets-mode')) || 'shop';
-      }
       var shopPrefixes = [
         '/dashboard', '/users', '/finance', '/orders', '/payments', '/plans',
-        '/broadcast', '/loyalty', '/message-variables'
+        '/broadcast', '/loyalty', '/message-variables', '/resellers', '/tickets'
       ];
       for (var i = 0; i < shopPrefixes.length; i++) {
         if (path === shopPrefixes[i] || path.indexOf(shopPrefixes[i] + '/') === 0) return 'shop';
@@ -3581,21 +3564,29 @@ const root = document.getElementById('upd-root');
       return 'system';
     }
 
-    function setMode(mode, persist) {
-      var allowed = availableModes();
-      if (allowed.indexOf(mode) < 0) mode = allowed[0] || 'system';
-      nav.setAttribute('data-active-mode', mode);
-      if (modesRoot) {
-        var tabs = modesRoot.querySelectorAll('[data-nav-mode-tab]');
-        for (var i = 0; i < tabs.length; i++) {
-          var tab = tabs[i];
-          var on = tab.getAttribute('data-nav-mode-tab') === mode;
-          tab.setAttribute('aria-selected', on ? 'true' : 'false');
-          tab.tabIndex = on ? 0 : -1;
-        }
+    function activeSectionKey() {
+      var active = nav.querySelector('.nav-item.active');
+      if (active) {
+        var parent = active.closest('.nav-section[data-nav-mode]');
+        if (parent) return parent.getAttribute('data-nav-mode');
       }
-      if (persist) {
-        try { localStorage.setItem(MODE_KEY, mode); } catch (_) {}
+      return sectionFromPath(location.pathname, location.search);
+    }
+
+    function setOpenSection(openKey) {
+      var sections = nav.querySelectorAll('.nav-section[data-nav-mode]');
+      var found = false;
+      for (var i = 0; i < sections.length; i++) {
+        if (sections[i].getAttribute('data-nav-mode') === openKey) found = true;
+      }
+      if (!found && sections.length) openKey = sections[0].getAttribute('data-nav-mode');
+      for (var j = 0; j < sections.length; j++) {
+        var section = sections[j];
+        var key = section.getAttribute('data-nav-mode');
+        var btn = section.querySelector('[data-nav-collapse]');
+        var collapsed = key !== openKey;
+        section.classList.toggle('is-collapsed', collapsed);
+        if (btn) btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
       }
       var active = nav.querySelector('.nav-item.active');
       if (active && typeof active.scrollIntoView === 'function') {
@@ -3603,47 +3594,7 @@ const root = document.getElementById('upd-root');
       }
     }
 
-    function readCollapsed() {
-      try {
-        return JSON.parse(localStorage.getItem(COLLAPSE_KEY) || '{}') || {};
-      } catch (_) {
-        return {};
-      }
-    }
-
-    function writeCollapsed(map) {
-      try { localStorage.setItem(COLLAPSE_KEY, JSON.stringify(map || {})); } catch (_) {}
-    }
-
-    function applyCollapsed() {
-      var map = readCollapsed();
-      var sections = nav.querySelectorAll('.nav-section[data-nav-mode]');
-      for (var i = 0; i < sections.length; i++) {
-        var section = sections[i];
-        var key = section.getAttribute('data-nav-mode');
-        var btn = section.querySelector('[data-nav-collapse]');
-        var collapsed = !!map[key];
-        section.classList.toggle('is-collapsed', collapsed);
-        if (btn) btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
-      }
-    }
-
-    var pathMode = modeFromPath(location.pathname, location.search);
-    var initial = pathMode;
-    if (!initial) {
-      try { initial = localStorage.getItem(MODE_KEY); } catch (_) { initial = null; }
-    }
-    setMode(initial || 'system', false);
-    applyCollapsed();
-
-    if (modesRoot) {
-      modesRoot.addEventListener('click', function (e) {
-        var btn = e.target.closest('[data-nav-mode-tab]');
-        if (!btn || !modesRoot.contains(btn)) return;
-        e.preventDefault();
-        setMode(btn.getAttribute('data-nav-mode-tab'), true);
-      });
-    }
+    setOpenSection(activeSectionKey());
 
     nav.addEventListener('click', function (e) {
       var btn = e.target.closest('[data-nav-collapse]');
@@ -3652,12 +3603,14 @@ const root = document.getElementById('upd-root');
       var key = btn.getAttribute('data-nav-collapse');
       var section = btn.closest('.nav-section');
       if (!section || !key) return;
-      var map = readCollapsed();
-      var next = !section.classList.contains('is-collapsed');
-      if (next) map[key] = true; else delete map[key];
-      writeCollapsed(map);
-      section.classList.toggle('is-collapsed', next);
-      btn.setAttribute('aria-expanded', next ? 'false' : 'true');
+      /* Exclusive accordion: opening one closes the rest; collapsing the
+         open one is allowed so the user can peek without leaving the page. */
+      if (section.classList.contains('is-collapsed')) {
+        setOpenSection(key);
+      } else {
+        section.classList.add('is-collapsed');
+        btn.setAttribute('aria-expanded', 'false');
+      }
     });
   }
 

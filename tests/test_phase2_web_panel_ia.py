@@ -1,4 +1,4 @@
-"""Phase 2 — evolutionary web panel IA (work modes, Persian chrome)."""
+"""Phase 2 — web panel IA: stacked accordion sections + Persian chrome."""
 
 from __future__ import annotations
 
@@ -12,21 +12,24 @@ JS = ROOT / "app/web/static/panel.js"
 PRINCIPALS = ROOT / "app/web/templates/principals.html"
 
 
-class Phase2NavWorkModesTests(unittest.TestCase):
-    def test_base_has_work_mode_switcher(self):
+class Phase2NavAccordionTests(unittest.TestCase):
+    def test_no_work_mode_tabs(self):
         html = BASE.read_text(encoding="utf-8")
-        self.assertIn('data-nav-modes', html)
-        self.assertIn('data-nav-mode-tab="system"', html)
-        self.assertIn('data-nav-mode-tab="shop"', html)
-        self.assertIn('data-nav-mode-tab="pg"', html)
-        self.assertIn(">سیستم</button>", html)
-        self.assertIn(">فروش</button>", html)
-        self.assertIn(">پاسارگارد</button>", html)
+        self.assertNotIn("data-nav-modes", html)
+        self.assertNotIn("data-nav-mode-tab", html)
+        self.assertNotIn("nav-mode-btn", html)
+        self.assertNotIn(">سیستم</button>", html)
+        self.assertNotIn(">فروش</button>", html)
+        self.assertNotIn('role="tablist"', html)
+        self.assertNotIn('role="tabpanel"', html)
+
+    def test_all_sections_stacked_with_mode_keys(self):
+        html = BASE.read_text(encoding="utf-8")
         self.assertIn('data-nav-mode="system"', html)
         self.assertIn('data-nav-mode="shop"', html)
         self.assertIn('data-nav-mode="pg"', html)
         self.assertIn('data-nav-mode="help"', html)
-        # Keep established section labels for IA continuity / existing tests
+        # Keep established section labels for IA continuity
         self.assertIn("پنل ربات", html)
         self.assertIn("پنل پاسارگارد", html)
         self.assertIn("وب پنل", html)
@@ -45,13 +48,28 @@ class Phase2NavWorkModesTests(unittest.TestCase):
         self.assertIn("/static/panel-nav-modes.css?v={{ app_version }}", html)
         self.assertTrue(CSS.is_file())
         css = CSS.read_text(encoding="utf-8")
-        self.assertIn(".nav-modes", css)
-        self.assertIn("data-active-mode", css)
+        self.assertNotIn(".nav-modes", css)
+        self.assertNotIn("data-active-mode", css)
         self.assertIn(".nav-section.is-collapsed", css)
+        self.assertIn(".nav-label-toggle", css)
         js = JS.read_text(encoding="utf-8")
         self.assertIn("initNavWorkModes", js)
-        self.assertIn("panel-nav-mode", js)
-        self.assertIn("panel-nav-collapsed", js)
+        self.assertIn("activeSectionKey", js)
+        self.assertIn("setOpenSection", js)
+        self.assertIn(".nav-item.active", js)
+        self.assertNotIn("panel-nav-collapsed", js)
+        self.assertNotIn("data-nav-mode-tab", js)
+        self.assertNotIn("data-active-mode", js)
+
+    def test_sections_default_collapsed_until_js(self):
+        html = BASE.read_text(encoding="utf-8")
+        self.assertGreaterEqual(html.count("is-collapsed"), 3)
+        self.assertIn('data-nav-collapse="system" aria-expanded="false"', html)
+
+    def test_sections_default_collapsed_until_js(self):
+        html = BASE.read_text(encoding="utf-8")
+        self.assertGreaterEqual(html.count("is-collapsed"), 3)
+        self.assertIn('data-nav-collapse="system" aria-expanded="false"', html)
 
     def test_persian_pg_role_chrome(self):
         html = BASE.read_text(encoding="utf-8")
