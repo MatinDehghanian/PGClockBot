@@ -91,7 +91,13 @@ class GuideCatalogTests(unittest.TestCase):
         self.assertIn("راهنمای پنل", base)
         css = (ROOT / "app" / "web" / "static" / "panel.css").read_text(encoding="utf-8")
         self.assertIn(".nav-section-help", css)
-        self.assertIn("margin-top: auto", css)
+        self.assertIn("var(--ok)", css)
+        self.assertIn("color: var(--ok-fg)", css)
+        self.assertNotIn(".nav-section-help {\n  margin-top: auto", css)
+        self.assertIn(".page-help-pop", css)
+        self.assertIn("position: fixed", css)
+        js = (ROOT / "app" / "web" / "static" / "panel.js").read_text(encoding="utf-8")
+        self.assertIn("placeHelpPop", js)
 
 
 if __name__ == "__main__":

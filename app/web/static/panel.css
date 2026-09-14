@@ -798,8 +798,9 @@ tr.principal-row-l2 td:first-child {
 .page-help {
   position: relative;
   flex: 0 0 auto;
-  margin-inline-start: 6px;
+  margin-inline-start: var(--space-1);
   align-self: center;
+  z-index: 5;
 }
 .page-help > summary {
   list-style: none;
@@ -809,59 +810,61 @@ tr.principal-row-l2 td:first-child {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--brand) 42%, var(--border));
-  background: color-mix(in srgb, var(--brand) 12%, var(--bg-card));
-  color: var(--brand-fg);
-  font-size: 14px;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--control-radius);
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--muted-fg);
+  font-size: 13px;
   font-weight: 700;
   line-height: 1;
   cursor: pointer;
-  box-shadow: 0 0 0 0 color-mix(in srgb, var(--brand) 0%, transparent);
   transition:
-    color 180ms var(--ease-out),
-    border-color 180ms var(--ease-out),
-    background 180ms var(--ease-out),
-    box-shadow 180ms var(--ease-out),
-    transform 180ms var(--ease-out);
+    color var(--motion-fast) var(--ease-out),
+    border-color var(--motion-fast) var(--ease-out),
+    background var(--motion-fast) var(--ease-out),
+    box-shadow var(--motion-fast) var(--ease-out);
 }
 .page-help-btn:hover,
 .page-help[open] > .page-help-btn {
-  color: #fff7ed;
-  border-color: color-mix(in srgb, var(--brand) 70%, var(--border));
-  background: color-mix(in srgb, var(--brand) 28%, var(--bg-card));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 18%, transparent);
-  transform: translateY(-1px);
+  color: var(--brand-fg);
+  border-color: color-mix(in srgb, var(--brand) 55%, var(--border));
+  background: color-mix(in srgb, var(--brand) 12%, var(--bg-card));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 14%, transparent);
 }
+/* Fixed popover — JS clamps to viewport so it never leaves the frame */
 .page-help-pop {
-  position: absolute;
-  inset-inline-start: 0;
-  top: calc(100% + 10px);
-  z-index: 70;
-  width: min(340px, calc(100vw - 32px));
-  padding: 16px;
-  border-radius: 16px;
-  border: 1px solid color-mix(in srgb, var(--brand) 22%, var(--border));
-  background: color-mix(in srgb, var(--bg-card) 94%, var(--brand));
-  backdrop-filter: blur(12px);
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+  position: fixed;
+  z-index: 3200;
+  width: min(300px, calc(100vw - 24px));
+  max-height: min(70vh, 360px);
+  overflow: auto;
+  padding: var(--space-2);
+  border-radius: var(--menu-radius);
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+  -webkit-overflow-scrolling: touch;
 }
 .page-help-pop-title {
   display: block;
   font-size: 14px;
   font-weight: 650;
-  margin-bottom: 6px;
+  color: var(--foreground);
+  margin-bottom: var(--space-1);
+  line-height: 1.35;
 }
 .page-help-pop-sum {
-  margin: 0 0 12px;
+  margin: 0 0 var(--space-2);
   color: var(--muted-fg);
   font-size: 13px;
   line-height: 1.65;
 }
 .page-help-pop-link {
   display: inline-flex;
+  width: 100%;
+  justify-content: center;
 }
 @keyframes page-title-ico-in {
   from { opacity: 0; transform: scale(0.78) translateY(6px); }
@@ -5362,10 +5365,11 @@ form.settings-form > .actions.sticky-actions,
   }
 }
 
-/* ── Panel split: Bot vs PasarGuard ── */
+/* ── Panel split: Home / Bot / PasarGuard / Help ── */
 .nav-section-bot,
 .nav-section-pg,
-.nav-section-home {
+.nav-section-home,
+.nav-section-help {
   margin-top: var(--space-2);
   padding: var(--space-1);
   border-radius: var(--radius);
@@ -5402,31 +5406,30 @@ form.settings-form > .actions.sticky-actions,
   border: 1px solid color-mix(in srgb, var(--pg-line) 35%, var(--border));
   background: transparent;
 }
-/* Air below last panel box before sidebar footer — match bot↔pg gap (--space-2) */
-.side-nav > .nav-section-pg:last-child,
+/* Help box — same chrome as bot/pg, green accent; same gap as other boxes */
+.nav-section-help {
+  border: 1px solid color-mix(in srgb, var(--ok) 38%, var(--border));
+  background: transparent;
+}
 .side-nav > .nav-section-help:last-child {
   margin-bottom: var(--space-1);
 }
-.nav-section-help {
-  margin-top: auto;
-  border: 1px solid color-mix(in srgb, var(--brand) 28%, var(--border));
-  background: transparent;
-}
 .nav-label-help {
-  color: var(--brand);
+  color: var(--ok-fg);
   font-weight: 600;
   letter-spacing: 0.02em;
 }
+.nav-section-help .nav-ico { color: var(--ok); }
 .nav-item-help.active,
 .nav-item-help.active:hover {
-  background: color-mix(in srgb, var(--brand) 16%, var(--muted));
-  border-color: color-mix(in srgb, var(--brand) 28%, transparent);
+  background: color-mix(in srgb, var(--ok) 14%, transparent);
+  border-color: transparent;
   color: var(--foreground);
 }
-.nav-item-help.active .nav-ico { color: var(--brand); }
+.nav-item-help.active .nav-ico { color: var(--ok); }
 .nav-item-help:hover {
-  background: color-mix(in srgb, var(--brand) 10%, var(--bg-hover));
-  border-color: color-mix(in srgb, var(--brand) 22%, var(--border));
+  background: color-mix(in srgb, var(--ok) 8%, transparent);
+  border-color: color-mix(in srgb, var(--ok) 36%, transparent);
   color: var(--foreground);
 }
 .nav-label-bot {
@@ -5441,7 +5444,6 @@ form.settings-form > .actions.sticky-actions,
 }
 .nav-section-bot .nav-ico { color: var(--bot-line); }
 .nav-section-pg .nav-ico { color: var(--pg-line); }
-.nav-section-help .nav-ico { color: var(--brand); }
 .nav-item-bot.active,
 .nav-item-bot.active:hover {
   background: var(--bot-fill);
@@ -6816,7 +6818,7 @@ html[data-theme="light"] .nav-section-pg {
   background: transparent;
 }
 html[data-theme="light"] .nav-section-help {
-  border-color: color-mix(in srgb, var(--brand) 24%, var(--border));
+  border-color: color-mix(in srgb, var(--ok) 28%, var(--border));
   background: transparent;
 }
 html[data-theme="light"] .nav-label-bot,
@@ -6824,7 +6826,18 @@ html[data-theme="light"] .nav-section-bot .nav-ico { color: var(--bot-line); }
 html[data-theme="light"] .nav-label-pg,
 html[data-theme="light"] .nav-section-pg .nav-ico { color: var(--pg-line); }
 html[data-theme="light"] .nav-label-help,
-html[data-theme="light"] .nav-section-help .nav-ico { color: var(--brand); }
+html[data-theme="light"] .nav-section-help .nav-ico { color: var(--ok); }
+html[data-theme="light"] .nav-item-help.active,
+html[data-theme="light"] .nav-item-help.active:hover {
+  background: color-mix(in srgb, var(--ok) 12%, transparent);
+  border-color: transparent;
+  color: var(--foreground);
+}
+html[data-theme="light"] .nav-item-help:hover {
+  background: color-mix(in srgb, var(--ok) 6%, transparent);
+  border-color: color-mix(in srgb, var(--ok) 28%, transparent);
+  color: var(--foreground);
+}
 html[data-theme="light"] .nav-item-bot.active,
 html[data-theme="light"] .nav-item-bot.active:hover {
   background: var(--bot-fill);
