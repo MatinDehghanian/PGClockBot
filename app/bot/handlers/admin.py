@@ -452,24 +452,40 @@ async def adm_orders(callback: CallbackQuery, session: AsyncSession, db_user: Bo
         await callback.answer("ادمین نیستید", show_alert=True)
         return
     await callback.answer()
+    from app.services.ux20 import list_stuck_paid_orders
+
+    stuck = await list_stuck_paid_orders(session, reseller_id=None, limit=12)
+    stuck_ids = {int(o.id) for o in stuck}
     result = await session.execute(
         select(Order)
         .where(Order.reseller_id.is_(None))
         .order_by(Order.id.desc())
         .limit(12)
     )
-    orders = list(result.scalars().all())
-    if not orders:
+    recent = list(result.scalars().all())
+    merged: list[Order] = []
+    seen: set[int] = set()
+    for o in list(stuck) + recent:
+        oid = int(o.id)
+        if oid in seen:
+            continue
+        seen.add(oid)
+        merged.append(o)
+        if len(merged) >= 12:
+            break
+    if not merged:
         if callback.message:
             await callback.message.edit_text("سفارشی نیست.", reply_markup=None)
         return
     rows = []
-    for o in orders:
-        label = f"#{o.id} · {order_status_fa(o.status)} · {format_toman(o.amount, get_settings().currency)}"
+    for o in merged:
+        prefix = "⚠ " if int(o.id) in stuck_ids else ""
+        label = f"{prefix}#{o.id} · {order_status_fa(o.status)} · {format_toman(o.amount, get_settings().currency)}"
         rows.append([InlineKeyboardButton(text=label[:64], callback_data=f"adm:order:{o.id}")])
     if callback.message:
         await callback.message.edit_text(
             "🛒 <b>سفارش‌ها</b>\nیکی را برای جزئیات و تأیید/رد انتخاب کنید:\n"
+            "<i>⚠ = پرداخت‌شده بدون سرویس (نیاز به تلاش مجدد تحویل)</i>\n"
             "<i>بازگشت از کیبورد پایین</i>",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
         )
@@ -2275,7 +2291,8 @@ async def adm_users_service_delete_ask(
             (
                 f"⚠️ <b>حذف سرویس #{service_id}</b>\n\n"
                 f"سرویس <code>{html.escape(str(label))}</code> و کاربر پاسارگارد مرتبط "
-                f"برای همیشه حذف شوند؟\nاین عمل برگشت‌ناپذیر است."
+                f"برای همیشه حذف شوند؟\nاین عمل برگشت‌ناپذیر است.\n"
+                f"برای قطع موقت، از غیرفعال‌سازی در پنل/ربات استفاده کنید."
             ),
             reply_markup=kb.admin_user_service_delete_confirm(user_id, service_id),
         )
@@ -3717,7 +3734,7 @@ async def pg_stats(callback: CallbackQuery, db_user: BotUser):
 
 # Node ops: app.bot.handlers.admin_pg_nodes (web /pg/nodes parity)
 
-# Phase 4G — PG hub / catalog hints live on admin_pg_users (no Owner middleware).
+# PG hub / catalog hints live on admin_pg_users (no Owner middleware).
 from app.bot.handlers.admin_pg_users import (  # noqa: E402,F401
     adm_pg,
     adm_pg_group_hint,

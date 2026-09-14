@@ -16,6 +16,16 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "10.0.0": [
+        "امنیت: SSRF روی PG_BASE_URL، Setup فقط loopback، Redirect امن، lockout پایدار لاگین",
+        "امنیت: CSRF double-submit + CSP nonce؛ Encrypt توکن بات نماینده؛ freshness card-auto",
+        "پول/تحویل: Refund خودکار Stars، idempotency باشگاه، fail-closed حذف سرویس، wallet top-up",
+        "عملیات: بازیابی سفارش PAID گیرکرده، جستجوی مالی SQL، broadcast/expiry تکه‌تکه",
+        "UX: type-to-confirm برای حذف‌های برگشت‌ناپذیر VPN",
+        "معماری: login_guard، authz به‌جای pilot، استخراج reply_keyboards",
+        "Doctor: هشدار هم‌ترازی Web Owner و ADMIN_IDS؛ get.sh با PGCLOCK_REF",
+        "ریستور: pre-v10.0.0-restore / phase0-20260914-085947",
+    ],
     "9.2.0": [
         "ساخت دستی کاربر بات و اختصاص پلن از وب‌پنل (بدون سفارش)",
         "نماینده: عملیات سرویس طبق ACL پاسارگارد (create/update/delete) + ایزوله فروشگاه",

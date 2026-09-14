@@ -1,4 +1,47 @@
   (function(){
+    function csrfToken() {
+      var meta = document.querySelector('meta[name="csrf-token"]');
+      if (meta && meta.content) return meta.content;
+      var m = document.cookie.match(/(?:^|; )csrf=([^;]*)/);
+      return m ? decodeURIComponent(m[1]) : '';
+    }
+    function ensureCsrfField(form) {
+      if (!form || form.tagName !== 'FORM') return;
+      if (form.method && form.method.toUpperCase() === 'GET') return;
+      var tok = csrfToken();
+      if (!tok) return;
+      var existing = form.querySelector('input[name="csrf_token"]');
+      if (existing) {
+        existing.value = tok;
+        return;
+      }
+      var input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = 'csrf_token';
+      input.value = tok;
+      form.appendChild(input);
+    }
+    document.addEventListener('submit', function (e) {
+      ensureCsrfField(e.target);
+    }, true);
+    var _fetch = window.fetch;
+    if (typeof _fetch === 'function') {
+      window.fetch = function (input, init) {
+        init = init || {};
+        var method = (init.method || 'GET').toUpperCase();
+        if (method !== 'GET' && method !== 'HEAD') {
+          var headers = new Headers(init.headers || {});
+          if (!headers.has('X-CSRF-Token')) {
+            var tok = csrfToken();
+            if (tok) headers.set('X-CSRF-Token', tok);
+          }
+          init.headers = headers;
+          if (init.credentials == null) init.credentials = 'same-origin';
+        }
+        return _fetch.call(this, input, init);
+      };
+    }
+
     const side = document.getElementById('sidebar');
     const btn = document.getElementById('menu-toggle');
     const back = document.getElementById('side-backdrop');
@@ -1857,6 +1900,7 @@
 
     /* Shared confirm modal — replaces native confirm()/prompt() for panel mutations.
        Reason field is RENDERED only when requireReason=true (delete user/reseller/admin).
+       Phrase field is RENDERED when confirmPhrase is set (VPN hard-delete type-to-confirm).
        Never leave a hidden .form-field in the DOM — author CSS display:flex beats [hidden]. */
     (function setupPanelConfirm(){
       const modal = document.getElementById('modal-confirm');
@@ -1869,13 +1913,19 @@
       let resolver = null;
       let activeRequireReason = false;
       let activeReasonMin = 3;
+      let activeConfirmPhrase = '';
 
-      function clearReasonField(){
+      function clearExtraFields(){
         activeRequireReason = false;
+        activeConfirmPhrase = '';
         if (reasonSlot) {
           reasonSlot.innerHTML = '';
           reasonSlot.hidden = true;
         }
+        if (submitBtn) submitBtn.disabled = false;
+      }
+      function clearReasonField(){
+        clearExtraFields();
       }
 
       function renderReasonField(opts){
@@ -1894,10 +1944,36 @@
         return document.getElementById('confirm-reason');
       }
 
+      function renderPhraseField(opts){
+        if (!reasonSlot) return null;
+        const phrase = String(opts.confirmPhrase || '').trim();
+        if (!phrase) return null;
+        activeConfirmPhrase = phrase;
+        const label = opts.phraseLabel || ('برای تأیید، دقیقاً این عبارت را تایپ کنید: ' + phrase);
+        reasonSlot.hidden = false;
+        reasonSlot.innerHTML =
+          '<label class="form-field" id="confirm-phrase-wrap">' +
+            '<span id="confirm-phrase-label">' + label.replace(/</g, '&lt;') + '</span>' +
+            '<input id="confirm-phrase" name="confirm_phrase" type="text" required autocomplete="off" ' +
+              'spellcheck="false" dir="ltr" placeholder="' + phrase.replace(/"/g, '&quot;') + '" />' +
+          '</label>';
+        const input = document.getElementById('confirm-phrase');
+        if (submitBtn) submitBtn.disabled = true;
+        if (input) {
+          const sync = () => {
+            if (submitBtn) submitBtn.disabled = input.value.trim() !== phrase;
+          };
+          input.addEventListener('input', sync);
+          input.addEventListener('change', sync);
+          sync();
+        }
+        return input;
+      }
+
       function finish(result){
         const r = resolver;
         resolver = null;
-        clearReasonField();
+        clearExtraFields();
         if (modal.classList.contains('open')) closeModal(modal);
         if (r) r(result || { ok: false });
       }
@@ -1914,16 +1990,14 @@
           if (submitBtn) {
             submitBtn.textContent = opts.confirmLabel || 'تأیید';
             submitBtn.className = 'btn' + (opts.danger ? ' btn-danger' : (opts.warn ? ' btn-warn' : ''));
+            submitBtn.disabled = false;
           }
-          /* Strict: only true when caller sets requireReason (or legacy opts.reason === true) */
           const requireReason = opts.requireReason === true || opts.reason === true;
-          clearReasonField();
-          let reasonInput = null;
-          if (requireReason) {
-            reasonInput = renderReasonField(opts);
-          }
+          const phrase = String(opts.confirmPhrase || '').trim();
+          clearExtraFields();
+          if (phrase) renderPhraseField(opts);
+          else if (requireReason) renderReasonField(opts);
           openModal('modal-confirm');
-          /* Do not autofocus reason — avoids mobile keyboard popping open. */
         });
       };
 
@@ -1931,6 +2005,16 @@
         formEl.addEventListener('submit', (e) => {
           e.preventDefault();
           if (!resolver) return;
+          if (activeConfirmPhrase) {
+            const phraseInput = document.getElementById('confirm-phrase');
+            const v = (phraseInput && phraseInput.value || '').trim();
+            if (v !== activeConfirmPhrase) {
+              if (phraseInput) phraseInput.focus();
+              return;
+            }
+            finish({ ok: true, phrase: v });
+            return;
+          }
           if (activeRequireReason) {
             const reasonInput = document.getElementById('confirm-reason');
             const v = (reasonInput && reasonInput.value || '').trim();
@@ -1951,7 +2035,7 @@
         if (e.target.closest('[data-modal-close]') || e.target === modal.querySelector('.ui-modal-backdrop')) {
           const r = resolver;
           resolver = null;
-          clearReasonField();
+          clearExtraFields();
           if (r) r({ ok: false });
         }
       });
@@ -1965,7 +2049,7 @@
       function attrTruthy(el, name){
         if (!el || !el.hasAttribute(name)) return false;
         const v = (el.getAttribute(name) || '').trim().toLowerCase();
-        if (!v) return true; /* presence-only like data-confirm-reason */
+        if (!v) return true;
         return !(v === '0' || v === 'false' || v === 'no' || v === 'off');
       }
 
@@ -1974,16 +2058,21 @@
         const requireReason = attrTruthy(src, 'data-confirm-reason');
         const reasonName = (src && src.getAttribute('data-confirm-reason-name')) || 'reason';
         const reasonMin = parseInt((src && src.getAttribute('data-confirm-reason-min')) || '3', 10) || 3;
+        const confirmPhrase = ((src && src.getAttribute('data-confirm-phrase')) || '').trim();
+        const phraseName = (src && src.getAttribute('data-confirm-phrase-name')) || 'confirm_phrase';
         return {
           title: (src && src.getAttribute('data-confirm-title')) || 'تأیید',
           message: (src && src.getAttribute('data-confirm')) || 'ادامه می‌دهید؟',
           danger: !!(src && src.hasAttribute('data-confirm-danger')),
           warn: !!(src && src.hasAttribute('data-confirm-warn')),
-          requireReason: requireReason,
-          reason: requireReason, /* legacy alias for panelConfirm */
+          requireReason: requireReason && !confirmPhrase,
+          reason: requireReason && !confirmPhrase,
           reasonMin: reasonMin,
           reasonLabel: (src && src.getAttribute('data-confirm-reason-label')) || 'علت حذف',
           reasonName: reasonName,
+          confirmPhrase: confirmPhrase,
+          phraseName: phraseName,
+          phraseLabel: (src && src.getAttribute('data-confirm-phrase-label')) || '',
           confirmLabel: (src && src.getAttribute('data-confirm-label')) || 'تأیید',
         };
       }
@@ -2002,6 +2091,20 @@
         hidden.value = reason;
       }
 
+      function applyPhrase(form, opts, phrase){
+        if (!opts.confirmPhrase || !phrase) return;
+        let hidden = form.querySelector(
+          'input[name="' + opts.phraseName + '"], textarea[name="' + opts.phraseName + '"]'
+        );
+        if (!hidden) {
+          hidden = document.createElement('input');
+          hidden.type = 'hidden';
+          hidden.name = opts.phraseName;
+          form.appendChild(hidden);
+        }
+        hidden.value = phrase;
+      }
+
       document.addEventListener('submit', (e) => {
         const form = e.target;
         if (!(form instanceof HTMLFormElement)) return;
@@ -2017,6 +2120,7 @@
         window.panelConfirm(opts).then((result) => {
           if (!result || !result.ok) return;
           applyReason(form, opts, result.reason);
+          applyPhrase(form, opts, result.phrase);
           form.dataset.confirmSkip = '1';
           if (typeof form.requestSubmit === 'function') form.requestSubmit();
           else form.submit();
@@ -2039,6 +2143,7 @@
           if (!result || !result.ok) return;
           if (!form) return;
           applyReason(form, opts, result.reason);
+          applyPhrase(form, opts, result.phrase);
           form.dataset.confirmSkip = '1';
           btn.dataset.confirmSkip = '1';
           if (typeof form.requestSubmit === 'function') form.requestSubmit(btn);
@@ -2054,7 +2159,7 @@
           }
         });
       }, true);
-    })();
+        })();
 
     /* Normalize Persian/Arabic digits in numeric fields before submit / blur */
     (function(){
@@ -2677,26 +2782,29 @@
         const baseMsg = btn.getAttribute('data-bulk-confirm') || 'ادامه می‌دهید؟';
         const confirmMsg = baseMsg.replace(/\{n\}/g, faNum(n));
         const needsReason = btn.hasAttribute('data-bulk-confirm-reason');
+        const confirmPhrase = (btn.getAttribute('data-bulk-confirm-phrase') || '').trim();
         const opts = {
           title: btn.getAttribute('data-bulk-confirm-title') || 'تأیید',
           message: confirmMsg,
           confirmLabel: btn.getAttribute('data-bulk-confirm-label') || 'تأیید',
           danger: btn.hasAttribute('data-bulk-confirm-danger'),
           warn: btn.hasAttribute('data-bulk-confirm-warn'),
-          requireReason: needsReason,
+          requireReason: needsReason && !confirmPhrase,
           reasonLabel: btn.getAttribute('data-bulk-confirm-reason-label') || 'علت',
+          confirmPhrase: confirmPhrase,
+          phraseLabel: btn.getAttribute('data-bulk-confirm-phrase-label') || '',
         };
-        const run = (reason) => postBulk(actionUrl, actionKey, ids, reason || '');
+        const run = (reason, phrase) => postBulk(actionUrl, actionKey, ids, reason || '', phrase || '');
         if (typeof window.panelConfirm === 'function') {
           window.panelConfirm(opts).then((result) => {
             if (!result || !result.ok) return;
-            run(result.reason || '');
+            run(result.reason || '', result.phrase || '');
           });
           return;
         }
-        run('');
+        run('', '');
       }
-      function postBulk(url, actionKey, ids, reason) {
+      function postBulk(url, actionKey, ids, reason, phrase) {
         const form = document.createElement('form');
         form.method = 'post';
         form.action = url;
@@ -2716,6 +2824,13 @@
           r.name = 'reason';
           r.value = reason;
           form.appendChild(r);
+        }
+        if (phrase) {
+          const p = document.createElement('input');
+          p.type = 'hidden';
+          p.name = 'confirm_phrase';
+          p.value = phrase;
+          form.appendChild(p);
         }
         ids.forEach((id) => {
           const inp = document.createElement('input');

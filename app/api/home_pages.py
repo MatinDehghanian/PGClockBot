@@ -14,6 +14,7 @@ from app.db.models import BotUser, Order, Payment, PaymentStatus, Plan, Ticket, 
 from app.services.host_gauges import gauges_json, local_host_gauges
 from app.services.home_overview import build_home_overview
 from app.services.shop_scope import empty_shop_stats, is_platform_admin, shop_owner_id
+from app.services.secret_box import reveal_bot_token
 
 logger = logging.getLogger(__name__)
 
@@ -711,7 +712,7 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
 
         async def _bot_task():
             # Tenant bot only — never probe platform BOT_TOKEN.
-            bot_token = ((profile.bot_token if profile else None) or "").strip()
+            bot_token = ((reveal_bot_token(profile.bot_token) if profile else None) or "").strip()
             main_token = (get_settings().bot_token or "").strip()
             if not bot_token or (main_token and bot_token == main_token):
                 return {

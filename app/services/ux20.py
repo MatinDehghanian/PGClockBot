@@ -379,6 +379,50 @@ async def resolve_delivery_failure(session: AsyncSession, order_id: int) -> None
     )
 
 
+async def list_stuck_paid_orders(
+    session: AsyncSession, *, reseller_id: int | None = None, limit: int = 100
+) -> list[Order]:
+    """Orders paid/delivering with no local service — need delivery retry."""
+    from app.db.models import OrderStatus
+
+    q = (
+        select(Order)
+        .where(
+            Order.status.in_([OrderStatus.PAID.value, OrderStatus.DELIVERING.value]),
+            Order.service_id.is_(None),
+        )
+        .order_by(Order.id.desc())
+        .limit(limit)
+    )
+    if reseller_id is None:
+        q = q.where(Order.reseller_id.is_(None))
+    else:
+        q = q.where(Order.reseller_id == int(reseller_id))
+    return list((await session.execute(q)).scalars().all())
+
+
+async def count_stuck_paid_orders(
+    session: AsyncSession, *, reseller_id: int | None = None
+) -> int:
+    from sqlalchemy import func
+
+    from app.db.models import OrderStatus
+
+    q = (
+        select(func.count())
+        .select_from(Order)
+        .where(
+            Order.status.in_([OrderStatus.PAID.value, OrderStatus.DELIVERING.value]),
+            Order.service_id.is_(None),
+        )
+    )
+    if reseller_id is None:
+        q = q.where(Order.reseller_id.is_(None))
+    else:
+        q = q.where(Order.reseller_id == int(reseller_id))
+    return int((await session.scalar(q)) or 0)
+
+
 async def list_open_delivery_failures(
     session: AsyncSession, *, reseller_id: int | None = None, limit: int = 100
 ) -> list[DeliveryFailure]:

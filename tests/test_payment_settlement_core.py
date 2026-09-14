@@ -14,6 +14,16 @@ os.environ["ALLOW_SETTLEMENT_MOCK"] = "1"
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _with_ts(payload: dict) -> dict:
+    """Card-auto events now require a fresh unix timestamp inside the signed body."""
+    import time
+
+    out = dict(payload)
+    out.setdefault("timestamp", int(time.time()))
+    return out
+
+
+
 class CardAutoCryptoTests(unittest.TestCase):
     def test_sign_verify_roundtrip(self):
         from app.services.payment_providers.card_auto import (
@@ -23,7 +33,7 @@ class CardAutoCryptoTests(unittest.TestCase):
             verify_signature,
         )
 
-        payload = {"amount": 150000, "external_ref": "evt-1", "payment_id": 42}
+        payload = _with_ts({"amount": 150000, "external_ref": "evt-1", "payment_id": 42})
         body = dumps_canonical(payload)
         sig = sign_payload("secret-test-16chars", body)
         self.assertTrue(
@@ -37,7 +47,7 @@ class CardAutoCryptoTests(unittest.TestCase):
         from app.services.payment_providers.card_auto import parse_card_auto_event
 
         with self.assertRaises(ValueError):
-            parse_card_auto_event({"amount": 10})
+            parse_card_auto_event(_with_ts({"amount": 10}))
 
 
 class MockGateTests(unittest.TestCase):
@@ -311,11 +321,11 @@ class SettlementFlowDbTests(unittest.IsolatedAsyncioTestCase):
             await session.commit()
             await session.refresh(payment)
 
-            payload = {
+            payload = _with_ts({
                 "amount": 33000,
                 "external_ref": "bank-1",
                 "payment_id": payment.id,
-            }
+            })
             body = dumps_canonical(payload)
 
             # Platform secret must NOT settle shop payment
@@ -329,7 +339,7 @@ class SettlementFlowDbTests(unittest.IsolatedAsyncioTestCase):
                 )
 
             # Missing payment_id rejected
-            bad = dumps_canonical({"amount": 33000, "external_ref": "bank-2"})
+            bad = dumps_canonical(_with_ts({"amount": 33000, "external_ref": "bank-2"}))
             sig_shop = sign_payload("shop-secret-sixteen", bad)
             with self.assertRaises(ValueError):
                 await handle_card_auto_webhook(
@@ -588,11 +598,11 @@ class SettlementFlowDbTests(unittest.IsolatedAsyncioTestCase):
 
             await ps.create_card_auto_awaiting(session, payment)
 
-            payload = {
+            payload = _with_ts({
                 "amount": 12000,
                 "external_ref": "evt-dup-1",
                 "payment_id": payment.id,
-            }
+            })
             body = dumps_canonical(payload)
             sig = sign_payload("dup-secret-16chars", body)
             calls = {"n": 0}
@@ -679,11 +689,11 @@ class SettlementFlowDbTests(unittest.IsolatedAsyncioTestCase):
             await session.refresh(payment)
             await create_card_auto_awaiting(session, payment)
 
-            payload = {
+            payload = _with_ts({
                 "amount": 9000,
                 "external_ref": "xt-1",
                 "payment_id": payment.id,
-            }
+            })
             body = dumps_canonical(payload)
             # Shop-2 secret + shop-2 path must not settle shop-1 payment
             sig = sign_payload("tenant-two-secret2", body)

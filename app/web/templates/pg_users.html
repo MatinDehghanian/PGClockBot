@@ -27,7 +27,7 @@
     {'key': 'enable', 'label': 'فعال', 'confirm': '{n} کاربر فعال شوند؟', 'confirm_title': 'فعال‌سازی گروهی', 'confirm_label': 'فعال'},
     {'key': 'reset', 'label': 'ریست', 'confirm': 'مصرف {n} کاربر ریست شود؟', 'confirm_title': 'ریست گروهی', 'confirm_label': 'ریست', 'warn': true},
     {'key': 'revoke', 'label': 'ابطال ساب', 'confirm': 'سابسکرایب {n} کاربر ابطال شود؟', 'confirm_title': 'ابطال گروهی', 'confirm_label': 'ابطال', 'warn': true},
-    {'key': 'delete', 'label': 'حذف', 'class': 'btn-danger', 'confirm': '{n} کاربر پاسارگارد حذف شوند؟', 'confirm_title': 'حذف گروهی', 'confirm_label': 'حذف', 'danger': true},
+    {'key': 'delete', 'label': 'حذف', 'class': 'btn-danger', 'confirm': '{n} کاربر پاسارگارد برای همیشه حذف شوند؟ برای قطع موقت از «غیرفعال» استفاده کنید. برای تأیید عبارت حذف را تایپ کنید.', 'confirm_title': 'حذف گروهی برگشت‌ناپذیر', 'confirm_label': 'حذف دائمی', 'danger': true, 'phrase': 'حذف', 'phrase_label': 'عبارت تأیید (حذف)'},
   ]) }}
   {% endif %}
   <div class="table-wrap">
@@ -120,7 +120,16 @@
             <form method="post" action="/pg/users/{{ uid }}/revoke" data-confirm="سابسکرایب ابطال شود؟" data-confirm-title="ابطال سابسکرایب" data-confirm-warn="1" data-confirm-label="ابطال"><button class="btn btn-ghost btn-sm" type="submit">ابطال ساب</button></form>
             {% endif %}
             {% if can_delete and uid %}
-            <form method="post" action="/pg/users/{{ uid }}/delete" data-confirm="کاربر پاسارگارد حذف شود؟" data-confirm-title="تأیید حذف" data-confirm-danger="1" data-confirm-label="حذف"><button class="btn btn-danger btn-sm" type="submit">حذف</button></form>
+            <form method="post" action="/pg/users/{{ uid }}/delete"
+                  data-confirm="کاربر پاسارگارد «{{ u.get('username') or uid }}» برای همیشه حذف شود؟ برای قطع موقت ابتدا «غیرفعال» را بزنید. این عمل برگشت‌ناپذیر است."
+                  data-confirm-title="حذف دائمی کاربر VPN"
+                  data-confirm-danger="1"
+                  data-confirm-label="حذف دائمی"
+                  data-confirm-phrase="{{ u.get('username') or uid }}"
+                  data-confirm-phrase-label="نام کاربری را برای تأیید تایپ کنید"
+                  data-confirm-phrase-name="confirm_phrase">
+              <button class="btn btn-danger btn-sm" type="submit">حذف</button>
+            </form>
             {% endif %}
           {% endcall %}
         </td>

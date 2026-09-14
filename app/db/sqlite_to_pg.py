@@ -1,7 +1,14 @@
 """SQLite → PostgreSQL offline data migration (ETL).
 
+This is a one-shot cutover tool — not a dual-runtime database path.
+Production runtime uses a single ``DATABASE_URL`` (PostgreSQL recommended).
+SQLite remains available for labs and as the ETL source for existing installs.
+
 Preserves primary keys, copies all application tables in FK-safe order,
 resets PostgreSQL sequences, and optionally validates row counts.
+
+CLI: ``pgclock migrate --from-sqlite --source … --target …``
+Docs: ``docs/PHASE_A_DATABASE.md``.
 """
 
 from __future__ import annotations

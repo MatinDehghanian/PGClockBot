@@ -16,6 +16,9 @@ set -euo pipefail
 REPO_URL="${PGCLOCK_REPO:-https://github.com/Mrclocks/PGClockBot.git}"
 DIR_NAME="${PGCLOCK_DIR:-PGClockBot}"
 REMOTE_BRANCH="${PGCLOCK_BRANCH:-main}"
+# Optional pin: tag or commit SHA (e.g. v10.0.0). When set, sync checks out this
+# ref instead of tracking the branch tip — prefer for production installs.
+REMOTE_REF="${PGCLOCK_REF:-}"
 
 info() { echo "  > $*"; }
 ok()   { echo "  + $*"; }
@@ -73,21 +76,29 @@ restore_runtime() {
 }
 
 force_sync_to_remote() {
-  info "Syncing hard to origin/${REMOTE_BRANCH} (keeps .env + data)..."
+  local target="${REMOTE_REF:-origin/${REMOTE_BRANCH}}"
+  info "Syncing hard to ${target} (keeps .env + data)..."
   backup_runtime
   local bak="$RUNTIME_BAK"
 
   git remote set-url origin "$REPO_URL" 2>/dev/null || git remote add origin "$REPO_URL" 2>/dev/null || true
   # Targeted fetch (no tags / no --all) — much faster on weak VPS links
-  git fetch --no-tags --prune origin "$REMOTE_BRANCH" || git fetch --no-tags --prune origin
-
-  # Detach local dirty state safely
-  git checkout -f -B "$REMOTE_BRANCH" "origin/${REMOTE_BRANCH}"
-  git reset --hard "origin/${REMOTE_BRANCH}"
+  if [[ -n "$REMOTE_REF" ]]; then
+    git fetch --no-tags --prune origin "$REMOTE_REF" \
+      || git fetch --tags --prune origin "$REMOTE_REF" \
+      || git fetch --no-tags --prune origin
+    git checkout -f "$REMOTE_REF"
+    git reset --hard "$REMOTE_REF"
+  else
+    git fetch --no-tags --prune origin "$REMOTE_BRANCH" || git fetch --no-tags --prune origin
+    # Detach local dirty state safely
+    git checkout -f -B "$REMOTE_BRANCH" "origin/${REMOTE_BRANCH}"
+    git reset --hard "origin/${REMOTE_BRANCH}"
+  fi
   git clean -fd --exclude=.env --exclude=data --exclude=.venv --exclude='.env.bak.*' --exclude='.env.restored.*'
 
   restore_runtime "$bak"
-  ok "Code synced to origin/${REMOTE_BRANCH}"
+  ok "Code synced to ${target}"
 }
 
 git_update() {

@@ -1,16 +1,47 @@
-# Security regression test manifest.
-#
-# Every file listed here is executed by scripts/run_security_tests.sh (and by
-# the "Security tests" CI workflow) on every push/PR — independent of the
-# full test suite, which also contains a long tail of unrelated pre-existing
-# UI/version-pin tests that are noisy and not security-relevant.
-#
-# Whenever you fix a security bug or add an access-control / tenant-isolation
-# / secret-handling change, add the new regression test file's path here so
-# it is never silently skipped by future patches. One path per line; lines
-# starting with # are comments; blank lines are ignored.
 
+#
+# --- ACL / RBAC / authz audits ---
 # --- Core authorization / role & tenant isolation phases ---
+# Every file listed here is executed by scripts/run_security_tests.sh (and by
+# full test suite, which also contains a long tail of unrelated pre-existing
+# it is never silently skipped by future patches. One path per line; lines
+# --- Multi-tenant scale / performance hardening ---
+# --- PasarGuard admin/staff web-access & credential handling ---
+# / secret-handling change, add the new regression test file's path here so
+# Security regression test manifest.
+# --- Setup wizard / secrets-at-rest / infra hardening ---
+# starting with # are comments; blank lines are ignored.
+# --- Tenant / shop isolation & IDOR ---
+tests/test_authz_regression_premerge_4_5_1.py
+tests/test_bot_inline_settings_owner.py
+tests/test_bot_pg_action_matrix.py
+tests/test_bot_users_reseller_id_index.py
+tests/test_cancel_tickets_isolation_3_6_6.py
+tests/test_client_ip_spoofing.py
+tests/test_csrf_csp_doctor_remaining.py
+tests/test_final_admin_reseller_security_audit.py
+tests/test_final_audit_2_0_2.py
+tests/test_final_audit_fixes.py
+tests/test_full_audit_3_8_3.py
+tests/test_giftcode_toggle_authz.py
+tests/test_hybrid_owner_pg_clamp.py
+tests/test_hybrid_owner_quota_gate.py
+tests/test_hybrid_quota_boxes.py
+tests/test_inbox_platform_scope_leak.py
+tests/test_live_pg_menus.py
+tests/test_miniapp_security_audit.py
+tests/test_owner_bypass_guards.py
+tests/test_pg_admin_web_gate.py
+tests/test_pg_groups_inbound_tag_allowlist.py
+tests/test_pg_outage_access_revoke.py
+tests/test_pg_quota.py
+tests/test_pg_reseller_client_cache_key.py
+tests/test_pg_staff_reseller_parity.py
+tests/test_pg_web_access_guards.py
+tests/test_phase5b_bot_l2_bind_resolve.py
+tests/test_phase5c_bot_l2_pg_parity.py
+tests/test_phase5d_l2_bot_routing.py
+tests/test_phase5e_final_hierarchy_redteam.py
 tests/test_phase_c0_authz.py
 tests/test_phase_c1_read_isolation.py
 tests/test_phase_c2_write_authz.py
@@ -21,67 +52,31 @@ tests/test_phase_d1_credential_policy.py
 tests/test_phase_d2_grant_sync.py
 tests/test_phase_d3_legacy_remediation.py
 tests/test_phase_d4_identity_consistency.py
-
-# --- Tenant / shop isolation & IDOR ---
-tests/test_tenant_isolation.py
-tests/test_shop_isolation_3_5_4.py
-tests/test_cancel_tickets_isolation_3_6_6.py
-tests/test_reseller_access.py
-tests/test_receipt_security.py
-tests/test_receipt_match_tenant_isolation.py
-tests/test_inbox_platform_scope_leak.py
-
-# --- ACL / RBAC / authz audits ---
-tests/test_authz_regression_premerge_4_5_1.py
-tests/test_rbac_final_security_audit_4_5_1.py
-tests/test_rtl_acl_audit_4_5_1.py
-tests/test_final_admin_reseller_security_audit.py
-tests/test_final_audit_2_0_2.py
-tests/test_final_audit_fixes.py
-tests/test_full_audit_3_8_3.py
+tests/test_plans_catalog_hybrid_owner_scope.py
+tests/test_product5_l2_telegram_bind.py
 tests/test_production_audit_3_5_6.py
+tests/test_quota_own_client.py
+tests/test_rbac_final_security_audit_4_5_1.py
+tests/test_receipt_match_tenant_isolation.py
+tests/test_receipt_security.py
+tests/test_representative_unification.py
+tests/test_reseller_access.py
+tests/test_role_miniapp.py
+tests/test_rtl_acl_audit_4_5_1.py
+tests/test_secret_box_key_separation.py
 tests/test_security_audit_3_6_3.py
 tests/test_security_audit_hardening.py
-tests/test_miniapp_security_audit.py
-tests/test_role_miniapp.py
 tests/test_security_hardening.py
 tests/test_security_legacy_username_parity.py
-tests/test_v4_0_8_security_audit_sanitize.py
-tests/test_v4_1_1_reseller_pg_role_access.py
-tests/test_giftcode_toggle_authz.py
-tests/test_owner_bypass_guards.py
-
-# --- PasarGuard admin/staff web-access & credential handling ---
-tests/test_pg_admin_web_gate.py
-tests/test_pg_web_access_guards.py
-tests/test_pg_outage_access_revoke.py
-tests/test_pg_staff_reseller_parity.py
-tests/test_pg_quota.py
-tests/test_quota_own_client.py
-tests/test_pg_reseller_client_cache_key.py
-tests/test_pg_groups_inbound_tag_allowlist.py
-tests/test_bot_pg_action_matrix.py
-tests/test_plans_catalog_hybrid_owner_scope.py
-tests/test_hybrid_owner_pg_clamp.py
-tests/test_hybrid_owner_quota_gate.py
-tests/test_hybrid_quota_boxes.py
-tests/test_live_pg_menus.py
-
-# --- Multi-tenant scale / performance hardening ---
-tests/test_bot_users_reseller_id_index.py
-
-# --- Setup wizard / secrets-at-rest / infra hardening ---
+tests/test_setup_bot_placeholder_rejection.py
 tests/test_setup_gate_install_url.py
 tests/test_setup_url_log_redaction.py
-tests/test_setup_bot_placeholder_rejection.py
 tests/test_setup_wizard_secret_masking.py
-tests/test_secret_box_key_separation.py
+tests/test_shop_isolation_3_5_4.py
 tests/test_sqlite_db_file_permissions.py
-tests/test_client_ip_spoofing.py
-tests/test_representative_unification.py
-tests/test_phase5b_bot_l2_bind_resolve.py
-tests/test_phase5c_bot_l2_pg_parity.py
-tests/test_phase5d_l2_bot_routing.py
-tests/test_phase5e_final_hierarchy_redteam.py
-tests/test_product5_l2_telegram_bind.py
-tests/test_bot_inline_settings_owner.py
+tests/test_tenant_isolation.py
+tests/test_v4_0_8_security_audit_sanitize.py
+tests/test_v4_1_1_reseller_pg_role_access.py
+# the "Security tests" CI workflow) on every push/PR — independent of the
+# UI/version-pin tests that are noisy and not security-relevant.
+# Whenever you fix a security bug or add an access-control / tenant-isolation

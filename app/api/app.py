@@ -5,7 +5,6 @@ import hmac
 import json
 import logging
 import time
-from collections import defaultdict
 from pathlib import Path
 from typing import Optional
 from urllib.parse import parse_qsl, quote
@@ -70,6 +69,8 @@ from app.services.setup_wizard import (
     update_env_keys,
 )
 from app.services.security_policy import (
+    UnsafePgUrlError,
+    assert_safe_pg_base_url,
     PUBLIC_FORM_MAX_BODY_BYTES,
     content_length_ok,
     request_host_allowed,
@@ -96,6 +97,12 @@ from app.services.web_auth import (
 )
 from app.api.home_pages import register_home_pages
 from app.api.pg_pages import register_pg_pages
+from app.api.login_guard import (
+    client_ip as _client_ip,
+    login_blocked as _login_blocked,
+    login_fail as _login_fail,
+    login_success as _login_success,
+)
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 templates = Jinja2Templates(directory=str(WEB_DIR / "templates"))
@@ -115,10 +122,7 @@ templates.env.globals["ticket_status_fa"] = ticket_status_fa
 templates.env.globals["format_bytes"] = format_bytes
 templates.env.globals["format_bytes_ratio"] = format_bytes_ratio
 
-# Login brute-force tracking: ip -> list of failure timestamps
-_LOGIN_FAILURES: dict[str, list[float]] = defaultdict(list)
-_LOGIN_WINDOW_SEC = 15 * 60
-_LOGIN_MAX_FAILURES = 8
+
 
 
 class NotAuthenticated(Exception):
@@ -145,6 +149,19 @@ def render(request: Request, name: str, context: dict | None = None, status_code
     ctx.setdefault("flash_err", None)
     ctx.setdefault("open_edit", None)
     ctx.setdefault("app_version", local_version())
+    try:
+        from app.services.csrf import ensure_csrf_token
+
+        ctx.setdefault("csrf_token", ensure_csrf_token(request))
+    except Exception:
+        ctx.setdefault("csrf_token", "")
+    nonce = getattr(request.state, "csp_nonce", None)
+    if not nonce:
+        import secrets as _secrets
+
+        nonce = _secrets.token_urlsafe(16)
+        request.state.csp_nonce = nonce
+    ctx.setdefault("csp_nonce", nonce)
     if "pwa_name" not in ctx:
         try:
             from app.services.pwa import panel_display_name
@@ -175,7 +192,25 @@ def render(request: Request, name: str, context: dict | None = None, status_code
             ctx["identity"] = hierarchy_identity(ctx.get("staff"))
         except Exception:
             ctx["identity"] = {}
-    return templates.TemplateResponse(request, name, ctx, status_code=status_code)
+    response = templates.TemplateResponse(request, name, ctx, status_code=status_code)
+    try:
+        from app.services.csrf import CSRF_COOKIE, ensure_csrf_token
+
+        token = ensure_csrf_token(request)
+        if getattr(request.state, "csrf_token_set", False) or CSRF_COOKIE not in request.cookies:
+            response.set_cookie(
+                CSRF_COOKIE,
+                token,
+                httponly=False,  # panel.js reads meta/cookie for XHR; value is not a secret session
+                samesite="strict",
+                secure=_cookie_secure(request),
+                max_age=60 * 60 * 12,
+                path="/",
+            )
+            request.state.csrf_token_set = False
+    except Exception:
+        pass
+    return response
 
 
 from app.api.safe_next import safe_internal_next
@@ -201,50 +236,6 @@ def _redirect_msg(path: str, *, ok: str | None = None, err: str | None = None) -
 SESSION_MAX_AGE = 60 * 60 * 24 * 7
 
 
-def _client_ip(request: Request) -> str:
-    """Best-effort real client IP, resistant to X-Forwarded-For spoofing.
-
-    X-Forwarded-For is fully attacker-controlled except for the hop(s) your
-    own trusted reverse proxy appends. Reading the LEFT-most entry (the
-    classic mistake) lets any client claim to be any IP — including
-    loopback/private ranges, which would bypass login lockouts and the
-    setup-wizard local-IP auto-open gate. Instead we read the entry counted
-    from the RIGHT that corresponds to ``trust_proxy_hops`` (default: a
-    single reverse proxy directly in front of the app).
-    """
-    try:
-        settings = get_settings()
-        if settings.trust_proxy:
-            raw = request.headers.get("x-forwarded-for") or ""
-            parts = [p.strip() for p in raw.split(",") if p.strip()]
-            hops = max(1, int(getattr(settings, "trust_proxy_hops", 1) or 1))
-            if len(parts) >= hops:
-                candidate = parts[-hops]
-                if candidate:
-                    return candidate
-    except Exception:
-        pass
-    if request.client and request.client.host:
-        return request.client.host
-    return "unknown"
-
-
-def _login_blocked(ip: str) -> bool:
-    now = time.time()
-    stamps = [t for t in _LOGIN_FAILURES.get(ip, []) if now - t < _LOGIN_WINDOW_SEC]
-    _LOGIN_FAILURES[ip] = stamps
-    return len(stamps) >= _LOGIN_MAX_FAILURES
-
-
-def _login_fail(ip: str) -> None:
-    now = time.time()
-    stamps = [t for t in _LOGIN_FAILURES.get(ip, []) if now - t < _LOGIN_WINDOW_SEC]
-    stamps.append(now)
-    _LOGIN_FAILURES[ip] = stamps
-
-
-def _login_success(ip: str) -> None:
-    _LOGIN_FAILURES.pop(ip, None)
 
 
 def _cookie_secure(request: Request) -> bool:
@@ -281,16 +272,26 @@ def _panel_redirect(request: Request, path: str, *, status_code: int = 303) -> R
                 return RedirectResponse(f"{base}{path}", status_code=status_code)
     except Exception:
         logging.getLogger(__name__).exception("_panel_redirect https probe failed")
+    # Never trust the request Host header for absolute redirects (open-redirect /
+    # cache-poisoning). Prefer configured PUBLIC_BASE_URL, else a relative redirect.
     try:
-        host = (request.headers.get("host") or getattr(request.url, "netloc", None) or "").strip()
-        if host:
-            return RedirectResponse(f"http://{host}{path}", status_code=status_code)
+        from app.services.ssl_certs import public_panel_base_url
+
+        base = (public_panel_base_url() or "").rstrip("/")
+        if base:
+            return RedirectResponse(f"{base}{path}", status_code=status_code)
     except Exception:
-        logging.getLogger(__name__).exception("_panel_redirect host fallback failed")
+        logging.getLogger(__name__).exception("_panel_redirect public base fallback failed")
     return RedirectResponse(path, status_code=status_code)
 
 
 def create_api_app(lifespan=None) -> FastAPI:
+    """Build the panel FastAPI app (routing + middleware factory).
+
+    Prefer extracting cohesive helpers into ``app.api.*`` modules (e.g.
+    ``login_guard``) rather than growing this file further. Domain page
+    routers already live under ``register_*_pages``.
+    """
     app = FastAPI(title="PGClockBot Panel", docs_url=None, redoc_url=None, lifespan=lifespan)
     from starlette.middleware.gzip import GZipMiddleware
 
@@ -772,7 +773,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "<p><code style='background:#f4f4f5;padding:6px 10px;border-radius:4px;display:block'>"
                 "bash pgclock.sh status</code></p>"
                 "<p style='font-size:14px;color:#71717a'>"
-                "اگر از همان سرور با <code>127.0.0.1</code> باز کنید، معمولاً بدون لینک هم باز می‌شود."
+                "فقط از خود سرور با <code>127.0.0.1</code> / <code>::1</code> بدون لینک باز می‌شود؛ دسترسی از شبکه داخلی/اینترنت فقط با لینک یک‌بارمصرف."
                 "</p></body></html>",
                 status_code=403,
             )
@@ -780,7 +781,11 @@ def create_api_app(lifespan=None) -> FastAPI:
 
     @app.middleware("http")
     async def csrf_origin_guard(request: Request, call_next):
-        """Reject cross-site unsafe requests that carry a session cookie (defense-in-depth)."""
+        """Reject cross-site unsafe requests that carry a session cookie (defense-in-depth).
+
+        Authenticated panel mutations also require a double-submit CSRF token
+        (cookie ``csrf`` matching form field / ``X-CSRF-Token``).
+        """
         if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
             has_session = bool(request.cookies.get("session") or request.cookies.get("setup_gate"))
             if has_session:
@@ -790,11 +795,46 @@ def create_api_app(lifespan=None) -> FastAPI:
                 # Require Origin or Referer for cookie-authenticated mutations
                 if not origin and not referer:
                     return HTMLResponse("CSRF rejected", status_code=403)
-                if not (
+                allowed = (
                     request_host_allowed(host, origin)
                     or request_host_allowed(host, referer)
-                ):
+                )
+                if not allowed:
+                    # Prefer configured public host over raw Host (Host can be spoofed
+                    # when the panel is reached via an unexpected name).
+                    try:
+                        from urllib.parse import urlparse
+                        from app.services.ssl_certs import public_panel_base_url
+
+                        pub = (public_panel_base_url() or "").strip()
+                        pub_host = urlparse(pub).netloc if pub else ""
+                        if pub_host and (
+                            request_host_allowed(pub_host, origin)
+                            or request_host_allowed(pub_host, referer)
+                        ):
+                            allowed = True
+                    except Exception:
+                        pass
+                if not allowed:
                     return HTMLResponse("CSRF rejected", status_code=403)
+                # Token check for logged-in panel sessions only — never for /login
+                # (stale/expired session cookies must not block re-authentication).
+                path_now = request.url.path
+                if request.cookies.get("session") and path_now not in {
+                    "/login",
+                    "/setup",
+                    "/setup/save",
+                }:
+                    from app.services.csrf import (
+                        CSRF_COOKIE,
+                        csrf_tokens_match,
+                        extract_csrf_from_request,
+                    )
+
+                    cookie_tok = (request.cookies.get(CSRF_COOKIE) or "").strip()
+                    submitted = await extract_csrf_from_request(request)
+                    if not csrf_tokens_match(cookie_tok, submitted):
+                        return HTMLResponse("CSRF token rejected", status_code=403)
         path = request.url.path
         if request.method == "POST" and path in {"/login", "/setup", "/setup/save", "/"}:
             if not content_length_ok(request.headers.get("content-length"), PUBLIC_FORM_MAX_BODY_BYTES):
@@ -823,6 +863,10 @@ def create_api_app(lifespan=None) -> FastAPI:
 
     @app.middleware("http")
     async def security_headers(request: Request, call_next):
+        import secrets as _secrets
+
+        if not getattr(request.state, "csp_nonce", None):
+            request.state.csp_nonce = _secrets.token_urlsafe(16)
         response = await call_next(request)
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         is_miniapp = request.url.path.startswith("/miniapp")
@@ -834,13 +878,18 @@ def create_api_app(lifespan=None) -> FastAPI:
         response.headers.setdefault("Referrer-Policy", "same-origin")
         response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
         response.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
-        # Panel pages only; keep CSP moderate so inline preview/scripts still work
+        # Panel pages: nonce + transitional unsafe-inline (many page templates still
+        # ship inline scripts). Prefer nonce on new scripts; drop unsafe-inline later.
         if not request.url.path.startswith("/static") and not request.url.path.startswith("/media"):
-            script_src = "script-src 'self' 'unsafe-inline'"
+            nonce = getattr(request.state, "csp_nonce", "") or ""
+            nonce_src = f" 'nonce-{nonce}'" if nonce else ""
+            script_src = f"script-src 'self'{nonce_src} 'unsafe-inline'"
             frame_ancestors = "frame-ancestors 'none'"
             # Mini App needs Telegram WebApp SDK (+ Telegram may embed the sheet)
             if is_miniapp:
-                script_src = "script-src 'self' 'unsafe-inline' https://telegram.org"
+                script_src = (
+                    f"script-src 'self'{nonce_src} 'unsafe-inline' https://telegram.org"
+                )
                 frame_ancestors = (
                     "frame-ancestors 'self' https://web.telegram.org https://telegram.org"
                 )
@@ -1399,6 +1448,10 @@ def create_api_app(lifespan=None) -> FastAPI:
         base = normalize_pg_base_url((pg_base_url or "").strip())
         if not base:
             return await fail("آدرس پاسارگارد الزامی است.")
+        try:
+            base = assert_safe_pg_base_url(base)
+        except UnsafePgUrlError as exc:
+            return await fail(str(exc))
         if not (pg_username or "").strip():
             return await fail("نام کاربری پاسارگارد الزامی است.")
         if not (pg_password or "").strip():
@@ -1500,6 +1553,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             return RedirectResponse("/", status_code=303)
         err = request.query_params.get("err")
         # With an error (often after cookie clear), always show the form.
+        clear_stale_session = False
         if not err:
             sess = get_session_user(request)
             if sess:
@@ -1509,6 +1563,9 @@ def create_api_app(lifespan=None) -> FastAPI:
                     return _panel_redirect(request, "/pg")
                 # Reseller / sub-admin: web dashboard
                 return _panel_redirect(request, "/home")
+            # Cookie present but invalid/expired — drop it so re-login is not CSRF-blocked.
+            if request.cookies.get("session"):
+                clear_stale_session = True
         page = render(
             request,
             "login.html",
@@ -1518,11 +1575,10 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "flash_ok": request.query_params.get("ok"),
             },
         )
-        if err:
-            # Belt-and-suspenders: drop any leftover session when showing an auth error.
+        if err or clear_stale_session:
+            # Belt-and-suspenders: drop leftover session when showing the login form.
             page.delete_cookie("session", path="/")
         return page
-
     @app.post("/login")
     async def login_submit(
         request: Request,
@@ -4097,6 +4153,11 @@ def create_api_app(lifespan=None) -> FastAPI:
             uname = str(form.get("BOT_USERNAME") or "").strip().lstrip("@")
             ids_raw = str(form.get("ADMIN_IDS") or "").strip()
             pg_base = normalize_pg_base_url(str(form.get("PG_BASE_URL") or "").strip())
+            if pg_base:
+                try:
+                    pg_base = assert_safe_pg_base_url(pg_base)
+                except UnsafePgUrlError as exc:
+                    return _bot_err(str(exc))
             pg_user = str(form.get("PG_USERNAME") or "").strip()
             pg_pass = str(form.get("PG_PASSWORD") or "").strip()
             web_port = str(form.get("WEB_PORT") or "9000").strip()

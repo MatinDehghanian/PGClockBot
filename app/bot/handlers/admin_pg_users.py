@@ -76,8 +76,8 @@ async def _pg_user_gate(
     callback_data: str | None = None,
     notify: bool = True,
 ):
-    """Phase 4B/4C — Principal + AuthzContext gate (not ``_is_admin``)."""
-    from app.services.bot_pg_user_pilot import authorize_bot_pg_user_op
+    """Principal + AuthzContext gate (not ``_is_admin``)."""
+    from app.services.bot_pg_user_authz import authorize_bot_pg_user_op
 
     data = callback_data
     if data is None and callback is not None:
@@ -226,7 +226,7 @@ async def _render_users_list(
     edit: bool = True,
     gate,
 ) -> None:
-    from app.services.bot_pg_user_pilot import list_scoped_pg_users
+    from app.services.bot_pg_user_authz import list_scoped_pg_users
 
     query = (query or "").strip() or None
     try:
@@ -333,7 +333,7 @@ async def _show_user_card(
         await target.answer(text, reply_markup=markup)
 
 
-# ----- PG hub + catalog hints (Phase 4E/4G — Principal-gated, not Owner middleware) -----
+# ----- PG hub + catalog hints (Principal-gated, not Owner middleware) -----
 
 
 @router.callback_query(F.data == "adm:pg")
@@ -388,8 +388,8 @@ async def adm_pg_group_hint(
     reseller_profile_id: int | None = None,
     reseller_owner_id: int | None = None,
 ):
-    """Phase 4E — Principal-gated groups hint (not ``_is_admin``)."""
-    from app.services.bot_pg_catalog_pilot import (
+    """Principal-gated groups hint (not ``_is_admin``)."""
+    from app.services.bot_pg_catalog_authz import (
         authorize_bot_pg_catalog_op,
         list_scoped_pg_catalog,
     )
@@ -445,8 +445,8 @@ async def adm_pg_template_hint(
     reseller_profile_id: int | None = None,
     reseller_owner_id: int | None = None,
 ):
-    """Phase 4E — Principal-gated templates hint (not ``_is_admin``)."""
-    from app.services.bot_pg_catalog_pilot import (
+    """Principal-gated templates hint (not ``_is_admin``)."""
+    from app.services.bot_pg_catalog_authz import (
         authorize_bot_pg_catalog_op,
         list_scoped_pg_catalog,
     )
@@ -598,7 +598,7 @@ async def pg_search_query(
     reseller_profile_id: int | None = None,
     reseller_owner_id: int | None = None,
 ):
-    from app.services.bot_pg_user_pilot import lookup_scoped_pg_user_by_username
+    from app.services.bot_pg_user_authz import lookup_scoped_pg_user_by_username
 
     gate = await _pg_user_gate(
         db_user,
@@ -863,19 +863,36 @@ async def pg_user_del_ask(
     if not gate.allowed:
         return
     uid = int(gate.pg_user["id"]) if gate.pg_user and gate.pg_user.get("id") is not None else 0
+    uname = str((gate.pg_user or {}).get("username") or uid)
     await callback.answer()
     markup = InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="🗑 بله، حذف شود", callback_data=f"adm:pg:u:{uid}:del"),
+                InlineKeyboardButton(
+                    text="🚫 فقط غیرفعال (پیشنهادی)",
+                    callback_data=f"adm:pg:dis:{uid}",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🗑 حذف دائمی",
+                    callback_data=f"adm:pg:u:{uid}:del",
+                ),
                 InlineKeyboardButton(text="انصراف", callback_data=f"adm:pg:u:{uid}"),
-            ]
+            ],
         ]
     )
     if callback.message:
         await safe_edit_text(
             callback.message,
-            format_message("⚠️ حذف کاربر", f"کاربر #{uid} برای همیشه حذف شود؟"),
+            format_message(
+                "⚠️ حذف کاربر VPN",
+                (
+                    f"کاربر <code>{html.escape(uname)}</code> (#{uid})\n\n"
+                    "برای قطع موقت، «غیرفعال» را بزنید.\n"
+                    "حذف دائمی برگشت‌ناپذیر است و لینک اشتراک از کار می‌افتد."
+                ),
+            ),
             reply_markup=markup,
         )
 
@@ -1055,7 +1072,7 @@ async def pg_create_tpl_chosen(
         await callback.answer("اجازه این عمل را ندارید", show_alert=True)
         return
     tid = int(match.group(1))
-    from app.services.bot_pg_catalog_pilot import catalog_template_allowed
+    from app.services.bot_pg_catalog_authz import catalog_template_allowed
 
     if not catalog_template_allowed(gate.staff, tid):
         await callback.answer("اجازه این عمل را ندارید", show_alert=True)
@@ -1186,7 +1203,7 @@ async def pg_create_toggrp(
     if gid in selected:
         selected = [x for x in selected if x != gid]
     else:
-        from app.services.bot_pg_catalog_pilot import catalog_groups_allowed
+        from app.services.bot_pg_catalog_authz import catalog_groups_allowed
 
         if not catalog_groups_allowed(gate.staff, [gid]):
             await callback.answer("اجازه این عمل را ندارید", show_alert=True)
@@ -1223,7 +1240,7 @@ async def pg_create_grpdone(
     if not selected:
         await callback.answer("حداقل یک گروه انتخاب کنید", show_alert=True)
         return
-    from app.services.bot_pg_catalog_pilot import catalog_groups_allowed
+    from app.services.bot_pg_catalog_authz import catalog_groups_allowed
 
     if not catalog_groups_allowed(gate.staff, selected):
         await callback.answer("اجازه این عمل را ندارید", show_alert=True)
@@ -1247,7 +1264,7 @@ async def pg_create_username(
     reseller_profile_id: int | None = None,
     reseller_owner_id: int | None = None,
 ):
-    from app.services.bot_pg_user_pilot import sanitize_pg_user_write_payload
+    from app.services.bot_pg_user_authz import sanitize_pg_user_write_payload
 
     gate = await _pg_user_gate(
         db_user,
@@ -1278,7 +1295,7 @@ async def pg_create_username(
             await state.clear()
             await message.answer("تمپلیت انتخاب نشده.", reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
             return
-        from app.services.bot_pg_catalog_pilot import catalog_template_allowed
+        from app.services.bot_pg_catalog_authz import catalog_template_allowed
 
         if not catalog_template_allowed(gate.staff, int(tid)):
             await state.clear()
@@ -1369,7 +1386,7 @@ async def pg_create_days(
     reseller_profile_id: int | None = None,
     reseller_owner_id: int | None = None,
 ):
-    from app.services.bot_pg_user_pilot import sanitize_pg_user_write_payload
+    from app.services.bot_pg_user_authz import sanitize_pg_user_write_payload
 
     gate = await _pg_user_gate(
         db_user,
@@ -1403,7 +1420,7 @@ async def pg_create_days(
         await state.clear()
         await message.answer("داده ناقص است — دوباره شروع کنید.", reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
         return
-    from app.services.bot_pg_catalog_pilot import catalog_groups_allowed
+    from app.services.bot_pg_catalog_authz import catalog_groups_allowed
 
     if not catalog_groups_allowed(gate.staff, groups):
         await state.clear()
@@ -1533,7 +1550,7 @@ async def pg_edit_name_save(
     reseller_profile_id: int | None = None,
     reseller_owner_id: int | None = None,
 ):
-    from app.services.bot_pg_user_pilot import sanitize_pg_user_write_payload
+    from app.services.bot_pg_user_authz import sanitize_pg_user_write_payload
 
     if kb.is_cancel_text(message.text):
         await state.clear()
@@ -1621,7 +1638,7 @@ async def pg_edit_gb_save(
     reseller_profile_id: int | None = None,
     reseller_owner_id: int | None = None,
 ):
-    from app.services.bot_pg_user_pilot import sanitize_pg_user_write_payload
+    from app.services.bot_pg_user_authz import sanitize_pg_user_write_payload
 
     if kb.is_cancel_text(message.text):
         await state.clear()
@@ -1715,7 +1732,7 @@ async def pg_edit_days_save(
     reseller_profile_id: int | None = None,
     reseller_owner_id: int | None = None,
 ):
-    from app.services.bot_pg_user_pilot import sanitize_pg_user_write_payload
+    from app.services.bot_pg_user_authz import sanitize_pg_user_write_payload
 
     if kb.is_cancel_text(message.text):
         await state.clear()
@@ -1829,7 +1846,7 @@ async def pg_edit_toggrp(
     if gid in selected:
         selected = [x for x in selected if x != gid]
     else:
-        from app.services.bot_pg_catalog_pilot import catalog_groups_allowed
+        from app.services.bot_pg_catalog_authz import catalog_groups_allowed
 
         if not catalog_groups_allowed(gate.staff, [gid]):
             await callback.answer("اجازه این عمل را ندارید", show_alert=True)
@@ -1850,7 +1867,7 @@ async def pg_edit_grpdone(
     reseller_profile_id: int | None = None,
     reseller_owner_id: int | None = None,
 ):
-    from app.services.bot_pg_user_pilot import sanitize_pg_user_write_payload
+    from app.services.bot_pg_user_authz import sanitize_pg_user_write_payload
 
     data = await state.get_data()
     uid = int(data.get("pg_edit_uid") or 0)
@@ -1873,7 +1890,7 @@ async def pg_edit_grpdone(
     if not selected:
         await callback.answer("حداقل یک گروه انتخاب کنید", show_alert=True)
         return
-    from app.services.bot_pg_catalog_pilot import catalog_groups_allowed
+    from app.services.bot_pg_catalog_authz import catalog_groups_allowed
 
     if not catalog_groups_allowed(gate.staff, selected):
         await callback.answer("اجازه این عمل را ندارید", show_alert=True)

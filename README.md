@@ -168,7 +168,8 @@ Or set `PUBLIC_BASE_URL` in the web setup wizard / Settings.
 
 ## Database (production)
 
-PostgreSQL is the recommended production database:
+PostgreSQL is the recommended production database. The process uses a single
+`DATABASE_URL` (SQLite defaults are lab/legacy only — not a dual-runtime path):
 
 ```bash
 sudo bash scripts/setup_postgres.sh
@@ -176,7 +177,8 @@ sudo bash scripts/setup_postgres.sh
 .venv/bin/python -m scripts.alembic_upgrade
 ```
 
-Existing SQLite installs: run Phase 0 baseline, then migrate (see `docs/PHASE_A_DATABASE.md`).
+Existing SQLite installs: run Phase 0 baseline, then offline ETL migrate
+(see `docs/PHASE_A_DATABASE.md`), then point `.env` at PostgreSQL and restart.
 
 Installer hint: export `PGCLOCK_DATABASE_URL` before `bash pgclock.sh install` to write PostgreSQL into `.env`.
 

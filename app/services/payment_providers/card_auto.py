@@ -9,8 +9,12 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import time
 from dataclasses import dataclass
 from typing import Any
+
+# Reject replayed signed webhooks outside this skew window.
+CARD_AUTO_MAX_SKEW_SEC = 300
 
 
 @dataclass(frozen=True)
@@ -62,6 +66,7 @@ def parse_card_auto_event(payload: dict[str, Any]) -> CardAutoEvent:
             raise ValueError("payment_id invalid") from exc
     last4 = payload.get("card_last4") or payload.get("pan")
     last4_s = str(last4).strip()[-4:] if last4 else None
+    assert_fresh_timestamp(payload)
     return CardAutoEvent(
         external_ref=ref[:128],
         amount=amount,
@@ -75,3 +80,25 @@ def dumps_canonical(payload: dict[str, Any]) -> bytes:
     return json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode(
         "utf-8"
     )
+
+
+def assert_fresh_timestamp(payload: dict[str, Any], *, now: float | None = None) -> int:
+    """Require unix ``timestamp`` (or ``ts``) within ±CARD_AUTO_MAX_SKEW_SEC.
+
+    Timestamp is part of the signed JSON body, so altering it breaks HMAC.
+    Missing/stale timestamps fail closed to block replay of captured bodies.
+    """
+    raw_ts = payload.get("timestamp", payload.get("ts"))
+    if raw_ts is None or str(raw_ts).strip() == "":
+        raise ValueError("timestamp required")
+    try:
+        ts = int(raw_ts)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("timestamp invalid") from exc
+    # Accept ms timestamps from some providers
+    if ts > 10_000_000_000:
+        ts = ts // 1000
+    current = float(time.time() if now is None else now)
+    if abs(current - ts) > CARD_AUTO_MAX_SKEW_SEC:
+        raise ValueError("timestamp expired")
+    return ts

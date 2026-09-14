@@ -90,3 +90,32 @@ def decrypt_secret(token: str | None) -> str | None:
             continue
     logger.warning("decrypt_secret failed — secret unreadable")
     return None
+
+
+def hash_bot_token(token: str | None) -> str | None:
+    """Stable SHA-256 hex for equality lookups (never store raw token for search)."""
+    text = (token or "").strip()
+    if not text:
+        return None
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def looks_encrypted_secret(value: str | None) -> bool:
+    """Fernet tokens are urlsafe-base64 and start with the version/timestamp prefix ``gAAAA``."""
+    return bool(value) and str(value).startswith("gAAAA")
+
+
+def seal_bot_token(plain: str | None) -> str | None:
+    """Encrypt a Telegram bot token for at-rest storage."""
+    return encrypt_secret(plain)
+
+
+def reveal_bot_token(stored: str | None) -> str | None:
+    """Decrypt bot token; legacy plaintext rows pass through unchanged."""
+    raw = (stored or "").strip()
+    if not raw:
+        return None
+    if looks_encrypted_secret(raw):
+        return decrypt_secret(raw)
+    return raw
+

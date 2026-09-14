@@ -61,6 +61,13 @@ class LocalClientTests(unittest.TestCase):
 
         self.assertFalse(is_local_setup_client("8.8.8.8"))
 
+    def test_private_lan_is_not_local(self):
+        from app.services.setup_wizard import is_local_setup_client
+
+        # VPC/LAN peers must present the one-time gate token
+        self.assertFalse(is_local_setup_client("10.0.0.5"))
+        self.assertFalse(is_local_setup_client("192.168.1.20"))
+
 
 class PgclockInstallHintTests(unittest.TestCase):
     def test_install_prints_setup_entry_url_helper(self):

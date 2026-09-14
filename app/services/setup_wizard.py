@@ -184,13 +184,17 @@ def setup_gate_ok(provided: str | None) -> bool:
 
 
 def is_local_setup_client(host: str | None) -> bool:
-    """True for loopback / private IPs — safe to auto-open wizard without URL token."""
-    from app.services.security_policy import is_public_ip
+    """True only for loopback — LAN/VPC peers must use the one-time gate URL.
+
+    Private RFC1918 addresses are *not* treated as local: on cloud VPCs any
+    peer could otherwise open ``/setup`` and seize the panel before finish.
+    """
+    from app.services.security_policy import is_loopback_ip
 
     ip = (host or "").strip()
     if not ip or ip == "unknown":
         return False
-    return not is_public_ip(ip)
+    return is_loopback_ip(ip)
 
 
 def build_setup_entry_url(

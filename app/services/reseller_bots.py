@@ -11,6 +11,7 @@ from aiogram.enums import ParseMode
 from sqlalchemy import select
 
 from app.db.models import ResellerProfile
+from app.services.secret_box import hash_bot_token, reveal_bot_token
 from app.db.session import SessionLocal
 
 log = logging.getLogger(__name__)
@@ -39,7 +40,7 @@ class ResellerBotManager:
                 )
             )
             rows = list(result.scalars().all())
-            items = [(r.id, r.bot_token, r.bot_telegram_id) for r in rows if r.bot_token]
+            items = [(r.id, reveal_bot_token(r.bot_token), r.bot_telegram_id) for r in rows if r.bot_token]
         for rid, token, tg_id in items:
             try:
                 await self.start_reseller(rid, token, bot_telegram_id=tg_id)
@@ -125,7 +126,7 @@ class ResellerBotManager:
             row = await session.get(ResellerProfile, profile_id)
             if not row or not row.bot_token or not row.is_active:
                 return False
-            token = row.bot_token
+            token = reveal_bot_token(row.bot_token)
             tg_id = row.bot_telegram_id
         return await self.start_reseller(profile_id, token, bot_telegram_id=tg_id)
 
@@ -248,7 +249,7 @@ async def open_notify_bot_for_reseller(session, reseller_user_id: int) -> tuple[
         shop = mgr.bot_for_profile_id(int(profile.id))
         if shop is not None:
             return shop, False
-    token = (profile.bot_token or "").strip()
+    token = (reveal_bot_token(profile.bot_token) or "").strip()
     if token:
         return create_bot(token), True
     # No dedicated bot yet — do not fall back to main bot (ACL would break on platform bot)
@@ -274,13 +275,36 @@ async def lookup_reseller_by_bot_token(session, token: str) -> dict[str, Any] | 
         at, payload = cached
         if now - at < _TOKEN_LOOKUP_TTL:
             return dict(payload) if payload else None
-    result = await session.execute(
-        select(ResellerProfile).where(
-            ResellerProfile.bot_token == token,
-            ResellerProfile.is_active.is_(True),
+    token_hash = hash_bot_token(token)
+    row = None
+    if token_hash:
+        result = await session.execute(
+            select(ResellerProfile).where(
+                ResellerProfile.bot_token_hash == token_hash,
+                ResellerProfile.is_active.is_(True),
+            )
         )
-    )
-    row = result.scalar_one_or_none()
+        row = result.scalar_one_or_none()
+    if row is None:
+        # Legacy plaintext rows (pre-encryption) — match then lazy-upgrade hash/seal
+        result = await session.execute(
+            select(ResellerProfile).where(
+                ResellerProfile.bot_token == token,
+                ResellerProfile.is_active.is_(True),
+            )
+        )
+        row = result.scalar_one_or_none()
+        if row is not None and token_hash:
+            try:
+                from app.services.secret_box import seal_bot_token
+
+                sealed = seal_bot_token(token)
+                if sealed:
+                    row.bot_token = sealed
+                    row.bot_token_hash = token_hash
+                    await session.commit()
+            except Exception:
+                pass
     if not row:
         _TOKEN_LOOKUP_CACHE[token] = (now, None)
         return None
