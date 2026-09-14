@@ -98,13 +98,41 @@ class LoginLockoutPersistenceTests(unittest.TestCase):
                 self.assertTrue(lock.is_file())
                 data = json.loads(lock.read_text(encoding="utf-8"))
                 self.assertIn("203.0.113.9", data)
-                # Simulate process restart: clear memory and reload
+                # Simulate other worker / process restart: clear memory only.
+                # login_blocked must re-read disk (multi-worker share).
                 lg._LOGIN_FAILURES.clear()
-                self.assertFalse(lg.login_blocked("203.0.113.9"))
-                lg._login_lock_load()
                 self.assertTrue(lg.login_blocked("203.0.113.9"))
                 lg.login_success("203.0.113.9")
                 self.assertFalse(lg.login_blocked("203.0.113.9"))
+
+    def test_workers_merge_failures_without_clobber(self):
+        """Two workers must accumulate failures, not overwrite each other's map."""
+        from app.api import login_guard as lg
+
+        with tempfile.TemporaryDirectory() as tmp:
+            lock = Path(tmp) / "login_lockouts.json"
+            with patch.object(lg, "_LOGIN_LOCK_FILE", lock), patch.object(
+                lg, "DATA_DIR", Path(tmp)
+            ):
+                lg._LOGIN_FAILURES.clear()
+                if lock.exists():
+                    lock.unlink()
+                # Worker A records 5 failures for IP-A
+                for _ in range(5):
+                    lg.login_fail("198.51.100.1")
+                # Simulate worker B with empty memory recording IP-B
+                lg._LOGIN_FAILURES.clear()
+                for _ in range(5):
+                    lg.login_fail("198.51.100.2")
+                data = json.loads(lock.read_text(encoding="utf-8"))
+                self.assertIn("198.51.100.1", data)
+                self.assertIn("198.51.100.2", data)
+                lg._LOGIN_FAILURES.clear()
+                self.assertEqual(len(data["198.51.100.1"]), 5)
+                # Continue failures on A from "empty" worker until blocked
+                for _ in range(3):
+                    lg.login_fail("198.51.100.1")
+                self.assertTrue(lg.login_blocked("198.51.100.1"))
 
 
 class CardAutoTimestampTests(unittest.TestCase):
