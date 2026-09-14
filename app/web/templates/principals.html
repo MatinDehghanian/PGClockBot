@@ -60,7 +60,7 @@
         <td class="col-hide-sm">—</td>
         <td class="col-hide-sm" data-sort-value="{{ row.pg_role_name or '' }}">
           {% if row.pg_role_name %}
-          <span class="identity-pg-role">PG Role: {{ row.pg_role_name }}</span>
+          <span class="identity-pg-role">نقش پاسارگارد: {{ row.pg_role_name }}</span>
           {% else %}
           —
           {% endif %}
@@ -91,7 +91,7 @@
         <td class="mono col-hide-sm" dir="ltr">{{ child.parent_username or row.pg_username or '—' }}</td>
         <td class="col-hide-sm" data-sort-value="{{ child.pg_role_name or '' }}">
           {% if child.pg_role_name %}
-          <span class="identity-pg-role">PG Role: {{ child.pg_role_name }}</span>
+          <span class="identity-pg-role">نقش پاسارگارد: {{ child.pg_role_name }}</span>
           {% else %}
           —
           {% endif %}
@@ -127,7 +127,7 @@
         <td class="mono col-hide-sm" dir="ltr">{{ child.parent_username or '—' }}</td>
         <td class="col-hide-sm" data-sort-value="{{ child.pg_role_name or '' }}">
           {% if child.pg_role_name %}
-          <span class="identity-pg-role">PG Role: {{ child.pg_role_name }}</span>
+          <span class="identity-pg-role">نقش پاسارگارد: {{ child.pg_role_name }}</span>
           {% else %}
           —
           {% endif %}
@@ -251,7 +251,7 @@
       {% endif %}
       <p>
         {% if detail.pg_role_name %}
-        <span class="identity-pg-role">PG Role: {{ detail.pg_role_name }}</span>
+        <span class="identity-pg-role">نقش پاسارگارد: {{ detail.pg_role_name }}</span>
         {% else %}
         نقش پاسارگارد: —
         {% endif %}
