@@ -2941,4 +2941,30 @@
         if (!el.contains(e.target)) el.removeAttribute('open');
       });
     });
+
+    /* Clear named fields and submit — CSP-safe replacement for inline onclick. */
+    document.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-clear-and-submit]');
+      if (!btn) return;
+      const form = btn.form || btn.closest('form');
+      if (!form) return;
+      e.preventDefault();
+      const names = String(btn.getAttribute('data-clear-fields') || '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      names.forEach((name) => {
+        const el = form.elements.namedItem(name);
+        if (!el) return;
+        if (el instanceof RadioNodeList) {
+          Array.from(el).forEach((node) => {
+            if ('value' in node) node.value = '';
+          });
+        } else if ('value' in el) {
+          el.value = '';
+        }
+      });
+      if (typeof form.requestSubmit === 'function') form.requestSubmit();
+      else form.submit();
+    });
   })();

@@ -54,12 +54,42 @@ class CspNonceInjectionTests(unittest.TestCase):
         self.assertIn("buffer_and_inject_nonce", src)
         self.assertIn("csp_nonce", src)
 
-    def test_defer_template_has_nonce_attr(self):
-        defer = (ROOT / "app/web/templates/_panel_widgets_defer.html").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn("csp_nonce", defer)
-        self.assertIn("nonce=", defer)
+    def test_buffer_preserves_multiple_set_cookie_headers(self):
+        """dict(headers) would keep only the first Set-Cookie — must not drop csrf/session."""
+        from starlette.responses import HTMLResponse
+
+        app = FastAPI()
+
+        @app.middleware("http")
+        async def stamp(request: Request, call_next):
+            response = await call_next(request)
+            return await buffer_and_inject_nonce(response, "cookie-nonce")
+
+        @app.get("/page")
+        async def page():
+            resp = HTMLResponse("<html><script>1</script></html>")
+            resp.set_cookie("csrf", "tok-a", path="/")
+            resp.set_cookie("setup_gate", "tok-b", path="/")
+            return resp
+
+        client = TestClient(app)
+        r = client.get("/page")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn('nonce="cookie-nonce"', r.text)
+        # TestClient stores cookies; both must survive the rebuild.
+        self.assertIn("csrf", r.cookies)
+        self.assertIn("setup_gate", r.cookies)
+        self.assertEqual(r.cookies["csrf"], "tok-a")
+        self.assertEqual(r.cookies["setup_gate"], "tok-b")
+
+    def test_no_inline_onclick_in_resellers_template(self):
+        html = (ROOT / "app/web/templates/resellers.html").read_text(encoding="utf-8")
+        self.assertNotIn("onclick=", html)
+        self.assertIn("data-clear-and-submit", html)
+        self.assertIn("data-clear-fields", html)
+        js = (ROOT / "app/web/static/panel.js").read_text(encoding="utf-8")
+        self.assertIn("data-clear-and-submit", js)
+
 
 
 class DeleteReasonExtractionTests(unittest.TestCase):
