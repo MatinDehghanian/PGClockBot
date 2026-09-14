@@ -787,6 +787,13 @@ async def admin_delete_service(
             except Exception:
                 logger.debug("PG disable fallback failed uid=%s", pg_uid, exc_info=True)
 
+        # Fail closed: never wipe the local shop row while the PG user still
+        # exists and is enabled — that orphans live quota / billing.
+        if not pg_deleted and not pg_disabled:
+            raise ValueError(
+                "حذف/غیرفعال‌سازی در پاسارگارد ناموفق بود — سرویس محلی حذف نشد"
+            )
+
     await session.execute(
         update(Order).where(Order.service_id == svc_id).values(service_id=None)
     )

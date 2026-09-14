@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from aiogram import F, Router
 from aiogram.types import CallbackQuery, Message, PreCheckoutQuery
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,6 +14,26 @@ from app.services.resellers import reseller_can_review_payment
 from app.services.users import get_all_settings, get_setting
 
 router = Router(name="payments")
+
+
+
+async def _refund_stars_charge(bot, *, telegram_user_id: int, charge_id: str) -> bool:
+    """Best-effort Telegram Stars refund. Returns True when Telegram accepted it."""
+    charge = (charge_id or "").strip()
+    if not charge or not telegram_user_id:
+        return False
+    try:
+        return bool(
+            await bot.refund_star_payment(
+                user_id=int(telegram_user_id),
+                telegram_payment_charge_id=charge,
+            )
+        )
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "stars refund failed user=%s charge=%s", telegram_user_id, charge
+        )
+        return False
 
 
 @router.pre_checkout_query()
@@ -86,40 +108,87 @@ async def stars_successful_payment(message: Message, session: AsyncSession, db_u
         except (TypeError, ValueError):
             rate = 500
         expected_stars = stars_amount_for_toman(payment.amount, rate)
+    charge_id = (sp.telegram_payment_charge_id or "").strip()
     if int(sp.total_amount or 0) != int(expected_stars):
-        await message.answer(
-            f"مبلغ استارز نامعتبر است (انتظار {expected_stars}، دریافت {sp.total_amount})."
+        refunded = await _refund_stars_charge(
+            message.bot,
+            telegram_user_id=int(db_user.telegram_id),
+            charge_id=charge_id,
         )
+        payment.receipt_file_id = payment.receipt_file_id or (
+            f"stars:{charge_id}" if charge_id else payment.receipt_file_id
+        )
+        payment.status = PaymentStatus.REJECTED.value
+        payment.review_note = (
+            f"stars amount mismatch expected={expected_stars} got={sp.total_amount}"
+            + ("; refunded" if refunded else "; refund_failed")
+        )
+        await session.commit()
+        if refunded:
+            await message.answer(
+                f"مبلغ استارز نامعتبر بود (انتظار {expected_stars}، دریافت {sp.total_amount}). "
+                "استارز به‌صورت خودکار بازگردانده شد."
+            )
+        else:
+            await message.answer(
+                f"مبلغ استارز نامعتبر است (انتظار {expected_stars}، دریافت {sp.total_amount}). "
+                "بازگشت خودکار ناموفق بود — با پشتیبانی تماس بگیرید و شناسه پرداخت را بفرستید."
+            )
         return
-    payment.receipt_file_id = payment.receipt_file_id or f"stars:{sp.telegram_payment_charge_id}"
+    payment.receipt_file_id = payment.receipt_file_id or f"stars:{charge_id}"
     payment.status = PaymentStatus.PENDING.value
     await session.commit()
     try:
         order = await approve_payment(session, payment, reviewer_tg=0)
     except Exception as e:
-        import logging
-
         logging.getLogger(__name__).error(
             "stars delivery failed payment=%s charge=%s err=%s",
             payment.id,
-            sp.telegram_payment_charge_id,
+            charge_id,
             e,
             exc_info=True,
         )
-        await message.answer(
-            f"پرداخت استارز دریافت شد ولی تحویل ناموفق بود: {e}\n"
-            "اگر سرویس فعال نشد با پشتیبانی تماس بگیرید — شناسه پرداخت ثبت شد."
+        refunded = await _refund_stars_charge(
+            message.bot,
+            telegram_user_id=int(db_user.telegram_id),
+            charge_id=charge_id,
         )
-        # Alert platform admins so charged-but-undelivered Stars are not silent
+        # approve_payment may have left the row APPROVED or rolled it; force a
+        # clear rejected marker when we refund so staff do not re-deliver.
+        try:
+            await session.refresh(payment)
+            note = (
+                f"stars approve/delivery failed: {e}"
+                + ("; refunded" if refunded else "; refund_failed")
+            )
+            # Refunded → reject so staff do not re-deliver. Still-APPROVED without
+            # refund stays approved for manual retry, but always stamp the note.
+            if refunded or payment.status != PaymentStatus.APPROVED.value:
+                payment.status = PaymentStatus.REJECTED.value
+            payment.review_note = payment.review_note or note
+            await session.commit()
+        except Exception:
+            logging.getLogger(__name__).exception(
+                "stars post-failure payment update failed id=%s", payment.id
+            )
+        if refunded:
+            await message.answer(
+                f"پرداخت استارز دریافت شد ولی تحویل ناموفق بود و استارز بازگردانده شد: {e}"
+            )
+        else:
+            await message.answer(
+                f"پرداخت استارز دریافت شد ولی تحویل ناموفق بود: {e}\n"
+                "بازگشت خودکار ناموفق بود — با پشتیبانی تماس بگیرید؛ شناسه پرداخت ثبت شد."
+            )
         try:
             from app.config import get_settings
 
-            charge = sp.telegram_payment_charge_id or "—"
             alert = (
                 f"⚠️ تحویل استارز ناموفق\n"
                 f"payment=#{payment.id}\n"
                 f"user_tg={db_user.telegram_id}\n"
-                f"charge={charge}\n"
+                f"charge={charge_id or '—'}\n"
+                f"refunded={'yes' if refunded else 'NO'}\n"
                 f"error={e}"
             )
             for aid in get_settings().admin_ids:
