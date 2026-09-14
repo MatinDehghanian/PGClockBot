@@ -21,16 +21,12 @@
       input.value = tok;
       form.appendChild(input);
     }
-    /* form.submit() skips the submit event — always stamp CSRF before programmatic posts. */
+    /* form.submit() skips the submit event — always stamp CSRF before programmatic posts.
+       Prefer submit() over requestSubmit(): requestSubmit re-fires capture listeners and
+       raced with data-confirm + confirmSkip (delete reason never reached the server). */
     function submitFormWithCsrf(form) {
       if (!form) return;
       ensureCsrfField(form);
-      if (typeof form.requestSubmit === 'function') {
-        try {
-          form.requestSubmit();
-          return;
-        } catch (_) {}
-      }
       form.submit();
     }
     window.panelEnsureCsrfField = ensureCsrfField;
@@ -2210,25 +2206,33 @@
       }
 
       function applyReason(form, opts, reason){
+        /* v9-compatible: update existing hidden reason in place (templates include
+           <input type="hidden" name="reason" value="">). Avoid appending a second
+           reason= that Starlette FormData.get can last-win as empty. Still mirror
+           confirm_reason as a single backup field for extract_delete_reason. */
         const text = String(reason || '').trim();
-        if (!text) return;
-        const name = (opts && opts.reasonName) || 'reason';
-        /* Replace any prior empty/stale reason fields so the POST body cannot
-           keep a blank "reason=" that shadows the confirmed value (Starlette
-           FormData.get is last-wins). Also mirror confirm_reason as backup. */
-        stripNamedFields(form, name);
-        stripNamedFields(form, 'confirm_reason');
-        const hidden = document.createElement('input');
-        hidden.type = 'hidden';
-        hidden.name = name;
+        if (!opts || !opts.requireReason || !text) return;
+        const name = (opts.reasonName) || 'reason';
+        let hidden = form.querySelector(
+          'input[name="' + name + '"], textarea[name="' + name + '"]'
+        );
+        if (!hidden) {
+          hidden = document.createElement('input');
+          hidden.type = 'hidden';
+          hidden.name = name;
+          form.appendChild(hidden);
+        }
         hidden.value = text;
-        form.appendChild(hidden);
+        /* One confirm_reason backup only */
+        let mirror = form.querySelector('input[name="confirm_reason"], textarea[name="confirm_reason"]');
         if (name !== 'confirm_reason') {
-          const mirror = document.createElement('input');
-          mirror.type = 'hidden';
-          mirror.name = 'confirm_reason';
+          if (!mirror) {
+            mirror = document.createElement('input');
+            mirror.type = 'hidden';
+            mirror.name = 'confirm_reason';
+            form.appendChild(mirror);
+          }
           mirror.value = text;
-          form.appendChild(mirror);
         }
       }
 
@@ -2260,8 +2264,9 @@
           if (!result || !result.ok) return;
           applyReason(form, opts, result.reason);
           applyPhrase(form, opts, result.phrase);
-          form.dataset.confirmSkip = '1';
-          submitFormWithCsrf(form);
+          /* Native submit skips the submit event — avoids confirmSkip races. */
+          ensureCsrfField(form);
+          form.submit();
         });
       }, true);
 
@@ -2282,20 +2287,21 @@
           if (!form) return;
           applyReason(form, opts, result.reason);
           applyPhrase(form, opts, result.phrase);
-          form.dataset.confirmSkip = '1';
-          btn.dataset.confirmSkip = '1';
-          if (typeof form.requestSubmit === 'function') form.requestSubmit(btn);
-          else {
-            if (btn.name) {
-              let h = document.createElement('input');
+          if (btn && btn.name) {
+            let h = form.querySelector('input[type="hidden"][name="' + btn.name + '"][data-submitter-proxy]');
+            if (!h) {
+              h = document.createElement('input');
               h.type = 'hidden';
               h.name = btn.name;
               h.value = btn.value || '1';
+              h.setAttribute('data-submitter-proxy', '1');
               form.appendChild(h);
+            } else {
+              h.value = btn.value || '1';
             }
-            ensureCsrfField(form);
-            form.submit();
           }
+          ensureCsrfField(form);
+          form.submit();
         });
       }, true);
     })();

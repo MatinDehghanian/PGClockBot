@@ -100,8 +100,8 @@
   </form>
   {% if owner_view %}
   {{ table_bulk_bar('/resellers/bulk-action', [
-    {'key': 'delete_reseller', 'label': 'حذف نمایندگی', 'class': 'btn-danger', 'confirm': '{n} نمایندگی حذف شوند؟ ادمین پاسارگارد متصل هم حذف می‌شود.', 'confirm_title': 'حذف نمایندگی گروهی', 'confirm_label': 'حذف نمایندگی', 'danger': true},
-    {'key': 'delete_user', 'label': 'حذف کاربر', 'class': 'btn-danger', 'confirm': '{n} کاربر کامل حذف شوند؟ برگشت‌ناپذیر است.', 'confirm_title': 'حذف کامل گروهی', 'confirm_label': 'حذف کامل', 'danger': true},
+    {'key': 'delete_reseller', 'label': 'حذف نمایندگی', 'class': 'btn-danger', 'confirm': '{n} نمایندگی حذف شوند؟ ادمین پاسارگارد متصل هم حذف می‌شود.', 'confirm_title': 'حذف نمایندگی گروهی', 'confirm_label': 'حذف نمایندگی', 'danger': true, 'reason': true, 'reason_label': 'علت حذف نمایندگی'},
+    {'key': 'delete_user', 'label': 'حذف کاربر', 'class': 'btn-danger', 'confirm': '{n} کاربر کامل حذف شوند؟ برگشت‌ناپذیر است.', 'confirm_title': 'حذف کامل گروهی', 'confirm_label': 'حذف کامل', 'danger': true, 'reason': true, 'reason_label': 'علت حذف کامل'},
   ]) }}
   {% endif %}
   <div class="table-wrap">
@@ -175,7 +175,11 @@
                   data-confirm="نمایندگی حذف شود؟ ادمین پاسارگارد متصل هم حذف می‌شود و علت برای کاربر ارسال می‌گردد. حساب بات، سفارش‌ها و کیف پول کاربر باقی می‌ماند مگر «حذف کاربر» را بزنید."
                   data-confirm-title="حذف نمایندگی (+ ادمین پاسارگارد)"
                   data-confirm-danger="1"
+                  data-confirm-reason="1"
+                  data-confirm-reason-label="علت حذف نمایندگی"
+                  data-confirm-reason-name="reason"
                   data-confirm-label="حذف نمایندگی و ادمین">
+              <input type="hidden" name="reason" value="" />
               <button class="btn btn-sm btn-danger" type="submit">حذف نمایندگی</button>
             </form>
             <form method="post" action="/resellers/{{ u.id }}/delete-user"
@@ -183,7 +187,11 @@
                   data-confirm-title="حذف کامل (+ ادمین پاسارگارد)"
                   data-confirm-danger="1"
                   {% if (u.wallet_balance or 0) > 0 %}data-confirm-warn="1"{% endif %}
+                  data-confirm-reason="1"
+                  data-confirm-reason-label="علت حذف کامل کاربر"
+                  data-confirm-reason-name="reason"
                   data-confirm-label="حذف کامل">
+              <input type="hidden" name="reason" value="" />
               <button class="btn btn-sm btn-danger" type="submit">حذف کاربر</button>
             </form>
           {% endcall %}

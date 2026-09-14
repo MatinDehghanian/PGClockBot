@@ -140,7 +140,11 @@
               data-confirm-title="تأیید حذف"
               {% endif %}
               data-confirm-danger="1"
+              data-confirm-reason="1"
+              data-confirm-reason-label="علت حذف"
+              data-confirm-reason-name="reason"
               data-confirm-label="حذف">
+              <input type="hidden" name="reason" value="" />
               <button class="btn btn-sm btn-danger" type="submit">حذف ادمین</button>
             </form>
             {% endif %}

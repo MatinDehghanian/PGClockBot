@@ -2359,9 +2359,14 @@ def register_pg_pages(
         from app.services.resellers import notify_reseller_revoked, revoke_reseller
 
         form = await request.form()
-        from app.services.delete_reason import resolve_delete_reason
+        from app.services.delete_reason import delete_reason_too_short, extract_delete_reason
 
-        reason = resolve_delete_reason(form)
+        reason = extract_delete_reason(form)
+        if delete_reason_too_short(reason):
+            return RedirectResponse(
+                f"/pg/admins?err={_q(\'علت حذف ادمین الزامی است (حداقل ۳ کاراکتر)\')}",
+                status_code=303,
+            )
 
         pg_u = (username or "").strip()
         if not pg_u:

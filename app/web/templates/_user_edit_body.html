@@ -259,7 +259,11 @@
         data-confirm-title="تأیید حذف کاربر"
         data-confirm-danger="1"
         {% if (user.wallet_balance or 0) > 0 %}data-confirm-warn="1"{% endif %}
+        data-confirm-reason="1"
+        data-confirm-reason-label="علت حذف"
+        data-confirm-reason-name="reason"
         data-confirm-label="حذف کاربر">
+    <input type="hidden" name="reason" value="" />
     <button class="btn btn-danger" type="submit">حذف کاربر</button>
   </form>
 </section>

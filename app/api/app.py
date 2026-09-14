@@ -3580,9 +3580,11 @@ def create_api_app(lifespan=None) -> FastAPI:
         from app.services.users import delete_bot_user, friendly_user_delete_error
 
         form = await request.form()
-        from app.services.delete_reason import resolve_delete_reason
+        from app.services.delete_reason import delete_reason_too_short, extract_delete_reason
 
-        reason = resolve_delete_reason(form)
+        reason = extract_delete_reason(form)
+        if delete_reason_too_short(reason):
+            return _redirect_msg("/users", err="علت حذف کاربر الزامی است (حداقل ۳ کاراکتر)")
 
         actor_id = None
         try:

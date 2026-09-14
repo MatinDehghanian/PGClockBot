@@ -128,29 +128,29 @@ class DeleteReasonExtractionTests(unittest.TestCase):
 
     def test_users_delete_uses_helper(self):
         src = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
-        self.assertIn("resolve_delete_reason", src)
-        self.assertNotIn("delete_reason_too_short", src)
+        self.assertIn("extract_delete_reason", src)
+        self.assertIn("delete_reason_too_short", src)
 
     def test_panel_js_root_fixes_delete_reason(self):
         js = (ROOT / "app/web/static/panel.js").read_text(encoding="utf-8")
-        self.assertIn("Replace any prior empty/stale reason fields", js)
+        # v9-compatible in-place update + IME-safe validation + native submit after confirm
+        self.assertIn("update existing hidden reason in place", js)
         self.assertIn("form.id === 'confirm-form'", js)
         self.assertIn("علت حذف باید حداقل", js)
-        # No HTML minlength (Persian IME false positives); JS validates after composition.
         self.assertNotIn('minlength="', js[js.find("setupPanelConfirm") : js.find("Normalize Persian")])
         self.assertIn("compositionend", js)
         self.assertIn("confirm_reason", js)
         self.assertIn("stack: true", js)
         self.assertIn("novalidate", js)
 
-    def test_templates_have_no_empty_reason_placeholders(self):
-        templates = ROOT / "app/web/templates"
-        offenders = []
-        for path in templates.rglob("*.html"):
-            text = path.read_text(encoding="utf-8")
-            if 'name="reason" value=""' in text or "name='reason' value=''" in text:
-                offenders.append(str(path.relative_to(ROOT)))
-        self.assertEqual(offenders, [], msg="empty reason placeholders shadow confirmed values")
+    def test_templates_may_have_empty_reason_placeholder_updated_in_place(self):
+        """v9 style: empty hidden reason is OK because applyReason updates it in place."""
+        js = (ROOT / "app/web/static/panel.js").read_text(encoding="utf-8")
+        self.assertIn("update existing hidden reason in place", js)
+        users = (ROOT / "app/web/templates/users.html").read_text(encoding="utf-8")
+        delete = users.split("/users/{{ u.id }}/delete", 1)[1].split("</form>", 1)[0]
+        self.assertIn('name="reason"', delete)
+        self.assertIn('data-confirm-reason="1"', delete)
 
 
 if __name__ == "__main__":

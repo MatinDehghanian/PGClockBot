@@ -78,7 +78,7 @@ class RoleAndReasonUiTests(unittest.TestCase):
         self.assertIn("/users/{{ u.id }}/block", users)
         self.assertIn("/users/{{ u.id }}/delete", users)
         delete = users.split("/users/{{ u.id }}/delete", 1)[1].split("</form>", 1)[0]
-        self.assertNotIn("data-confirm-reason", delete)
+        self.assertIn("data-confirm-reason", delete)
         block = users.split("/users/{{ u.id }}/block", 1)[1].split("</form>", 1)[0]
         self.assertNotIn("data-confirm-reason", block)
         self.assertIn('data-modal-open="modal-user-edit"', users)
@@ -91,7 +91,7 @@ class RoleAndReasonUiTests(unittest.TestCase):
         self.assertNotIn("/resellers/{{ u.id }}/role", resellers)
         self.assertIn('data-modal-open="modal-reseller-edit"', resellers)
         # Delete actions keep reason; role is only in edit modal
-        self.assertNotIn("data-confirm-reason", resellers)
+        self.assertIn("data-confirm-reason", resellers)
 
     def test_role_lives_in_edit_bodies_without_reason(self):
         user_body = (ROOT / "app/web/templates/_user_edit_body.html").read_text(
@@ -103,7 +103,7 @@ class RoleAndReasonUiTests(unittest.TestCase):
         )[0]
         self.assertNotIn("data-confirm-reason", user_role)
         # Delete keeps reason; role form must not require one.
-        self.assertNotIn("data-confirm-reason", user_body)
+        self.assertIn("data-confirm-reason", user_body)
         reseller_body = (ROOT / "app/web/templates/_reseller_edit_body.html").read_text(
             encoding="utf-8"
         )
@@ -112,7 +112,7 @@ class RoleAndReasonUiTests(unittest.TestCase):
             "</form>", 1
         )[0]
         self.assertNotIn("data-confirm-reason", role)
-        self.assertNotIn("data-confirm-reason", reseller_body)
+        self.assertIn("data-confirm-reason", reseller_body)
 
     def test_renew_plan_only_no_manual_days(self):
         body = (ROOT / "app/web/templates/_user_edit_body.html").read_text(

@@ -128,11 +128,11 @@ class DeleteReasonBoxTests(unittest.TestCase):
         self.assertNotIn('id="confirm-reason"', confirm)
 
     def test_delete_forms_require_reason(self):
-        self.assertNotIn("data-confirm-reason", USERS)
+        self.assertIn("data-confirm-reason", USERS)
         self.assertIn("/users/{{ u.id }}/delete", USERS)
-        self.assertNotIn("data-confirm-reason", RESELLERS)
+        self.assertIn("data-confirm-reason", RESELLERS)
         self.assertIn("/resellers/{{ u.id }}/delete", RESELLERS)
-        self.assertNotIn("data-confirm-reason", RESELLER_BODY)
+        self.assertIn("data-confirm-reason", RESELLER_BODY)
         # _user_edit_body.html later gained its own delete-user form (parity
         # with _reseller_edit_body.html), so it legitimately carries
         # data-confirm-reason too now — but only on that delete form, never
@@ -144,9 +144,9 @@ class DeleteReasonBoxTests(unittest.TestCase):
         self.assertNotIn("data-confirm-reason", block)
 
     def test_backend_enforces_delete_reason_min_length(self):
-        self.assertNotIn("علت حذف کاربر الزامی است (حداقل ۳ کاراکتر)", API)
-        self.assertNotIn("علت حذف نمایندگی الزامی است (حداقل ۳ کاراکتر)", RESELLER_API)
-        self.assertIn("resolve_delete_reason", RESELLER_API)
+        self.assertIn("علت حذف کاربر الزامی است (حداقل ۳ کاراکتر)", API)
+        self.assertIn("علت حذف نمایندگی الزامی است (حداقل ۳ کاراکتر)", RESELLER_API)
+        self.assertIn("extract_delete_reason", RESELLER_API)
 
 
 class ServicesRedesignTests(unittest.TestCase):
