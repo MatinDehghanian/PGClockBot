@@ -146,7 +146,7 @@ class DeleteReasonBoxTests(unittest.TestCase):
     def test_backend_enforces_delete_reason_min_length(self):
         self.assertIn("علت حذف کاربر الزامی است (حداقل ۳ کاراکتر)", API)
         self.assertIn("علت حذف نمایندگی الزامی است (حداقل ۳ کاراکتر)", RESELLER_API)
-        self.assertIn("علت حذف کاربر الزامی است", RESELLER_API)
+        self.assertIn("extract_delete_reason", RESELLER_API)
 
 
 class ServicesRedesignTests(unittest.TestCase):

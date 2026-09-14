@@ -16,6 +16,13 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "10.1.14": [
+        "حذف کاربر/نماینده/ادمین: علت حذف مثل قبل از v10 دوباره پرسیده می‌شود و برای کاربر ارسال می‌شود",
+        "رفع لایهٔ JS: applyReason مقدار را روی فیلد مخفی موجود می‌نویسد؛ بعد از تأیید form.submit() بدون race با confirmSkip",
+        "استخراج علت از FormData چندمقداری (خالی + پر) تا مقدار تأییدشده گم نشود",
+        "حذف VPN/سرویس: بدون type-to-confirm اضافه‌شده در v10 (تأیید ساده مثل قبل)",
+        "بدون مایگریشن DB؛ ریستور: restore/pre-v10.1.14-simple-delete-2026-09-14 (قبل از اصلاح علت‌حذف)",
+    ],
     "10.1.13": [
         "رفع ریشه‌ای خطای «علت حذف کوتاه است»: دیگر مقدار خالی reason مقدار تأییدشده را نمی‌پوشاند",
         "مودال تأیید: بدون minlength HTML (کیبورد فارسی/IME دیگر خطای نادرست کاراکتر نمی‌دهد)",
