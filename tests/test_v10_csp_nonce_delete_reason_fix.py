@@ -101,6 +101,26 @@ class DeleteReasonExtractionTests(unittest.TestCase):
         )
         self.assertEqual(extract_delete_reason({}), "")
 
+    def test_filled_then_empty_reason_does_not_shadow(self):
+        """Starlette FormData.get is last-wins — empty trailing reason must not win."""
+        from starlette.datastructures import FormData
+
+        form = FormData(
+            [
+                ("reason", "حذف به دلیل تست کاربر"),
+                ("reason", ""),
+                ("confirm_reason", ""),
+            ]
+        )
+        self.assertEqual(extract_delete_reason(form), "حذف به دلیل تست کاربر")
+        self.assertFalse(delete_reason_too_short(extract_delete_reason(form)))
+
+        form2 = FormData([("reason", ""), ("reason", "abc")])
+        self.assertEqual(extract_delete_reason(form2), "abc")
+
+        form3 = FormData([("reason", ""), ("confirm_reason", "حذف نماینده")])
+        self.assertEqual(extract_delete_reason(form3), "حذف نماینده")
+
     def test_too_short(self):
         self.assertTrue(delete_reason_too_short("ab"))
         self.assertFalse(delete_reason_too_short("abc"))
@@ -111,12 +131,26 @@ class DeleteReasonExtractionTests(unittest.TestCase):
         self.assertIn("extract_delete_reason", src)
         self.assertIn("delete_reason_too_short", src)
 
-    def test_panel_js_replaces_stale_reason_fields(self):
+    def test_panel_js_root_fixes_delete_reason(self):
         js = (ROOT / "app/web/static/panel.js").read_text(encoding="utf-8")
         self.assertIn("Replace any prior empty/stale reason fields", js)
         self.assertIn("form.id === 'confirm-form'", js)
-        self.assertIn("setCustomValidity", js)
         self.assertIn("علت حذف باید حداقل", js)
+        # No HTML minlength (Persian IME false positives); JS validates after composition.
+        self.assertNotIn('minlength="', js[js.find("setupPanelConfirm") : js.find("Normalize Persian")])
+        self.assertIn("compositionend", js)
+        self.assertIn("confirm_reason", js)
+        self.assertIn("stack: true", js)
+        self.assertIn("novalidate", js)
+
+    def test_templates_have_no_empty_reason_placeholders(self):
+        templates = ROOT / "app/web/templates"
+        offenders = []
+        for path in templates.rglob("*.html"):
+            text = path.read_text(encoding="utf-8")
+            if 'name="reason" value=""' in text or "name='reason' value=''" in text:
+                offenders.append(str(path.relative_to(ROOT)))
+        self.assertEqual(offenders, [], msg="empty reason placeholders shadow confirmed values")
 
 
 if __name__ == "__main__":

@@ -461,10 +461,13 @@
         <h2 id="confirm-title">تأیید</h2>
         <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
       </div>
-      <form id="confirm-form" class="form-stack" action="#" method="post" data-panel-validate="0">
+      <form id="confirm-form" class="form-stack" action="#" method="post" data-panel-validate="0" novalidate>
         {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}" />{% endif %}
         <p id="confirm-message" class="confirm-message"></p>
-        {# Reason field is injected by panel.js only when requireReason=true #}
+        {# Reason field is injected by panel.js only when requireReason=true.
+           Phrase (type-to-confirm) is injected when confirmPhrase is set.
+           novalidate: HTML minlength fights Persian IME composition and showed
+           false "too short" errors; panel.js validates after composition ends. #}
         <div id="confirm-reason-slot" hidden></div>
         <div class="actions">
           <button type="submit" class="btn btn-danger" id="confirm-submit">تأیید</button>

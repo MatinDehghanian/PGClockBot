@@ -16,6 +16,13 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "10.1.13": [
+        "رفع ریشه‌ای خطای «علت حذف کوتاه است»: دیگر مقدار خالی reason مقدار تأییدشده را نمی‌پوشاند",
+        "مودال تأیید: بدون minlength HTML (کیبورد فارسی/IME دیگر خطای نادرست کاراکتر نمی‌دهد)",
+        "علت حذف بعد از پایان Composition خوانده می‌شود؛ confirm_reason هم به‌عنوان پشتیبان ارسال می‌شود",
+        "مودال تأیید روی مودال ویرایش stack می‌شود تا فرم حذف قطع نشود",
+        "بدون مایگریشن DB؛ ریستور: restore/pre-v10.1.13-v10.1.12",
+    ],
     "10.1.9": [
         "جدول‌های راهنما مثل وب‌پنل: کل جدول داخل قاب اسکرول می‌شود (بدون ستون چسبان خراب)",
         "بدون مایگریشن DB؛ ریستور: restore/pre-v10.1.9-v10.1.8",
