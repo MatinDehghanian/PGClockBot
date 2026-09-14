@@ -16,6 +16,13 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "10.1.0": [
+        "راهنمای فارسی داخل پنل روی /help با ظاهر هم‌سبک وب‌پنل و سرچ",
+        "آیکون دایره‌ای ؟ کنار تیتر صفحات: خلاصه کوتاه + لینک مطالعه کامل",
+        "خروجی استاتیک قابل‌نشر روی دامنه شخصی (DOCS_BASE_URL)",
+        "مثال و باکس خطای رایج برای بخش‌های مهم؛ مخاطب همه نقش‌ها",
+        "بدون مایگریشن DB؛ ریستور: restore/pre-v10.1.0-v10.0.0",
+    ],
     "10.0.0": [
         "امنیت: SSRF روی PG_BASE_URL، Setup فقط loopback، Redirect امن، lockout پایدار لاگین",
         "امنیت: CSRF double-submit + CSP nonce؛ Encrypt توکن بات نماینده؛ freshness card-auto",
