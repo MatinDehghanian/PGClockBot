@@ -152,7 +152,9 @@
             {% if action.danger %}data-bulk-confirm-danger="1"{% endif %}
             {% if action.warn %}data-bulk-confirm-warn="1"{% endif %}
             {% if action.reason %}data-bulk-confirm-reason="1"{% endif %}
-            {% if action.reason_label %}data-bulk-confirm-reason-label="{{ action.reason_label }}"{% endif %}>
+            {% if action.reason_label %}data-bulk-confirm-reason-label="{{ action.reason_label }}"{% endif %}
+            {% if action.phrase %}data-bulk-confirm-phrase="{{ action.phrase }}"{% endif %}
+            {% if action.phrase_label %}data-bulk-confirm-phrase-label="{{ action.phrase_label }}"{% endif %}>
       <span class="table-bulk-op-label">{{ action.label }}</span>
       <span class="table-bulk-op-count" data-bulk-op-count aria-hidden="true">۰</span>
     </button>

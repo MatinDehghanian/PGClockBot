@@ -451,6 +451,13 @@ def register_bulk_pages(
             return redirect_bulk(return_to, err="هیچ کاربری انتخاب نشده")
         if action not in {"disable", "enable", "reset", "revoke", "delete"}:
             return redirect_bulk(return_to, err="عملیات نامعتبر")
+        if action == "delete":
+            phrase = str(form.get("confirm_phrase") or "").strip()
+            if phrase != "حذف":
+                return redirect_bulk(
+                    return_to,
+                    err="برای حذف گروهی باید عبارت «حذف» را دقیق تایپ کنید",
+                )
         ok, fail = await bulk_pg_user_action(session, staff, ids, action)
         labels = {
             "disable": "کاربر غیرفعال شد",
