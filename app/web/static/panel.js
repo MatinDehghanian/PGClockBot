@@ -1,4 +1,47 @@
   (function(){
+    function csrfToken() {
+      var meta = document.querySelector('meta[name="csrf-token"]');
+      if (meta && meta.content) return meta.content;
+      var m = document.cookie.match(/(?:^|; )csrf=([^;]*)/);
+      return m ? decodeURIComponent(m[1]) : '';
+    }
+    function ensureCsrfField(form) {
+      if (!form || form.tagName !== 'FORM') return;
+      if (form.method && form.method.toUpperCase() === 'GET') return;
+      var tok = csrfToken();
+      if (!tok) return;
+      var existing = form.querySelector('input[name="csrf_token"]');
+      if (existing) {
+        existing.value = tok;
+        return;
+      }
+      var input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = 'csrf_token';
+      input.value = tok;
+      form.appendChild(input);
+    }
+    document.addEventListener('submit', function (e) {
+      ensureCsrfField(e.target);
+    }, true);
+    var _fetch = window.fetch;
+    if (typeof _fetch === 'function') {
+      window.fetch = function (input, init) {
+        init = init || {};
+        var method = (init.method || 'GET').toUpperCase();
+        if (method !== 'GET' && method !== 'HEAD') {
+          var headers = new Headers(init.headers || {});
+          if (!headers.has('X-CSRF-Token')) {
+            var tok = csrfToken();
+            if (tok) headers.set('X-CSRF-Token', tok);
+          }
+          init.headers = headers;
+          if (init.credentials == null) init.credentials = 'same-origin';
+        }
+        return _fetch.call(this, input, init);
+      };
+    }
+
     const side = document.getElementById('sidebar');
     const btn = document.getElementById('menu-toggle');
     const back = document.getElementById('side-backdrop');

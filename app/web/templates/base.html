@@ -9,8 +9,9 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="{{ pwa_name|default('MrClockBot') }}" />
+  {% if csrf_token %}<meta name="csrf-token" content="{{ csrf_token }}" />{% endif %}
   <title>{% block title %}پنل مدیریت{% endblock %} · {{ pwa_name|default('MrClockBot') }}</title>
-  <script>
+  <script{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}>
   (function () {
     try {
       var d = document.documentElement;
@@ -318,6 +319,7 @@
           </div>
         </div>
         <form method="post" action="/logout" class="logout-form">
+          {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}" />{% endif %}
           <button type="submit" class="logout-link">
           <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 5H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h4"/><path d="M14 12H4.5M14 12l3-3M14 12l3 3"/></svg>
           خروج
@@ -408,6 +410,7 @@
         <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
       </div>
       <form id="confirm-form" class="form-stack" action="#" method="post">
+        {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}" />{% endif %}
         <p id="confirm-message" class="confirm-message"></p>
         {# Reason field is injected by panel.js only when requireReason=true #}
         <div id="confirm-reason-slot" hidden></div>
@@ -418,12 +421,12 @@
       </form>
     </div>
   </div>
-  <script src="/static/panel.js?v={{ app_version }}"></script>
+  <script src="/static/panel.js?v={{ app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
   {% block page_scripts %}{% endblock %}
   {% else %}
     {% block auth %}{% endblock %}
   {% endif %}
-  <script>
+  <script{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function () {
       navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(function () {});
