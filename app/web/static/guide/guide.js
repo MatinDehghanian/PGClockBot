@@ -73,6 +73,34 @@
     }
   });
 
+  /* Resolve asset root from guide.js so search links work from nested pages */
+  var guideRoot = '';
+  (function () {
+    var base = document.querySelector('script[src*="guide.js"]');
+    if (base && base.getAttribute('src')) {
+      guideRoot = base.getAttribute('src').replace(/guide\.js.*$/, '');
+    }
+  })();
+
+  function resolveGuideHref(href) {
+    href = String(href || '');
+    if (!href) return guideRoot || './';
+    if (/^(https?:|mailto:|tel:|#|\/)/i.test(href)) return href;
+    return guideRoot + href.replace(/^\.\//, '');
+  }
+
+  /* Wrap any leftover bare tables so wide tables scroll instead of escaping the card */
+  document.querySelectorAll('.guide-content table').forEach(function (table) {
+    if (table.parentElement && table.parentElement.classList.contains('guide-table-scroll')) return;
+    var wrap = document.createElement('div');
+    wrap.className = 'guide-table-scroll';
+    wrap.setAttribute('role', 'region');
+    wrap.setAttribute('aria-label', 'جدول');
+    wrap.tabIndex = 0;
+    table.parentNode.insertBefore(wrap, table);
+    wrap.appendChild(table);
+  });
+
   var input = document.getElementById('guide-search-input');
   var panel = document.getElementById('guide-search-panel');
   if (!input || !panel) return;
@@ -80,12 +108,7 @@
   var indexPromise = null;
   function loadIndex() {
     if (!indexPromise) {
-      var base = document.querySelector('script[src*="guide.js"]');
-      var root = '';
-      if (base && base.getAttribute('src')) {
-        root = base.getAttribute('src').replace(/guide\.js.*$/, '');
-      }
-      indexPromise = fetch(root + 'search-index.json', { credentials: 'same-origin' })
+      indexPromise = fetch(guideRoot + 'search-index.json', { credentials: 'same-origin' })
         .then(function (r) { return r.json(); })
         .catch(function () { return []; });
     }
@@ -135,7 +158,7 @@
     hits.slice(0, 8).forEach(function (h, i) {
       var a = document.createElement('a');
       a.className = 'guide-search-hit' + (i === active ? ' is-active' : '');
-      a.href = h.href;
+      a.href = resolveGuideHref(h.href);
       a.setAttribute('role', 'option');
       a.innerHTML = '<strong></strong><span></span>';
       a.querySelector('strong').textContent = h.title;

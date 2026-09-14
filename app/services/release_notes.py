@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "10.1.8": [
+        "جدول‌های راهنما روی موبایل اسکرول افقی دارند و از کادر بیرون نمی‌زنند",
+        "رفع ۴۰۴ نتایج جستجوی راهنما وقتی از صفحات داخلی روی نتیجه می‌زنید",
+        "بدون مایگریشن DB؛ ریستور: restore/pre-v10.1.8-v10.1.7",
+    ],
     "10.1.7": [
         "ریشه خرابی دکمه آپدیت: GZip قبل از CSP nonce اسکریپت اینلاین را بی‌nonce می‌کرد و مرورگر اجرا نمی‌کرد",
         "منطق تب آپدیت به panel.js منتقل شد (همیشه با nonce قالب اجرا می‌شود)",

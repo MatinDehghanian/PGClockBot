@@ -44,6 +44,38 @@ class GuideCatalogTests(unittest.TestCase):
         self.assertNotIn("&lt;div", html)
         self.assertNotIn("{% for", html)
 
+    def test_tables_are_scroll_wrapped(self):
+        guide = ROOT / "app" / "web" / "static" / "guide"
+        roles = (guide / "roles" / "index.html").read_text(encoding="utf-8")
+        self.assertIn("guide-table-scroll", roles)
+        self.assertIn("<table>", roles)
+        css = (guide / "guide.css").read_text(encoding="utf-8")
+        self.assertIn(".guide-table-scroll", css)
+        self.assertIn("overflow-x: auto", css)
+        js = (guide / "guide.js").read_text(encoding="utf-8")
+        self.assertIn("resolveGuideHref", js)
+        self.assertIn("guide-table-scroll", js)
+
+    def test_search_index_hrefs_are_guide_root_relative(self):
+        import json
+
+        guide = ROOT / "app" / "web" / "static" / "guide"
+        items = json.loads((guide / "search-index.json").read_text(encoding="utf-8"))
+        self.assertGreater(len(items), 5)
+        for it in items:
+            href = it["href"]
+            self.assertFalse(href.startswith("../"), msg=href)
+            self.assertFalse(href.startswith("/"), msg=href)
+            self.assertTrue(
+                href.endswith("/index.html") or href.endswith("index.html"),
+                msg=href,
+            )
+            slug = href.split("/")[0]
+            self.assertTrue((guide / slug / "index.html").is_file(), msg=href)
+        js = (guide / "guide.js").read_text(encoding="utf-8")
+        self.assertIn("resolveGuideHref(h.href)", js)
+        self.assertIn("guideRoot +", js)
+
     def test_page_title_macro_has_help(self):
         macros = (ROOT / "app" / "web" / "templates" / "macros.html").read_text(
             encoding="utf-8"
