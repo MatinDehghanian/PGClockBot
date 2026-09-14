@@ -790,8 +790,10 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         session: AsyncSession = Depends(get_db),
     ):
         form = await request.form()
-        reason = str(form.get("reason") or "").strip()
-        if len(reason) < 3:
+        from app.services.delete_reason import delete_reason_too_short, extract_delete_reason
+
+        reason = extract_delete_reason(form)
+        if delete_reason_too_short(reason):
             return RedirectResponse(
                 f"/resellers?err={_q('علت حذف نمایندگی الزامی است (حداقل ۳ کاراکتر)')}",
                 status_code=303,
@@ -935,8 +937,10 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
     ):
         """Full bot-user delete from resellers tab (same cascade as /users delete)."""
         form = await request.form()
-        reason = str(form.get("reason") or "").strip()
-        if len(reason) < 3:
+        from app.services.delete_reason import delete_reason_too_short, extract_delete_reason
+
+        reason = extract_delete_reason(form)
+        if delete_reason_too_short(reason):
             return RedirectResponse(
                 f"/resellers?err={_q('علت حذف کاربر الزامی است')}",
                 status_code=303,

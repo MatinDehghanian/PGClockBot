@@ -1715,6 +1715,9 @@
 
       function skipForm(form){
         if (!(form instanceof HTMLFormElement)) return true;
+        /* Confirm modal has its own reason/phrase checks; never let the generic
+           validator stopImmediatePropagation before panelConfirm finishes. */
+        if (form.id === 'confirm-form') return true;
         if (form.getAttribute('data-panel-validate') === '0') return true;
         return false;
       }
@@ -2020,7 +2023,14 @@
             const v = (reasonInput && reasonInput.value || '').trim();
             const min = activeReasonMin || 3;
             if (v.length < min) {
-              if (reasonInput) reasonInput.focus();
+              if (reasonInput) {
+                reasonInput.focus();
+                try {
+                  reasonInput.setCustomValidity('علت حذف باید حداقل ' + min + ' کاراکتر باشد.');
+                  reasonInput.reportValidity();
+                  reasonInput.setCustomValidity('');
+                } catch (_) {}
+              }
               return;
             }
             finish({ ok: true, reason: v });
@@ -2078,31 +2088,33 @@
       }
 
       function applyReason(form, opts, reason){
-        if (!opts.requireReason || !reason) return;
-        let hidden = form.querySelector(
-          'input[name="' + opts.reasonName + '"], textarea[name="' + opts.reasonName + '"]'
-        );
-        if (!hidden) {
-          hidden = document.createElement('input');
-          hidden.type = 'hidden';
-          hidden.name = opts.reasonName;
-          form.appendChild(hidden);
-        }
-        hidden.value = reason;
+        const text = String(reason || '').trim();
+        if (!text) return;
+        const name = (opts && opts.reasonName) || 'reason';
+        /* Replace any prior empty/stale reason fields so the POST body cannot
+           keep a blank "reason=" that shadows the confirmed value. */
+        form.querySelectorAll(
+          'input[name="' + name + '"], textarea[name="' + name + '"]'
+        ).forEach((el) => el.parentNode && el.parentNode.removeChild(el));
+        const hidden = document.createElement('input');
+        hidden.type = 'hidden';
+        hidden.name = name;
+        hidden.value = text;
+        form.appendChild(hidden);
       }
 
       function applyPhrase(form, opts, phrase){
-        if (!opts.confirmPhrase || !phrase) return;
-        let hidden = form.querySelector(
-          'input[name="' + opts.phraseName + '"], textarea[name="' + opts.phraseName + '"]'
-        );
-        if (!hidden) {
-          hidden = document.createElement('input');
-          hidden.type = 'hidden';
-          hidden.name = opts.phraseName;
-          form.appendChild(hidden);
-        }
-        hidden.value = phrase;
+        const text = String(phrase || '').trim();
+        if (!opts.confirmPhrase || !text) return;
+        const name = (opts && opts.phraseName) || 'confirm_phrase';
+        form.querySelectorAll(
+          'input[name="' + name + '"], textarea[name="' + name + '"]'
+        ).forEach((el) => el.parentNode && el.parentNode.removeChild(el));
+        const hidden = document.createElement('input');
+        hidden.type = 'hidden';
+        hidden.name = name;
+        hidden.value = text;
+        form.appendChild(hidden);
       }
 
       document.addEventListener('submit', (e) => {

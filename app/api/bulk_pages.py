@@ -74,8 +74,10 @@ def register_bulk_pages(
             ok, fail = await bulk_renew_users(session, staff, ids)
             noun = "تمدید"
         elif action == "delete":
-            reason = str(form.get("reason") or "").strip()
-            if len(reason) < 3:
+            from app.services.delete_reason import delete_reason_too_short, extract_delete_reason
+
+            reason = extract_delete_reason(form)
+            if delete_reason_too_short(reason):
                 return redirect_bulk(return_to, err="علت حذف الزامی است (حداقل ۳ کاراکتر)")
             ok, fail = await bulk_delete_users(session, staff, ids, reason=reason)
             noun = "حذف"
@@ -310,16 +312,18 @@ def register_bulk_pages(
         )
         if not ids:
             return redirect_bulk(return_to, err="هیچ نماینده‌ای انتخاب نشده")
-        reason = str(form.get("reason") or "").strip()
+        from app.services.delete_reason import delete_reason_too_short, extract_delete_reason
+
+        reason = extract_delete_reason(form)
         if action == "delete_reseller":
-            if len(reason) < 3:
+            if delete_reason_too_short(reason):
                 return redirect_bulk(return_to, err="علت حذف الزامی است (حداقل ۳ کاراکتر)")
             ok, fail = await bulk_revoke_resellers(session, staff, ids, reason=reason)
             return _bulk_result(
                 return_to, ok, fail, done="نمایندگی حذف شد", none="هیچ نمایندگی حذف نشد"
             )
         if action == "delete_user":
-            if len(reason) < 3:
+            if delete_reason_too_short(reason):
                 return redirect_bulk(return_to, err="علت حذف الزامی است (حداقل ۳ کاراکتر)")
             ok, fail = await bulk_delete_reseller_users(session, staff, ids, reason=reason)
             return _bulk_result(

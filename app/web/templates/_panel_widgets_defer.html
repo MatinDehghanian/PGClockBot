@@ -14,7 +14,7 @@
     <a class="btn btn-sm btn-ghost" href="?full=1">نمایش کامل</a>
   </div>
 </noscript>
-<script>
+<script{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}>
 (function () {
   var url = {{ body_url|tojson }};
   var fetchOpts = {
