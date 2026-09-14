@@ -312,9 +312,11 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
         alert_key = str(form.get("alert_key") or "").strip()
         entity_id = str(form.get("entity_id") or "").strip()
         mode = str(form.get("mode") or "").strip()
-        return_to = str(form.get("return_to") or "/inbox").strip()
-        if not return_to.startswith("/") or return_to.startswith("//"):
-            return_to = "/inbox"
+        from app.services.table_bulk import sanitize_return_to
+
+        return_to = sanitize_return_to(
+            str(form.get("return_to") or "/inbox"), default="/inbox"
+        )
         try:
             await upsert_dismissal(
                 session,
@@ -346,9 +348,11 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
         from app.services.panel_inbox import invalidate_inbox_sidebar_cache
 
         form = await request.form()
-        return_to = str(form.get("return_to") or "/inbox").strip()
-        if not return_to.startswith("/") or return_to.startswith("//"):
-            return_to = "/inbox"
+        from app.services.table_bulk import sanitize_return_to
+
+        return_to = sanitize_return_to(
+            str(form.get("return_to") or "/inbox"), default="/inbox"
+        )
         removed = await clear_staff_dismissals(session, staff)
         invalidate_inbox_sidebar_cache(staff)
         msg = "اعلان‌های مخفی‌شده بازنشانی شدند" if removed else "اعلان مخفی‌شده‌ای نبود"

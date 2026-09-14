@@ -56,6 +56,8 @@
   {% set perms = staff.get('permissions') or [] %}
   {% set pg_nav = staff.get('pg_permissions') or [] %}
   {% set is_admin = staff.role == 'admin' %}
+  {# Owner-gated chrome: sticky role=admin alone must not unlock Owner nav #}
+  {% set is_owner = is_owner if is_owner is defined else (identity.kind == 'owner' if identity is defined and identity else false) %}
   {% set is_reseller = staff.role == 'reseller' %}
   {% set is_pg_staff = staff.role == 'pg_staff' %}
   {% set ident = identity if identity is defined and identity else {} %}
@@ -116,7 +118,7 @@
       <nav class="side-nav">
         {% set settings_tab = request.query_params.get('tab') or 'welcome' %}
         {% set is_panel_settings = path.startswith('/settings') and settings_tab in ['backup','pwa','ssl','update'] %}
-        {% if is_admin %}
+        {% if is_owner %}
         <div class="nav-section nav-section-home">
           <span class="nav-label nav-label-home">وب پنل</span>
           <a href="/home" class="nav-item nav-item-home {% if path=='/home' %}active{% endif %}">
@@ -170,7 +172,7 @@
             <span>نمای کلی</span>
           </a>
           {% endif %}
-          {% if is_admin %}
+          {% if is_owner %}
           <a href="/users" class="nav-item nav-item-bot {% if path.startswith('/users') %}active{% endif %}">
             <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9" r="2.4"/><path d="M15.2 19c.4-2.2 2-3.8 4.3-4.2"/></svg>
             <span>کاربران</span>
@@ -181,7 +183,7 @@
             <span>مشتریان</span>
           </a>
           {% endif %}
-          {% if is_admin %}
+          {% if is_owner %}
           {% if ident.can_manage_representatives %}
           <a href="/resellers" class="nav-item nav-item-bot {% if path.startswith('/resellers') %}active{% endif %}">
             <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="9" r="3"/><circle cx="16" cy="9" r="3"/><path d="M2.8 19a5.2 5.2 0 0 1 10.4 0M10.8 19a5.2 5.2 0 0 1 10.4 0"/></svg>
@@ -201,13 +203,13 @@
             <span>پلن‌ها</span>
           </a>
           {% endif %}
-          {% if is_admin or is_reseller or 'tickets' in perms %}
+          {% if is_owner or 'tickets' in perms %}
           <a href="/tickets" class="nav-item nav-item-bot {% if path.startswith('/tickets') %}active{% endif %}">
             <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-3a2 2 0 0 0 0-4V8a2 2 0 0 1 2-2z"/><path d="M12 9v6"/></svg>
             <span class="nav-item-label"><span>پشتیبانی</span>{% if tickets_unread %}<i class="nav-dot" aria-label="پیام خوانده‌نشده"></i>{% endif %}</span>
           </a>
           {% endif %}
-          {% if is_admin %}
+          {% if is_owner %}
           <a href="/broadcast" class="nav-item nav-item-bot {% if path.startswith('/broadcast') %}active{% endif %}">
             <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4h3l5 4V6L7 10H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M18.8 6.2a8.5 8.5 0 0 1 0 11.6"/></svg>
             <span>پیام گروهی</span>
@@ -219,14 +221,14 @@
             <span>باشگاه مشتریان</span>
           </a>
           {% endif %}
-          {% if is_admin or 'shop_settings' in perms or is_reseller %}
+          {% if is_owner or 'shop_settings' in perms %}
           <a href="/message-variables" class="nav-item nav-item-bot {% if path.startswith('/message-variables') %}active{% endif %}">
             <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h10v10H7z"/><path d="M10 10h4M10 14h2"/><path d="M4 12h2M18 12h2"/></svg>
             <span>متغیرهای پیام</span>
           </a>
           {% endif %}
-          {% if is_admin or 'shop_settings' in perms or is_reseller %}
-          <a href="{% if is_admin %}/settings{% else %}/shop-settings{% endif %}" class="nav-item nav-item-bot {% if (path.startswith('/settings') and not is_panel_settings) or path.startswith('/shop-settings') %}active{% endif %}">
+          {% if is_owner or 'shop_settings' in perms %}
+          <a href="{% if is_owner %}/settings{% else %}/shop-settings{% endif %}" class="nav-item nav-item-bot {% if (path.startswith('/settings') and not is_panel_settings) or path.startswith('/shop-settings') %}active{% endif %}">
             <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="8" width="16" height="11" rx="2.5"/><path d="M12 8V5H9"/><path d="M2 14h2M20 14h2"/><circle cx="9.5" cy="13.5" r="1.1"/><circle cx="14.5" cy="13.5" r="1.1"/><path d="M9.5 17h5"/></svg>
             <span>تنظیمات</span>
           </a>
@@ -315,7 +317,7 @@
               {% endfor %}
             </span>
             {% endif %}
-            {% elif is_admin %}
+            {% elif is_owner %}
             <span class="role-tag role-tag-admin">ادمین</span>
             {% elif is_reseller %}
             <span class="role-tag role-tag-reseller">نماینده</span>

@@ -206,6 +206,13 @@ def render(request: Request, name: str, context: dict | None = None, status_code
             ctx["identity"] = hierarchy_identity(ctx.get("staff"))
         except Exception:
             ctx["identity"] = {}
+    if ctx.get("staff") and "is_owner" not in ctx:
+        try:
+            from app.services.platform_identity import is_explicit_owner_staff
+
+            ctx["is_owner"] = bool(is_explicit_owner_staff(ctx.get("staff")))
+        except Exception:
+            ctx["is_owner"] = False
     response = templates.TemplateResponse(request, name, ctx, status_code=status_code)
     try:
         from app.services.csrf import CSRF_COOKIE, ensure_csrf_token
@@ -4123,7 +4130,8 @@ def create_api_app(lifespan=None) -> FastAPI:
                 }
             return {"ok": False, "error": data.get("description") or "توکن نامعتبر"}
         except Exception as exc:
-            return {"ok": False, "error": f"عدم اتصال به تلگرام: {exc}"}
+            from app.services.redact import redact
+            return {"ok": False, "error": f"عدم اتصال به تلگرام: {redact(exc)}"}
 
     @app.post("/settings")
     async def settings_save(
