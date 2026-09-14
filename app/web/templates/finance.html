@@ -106,6 +106,9 @@
           <span class="badge {% if o.status=='delivered' %}delivered{% elif o.status=='paid' %}paid{% elif o.status in ['pending','awaiting_receipt','awaiting_approval'] %}pending{% elif o.status in ['rejected','cancelled','failed'] %}rejected{% else %}neutral{% endif %}">
             {{ ord_status(o.status) }}
           </span>
+          {% if o.id in (stuck_order_ids or []) %}
+          <span class="badge warn badge-inline" title="پرداخت شده بدون سرویس">گیرکرده</span>
+          {% endif %}
         </td>
         <td class="col-hide-sm" data-sort-value="{{ o.payment_method or '' }}">{% if o.payment_method=='card' %}کارت{% elif o.payment_method=='wallet' %}کیف پول{% else %}{{ o.payment_method or "—" }}{% endif %}</td>
         <td class="muted col-hide-sm" data-sort-value="{{ o.created_at }}">{{ o.created_at }}</td>
@@ -127,10 +130,19 @@
               <form method="post" action="/orders/{{ o.id }}/cancel" data-confirm="این سفارش لغو شود؟" data-confirm-title="لغو سفارش" data-confirm-warn="1" data-confirm-label="لغو">
                 <button class="btn btn-ghost btn-sm" type="submit">لغو</button>
               </form>
-            {% elif o.status in ['paid','awaiting_approval'] %}
+            {% elif o.status in ['paid','awaiting_approval','delivering'] %}
+              {% if o.id in (stuck_order_ids or []) %}
+              <form method="post" action="/orders/{{ o.id }}/retry-delivery"
+                    data-confirm="تحویل این سفارش گیرکرده دوباره تلاش شود؟"
+                    data-confirm-title="تلاش مجدد تحویل"
+                    data-confirm-label="تلاش مجدد">
+                <button class="btn btn-ok btn-sm" type="submit">تلاش مجدد تحویل</button>
+              </form>
+              {% else %}
               <form method="post" action="/orders/{{ o.id }}/approve" data-confirm="سفارش تأیید و تحویل شود؟" data-confirm-title="تأیید و تحویل" data-confirm-label="تأیید و تحویل">
                 <button class="btn btn-ok btn-sm" type="submit">تأیید و تحویل</button>
               </form>
+              {% endif %}
               {% if o.status == 'awaiting_approval' %}
               <form method="post" action="/orders/{{ o.id }}/reject" data-confirm="این سفارش رد شود؟" data-confirm-title="رد سفارش" data-confirm-danger="1" data-confirm-label="رد">
                 <button class="btn btn-danger btn-sm" type="submit">رد</button>
@@ -166,6 +178,31 @@
     </tbody>
   </table>
   </div>
+  {% if pager and (pager.has_prev or pager.has_next) %}
+  <nav class="list-pager" aria-label="صفحه‌بندی سفارش‌ها">
+    <p class="list-pager-meta">
+      {% if pager.pages and pager.total is not none %}
+      صفحه {{ pager.page }} از {{ pager.pages }}
+      <span aria-hidden="true">·</span>
+      {{ pager.total }} سفارش
+      {% else %}
+      صفحه {{ pager.page }}
+      {% endif %}
+    </p>
+    <div class="list-pager-actions">
+      {% if pager.has_prev %}
+      <a class="btn btn-ghost btn-sm" href="/finance?tab=orders&amp;page={{ pager.prev_page }}{% if q %}&amp;q={{ q|urlencode }}{% endif %}">قبلی</a>
+      {% else %}
+      <span class="btn btn-ghost btn-sm" aria-disabled="true">قبلی</span>
+      {% endif %}
+      {% if pager.has_next %}
+      <a class="btn btn-ghost btn-sm" href="/finance?tab=orders&amp;page={{ pager.next_page }}{% if q %}&amp;q={{ q|urlencode }}{% endif %}">بعدی</a>
+      {% else %}
+      <span class="btn btn-ghost btn-sm" aria-disabled="true">بعدی</span>
+      {% endif %}
+    </div>
+  </nav>
+  {% endif %}
 </div>
 
 {% elif finance_tab == 'payments' and can_payments %}
@@ -240,6 +277,31 @@
     </tbody>
   </table>
   </div>
+  {% if pager and (pager.has_prev or pager.has_next) %}
+  <nav class="list-pager" aria-label="صفحه‌بندی پرداخت‌ها">
+    <p class="list-pager-meta">
+      {% if pager.pages and pager.total is not none %}
+      صفحه {{ pager.page }} از {{ pager.pages }}
+      <span aria-hidden="true">·</span>
+      {{ pager.total }} پرداخت
+      {% else %}
+      صفحه {{ pager.page }}
+      {% endif %}
+    </p>
+    <div class="list-pager-actions">
+      {% if pager.has_prev %}
+      <a class="btn btn-ghost btn-sm" href="/finance?tab=payments&amp;page={{ pager.prev_page }}{% if q %}&amp;q={{ q|urlencode }}{% endif %}">قبلی</a>
+      {% else %}
+      <span class="btn btn-ghost btn-sm" aria-disabled="true">قبلی</span>
+      {% endif %}
+      {% if pager.has_next %}
+      <a class="btn btn-ghost btn-sm" href="/finance?tab=payments&amp;page={{ pager.next_page }}{% if q %}&amp;q={{ q|urlencode }}{% endif %}">بعدی</a>
+      {% else %}
+      <span class="btn btn-ghost btn-sm" aria-disabled="true">بعدی</span>
+      {% endif %}
+    </div>
+  </nav>
+  {% endif %}
 </div>
 
 {% elif finance_tab == 'delivery' and can_orders %}
@@ -260,12 +322,33 @@
       </tr>
     </thead>
     <tbody>
+    {% for oid in (stuck_only_order_ids or []) %}
+      {% set o = (orders_by_id or {}).get(oid) %}
+      {% set uname = (o.user.full_name or o.user.username or o.user_id) if o and o.user else (o.user_id if o else '—') %}
+      <tr data-bulk-ops="retry">
+        {{ table_select_cell(oid) }}
+        <td class="mono" data-sort-value="{{ oid }}">#{{ oid }} <span class="badge warn badge-inline">گیرکرده</span></td>
+        <td data-sort-value="{{ uname }}">{{ uname }}</td>
+        <td class="col-hide-sm muted" data-sort-value="stuck">پرداخت‌شده بدون سرویس محلی</td>
+        <td class="mono" data-sort-value="0">—</td>
+        <td class="col-actions">
+          {% call row_actions() %}
+            <form method="post" action="/orders/{{ oid }}/retry-delivery"
+                  data-confirm="تحویل این سفارش گیرکرده دوباره تلاش شود؟"
+                  data-confirm-title="تلاش مجدد تحویل"
+                  data-confirm-label="تلاش مجدد">
+              <button class="btn btn-ok btn-sm" type="submit">تلاش مجدد</button>
+            </form>
+          {% endcall %}
+        </td>
+      </tr>
+    {% endfor %}
     {% for f in delivery_failures %}
       {% set o = (orders_by_id or {}).get(f.order_id) %}
       {% set uname = (o.user.full_name or o.user.username or o.user_id) if o and o.user else (o.user_id if o else '—') %}
       <tr data-bulk-ops="retry">
         {{ table_select_cell(f.order_id) }}
-        <td class="mono" data-sort-value="{{ f.order_id }}">#{{ f.order_id }}</td>
+        <td class="mono" data-sort-value="{{ f.order_id }}">#{{ f.order_id }}{% if f.order_id in (stuck_order_ids or []) %} <span class="badge warn badge-inline">گیرکرده</span>{% endif %}</td>
         <td data-sort-value="{{ uname }}">{{ uname }}</td>
         <td class="col-hide-sm muted" data-sort-value="{{ f.error or '' }}">{{ (f.error or '—')[:120] }}</td>
         <td class="mono" data-sort-value="{{ f.attempts }}">{{ f.attempts }}</td>
@@ -281,7 +364,9 @@
         </td>
       </tr>
     {% else %}
+      {% if not (stuck_only_order_ids or []) %}
       <tr><td colspan="6" class="muted">صف تحویل ناموفق خالی است.</td></tr>
+      {% endif %}
     {% endfor %}
     </tbody>
   </table>

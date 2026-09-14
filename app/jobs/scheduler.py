@@ -85,24 +85,6 @@ async def check_expiring_services(bot: Bot) -> None:
             if not reseller_ids_with_alerts:
                 return
 
-        # Only services that still need at least one alert (skip fully-notified rows).
-        svc_q = select(UserService).where(
-            UserService.subscription_token.is_not(None),
-            or_(
-                UserService.notified_expire.is_(False),
-                UserService.notified_traffic.is_(False),
-            ),
-        )
-        if not platform_on and reseller_ids_with_alerts:
-            # Narrow to shops that actually have alerts on before PG fan-out
-            svc_q = svc_q.join(BotUser, BotUser.id == UserService.bot_user_id).where(
-                BotUser.reseller_id.in_(reseller_ids_with_alerts)
-            )
-        result = await session.execute(svc_q)
-        services = list(result.scalars().all())
-        if not services:
-            return
-
         profiles = (
             await session.execute(
                 select(ResellerProfile.user_id, ResellerProfile.id).where(
@@ -113,135 +95,167 @@ async def check_expiring_services(bot: Bot) -> None:
         ).all()
         profile_by_user = {int(uid): int(pid) for uid, pid in profiles if uid is not None}
 
-        # Prefetch users for alert eligibility before any remote PG call
-        user_ids = {svc.bot_user_id for svc in services}
-        users_by_id: dict[int, BotUser] = {}
-        if user_ids:
-            rows = (
-                await session.execute(select(BotUser).where(BotUser.id.in_(user_ids)))
-            ).scalars().all()
-            users_by_id = {u.id: u for u in rows}
-
         pg = get_pg()
         now = datetime.now(timezone.utc)
+        batch_size = 150
+        last_id = 0
 
-        eligible: list[tuple[UserService, BotUser, dict, int, int]] = []
-        for svc in services:
-            user = users_by_id.get(svc.bot_user_id)
-            if not user or user.is_blocked:
-                continue
+        while True:
+            # Keyset batches — avoid loading every pending service in one query.
+            svc_q = (
+                select(UserService)
+                .where(
+                    UserService.subscription_token.is_not(None),
+                    or_(
+                        UserService.notified_expire.is_(False),
+                        UserService.notified_traffic.is_(False),
+                    ),
+                    UserService.id > last_id,
+                )
+                .order_by(UserService.id)
+                .limit(batch_size)
+            )
+            if not platform_on and reseller_ids_with_alerts:
+                # Narrow to shops that actually have alerts on before PG fan-out
+                svc_q = svc_q.join(BotUser, BotUser.id == UserService.bot_user_id).where(
+                    BotUser.reseller_id.in_(reseller_ids_with_alerts)
+                )
+            services = list((await session.execute(svc_q)).scalars().all())
+            if not services:
+                break
+            last_id = int(services[-1].id)
 
-            rid = int(user.reseller_id) if user.reseller_id else None
-            if not platform_on:
-                if rid is None or rid not in reseller_ids_with_alerts:
+            # Prefetch users for alert eligibility before any remote PG call
+            user_ids = {svc.bot_user_id for svc in services}
+            users_by_id: dict[int, BotUser] = {}
+            if user_ids:
+                rows = (
+                    await session.execute(select(BotUser).where(BotUser.id.in_(user_ids)))
+                ).scalars().all()
+                users_by_id = {u.id: u for u in rows}
+
+            eligible: list[tuple[UserService, BotUser, dict, int, int]] = []
+            for svc in services:
+                user = users_by_id.get(svc.bot_user_id)
+                if not user or user.is_blocked:
                     continue
 
-            ui = await ui_for(rid)
-            if not on(ui.get("user_alert_low_enabled", "0")):
+                rid = int(user.reseller_id) if user.reseller_id else None
+                if not platform_on:
+                    if rid is None or rid not in reseller_ids_with_alerts:
+                        continue
+
+                ui = await ui_for(rid)
+                if not on(ui.get("user_alert_low_enabled", "0")):
+                    continue
+
+                traffic_pct = max(1, min(99, _as_int(ui.get("user_alert_low_traffic_pct"), 20)))
+                time_pct = max(1, min(99, _as_int(ui.get("user_alert_low_time_pct"), 20)))
+                eligible.append((svc, user, ui, traffic_pct, time_pct))
+
+            if not eligible:
+                if len(services) < batch_size:
+                    break
                 continue
 
-            traffic_pct = max(1, min(99, _as_int(ui.get("user_alert_low_traffic_pct"), 20)))
-            time_pct = max(1, min(99, _as_int(ui.get("user_alert_low_time_pct"), 20)))
-            eligible.append((svc, user, ui, traffic_pct, time_pct))
+            sem = asyncio.Semaphore(_PG_FETCH_CONCURRENCY)
 
-        if not eligible:
-            return
-
-        sem = asyncio.Semaphore(_PG_FETCH_CONCURRENCY)
-
-        async def _fetch_info(token: str):
-            async with sem:
-                try:
-                    return await asyncio.wait_for(pg.subscription_info(token), timeout=12)
-                except Exception:
-                    logger.debug("subscription_info failed for service fetch", exc_info=True)
-                    return None
-
-        infos = await asyncio.gather(
-            *[_fetch_info(svc.subscription_token) for svc, *_rest in eligible]
-        )
-
-        for (svc, user, _ui, traffic_pct, time_pct), info in zip(eligible, infos):
-            if not info:
-                continue
-            send_bot = _resolve_send_bot(bot, user.reseller_id, profile_by_user)
-
-            # --- remaining TIME percent ---
-            if not svc.notified_expire:
-                expire = parse_expire(info.get("expire"))
-                created = svc.created_at
-                if created and created.tzinfo is None:
-                    created = created.replace(tzinfo=timezone.utc)
-                if expire and created and expire > created:
-                    total = (expire - created).total_seconds()
-                    remaining = (expire - now).total_seconds()
-                    if total > 0 and remaining >= 0:
-                        rem_pct = (remaining / total) * 100
-                        if rem_pct <= time_pct:
-                            try:
-                                from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-
-                                renew_kb = None
-                                if on(_ui.get("one_tap_renew_enabled", "1")):
-                                    from app.services.button_styles import style_kwargs
-
-                                    renew_kb = InlineKeyboardMarkup(
-                                        inline_keyboard=[
-                                            [
-                                                InlineKeyboardButton(
-                                                    text="🔄 تمدید یک‌ضربی",
-                                                    callback_data=f"svc:renew:{svc.id}",
-                                                    **style_kwargs(
-                                                        _ui, "one_tap_renew", fallback="primary"
-                                                    ),
-                                                )
-                                            ]
-                                        ]
-                                    )
-                                await send_bot.send_message(
-                                    user.telegram_id,
-                                    f"⏰ زمان سرویس <b>{svc.pg_username}</b> به کمتر از "
-                                    f"<b>{time_pct}٪</b> رسیده است.\n"
-                                    "از بخش سرویس‌ها تمدید کنید."
-                                    + ("\nیا دکمه زیر را بزنید:" if renew_kb else ""),
-                                    parse_mode="HTML",
-                                    reply_markup=renew_kb,
-                                )
-                                svc.notified_expire = True
-                                if renew_kb is not None:
-                                    svc.renew_nudge_sent_at = now
-                            except Exception:
-                                logger.debug(
-                                    "expire alert send failed tg=%s", user.telegram_id, exc_info=True
-                                )
-
-            # --- remaining TRAFFIC percent ---
-            if not svc.notified_traffic:
-                used = float(info.get("used_traffic") or 0)
-                limit = info.get("data_limit")
-                if limit:
+            async def _fetch_info(token: str):
+                async with sem:
                     try:
-                        limit_f = float(limit)
+                        return await asyncio.wait_for(pg.subscription_info(token), timeout=12)
                     except Exception:
-                        limit_f = 0
-                    if limit_f > 0:
-                        rem_pct = max(0.0, (1.0 - (used / limit_f)) * 100)
-                        if rem_pct <= traffic_pct:
-                            try:
-                                await send_bot.send_message(
-                                    user.telegram_id,
-                                    f"📉 حجم باقی‌مانده سرویس <b>{svc.pg_username}</b> کمتر از "
-                                    f"<b>{traffic_pct}٪</b> است "
-                                    f"({format_bytes_ratio(used, limit_f, joiner=' از ')}).",
-                                    parse_mode="HTML",
-                                )
-                                svc.notified_traffic = True
-                            except Exception:
-                                logger.debug(
-                                    "traffic alert send failed tg=%s", user.telegram_id, exc_info=True
-                                )
+                        logger.debug("subscription_info failed for service fetch", exc_info=True)
+                        return None
 
-        await session.commit()
+            infos = await asyncio.gather(
+                *[_fetch_info(svc.subscription_token) for svc, *_rest in eligible]
+            )
+
+            for (svc, user, _ui, traffic_pct, time_pct), info in zip(eligible, infos):
+                if not info:
+                    continue
+                send_bot = _resolve_send_bot(bot, user.reseller_id, profile_by_user)
+
+                # --- remaining TIME percent ---
+                if not svc.notified_expire:
+                    expire = parse_expire(info.get("expire"))
+                    created = svc.created_at
+                    if created and created.tzinfo is None:
+                        created = created.replace(tzinfo=timezone.utc)
+                    if expire and created and expire > created:
+                        total = (expire - created).total_seconds()
+                        remaining = (expire - now).total_seconds()
+                        if total > 0 and remaining >= 0:
+                            rem_pct = (remaining / total) * 100
+                            if rem_pct <= time_pct:
+                                try:
+                                    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
+                                    renew_kb = None
+                                    if on(_ui.get("one_tap_renew_enabled", "1")):
+                                        from app.services.button_styles import style_kwargs
+
+                                        renew_kb = InlineKeyboardMarkup(
+                                            inline_keyboard=[
+                                                [
+                                                    InlineKeyboardButton(
+                                                        text="🔄 تمدید یک‌ضربی",
+                                                        callback_data=f"svc:renew:{svc.id}",
+                                                        **style_kwargs(
+                                                            _ui, "one_tap_renew", fallback="primary"
+                                                        ),
+                                                    )
+                                                ]
+                                            ]
+                                        )
+                                    await send_bot.send_message(
+                                        user.telegram_id,
+                                        f"⏰ زمان سرویس <b>{svc.pg_username}</b> به کمتر از "
+                                        f"<b>{time_pct}٪</b> رسیده است.\n"
+                                        "از بخش سرویس‌ها تمدید کنید."
+                                        + ("\nیا دکمه زیر را بزنید:" if renew_kb else ""),
+                                        parse_mode="HTML",
+                                        reply_markup=renew_kb,
+                                    )
+                                    svc.notified_expire = True
+                                    if renew_kb is not None:
+                                        svc.renew_nudge_sent_at = now
+                                except Exception:
+                                    logger.debug(
+                                        "expire alert send failed tg=%s", user.telegram_id, exc_info=True
+                                    )
+
+                # --- remaining TRAFFIC percent ---
+                if not svc.notified_traffic:
+                    used = float(info.get("used_traffic") or 0)
+                    limit = info.get("data_limit")
+                    if limit:
+                        try:
+                            limit_f = float(limit)
+                        except Exception:
+                            limit_f = 0
+                        if limit_f > 0:
+                            rem_pct = max(0.0, (1.0 - (used / limit_f)) * 100)
+                            if rem_pct <= traffic_pct:
+                                try:
+                                    await send_bot.send_message(
+                                        user.telegram_id,
+                                        f"📉 حجم باقی‌مانده سرویس <b>{svc.pg_username}</b> کمتر از "
+                                        f"<b>{traffic_pct}٪</b> است "
+                                        f"({format_bytes_ratio(used, limit_f, joiner=' از ')}).",
+                                        parse_mode="HTML",
+                                    )
+                                    svc.notified_traffic = True
+                                except Exception:
+                                    logger.debug(
+                                        "traffic alert send failed tg=%s", user.telegram_id, exc_info=True
+                                    )
+
+            await session.commit()
+            if len(services) < batch_size:
+                break
+
 
 
 # Track last billing run so tick minutes setting works without reschedule
