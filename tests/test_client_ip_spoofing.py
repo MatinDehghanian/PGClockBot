@@ -21,7 +21,10 @@ from unittest.mock import patch
 
 from starlette.requests import Request
 
-from app.api.app import _client_ip
+from app.api.login_guard import client_ip as _client_ip
+
+# Patch where get_settings is looked up (login_guard), not the old app.py site.
+_SETTINGS = "app.api.login_guard.get_settings"
 
 
 def _make_request(xff: str | None, client_host: str | None = "8.8.4.4"):
@@ -47,35 +50,35 @@ class _FakeSettings:
 
 class ClientIpSpoofingTests(unittest.TestCase):
     def test_trust_proxy_disabled_ignores_xff_entirely(self):
-        with patch("app.api.app.get_settings", return_value=_FakeSettings(False)):
+        with patch(_SETTINGS, return_value=_FakeSettings(False)):
             req = _make_request("127.0.0.1", client_host="8.8.4.4")
             self.assertEqual(_client_ip(req), "8.8.4.4")
 
     def test_single_trusted_hop_uses_rightmost_entry_not_attacker_claim(self):
         # Attacker claims to be loopback; real proxy appends the true peer IP
         # as the LAST entry. With trust_proxy_hops=1 we must trust the last one.
-        with patch("app.api.app.get_settings", return_value=_FakeSettings(True, 1)):
+        with patch(_SETTINGS, return_value=_FakeSettings(True, 1)):
             req = _make_request("127.0.0.1, 8.8.8.8")
             self.assertEqual(_client_ip(req), "8.8.8.8")
 
     def test_attacker_cannot_spoof_loopback_via_xff_left_entry(self):
-        with patch("app.api.app.get_settings", return_value=_FakeSettings(True, 1)):
+        with patch(_SETTINGS, return_value=_FakeSettings(True, 1)):
             req = _make_request("127.0.0.1, 8.8.8.8")
             ip = _client_ip(req)
             self.assertNotEqual(ip, "127.0.0.1")
 
     def test_two_trusted_hops_uses_second_from_right(self):
-        with patch("app.api.app.get_settings", return_value=_FakeSettings(True, 2)):
+        with patch(_SETTINGS, return_value=_FakeSettings(True, 2)):
             req = _make_request("1.1.1.1, 10.0.0.1, 10.0.0.2")
             self.assertEqual(_client_ip(req), "10.0.0.1")
 
     def test_insufficient_hops_falls_back_to_transport_peer(self):
-        with patch("app.api.app.get_settings", return_value=_FakeSettings(True, 3)):
+        with patch(_SETTINGS, return_value=_FakeSettings(True, 3)):
             req = _make_request("8.8.8.8", client_host="8.8.4.4")
             self.assertEqual(_client_ip(req), "8.8.4.4")
 
     def test_missing_xff_falls_back_to_transport_peer(self):
-        with patch("app.api.app.get_settings", return_value=_FakeSettings(True, 1)):
+        with patch(_SETTINGS, return_value=_FakeSettings(True, 1)):
             req = _make_request(None, client_host="8.8.4.4")
             self.assertEqual(_client_ip(req), "8.8.4.4")
 
@@ -84,11 +87,11 @@ class SetupGateSpoofingTests(unittest.TestCase):
     def test_local_setup_bypass_requires_correctly_trusted_hop(self):
         from app.services.setup_wizard import is_local_setup_client
 
-        with patch("app.api.app.get_settings", return_value=_FakeSettings(True, 1)):
+        with patch(_SETTINGS, return_value=_FakeSettings(True, 1)):
             spoofed = _make_request("127.0.0.1, 8.8.8.8")
             self.assertFalse(is_local_setup_client(_client_ip(spoofed)))
 
-        with patch("app.api.app.get_settings", return_value=_FakeSettings(True, 1)):
+        with patch(_SETTINGS, return_value=_FakeSettings(True, 1)):
             genuinely_local = _make_request("8.8.8.8, 127.0.0.1")
             self.assertTrue(is_local_setup_client(_client_ip(genuinely_local)))
 

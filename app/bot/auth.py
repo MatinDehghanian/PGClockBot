@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, OrgPrincipal
 
-# Phase 4G — single Owner-only denial copy (Web-equivalent explicit Owner Principal).
+# Single Owner-only denial copy (Web-equivalent explicit Owner Principal).
 OWNER_REQUIRED_MESSAGE = "دسترسی مالک سیستم لازم است"
 
 # Migrated 4B–4E families L1 may use on Bot (never overview/admins/backup).

@@ -3734,7 +3734,7 @@ async def pg_stats(callback: CallbackQuery, db_user: BotUser):
 
 # Node ops: app.bot.handlers.admin_pg_nodes (web /pg/nodes parity)
 
-# Phase 4G — PG hub / catalog hints live on admin_pg_users (no Owner middleware).
+# PG hub / catalog hints live on admin_pg_users (no Owner middleware).
 from app.bot.handlers.admin_pg_users import (  # noqa: E402,F401
     adm_pg,
     adm_pg_group_hint,
