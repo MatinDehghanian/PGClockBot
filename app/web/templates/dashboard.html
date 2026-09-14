@@ -11,7 +11,7 @@
 {% set can_shop = is_admin or 'shop_settings' in perms or staff.role == 'reseller' %}
 <div class="page-head">
   <div>
-    {{ page_title('overview', 'نمای کلی', 'brand') }}
+    {{ page_title('overview', 'نمای کلی', 'brand', help='bot-dashboard') }}
   </div>
 </div>
 

@@ -121,6 +121,8 @@ class Settings(BaseSettings):
     webhook_path: str = Field(default="/telegram/webhook", alias="WEBHOOK_PATH")
     webhook_secret_token: str = Field(default="", alias="WEBHOOK_SECRET_TOKEN")
     public_base_url: str = Field(default="", alias="PUBLIC_BASE_URL")
+    # Optional public docs site (e.g. https://docs.example.com). Empty = same-origin /help/
+    docs_base_url: str = Field(default="", alias="DOCS_BASE_URL")
     # When 1, trust X-Forwarded-For / X-Forwarded-Proto (only behind a real reverse proxy)
     trust_proxy: bool = Field(default=False, alias="TRUST_PROXY")
     # Number of reverse-proxy hops in front of this app that are trusted to append
@@ -150,6 +152,7 @@ class Settings(BaseSettings):
         "webhook_path",
         "webhook_secret_token",
         "public_base_url",
+        "docs_base_url",
         "currency",
         "default_locale",
         "database_url",
