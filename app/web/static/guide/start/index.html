@@ -254,29 +254,39 @@
               <span class="guide-chip">در پنل: <a href="/" data-panel-path="/">/</a></span>
               
               
-              <span class="guide-chip">مخاطب: مالک، ادمین، نماینده، ادمین پاسارگارد، نماینده ارشد</span>
+              <span class="guide-chip">مخاطب: مالک، ادمین، نماینده، ادمین پاسارگارد، سلسله‌مراتب</span>
               
             </div>
           </header>
 
           <div class="guide-content">
             <h2 id="این-بخش-برای-کیست؟">این بخش برای کیست؟</h2>
-<p>همه نقش‌ها — مخصوصاً کسی که ربات را روی سرور نصب می‌کند.</p>
+<p>همه نقش‌ها — مخصوصاً کسی که ربات را روی سرور نصب می‌کند یا اولین‌بار وارد وب‌پنل می‌شود. بعد از نصب، مالک معمولاً ویزارد را کامل می‌کند؛ بقیه نقش‌ها بیشتر برای ورود روزانه به همین صفحه مراجعه می‌کنند.</p>
 <h2 id="نصب-سریع">نصب سریع</h2>
 <p>روی اوبونتو ۲۲٫۰۴ یا جدیدتر:</p>
 <pre><code class="language-bash">bash &lt;(curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockBot/main/get.sh)</code></pre>
-<p>منوی انگلیسی باز می‌شود. گزینهٔ <strong>Install</strong> را بزنید، بعد در مرورگر ویزارد را کامل کنید.</p>
+<p>منوی انگلیسی باز می‌شود. گزینهٔ <strong>Install</strong> را بزنید و صبر کنید تا سرویس بالا بیاید. سپس در مرورگر ویزارد اولیه را کامل کنید.</p>
 <h3 id="مثال-واقعی">مثال واقعی</h3>
 <p>فرض کنید IP سرور شما <code>203.0.113.10</code> است:</p>
-<ol><li>نصب را تمام کنید.</li><li>بروید به <code>http://203.0.113.10:9000/</code></li><li>ویزارد: یوزر/رمز وب، توکن ربات، اتصال پاسارگارد را پر کنید.</li><li>Finish بزنید و با همان یوزر وارد پنل شوید.</li></ol>
-<h2 id="اگر-پروژه-از-قبل-هست">اگر پروژه از قبل هست</h2>
+<ol><li>نصب را تمام کنید.</li><li>بروید به <code>http://203.0.113.10:9000/</code></li><li>در ویزارد: یوزر/رمز وب، توکن ربات تلگرام، و اتصال پاسارگارد را پر کنید.</li><li><strong>Finish</strong> بزنید و با همان یوزر وارد پنل شوید.</li><li>پاورقی منو را ببینید: برای حساب ریشه معمولاً برچسب <strong>مالک</strong> است (نقش نشست همچنان <code>admin</code>).</li></ol>
+<div class="guide-callout guide-callout--info"><strong class="guide-callout-label">راهنما</strong><p>پورت پیش‌فرض وب‌پنل <strong>۹۰۰۰</strong> است. اگر پشت فایروال یا کلود هستید، این پورت باید باز باشد (یا از ریورس‌پراکسی با دامنه استفاده کنید).</p></div>
+<h2 id="اگر-پروژه-از-قبل-روی-سرور-هست">اگر پروژه از قبل روی سرور هست</h2>
 <pre><code class="language-bash">cd PGClockBot
 bash get.sh
 # یا
 bash pgclock.sh</code></pre>
-<p>آپدیت: منو → <strong>Update</strong> (فایل <code>.env</code> حفظ می‌شود).</p>
+<p>آپدیت: منو → <strong>Update</strong>. فایل <code>.env</code> و دیتابیس حفظ می‌شوند؛ آپدیت دستی با کپی‌پیست پوشه توصیه نمی‌شود.</p>
+<h2 id="ویزارد-اولیه-چه-چیزهایی-میپرسد؟">ویزارد اولیه چه چیزهایی می‌پرسد؟</h2>
+<p>معمولاً این‌ها را یک‌بار تنظیم می‌کنید:</p>
+<table><thead><tr><th>مورد</th><th>چرا لازم است؟</th></tr></thead><tbody><tr><td>یوزر و رمز وب</td><td>ورود به پنل مدیریت</td></tr><tr><td>توکن ربات</td><td>اتصال به تلگرام</td></tr><tr><td>آدرس و اعتبار پاسارگارد</td><td>ساخت سرویس VPN بعد از خرید</td></tr><tr><td>تنظیمات پایه فروشگاه</td><td>شروع کار بدون پنل خالی</td></tr></tbody></table>
+<p>اگر ویزارد را نیمه‌کاره رها کنید، ممکن است فقط با لینک یک‌بارمصرف یا از خود سرور قابل باز شدن باشد.</p>
 <h2 id="اولین-کار-بعد-از-نصب">اولین کار بعد از نصب</h2>
-<ol><li>در <strong>تنظیمات ربات</strong> متن خوش‌آمد و دکمه‌ها را ببینید.</li><li>یک <strong>پلن</strong> بسازید و به تمپلیت پاسارگارد وصل کنید.</li><li>روش پرداخت (مثلاً کارت‌به‌کارت) را در تنظیمات پرداخت پر کنید.</li><li>در تلگرام به ربات <code>/start</code> بزنید و خرید آزمایشی کنید.</li></ol>
+<ol><li>در <strong>تنظیمات ربات</strong> (<code>/settings</code>) متن خوش‌آمد و دکمه‌های منو را ببینید و در صورت نیاز فارسی‌سازی کنید.</li><li>یک <strong>پلن</strong> بسازید و به تمپلیت/گروه پاسارگارد وصل کنید.</li><li>روش پرداخت (مثلاً کارت‌به‌کارت) را در تنظیمات پرداخت پر کنید.</li><li>در تلگرام به ربات <code>/start</code> بزنید و یک خرید آزمایشی بگیرید.</li><li>رسید آزمایشی را از <a href="../finance/index.html">مدیریت مالی</a> تأیید کنید و ببینید سرویس ساخته می‌شود.</li><li>اگر منو محدود به نظر می‌رسد، <a href="../roles/index.html">نقش‌ها</a> را بخوانید — معمولاً دسترسی است نه باگ.</li></ol>
+<h3 id="چک-سلامت-سریع">چک سلامت سریع</h3>
+<pre><code class="language-bash">bash pgclock.sh status
+bash pgclock.sh service
+curl http://127.0.0.1:9000/health</code></pre>
+<p>اگر <code>health</code> جواب ندهد، اول سرویس و پورت را درست کنید؛ بعد سراغ تنظیمات فروشگاه بروید.</p>
 <div class="guide-callout guide-callout--error"><strong class="guide-callout-label">خطای رایج</strong><p><strong>مشکل:</strong> صفحهٔ وب باز نمی‌شود یا Timeout می‌دهد.</p>
 <p><strong>علت رایج:</strong> فایروال پورت ۹۰۰۰ را بسته، یا سرویس بالا نیست.</p>
 <p><strong>راه حل:</strong></p>
@@ -286,6 +296,7 @@ sudo ufw allow 9000/tcp</code></pre></div>
 <div class="guide-callout guide-callout--error"><strong class="guide-callout-label">خطای رایج</strong><p><strong>مشکل:</strong> ویزارد می‌گوید فقط با لینک یک‌بارمصرف.</p>
 <p><strong>علت رایج:</strong> از اینترنت بدون توکن gate باز کرده‌اید.</p>
 <p><strong>راه حل:</strong> روی سرور <code>bash pgclock.sh status</code> بزنید و لینک کامل را کپی کنید، یا از خود سرور با <code>127.0.0.1</code> باز کنید.</p></div>
+<div class="guide-callout guide-callout--tip"><strong class="guide-callout-label">نکته</strong><p>قبل از هر آپدیت بزرگ، از <a href="../settings-panel/index.html">تنظیمات وب پنل</a> بکاپ بگیرید. بکاپ/آپدیت/SSL فقط برای مالک در تب‌های <code>/settings</code> است؛ نقش‌های دیگر برای رمز حساب از <code>/security</code> استفاده می‌کنند.</p></div>
           </div>
 
           <nav class="guide-pager" aria-label="صفحه قبل و بعد">

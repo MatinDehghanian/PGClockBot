@@ -261,10 +261,11 @@
 
           <div class="guide-content">
             <h2 id="راهنما-را-روی-دامنه-خودتان-بالا-بیاورید">راهنما را روی دامنه خودتان بالا بیاورید</h2>
-<p>خروجی آماده در پروژه اینجاست:</p>
+<p>خروجی آمادهٔ راهنما در پروژه اینجاست:</p>
 <p><code>app/web/static/guide/</code></p>
-<p>همین پوشه یک سایت استاتیک کامل است (HTML/CSS/JS/فونت).</p>
-<h2 id="روش-۱--آپلود-روی-هاست">روش ۱ — آپلود روی هاست</h2>
+<p>همین پوشه یک سایت استاتیک کامل است (HTML/CSS/JS/فونت). می‌توانید همان را روی دامنه docs خودتان سرو کنید تا لینک‌های <strong>؟</strong> پنل به آنجا بروند.</p>
+<p>این کار معمولاً مال <strong>مالک/ادمین</strong> سرور است.</p>
+<h2 id="روش-۱--ساخت-و-آپلود-روی-هاست">روش ۱ — ساخت و آپلود روی هاست</h2>
 <ol><li>داخل پروژه:</li></ol>
 <pre><code class="language-bash">python scripts/build_guide.py</code></pre>
 <ol><li>محتویات <code>app/web/static/guide/</code> را روی هاست دامنه خودتان بریزید.</li><li>دامنه را به همان پوشه اشاره دهید؛ مثلاً <code>https://docs.example.com</code></li></ol>
@@ -278,13 +279,23 @@
     try_files $uri $uri/ $uri/index.html =404;
   }
 }</code></pre>
-<p>محتویات <code>guide/</code> را در <code>/var/www/pgclock-docs</code> کپی کنید.</p>
+<p>محتویات <code>guide/</code> را در <code>/var/www/pgclock-docs</code> کپی کنید. برای HTTPS از certbot یا گواهی خودتان جلوی همین سرور استفاده کنید.</p>
 <h2 id="وصل-کردن-آیکون-؟-پنل-به-دامنه-شما">وصل کردن آیکون ؟ پنل به دامنه شما</h2>
 <p>در <code>.env</code> سرور ربات:</p>
 <pre><code class="language-env">DOCS_BASE_URL=&quot;https://docs.example.com&quot;</code></pre>
 <p>سرویس را ری‌استارت کنید. از این به بعد لینک‌های راهنمای داخل پنل به دامنه شما می‌روند.</p>
-<div class="guide-callout guide-callout--tip"><strong class="guide-callout-label">نکته</strong><p>اگر <code>DOCS_BASE_URL</code> خالی باشد، همان <code>/help</code> روی سرور کاربر استفاده می‌شود.</p></div>
-<div class="guide-callout guide-callout--info"><strong class="guide-callout-label">راهنما</strong><p>بعد از هر تغییر در فایل‌های <code>docs/guide/pages/</code> باید دوباره <code>python scripts/build_guide.py</code> را اجرا کنید و خروجی را هم در گیت/سرور docs آپدیت کنید.</p></div>
+<div class="guide-callout guide-callout--tip"><strong class="guide-callout-label">نکته</strong><p>اگر <code>DOCS_BASE_URL</code> خالی باشد، همان <code>/help</code> روی سرور کاربر استفاده می‌شود — برای خیلی از نصب‌ها کافی است و نیازی به دامنه جدا نیست.</p></div>
+<h2 id="چه-زمانی-دامنه-جدا-لازم-است؟">چه زمانی دامنه جدا لازم است؟</h2>
+<ul><li>می‌خواهید راهنما حتی وقتی پنل پشت VPN/فایروال است باز باشد</li><li>چند پنل به یک منبع آموزش مشترک وصل شوند</li><li>می‌خواهید docs را جدا از آپدیت ربات کش/CDN کنید</li></ul>
+<h2 id="چکلیست-بعد-از-انتشار">چک‌لیست بعد از انتشار</h2>
+<ol><li><code>https://docs.example.com/</code> باز می‌شود؟</li><li>یک صفحه مثل <code>/start/</code> و <code>/roles/</code> ۲۰۰ می‌دهد؟</li><li>در پنل، لینک ؟ به همان دامنه می‌رود؟</li><li>بعد از تغییر مارک‌داون، دوباره <code>build_guide.py</code> زده‌اید و خروجی را آپلود کرده‌اید؟</li></ol>
+<h3 id="اشتباهات-رایج">اشتباهات رایج</h3>
+<table><thead><tr><th>علامت</th><th>احتمال</th><th>کار بعدی</th></tr></thead><tbody><tr><td>پنل هنوز <code>/help</code> می‌رود</td><td><code>DOCS_BASE_URL</code> ست نشده</td><td><code>.env</code> + ری‌استارت</td></tr><tr><td>زیرصفحه ۴۰۴</td><td><code>try_files</code> ناقص</td><td>نمونه Nginx بالا</td></tr><tr><td>متن قدیمی</td><td>بیلد نزده‌اید</td><td><code>build_guide.py</code> دوباره</td></tr></tbody></table>
+<div class="guide-callout guide-callout--info"><strong class="guide-callout-label">راهنما</strong><p>بعد از هر تغییر در فایل‌های <code>docs/guide/pages/</code> باید دوباره <code>python scripts/build_guide.py</code> را اجرا کنید و خروجی را هم در گیت/سرور docs آپدیت کنید. فقط ویرایش مارک‌داون بدون بیلد، سایت استاتیک را عوض نمی‌کند.</p></div>
+<div class="guide-callout guide-callout--error"><strong class="guide-callout-label">خطای رایج</strong><p><strong>مشکل:</strong> دامنه باز است ولی لینک‌های داخل پنل هنوز <code>/help</code> می‌روند.</p>
+<p><strong>علت رایج:</strong> <code>DOCS_BASE_URL</code> ذخیره/ری‌استارت نشده یا اسلش انتهایی/پروتکل اشتباه است.</p>
+<p><strong>راه حل:</strong> مقدار را با <code>https://</code> و بدون مسیر اضافه بررسی کنید؛ سرویس ربات را ری‌استارت کنید؛ یک‌بار کش مرورگر را خالی کنید.</p></div>
+<div class="guide-callout guide-callout--warn"><strong class="guide-callout-label">هشدار</strong><p>روی هاست، <code>try_files</code> باید برای مسیرهای پوشه‌ای مثل <code>/plans/</code> فایل <code>index.html</code> را پیدا کند. بدون آن، رفرش مستقیم زیرصفحه‌ها ۴۰۴ می‌دهد.</p></div>
           </div>
 
           <nav class="guide-pager" aria-label="صفحه قبل و بعد">

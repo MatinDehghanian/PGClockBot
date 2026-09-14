@@ -5,24 +5,46 @@
   var toggle = document.getElementById('guide-menu-toggle');
   var closeBtn = document.getElementById('guide-side-close');
   var scrim = document.getElementById('guide-scrim');
+  var sidebar = document.getElementById('guide-sidebar');
 
   function setNav(open) {
-    shell.classList.toggle('nav-open', !!open);
+    open = !!open;
+    shell.classList.toggle('nav-open', open);
     if (scrim) {
       if (open) scrim.removeAttribute('hidden');
       else scrim.setAttribute('hidden', '');
     }
     if (toggle) toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
     document.documentElement.style.overflow = open ? 'hidden' : '';
+    document.body.style.overflow = open ? 'hidden' : '';
   }
 
   if (toggle) {
-    toggle.addEventListener('click', function () {
+    toggle.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
       setNav(!shell.classList.contains('nav-open'));
     });
   }
-  if (closeBtn) closeBtn.addEventListener('click', function () { setNav(false); });
-  if (scrim) scrim.addEventListener('click', function () { setNav(false); });
+  if (closeBtn) {
+    closeBtn.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      setNav(false);
+    });
+  }
+  if (scrim) {
+    scrim.addEventListener('click', function (e) {
+      e.preventDefault();
+      setNav(false);
+    });
+  }
+  /* Clicks inside the drawer must not fall through to the scrim/main layer */
+  if (sidebar) {
+    sidebar.addEventListener('click', function (e) {
+      e.stopPropagation();
+    });
+  }
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') setNav(false);
   });
