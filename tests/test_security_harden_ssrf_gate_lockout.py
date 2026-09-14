@@ -84,27 +84,27 @@ class PanelRedirectHostInjectionTests(unittest.TestCase):
 
 class LoginLockoutPersistenceTests(unittest.TestCase):
     def test_failures_survive_reload(self):
-        from app.api import app as api
+        from app.api import login_guard as lg
 
         with tempfile.TemporaryDirectory() as tmp:
             lock = Path(tmp) / "login_lockouts.json"
-            with patch.object(api, "_LOGIN_LOCK_FILE", lock), patch.object(
-                api, "DATA_DIR", Path(tmp)
+            with patch.object(lg, "_LOGIN_LOCK_FILE", lock), patch.object(
+                lg, "DATA_DIR", Path(tmp)
             ):
-                api._LOGIN_FAILURES.clear()
-                for _ in range(api._LOGIN_MAX_FAILURES):
-                    api._login_fail("203.0.113.9")
-                self.assertTrue(api._login_blocked("203.0.113.9"))
+                lg._LOGIN_FAILURES.clear()
+                for _ in range(lg._LOGIN_MAX_FAILURES):
+                    lg.login_fail("203.0.113.9")
+                self.assertTrue(lg.login_blocked("203.0.113.9"))
                 self.assertTrue(lock.is_file())
                 data = json.loads(lock.read_text(encoding="utf-8"))
                 self.assertIn("203.0.113.9", data)
                 # Simulate process restart: clear memory and reload
-                api._LOGIN_FAILURES.clear()
-                self.assertFalse(api._login_blocked("203.0.113.9"))
-                api._login_lock_load()
-                self.assertTrue(api._login_blocked("203.0.113.9"))
-                api._login_success("203.0.113.9")
-                self.assertFalse(api._login_blocked("203.0.113.9"))
+                lg._LOGIN_FAILURES.clear()
+                self.assertFalse(lg.login_blocked("203.0.113.9"))
+                lg._login_lock_load()
+                self.assertTrue(lg.login_blocked("203.0.113.9"))
+                lg.login_success("203.0.113.9")
+                self.assertFalse(lg.login_blocked("203.0.113.9"))
 
 
 class CardAutoTimestampTests(unittest.TestCase):
