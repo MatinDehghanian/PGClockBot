@@ -128,8 +128,8 @@ class DeleteReasonExtractionTests(unittest.TestCase):
 
     def test_users_delete_uses_helper(self):
         src = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
-        self.assertIn("extract_delete_reason", src)
-        self.assertIn("delete_reason_too_short", src)
+        self.assertIn("resolve_delete_reason", src)
+        self.assertNotIn("delete_reason_too_short", src)
 
     def test_panel_js_root_fixes_delete_reason(self):
         js = (ROOT / "app/web/static/panel.js").read_text(encoding="utf-8")

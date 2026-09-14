@@ -272,9 +272,6 @@
         data-confirm="نمایندگی و ادمین پاسارگارد متصل حذف شوند؟ علت برای کاربر ارسال می‌شود."
         data-confirm-title="حذف نمایندگی (+ ادمین پاسارگارد)"
         data-confirm-danger="1"
-        data-confirm-reason="1"
-        data-confirm-reason-label="علت حذف نمایندگی"
-        data-confirm-reason-name="reason"
         data-confirm-label="حذف نمایندگی و ادمین">
     <button class="btn btn-danger" type="submit">حذف نمایندگی</button>
   </form>
@@ -293,9 +290,6 @@
         data-confirm-title="حذف کامل (+ ادمین پاسارگارد)"
         data-confirm-danger="1"
         {% if (user.wallet_balance or 0) > 0 %}data-confirm-warn="1"{% endif %}
-        data-confirm-reason="1"
-        data-confirm-reason-label="علت حذف کامل کاربر"
-        data-confirm-reason-name="reason"
         data-confirm-label="حذف کامل">
     <button class="btn btn-danger" type="submit">حذف کامل کاربر</button>
   </form>

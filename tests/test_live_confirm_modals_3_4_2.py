@@ -45,7 +45,7 @@ class ConfirmModalTests(unittest.TestCase):
         self.assertNotIn("confirm(", USERS)
         # Reason only on delete, not block
         delete = USERS.split("/users/{{ u.id }}/delete", 1)[1].split("</form>", 1)[0]
-        self.assertIn("data-confirm-reason", delete)
+        self.assertNotIn("data-confirm-reason", delete)
         block = USERS.split("/users/{{ u.id }}/block", 1)[1].split("</form>", 1)[0]
         self.assertNotIn("data-confirm-reason", block)
         # Role change moved into edit modal — not on list row
@@ -55,7 +55,7 @@ class ConfirmModalTests(unittest.TestCase):
         self.assertNotIn("prompt(", RESELLERS)
         self.assertNotIn("confirm(", RESELLERS)
         self.assertIn("data-confirm=", RESELLERS)
-        self.assertIn("data-confirm-reason", RESELLERS)
+        self.assertNotIn("data-confirm-reason", RESELLERS)
 
     def test_templates_drop_native_confirm_for_table_deletes(self):
         for rel in (

@@ -1041,15 +1041,6 @@ def register_pg_pages(
             if denied is not None:
                 return denied
             pg, _ = await _staff_pg(session, staff)
-            form = await request.form()
-            phrase = str(form.get("confirm_phrase") or "").strip()
-            info = await pg.get_user_by_id(user_id)
-            expected = str((info or {}).get("username") or user_id).strip()
-            if not phrase or phrase != expected:
-                return RedirectResponse(
-                    f"/pg/users?err={_q('برای حذف دائمی باید نام کاربری را دقیق تایپ کنید')}",
-                    status_code=303,
-                )
             await pg.delete_user_by_id(user_id)
             from app.services.bot_user_admin import detach_local_services_for_pg_user
 
@@ -2368,14 +2359,9 @@ def register_pg_pages(
         from app.services.resellers import notify_reseller_revoked, revoke_reseller
 
         form = await request.form()
-        from app.services.delete_reason import delete_reason_too_short, extract_delete_reason
+        from app.services.delete_reason import resolve_delete_reason
 
-        reason = extract_delete_reason(form)
-        if delete_reason_too_short(reason):
-            return RedirectResponse(
-                f"/pg/admins?err={_q('علت حذف ادمین الزامی است (حداقل ۳ کاراکتر)')}",
-                status_code=303,
-            )
+        reason = resolve_delete_reason(form)
 
         pg_u = (username or "").strip()
         if not pg_u:

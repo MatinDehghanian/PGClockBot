@@ -91,7 +91,7 @@ class UiWiringTests(unittest.TestCase):
         self.assertIn("/users/{{ u.id }}/block", users)
         self.assertIn("/users/{{ u.id }}/delete", users)
         delete = users.split("/users/{{ u.id }}/delete", 1)[1].split("</form>", 1)[0]
-        self.assertIn("data-confirm-reason", delete)
+        self.assertNotIn("data-confirm-reason", delete)
         block = users.split("/users/{{ u.id }}/block", 1)[1].split("</form>", 1)[0]
         self.assertNotIn("data-confirm-reason", block)
         # Role is edited in modal body, not list

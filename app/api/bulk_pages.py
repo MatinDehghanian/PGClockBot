@@ -74,11 +74,9 @@ def register_bulk_pages(
             ok, fail = await bulk_renew_users(session, staff, ids)
             noun = "تمدید"
         elif action == "delete":
-            from app.services.delete_reason import delete_reason_too_short, extract_delete_reason
+            from app.services.delete_reason import resolve_delete_reason
 
-            reason = extract_delete_reason(form)
-            if delete_reason_too_short(reason):
-                return redirect_bulk(return_to, err="علت حذف الزامی است (حداقل ۳ کاراکتر)")
+            reason = resolve_delete_reason(form)
             ok, fail = await bulk_delete_users(session, staff, ids, reason=reason)
             noun = "حذف"
         else:
@@ -312,19 +310,15 @@ def register_bulk_pages(
         )
         if not ids:
             return redirect_bulk(return_to, err="هیچ نماینده‌ای انتخاب نشده")
-        from app.services.delete_reason import delete_reason_too_short, extract_delete_reason
+        from app.services.delete_reason import resolve_delete_reason
 
-        reason = extract_delete_reason(form)
+        reason = resolve_delete_reason(form)
         if action == "delete_reseller":
-            if delete_reason_too_short(reason):
-                return redirect_bulk(return_to, err="علت حذف الزامی است (حداقل ۳ کاراکتر)")
             ok, fail = await bulk_revoke_resellers(session, staff, ids, reason=reason)
             return _bulk_result(
                 return_to, ok, fail, done="نمایندگی حذف شد", none="هیچ نمایندگی حذف نشد"
             )
         if action == "delete_user":
-            if delete_reason_too_short(reason):
-                return redirect_bulk(return_to, err="علت حذف الزامی است (حداقل ۳ کاراکتر)")
             ok, fail = await bulk_delete_reseller_users(session, staff, ids, reason=reason)
             return _bulk_result(
                 return_to, ok, fail, done="کاربر حذف شد", none="هیچ کاربری حذف نشد"
@@ -455,13 +449,6 @@ def register_bulk_pages(
             return redirect_bulk(return_to, err="هیچ کاربری انتخاب نشده")
         if action not in {"disable", "enable", "reset", "revoke", "delete"}:
             return redirect_bulk(return_to, err="عملیات نامعتبر")
-        if action == "delete":
-            phrase = str(form.get("confirm_phrase") or "").strip()
-            if phrase != "حذف":
-                return redirect_bulk(
-                    return_to,
-                    err="برای حذف گروهی باید عبارت «حذف» را دقیق تایپ کنید",
-                )
         ok, fail = await bulk_pg_user_action(session, staff, ids, action)
         labels = {
             "disable": "کاربر غیرفعال شد",

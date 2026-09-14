@@ -1,17 +1,19 @@
-"""Shared helpers for irreversible delete reason fields."""
+"""Shared helpers for irreversible delete reason fields.
+
+Pre-v10.1.14 panel deletes use a simple confirm dialog (no typed reason/phrase).
+Server still accepts an optional reason for audit/notify; otherwise a default
+is used so deletes never fail on an empty reason field.
+"""
 
 from __future__ import annotations
 
 from typing import Any, Iterable, Mapping, MutableMapping
 
+DEFAULT_DELETE_REASON = "حذف از پنل"
+
 
 def _iter_form_values(form: Mapping[str, Any] | MutableMapping[str, Any], key: str) -> Iterable[Any]:
-    """Yield every value for ``key`` — Starlette/FormData ``.get()`` is last-wins.
-
-    Empty placeholders (``<input name=reason value="">``) plus a later filled
-    field are fine, but the reverse order (filled then empty) made
-    ``form.get("reason")`` return ``""`` and reject a valid delete reason.
-    """
+    """Yield every value for ``key`` — Starlette/FormData ``.get()`` is last-wins."""
     getlist = getattr(form, "getlist", None)
     if callable(getlist):
         try:
@@ -37,12 +39,7 @@ def _iter_form_values(form: Mapping[str, Any] | MutableMapping[str, Any], key: s
 
 
 def extract_delete_reason(form: Mapping[str, Any] | MutableMapping[str, Any], *names: str) -> str:
-    """Return the first non-empty trimmed reason from preferred form keys.
-
-    Panel JS writes ``reason`` (or a custom ``data-confirm-reason-name``) and
-    also mirrors ``confirm_reason``. Scan **all** values per key so a trailing
-    empty ``reason=`` cannot shadow a confirmed value.
-    """
+    """Return the first non-empty trimmed reason from preferred form keys."""
     keys = names or ("reason", "confirm_reason")
     for key in keys:
         for raw in _iter_form_values(form, key):
@@ -54,5 +51,16 @@ def extract_delete_reason(form: Mapping[str, Any] | MutableMapping[str, Any], *n
     return ""
 
 
+def resolve_delete_reason(
+    form: Mapping[str, Any] | MutableMapping[str, Any],
+    *names: str,
+    default: str = DEFAULT_DELETE_REASON,
+) -> str:
+    """Optional reason for deletes — never blocks when empty."""
+    text = extract_delete_reason(form, *names)
+    return text or default
+
+
 def delete_reason_too_short(reason: str, *, minimum: int = 3) -> bool:
+    """Legacy helper kept for tests; panel deletes no longer enforce this."""
     return len((reason or "").strip()) < int(minimum)
