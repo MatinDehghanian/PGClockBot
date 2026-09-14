@@ -82,6 +82,17 @@ class GuideCatalogTests(unittest.TestCase):
         self.assertIn("help_docs", src)
         self.assertIn("path.startswith(\"/help\")", src)
 
+    def test_sidebar_has_help_link(self):
+        base = (ROOT / "app" / "web" / "templates" / "base.html").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("nav-section-help", base)
+        self.assertIn('href="/help/"', base)
+        self.assertIn("راهنمای پنل", base)
+        css = (ROOT / "app" / "web" / "static" / "panel.css").read_text(encoding="utf-8")
+        self.assertIn(".nav-section-help", css)
+        self.assertIn("margin-top: auto", css)
+
 
 if __name__ == "__main__":
     unittest.main()

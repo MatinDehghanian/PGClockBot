@@ -5402,9 +5402,32 @@ form.settings-form > .actions.sticky-actions,
   border: 1px solid color-mix(in srgb, var(--pg-line) 35%, var(--border));
   background: transparent;
 }
-/* Air below PasarGuard box before sidebar footer — match bot↔pg gap (--space-2) */
-.side-nav > .nav-section-pg:last-child {
+/* Air below last panel box before sidebar footer — match bot↔pg gap (--space-2) */
+.side-nav > .nav-section-pg:last-child,
+.side-nav > .nav-section-help:last-child {
   margin-bottom: var(--space-1);
+}
+.nav-section-help {
+  margin-top: auto;
+  border: 1px solid color-mix(in srgb, var(--brand) 28%, var(--border));
+  background: transparent;
+}
+.nav-label-help {
+  color: var(--brand);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.nav-item-help.active,
+.nav-item-help.active:hover {
+  background: color-mix(in srgb, var(--brand) 16%, var(--muted));
+  border-color: color-mix(in srgb, var(--brand) 28%, transparent);
+  color: var(--foreground);
+}
+.nav-item-help.active .nav-ico { color: var(--brand); }
+.nav-item-help:hover {
+  background: color-mix(in srgb, var(--brand) 10%, var(--bg-hover));
+  border-color: color-mix(in srgb, var(--brand) 22%, var(--border));
+  color: var(--foreground);
 }
 .nav-label-bot {
   color: var(--bot-line);
@@ -5418,6 +5441,7 @@ form.settings-form > .actions.sticky-actions,
 }
 .nav-section-bot .nav-ico { color: var(--bot-line); }
 .nav-section-pg .nav-ico { color: var(--pg-line); }
+.nav-section-help .nav-ico { color: var(--brand); }
 .nav-item-bot.active,
 .nav-item-bot.active:hover {
   background: var(--bot-fill);
@@ -6791,10 +6815,16 @@ html[data-theme="light"] .nav-section-pg {
   border-color: color-mix(in srgb, var(--pg-line) 28%, var(--border));
   background: transparent;
 }
+html[data-theme="light"] .nav-section-help {
+  border-color: color-mix(in srgb, var(--brand) 24%, var(--border));
+  background: transparent;
+}
 html[data-theme="light"] .nav-label-bot,
 html[data-theme="light"] .nav-section-bot .nav-ico { color: var(--bot-line); }
 html[data-theme="light"] .nav-label-pg,
 html[data-theme="light"] .nav-section-pg .nav-ico { color: var(--pg-line); }
+html[data-theme="light"] .nav-label-help,
+html[data-theme="light"] .nav-section-help .nav-ico { color: var(--brand); }
 html[data-theme="light"] .nav-item-bot.active,
 html[data-theme="light"] .nav-item-bot.active:hover {
   background: var(--bot-fill);
