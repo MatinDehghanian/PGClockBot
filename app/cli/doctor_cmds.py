@@ -128,6 +128,31 @@ def cmd_doctor(ctx: CliContext) -> int:
     else:
         ok("WEB_SECRET set")
 
+    # Web Owner (panel login) and ADMIN_IDS (Telegram Owner) are independent stores.
+    try:
+        from app.config import get_settings
+        from app.services.web_auth import load_web_admin
+
+        web = load_web_admin()
+        has_web_pw = bool((web.get("password") or "").strip())
+        admin_ids = list(get_settings().admin_ids or [])
+        if has_web_pw and not admin_ids:
+            warn(
+                "Web Owner is configured but ADMIN_IDS is empty — "
+                "Telegram Owner tools will deny until ADMIN_IDS is set"
+            )
+        elif admin_ids and not has_web_pw:
+            warn(
+                "ADMIN_IDS is set but Web Owner password is empty — "
+                "panel login may be unavailable"
+            )
+        elif has_web_pw and admin_ids:
+            ok("Web Owner + ADMIN_IDS both configured (independent identity stores)")
+        else:
+            warn("Neither Web Owner password nor ADMIN_IDS is configured yet")
+    except Exception as e:
+        warn(f"Owner identity check skipped: {e}")
+
     header("doctor summary")
     if issues == 0:
         ok("no critical issues")

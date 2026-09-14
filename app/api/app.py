@@ -149,6 +149,19 @@ def render(request: Request, name: str, context: dict | None = None, status_code
     ctx.setdefault("flash_err", None)
     ctx.setdefault("open_edit", None)
     ctx.setdefault("app_version", local_version())
+    try:
+        from app.services.csrf import ensure_csrf_token
+
+        ctx.setdefault("csrf_token", ensure_csrf_token(request))
+    except Exception:
+        ctx.setdefault("csrf_token", "")
+    nonce = getattr(request.state, "csp_nonce", None)
+    if not nonce:
+        import secrets as _secrets
+
+        nonce = _secrets.token_urlsafe(16)
+        request.state.csp_nonce = nonce
+    ctx.setdefault("csp_nonce", nonce)
     if "pwa_name" not in ctx:
         try:
             from app.services.pwa import panel_display_name
@@ -179,7 +192,25 @@ def render(request: Request, name: str, context: dict | None = None, status_code
             ctx["identity"] = hierarchy_identity(ctx.get("staff"))
         except Exception:
             ctx["identity"] = {}
-    return templates.TemplateResponse(request, name, ctx, status_code=status_code)
+    response = templates.TemplateResponse(request, name, ctx, status_code=status_code)
+    try:
+        from app.services.csrf import CSRF_COOKIE, ensure_csrf_token
+
+        token = ensure_csrf_token(request)
+        if getattr(request.state, "csrf_token_set", False) or CSRF_COOKIE not in request.cookies:
+            response.set_cookie(
+                CSRF_COOKIE,
+                token,
+                httponly=False,  # panel.js reads meta/cookie for XHR; value is not a secret session
+                samesite="strict",
+                secure=_cookie_secure(request),
+                max_age=60 * 60 * 12,
+                path="/",
+            )
+            request.state.csrf_token_set = False
+    except Exception:
+        pass
+    return response
 
 
 from app.api.safe_next import safe_internal_next
@@ -750,7 +781,11 @@ def create_api_app(lifespan=None) -> FastAPI:
 
     @app.middleware("http")
     async def csrf_origin_guard(request: Request, call_next):
-        """Reject cross-site unsafe requests that carry a session cookie (defense-in-depth)."""
+        """Reject cross-site unsafe requests that carry a session cookie (defense-in-depth).
+
+        Authenticated panel mutations also require a double-submit CSRF token
+        (cookie ``csrf`` matching form field / ``X-CSRF-Token``).
+        """
         if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
             has_session = bool(request.cookies.get("session") or request.cookies.get("setup_gate"))
             if has_session:
@@ -782,6 +817,24 @@ def create_api_app(lifespan=None) -> FastAPI:
                         pass
                 if not allowed:
                     return HTMLResponse("CSRF rejected", status_code=403)
+                # Token check for logged-in panel sessions only — never for /login
+                # (stale/expired session cookies must not block re-authentication).
+                path_now = request.url.path
+                if request.cookies.get("session") and path_now not in {
+                    "/login",
+                    "/setup",
+                    "/setup/save",
+                }:
+                    from app.services.csrf import (
+                        CSRF_COOKIE,
+                        csrf_tokens_match,
+                        extract_csrf_from_request,
+                    )
+
+                    cookie_tok = (request.cookies.get(CSRF_COOKIE) or "").strip()
+                    submitted = await extract_csrf_from_request(request)
+                    if not csrf_tokens_match(cookie_tok, submitted):
+                        return HTMLResponse("CSRF token rejected", status_code=403)
         path = request.url.path
         if request.method == "POST" and path in {"/login", "/setup", "/setup/save", "/"}:
             if not content_length_ok(request.headers.get("content-length"), PUBLIC_FORM_MAX_BODY_BYTES):
@@ -810,6 +863,10 @@ def create_api_app(lifespan=None) -> FastAPI:
 
     @app.middleware("http")
     async def security_headers(request: Request, call_next):
+        import secrets as _secrets
+
+        if not getattr(request.state, "csp_nonce", None):
+            request.state.csp_nonce = _secrets.token_urlsafe(16)
         response = await call_next(request)
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         is_miniapp = request.url.path.startswith("/miniapp")
@@ -821,13 +878,18 @@ def create_api_app(lifespan=None) -> FastAPI:
         response.headers.setdefault("Referrer-Policy", "same-origin")
         response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
         response.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
-        # Panel pages only; keep CSP moderate so inline preview/scripts still work
+        # Panel pages: nonce + transitional unsafe-inline (many page templates still
+        # ship inline scripts). Prefer nonce on new scripts; drop unsafe-inline later.
         if not request.url.path.startswith("/static") and not request.url.path.startswith("/media"):
-            script_src = "script-src 'self' 'unsafe-inline'"
+            nonce = getattr(request.state, "csp_nonce", "") or ""
+            nonce_src = f" 'nonce-{nonce}'" if nonce else ""
+            script_src = f"script-src 'self'{nonce_src} 'unsafe-inline'"
             frame_ancestors = "frame-ancestors 'none'"
             # Mini App needs Telegram WebApp SDK (+ Telegram may embed the sheet)
             if is_miniapp:
-                script_src = "script-src 'self' 'unsafe-inline' https://telegram.org"
+                script_src = (
+                    f"script-src 'self'{nonce_src} 'unsafe-inline' https://telegram.org"
+                )
                 frame_ancestors = (
                     "frame-ancestors 'self' https://web.telegram.org https://telegram.org"
                 )
@@ -1491,6 +1553,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             return RedirectResponse("/", status_code=303)
         err = request.query_params.get("err")
         # With an error (often after cookie clear), always show the form.
+        clear_stale_session = False
         if not err:
             sess = get_session_user(request)
             if sess:
@@ -1500,6 +1563,9 @@ def create_api_app(lifespan=None) -> FastAPI:
                     return _panel_redirect(request, "/pg")
                 # Reseller / sub-admin: web dashboard
                 return _panel_redirect(request, "/home")
+            # Cookie present but invalid/expired — drop it so re-login is not CSRF-blocked.
+            if request.cookies.get("session"):
+                clear_stale_session = True
         page = render(
             request,
             "login.html",
@@ -1509,11 +1575,10 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "flash_ok": request.query_params.get("ok"),
             },
         )
-        if err:
-            # Belt-and-suspenders: drop any leftover session when showing an auth error.
+        if err or clear_stale_session:
+            # Belt-and-suspenders: drop leftover session when showing the login form.
             page.delete_cookie("session", path="/")
         return page
-
     @app.post("/login")
     async def login_submit(
         request: Request,
