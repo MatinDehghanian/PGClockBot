@@ -80,3 +80,4 @@ tests/test_v4_1_1_reseller_pg_role_access.py
 # the "Security tests" CI workflow) on every push/PR — independent of the
 # UI/version-pin tests that are noisy and not security-relevant.
 # Whenever you fix a security bug or add an access-control / tenant-isolation
+tests/test_phase0_phase1_hardening.py

@@ -26,8 +26,7 @@ class CatalogAclTests(unittest.TestCase):
             self.assertNotIn(key, full)
         titles = [t for _, t, *_ in shop_notify_catalog(["orders", "shop_settings", "plans"])]
         self.assertTrue(any("سفارش" in t or "اشتراک" in t for t in titles))
-        # Core shop keys are soft-injected via with_shop_settings — ticket ACL still
-        # receives payment/order notify keys when any shop perms are present.
+        # Explicit shop keys only — no soft-inject of unrelated notify groups.
         ticket_only = shop_notify_allowed_keys(["tickets", "shop_settings", "plans"])
         self.assertIn("notify_new_ticket", ticket_only)
         self.assertNotIn("notify_account_edits", ticket_only)

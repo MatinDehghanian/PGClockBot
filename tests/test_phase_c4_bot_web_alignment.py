@@ -62,8 +62,9 @@ class CrossPlatformShopParityTests(unittest.TestCase):
         keys = shop_menu_keys(profile=profile)
         self.assertIn("dashboard", keys)
         self.assertIn("tickets", keys)
-        # with_shop_settings adds core keys
-        self.assertIn("orders", keys)
+        # Intentional subsets must stay subsets (no full-shop soft-inject).
+        self.assertNotIn("orders", keys)
+        self.assertNotIn("plans", keys)
         self.assertNotIn("stats", keys)
 
     def test_pg_staff_web_has_empty_shop(self):
