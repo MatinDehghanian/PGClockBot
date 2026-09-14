@@ -20,8 +20,8 @@ from app.services.resellers import (
     SHOP_SETTINGS_DOMAIN_REDIRECTS,
     complete_reseller_setup,
 )
-from app.services.users import (
 from app.services.secret_box import reveal_bot_token
+from app.services.users import (
     IMAGE_KEYS,
     SECRET_KEYS,
     TAB_SETTING_GROUPS,
