@@ -47,14 +47,15 @@ class GuideCatalogTests(unittest.TestCase):
     def test_tables_are_scroll_wrapped(self):
         guide = ROOT / "app" / "web" / "static" / "guide"
         roles = (guide / "roles" / "index.html").read_text(encoding="utf-8")
-        self.assertIn("guide-table-scroll", roles)
+        self.assertIn("guide-table-wrap", roles)
         self.assertIn("<table>", roles)
         css = (guide / "guide.css").read_text(encoding="utf-8")
-        self.assertIn(".guide-table-scroll", css)
-        self.assertIn("overflow-x: auto", css)
+        self.assertIn(".guide-table-wrap", css)
+        self.assertIn("overflow: auto", css)
+        self.assertNotIn("position: sticky;\n  right: 0;", css)
         js = (guide / "guide.js").read_text(encoding="utf-8")
         self.assertIn("resolveGuideHref", js)
-        self.assertIn("guide-table-scroll", js)
+        self.assertIn("guide-table-wrap", js)
 
     def test_search_index_hrefs_are_guide_root_relative(self):
         import json

@@ -158,7 +158,7 @@ def md_to_html(src: str) -> str:
                 for row in rows
             )
             out.append(
-                '<div class="guide-table-scroll" role="region" '
+                '<div class="guide-table-wrap" role="region" '
                 'aria-label="جدول" tabindex="0">'
                 f"<table><thead>{thead}</thead><tbody>{tbody}</tbody></table>"
                 "</div>"

@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "10.1.9": [
+        "جدول‌های راهنما مثل وب‌پنل: کل جدول داخل قاب اسکرول می‌شود (بدون ستون چسبان خراب)",
+        "بدون مایگریشن DB؛ ریستور: restore/pre-v10.1.9-v10.1.8",
+    ],
     "10.1.8": [
         "جدول‌های راهنما روی موبایل اسکرول افقی دارند و از کادر بیرون نمی‌زنند",
         "رفع ۴۰۴ نتایج جستجوی راهنما وقتی از صفحات داخلی روی نتیجه می‌زنید",
