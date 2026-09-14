@@ -668,7 +668,8 @@ pre code {
   box-shadow: none;
   max-width: 100%;
   min-width: 0;
-  overflow-x: clip;
+  /* Let `.guide-table-wrap` own horizontal scroll — don't clip nested tables */
+  overflow-x: visible;
 }
 
 .guide-content > :first-child {
@@ -725,26 +726,33 @@ pre code {
   color: var(--text-soft);
 }
 
+/* Same model as panel `.table-wrap`: whole table scrolls inside the frame */
+.guide-table-wrap,
 .guide-table-scroll {
+  display: block;
   width: 100%;
   max-width: 100%;
   margin: 1.1rem 0;
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow: auto;
   -webkit-overflow-scrolling: touch;
-  overscroll-behavior-x: contain;
+  overscroll-behavior: contain;
+  touch-action: pan-x pan-y;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--panel);
+  position: relative;
+  isolation: isolate;
 }
 
+.guide-table-wrap:focus-visible,
 .guide-table-scroll:focus-visible {
   outline: 2px solid var(--brand-ring);
   outline-offset: 2px;
 }
 
-.guide-content table,
-.guide-table-scroll table {
+.guide-content > table,
+.guide-table-wrap > table,
+.guide-table-scroll > table {
   width: max-content;
   min-width: 100%;
   border-collapse: collapse;
@@ -757,41 +765,27 @@ pre code {
 
 .guide-content th,
 .guide-content td,
+.guide-table-wrap th,
+.guide-table-wrap td,
 .guide-table-scroll th,
 .guide-table-scroll td {
   border-bottom: 1px solid var(--border);
   padding: 0.7rem 0.8rem;
   text-align: right;
-  vertical-align: top;
+  vertical-align: middle;
   white-space: nowrap;
 }
 
 .guide-content th,
+.guide-table-wrap th,
 .guide-table-scroll th {
   background: var(--panel-2);
   color: var(--text);
   font-weight: 700;
 }
 
-.guide-content th:first-child,
-.guide-content td:first-child,
-.guide-table-scroll th:first-child,
-.guide-table-scroll td:first-child {
-  white-space: normal;
-  min-width: 7.5rem;
-  max-width: 14rem;
-  position: sticky;
-  right: 0;
-  z-index: 1;
-  background: var(--panel-2);
-}
-
-.guide-content td:first-child,
-.guide-table-scroll td:first-child {
-  background: var(--panel);
-}
-
 .guide-content tr:last-child td,
+.guide-table-wrap tr:last-child td,
 .guide-table-scroll tr:last-child td {
   border-bottom: 0;
 }

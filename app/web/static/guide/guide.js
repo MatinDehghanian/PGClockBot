@@ -89,11 +89,20 @@
     return guideRoot + href.replace(/^\.\//, '');
   }
 
-  /* Wrap any leftover bare tables so wide tables scroll instead of escaping the card */
+  /* Wrap bare tables like panel `.table-wrap` — whole table scrolls together */
   document.querySelectorAll('.guide-content table').forEach(function (table) {
-    if (table.parentElement && table.parentElement.classList.contains('guide-table-scroll')) return;
+    var parent = table.parentElement;
+    if (
+      parent &&
+      (parent.classList.contains('guide-table-wrap') ||
+        parent.classList.contains('guide-table-scroll'))
+    ) {
+      parent.classList.add('guide-table-wrap');
+      parent.classList.remove('guide-table-scroll');
+      return;
+    }
     var wrap = document.createElement('div');
-    wrap.className = 'guide-table-scroll';
+    wrap.className = 'guide-table-wrap';
     wrap.setAttribute('role', 'region');
     wrap.setAttribute('aria-label', 'جدول');
     wrap.tabIndex = 0;
