@@ -80,11 +80,8 @@
       <button class="btn" type="submit">ذخیره تنظیمات</button>
       {% if custom_panel_url or custom_pg_panel_url %}
       <button class="btn btn-ghost" type="button"
-              onclick="
-                this.form.reseller_panel_base_url.value='';
-                this.form.reseller_pg_panel_base_url.value='';
-                this.form.submit();
-              ">
+              data-clear-fields="reseller_panel_base_url,reseller_pg_panel_base_url"
+              data-clear-and-submit>
         بازگشت آدرس‌ها به پیش‌فرض
       </button>
       {% endif %}

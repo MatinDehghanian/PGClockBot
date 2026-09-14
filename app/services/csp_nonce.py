@@ -7,6 +7,9 @@ responses must receive the request nonce on every opening ``<script>`` tag.
 Starlette ``@app.middleware("http")`` wraps the downstream response in a
 ``_StreamingResponse`` without a ``.body`` attribute — callers must buffer
 ``body_iterator`` (see ``buffer_and_inject_nonce``).
+
+When rebuilding the response, **all** ``Set-Cookie`` headers must be preserved
+(``dict(headers)`` keeps only the first cookie and drops the rest).
 """
 
 from __future__ import annotations
@@ -37,6 +40,39 @@ def inject_script_nonces(html: str, nonce: str) -> str:
         return tag[:-1] + f' nonce="{safe}">'
 
     return _SCRIPT_OPEN_RE.sub(_add, html)
+
+
+def _headers_preserving_cookies(response: Response) -> list[tuple[bytes, bytes]]:
+    """Copy response headers including every Set-Cookie (not just the first)."""
+    raw = getattr(response, "raw_headers", None)
+    if raw:
+        return list(raw)
+    # Fallback: single-value mapping (may already have lost duplicate cookies).
+    out: list[tuple[bytes, bytes]] = []
+    for key, value in response.headers.items():
+        out.append((key.encode("latin-1"), value.encode("latin-1")))
+    return out
+
+
+def _rebuild_response(
+    *,
+    content: bytes,
+    status_code: int,
+    source: Response,
+    drop_content_encoding: bool = False,
+) -> Response:
+    """Build a new Response with the same cookies/headers as ``source``."""
+    headers = MutableHeaders(raw=_headers_preserving_cookies(source))
+    headers["content-length"] = str(len(content))
+    if drop_content_encoding and "content-encoding" in headers:
+        del headers["content-encoding"]
+    return Response(
+        content=content,
+        status_code=status_code,
+        headers=headers,
+        media_type=source.media_type,
+        background=getattr(source, "background", None),
+    )
 
 
 def inject_nonce_into_response(response: Response, nonce: Optional[str]) -> Response:
@@ -71,6 +107,7 @@ async def buffer_and_inject_nonce(response: Response, nonce: Optional[str]) -> R
     """Buffer a (possibly streaming) HTML response and stamp script nonces.
 
     Safe to call for non-HTML responses — returns the original object unchanged.
+    Preserves every ``Set-Cookie`` header when rebuilding the response.
     """
     if not nonce:
         return response
@@ -98,25 +135,18 @@ async def buffer_and_inject_nonce(response: Response, nonce: Optional[str]) -> R
     try:
         text = raw.decode("utf-8")
     except UnicodeDecodeError:
-        return Response(
+        return _rebuild_response(
             content=raw,
             status_code=response.status_code,
-            headers=dict(response.headers),
-            media_type=response.media_type,
-            background=getattr(response, "background", None),
+            source=response,
+            drop_content_encoding=False,
         )
 
     updated = inject_script_nonces(text, nonce)
     new_body = updated.encode("utf-8")
-    headers = MutableHeaders(response.headers)
-    headers["content-length"] = str(len(new_body))
-    # Drop Content-Encoding if we rewrote plaintext (should not be gzip here).
-    if "content-encoding" in headers:
-        del headers["content-encoding"]
-    return Response(
+    return _rebuild_response(
         content=new_body,
         status_code=response.status_code,
-        headers=dict(headers),
-        media_type=response.media_type,
-        background=getattr(response, "background", None),
+        source=response,
+        drop_content_encoding=True,
     )
