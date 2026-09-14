@@ -85,23 +85,48 @@ async def send_broadcast(
     if len(body) > 4000:
         raise ValueError("متن پیام خیلی طولانی است (حداکثر ۴۰۰۰)")
 
-    users = await list_broadcast_targets(session, audience=audience)
+    # Keyset chunks — avoid loading the entire audience into memory.
+    chunk_size = 250
     ok = 0
     fail = 0
-    for u in users:
-        try:
-            await bot.send_message(u.telegram_id, body, parse_mode="HTML")
-            ok += 1
-        except Exception as e:
-            fail += 1
-            logger.debug("broadcast fail tg=%s: %s", u.telegram_id, e)
-        if delay:
-            await asyncio.sleep(delay)
+    total = 0
+    last_id = 0
+    while True:
+        q = select(BotUser).where(
+            BotUser.is_blocked.is_(False),
+            BotUser.id > last_id,
+        )
+        if audience == "users":
+            q = q.where(BotUser.role.in_([Role.USER.value, Role.RESELLER.value]))
+        elif audience == "resellers":
+            q = q.where(BotUser.role == Role.RESELLER.value)
+        elif audience == "admins":
+            q = q.where(BotUser.role == Role.ADMIN.value)
+        chunk = list(
+            (
+                await session.execute(q.order_by(BotUser.id).limit(chunk_size))
+            ).scalars().all()
+        )
+        if not chunk:
+            break
+        for u in chunk:
+            total += 1
+            last_id = int(u.id)
+            try:
+                await bot.send_message(u.telegram_id, body, parse_mode="HTML")
+                ok += 1
+            except Exception as e:
+                fail += 1
+                logger.debug("broadcast fail tg=%s: %s", u.telegram_id, e)
+            if delay:
+                await asyncio.sleep(delay)
+        if len(chunk) < chunk_size:
+            break
 
     log = BroadcastLog(
         audience=audience,
         text=body,
-        total=len(users),
+        total=total,
         ok_count=ok,
         fail_count=fail,
         created_by=(created_by or "")[:128] or None,
@@ -110,7 +135,7 @@ async def send_broadcast(
     await session.commit()
 
     return {
-        "total": len(users),
+        "total": total,
         "ok": ok,
         "fail": fail,
         "audience": audience,

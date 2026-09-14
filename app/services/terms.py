@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from typing import Literal
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, TermsAcceptance
@@ -162,7 +163,23 @@ async def record_acceptance(
     else:
         row.content_hash = want
         row.accepted_at = now
-    await session.commit()
+    try:
+        await session.commit()
+    except IntegrityError:
+        # Concurrent double-accept on unique (user, shop, gate) — treat as success.
+        await session.rollback()
+        row = await session.scalar(
+            select(TermsAcceptance).where(
+                TermsAcceptance.bot_user_id == int(bot_user_id),
+                TermsAcceptance.shop_owner_id == int(shop_owner_id),
+                TermsAcceptance.gate == gate,
+            )
+        )
+        if row is None:
+            raise
+        row.content_hash = want
+        row.accepted_at = now
+        await session.commit()
 
 
 async def needs_entry_gate(

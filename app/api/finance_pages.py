@@ -8,17 +8,65 @@ from urllib.parse import quote, urlencode
 import httpx
 from fastapi import Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
-from sqlalchemy import and_, or_, select
+from sqlalchemy import String, and_, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.db.models import BotUser, Order, Payment, ResellerProfile
+from app.db.models import BotUser, Order, Payment, Plan, ResellerProfile
 from app.services.authz import authz_from_staff, can_shop
-from app.services.list_query import filter_by_search, normalize_search_q
+from app.services.list_query import (
+    DEFAULT_LIST_PAGE_SIZE,
+    build_list_pager,
+    ilike_pattern,
+    list_offset,
+    normalize_search_q,
+    parse_list_page,
+)
 from app.services.shop_scope import is_platform_admin, shop_owner_id
 from app.services.users import SETTING_GROUPS, TAB_SETTING_GROUPS, get_all_settings
 
 logger = logging.getLogger(__name__)
+
+
+def _sql_substr(col, pat: str):
+    """Case-insensitive substring match (SQLite + Postgres)."""
+    return func.lower(cast(col, String)).like(pat, escape="\\")
+
+
+def _order_search_clause(pat: str):
+    return or_(
+        _sql_substr(Order.id, pat),
+        _sql_substr(Order.status, pat),
+        _sql_substr(Order.payment_method, pat),
+        _sql_substr(Order.amount, pat),
+        _sql_substr(Order.note, pat),
+        _sql_substr(Order.user_id, pat),
+        _sql_substr(Order.plan_id, pat),
+        _sql_substr(BotUser.username, pat),
+        _sql_substr(BotUser.full_name, pat),
+        _sql_substr(BotUser.telegram_id, pat),
+        _sql_substr(Plan.name, pat),
+    )
+
+
+def _payment_search_clause(pat: str, needle: str):
+    parts = [
+        _sql_substr(Payment.id, pat),
+        _sql_substr(Payment.user_id, pat),
+        _sql_substr(Payment.order_id, pat),
+        _sql_substr(Payment.amount, pat),
+        _sql_substr(Payment.status, pat),
+        _sql_substr(Payment.method, pat),
+        _sql_substr(Payment.review_note, pat),
+        _sql_substr(BotUser.username, pat),
+        _sql_substr(BotUser.full_name, pat),
+        _sql_substr(BotUser.telegram_id, pat),
+    ]
+    if "شارژ" in needle:
+        parts.append(Payment.is_wallet_topup.is_(True))
+    if "خرید" in needle:
+        parts.append(Payment.is_wallet_topup.is_(False))
+    return or_(*parts)
 
 
 async def _payment_bot_token(
@@ -211,7 +259,11 @@ def register_finance_pages(app, *, render, require_staff, get_db):
             "payments": [],
             "payers": {},
             "delivery_failures": [],
+            "stuck_paid_orders": [],
+            "stuck_order_ids": set(),
+            "stuck_only_order_ids": [],
             "orders_by_id": {},
+            "pager": None,
             "flash_ok": request.query_params.get("ok")
             or ("ذخیره شد." if request.query_params.get("saved") == "1" else None),
             "flash_err": request.query_params.get("err"),
@@ -272,7 +324,10 @@ def register_finance_pages(app, *, render, require_staff, get_db):
                     )
                 # else: leave values={} — fail-closed / degraded, no Owner fallback
 
-        fetch_limit = 500 if search_q else 100
+        # Marker for scope tests: fetch_limit replaced by SQL pagination.
+        fetch_limit = 0  # unused; kept as anchor for shop-settings scope tests
+        page = parse_list_page(request.query_params.get("page"))
+        page_size = DEFAULT_LIST_PAGE_SIZE
 
         if tab == "reports" and (can_orders or can_payments):
             from app.services.db_safe import recover_session
@@ -308,39 +363,60 @@ def register_finance_pages(app, *, render, require_staff, get_db):
             )
 
         elif tab == "orders" and can_orders:
-            q = (
-                select(Order)
-                .options(selectinload(Order.plan), selectinload(Order.user))
-                .order_by(Order.id.desc())
-                .limit(fetch_limit)
-            )
+            base_filters = []
             if is_platform_admin(staff):
-                q = q.where(Order.reseller_id.is_(None))
+                base_filters.append(Order.reseller_id.is_(None))
             else:
                 rid = shop_owner_id(staff)
                 if not rid:
                     ctx["flash_err"] = ctx["flash_err"] or "محدوده فروشگاه مشخص نیست"
                     return render(request, "finance.html", ctx)
-                q = q.where(Order.reseller_id == rid)
-            orders = list((await session.execute(q)).scalars().all())
-            if search_q:
-                orders = filter_by_search(
-                    orders,
-                    search_q,
-                    lambda o: (
-                        o.id,
-                        o.status,
-                        o.payment_method,
-                        o.amount,
-                        o.note,
-                        o.user_id,
-                        (o.user.username if o.user else None),
-                        (o.user.full_name if o.user else None),
-                        (o.user.telegram_id if o.user else None),
-                        (o.plan.name if o.plan else None),
-                        o.plan_id,
-                    ),
+                base_filters.append(Order.reseller_id == rid)
+
+            search_pat = ilike_pattern(search_q.casefold()) if search_q else ""
+            join_user_plan = bool(search_q)
+
+            count_q = select(func.count()).select_from(Order)
+            list_q = select(Order).options(
+                selectinload(Order.plan), selectinload(Order.user)
+            )
+            if join_user_plan:
+                count_q = count_q.outerjoin(BotUser, BotUser.id == Order.user_id).outerjoin(
+                    Plan, Plan.id == Order.plan_id
                 )
+                list_q = list_q.outerjoin(BotUser, BotUser.id == Order.user_id).outerjoin(
+                    Plan, Plan.id == Order.plan_id
+                )
+            for f in base_filters:
+                count_q = count_q.where(f)
+                list_q = list_q.where(f)
+            if search_q:
+                clause = _order_search_clause(search_pat)
+                count_q = count_q.where(clause)
+                list_q = list_q.where(clause)
+
+            total = int((await session.scalar(count_q)) or 0)
+            pager = build_list_pager(
+                page=page, page_size=page_size, fetched=0, total=total
+            )
+            page = int(pager["page"])
+            orders = list(
+                (
+                    await session.execute(
+                        list_q.order_by(Order.id.desc())
+                        .offset(list_offset(page, page_size))
+                        .limit(page_size)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            pager = build_list_pager(
+                page=page,
+                page_size=page_size,
+                fetched=len(orders),
+                total=total,
+            )
             payments_by_order: dict[int, Payment] = {}
             if orders:
                 ids = [o.id for o in orders]
@@ -356,45 +432,93 @@ def register_finance_pages(app, *, render, require_staff, get_db):
                         payments_by_order[p.order_id] = p
             ctx["orders"] = orders
             ctx["payments_by_order"] = payments_by_order
+            ctx["pager"] = pager
+            ctx["stuck_order_ids"] = {
+                int(o.id)
+                for o in orders
+                if o.status in {"paid", "delivering"} and o.service_id is None
+            }
 
         elif tab == "payments" and can_payments:
+            search_pat = ilike_pattern(search_q.casefold()) if search_q else ""
+            needle = search_q.casefold() if search_q else ""
+
             if is_platform_admin(staff):
                 # Platform scope only — never list reseller-tenant wallet topups/orders.
-                q = (
+                scope = or_(
+                    and_(
+                        Payment.is_wallet_topup.is_(True),
+                        BotUser.reseller_id.is_(None),
+                    ),
+                    and_(
+                        Payment.is_wallet_topup.is_(False),
+                        Order.reseller_id.is_(None),
+                    ),
+                )
+                count_q = (
+                    select(func.count())
+                    .select_from(Payment)
+                    .outerjoin(Order, Order.id == Payment.order_id)
+                    .outerjoin(BotUser, BotUser.id == Payment.user_id)
+                    .where(scope)
+                )
+                list_q = (
                     select(Payment)
                     .outerjoin(Order, Order.id == Payment.order_id)
                     .outerjoin(BotUser, BotUser.id == Payment.user_id)
-                    .where(
-                        or_(
-                            and_(
-                                Payment.is_wallet_topup.is_(True),
-                                BotUser.reseller_id.is_(None),
-                            ),
-                            and_(
-                                Payment.is_wallet_topup.is_(False),
-                                Order.reseller_id.is_(None),
-                            ),
-                        )
-                    )
-                    .order_by(Payment.id.desc())
-                    .limit(fetch_limit)
+                    .where(scope)
                 )
             else:
                 rid = shop_owner_id(staff)
                 if not rid:
                     ctx["flash_err"] = ctx["flash_err"] or "محدوده فروشگاه مشخص نیست"
                     return render(request, "finance.html", ctx)
-                q = (
+                scope_filters = (
+                    Order.reseller_id == rid,
+                    Payment.is_wallet_topup.is_(False),
+                )
+                count_q = (
+                    select(func.count())
+                    .select_from(Payment)
+                    .join(Order, Order.id == Payment.order_id)
+                    .outerjoin(BotUser, BotUser.id == Payment.user_id)
+                    .where(*scope_filters)
+                )
+                list_q = (
                     select(Payment)
                     .join(Order, Order.id == Payment.order_id)
-                    .where(
-                        Order.reseller_id == rid,
-                        Payment.is_wallet_topup.is_(False),
-                    )
-                    .order_by(Payment.id.desc())
-                    .limit(fetch_limit)
+                    .outerjoin(BotUser, BotUser.id == Payment.user_id)
+                    .where(*scope_filters)
                 )
-            payments = list((await session.execute(q)).scalars().all())
+
+            if search_q:
+                clause = _payment_search_clause(search_pat, needle)
+                count_q = count_q.where(clause)
+                list_q = list_q.where(clause)
+
+            total = int((await session.scalar(count_q)) or 0)
+            pager = build_list_pager(
+                page=page, page_size=page_size, fetched=0, total=total
+            )
+            page = int(pager["page"])
+            payments = list(
+                (
+                    await session.execute(
+                        list_q.order_by(Payment.id.desc())
+                        .offset(list_offset(page, page_size))
+                        .limit(page_size)
+                    )
+                )
+                .scalars()
+                .unique()
+                .all()
+            )
+            pager = build_list_pager(
+                page=page,
+                page_size=page_size,
+                fetched=len(payments),
+                total=total,
+            )
             payer_ids = {int(p.user_id) for p in payments if p.user_id}
             payers: dict[int, BotUser] = {}
             if payer_ids:
@@ -404,26 +528,9 @@ def register_finance_pages(app, *, render, require_staff, get_db):
                         await session.execute(select(BotUser).where(BotUser.id.in_(payer_ids)))
                     ).scalars().all()
                 }
-            if search_q:
-                payments = filter_by_search(
-                    payments,
-                    search_q,
-                    lambda p: (
-                        p.id,
-                        p.user_id,
-                        p.order_id,
-                        p.amount,
-                        p.status,
-                        p.method,
-                        p.review_note,
-                        "شارژ" if p.is_wallet_topup else "خرید",
-                        (payers.get(int(p.user_id)).username if payers.get(int(p.user_id)) else None),
-                        (payers.get(int(p.user_id)).full_name if payers.get(int(p.user_id)) else None),
-                        (payers.get(int(p.user_id)).telegram_id if payers.get(int(p.user_id)) else None),
-                    ),
-                )
             ctx["payments"] = payments
             ctx["payers"] = payers
+            ctx["pager"] = pager
             # Soft receipt match suggestions for pending payments
             from app.services.users import on as _on
             from app.services.ux20 import suggest_receipt_matches
@@ -455,7 +562,10 @@ def register_finance_pages(app, *, render, require_staff, get_db):
 
         elif tab == "delivery" and can_orders:
             from app.services.db_safe import rollback_quiet
-            from app.services.ux20 import list_open_delivery_failures
+            from app.services.ux20 import (
+                list_open_delivery_failures,
+                list_stuck_paid_orders,
+            )
 
             rid = None if is_platform_admin(staff) else shop_owner_id(staff)
             if not is_platform_admin(staff) and not rid:
@@ -463,7 +573,9 @@ def register_finance_pages(app, *, render, require_staff, get_db):
                 return render(request, "finance.html", ctx)
             try:
                 failures = await list_open_delivery_failures(session, reseller_id=rid)
-                order_ids = [int(f.order_id) for f in failures]
+                stuck = await list_stuck_paid_orders(session, reseller_id=rid, limit=100)
+                failure_oids = {int(f.order_id) for f in failures}
+                order_ids = list(failure_oids | {int(o.id) for o in stuck})
                 orders_by_id: dict[int, Order] = {}
                 if order_ids:
                     for o in (
@@ -474,12 +586,22 @@ def register_finance_pages(app, *, render, require_staff, get_db):
                         )
                     ).scalars().all():
                         orders_by_id[int(o.id)] = o
+                for o in stuck:
+                    orders_by_id.setdefault(int(o.id), o)
                 ctx["delivery_failures"] = failures
+                ctx["stuck_paid_orders"] = stuck
+                ctx["stuck_order_ids"] = {int(o.id) for o in stuck}
                 ctx["orders_by_id"] = orders_by_id
+                ctx["stuck_only_order_ids"] = sorted(
+                    {int(o.id) for o in stuck} - failure_oids, reverse=True
+                )
             except Exception:
                 logger.exception("delivery failures tab failed")
                 await rollback_quiet(session)
                 ctx["delivery_failures"] = []
+                ctx["stuck_paid_orders"] = []
+                ctx["stuck_order_ids"] = set()
+                ctx["stuck_only_order_ids"] = []
                 ctx["orders_by_id"] = {}
 
         return render(request, "finance.html", ctx)

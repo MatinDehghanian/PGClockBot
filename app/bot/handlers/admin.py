@@ -452,24 +452,40 @@ async def adm_orders(callback: CallbackQuery, session: AsyncSession, db_user: Bo
         await callback.answer("ادمین نیستید", show_alert=True)
         return
     await callback.answer()
+    from app.services.ux20 import list_stuck_paid_orders
+
+    stuck = await list_stuck_paid_orders(session, reseller_id=None, limit=12)
+    stuck_ids = {int(o.id) for o in stuck}
     result = await session.execute(
         select(Order)
         .where(Order.reseller_id.is_(None))
         .order_by(Order.id.desc())
         .limit(12)
     )
-    orders = list(result.scalars().all())
-    if not orders:
+    recent = list(result.scalars().all())
+    merged: list[Order] = []
+    seen: set[int] = set()
+    for o in list(stuck) + recent:
+        oid = int(o.id)
+        if oid in seen:
+            continue
+        seen.add(oid)
+        merged.append(o)
+        if len(merged) >= 12:
+            break
+    if not merged:
         if callback.message:
             await callback.message.edit_text("سفارشی نیست.", reply_markup=None)
         return
     rows = []
-    for o in orders:
-        label = f"#{o.id} · {order_status_fa(o.status)} · {format_toman(o.amount, get_settings().currency)}"
+    for o in merged:
+        prefix = "⚠ " if int(o.id) in stuck_ids else ""
+        label = f"{prefix}#{o.id} · {order_status_fa(o.status)} · {format_toman(o.amount, get_settings().currency)}"
         rows.append([InlineKeyboardButton(text=label[:64], callback_data=f"adm:order:{o.id}")])
     if callback.message:
         await callback.message.edit_text(
             "🛒 <b>سفارش‌ها</b>\nیکی را برای جزئیات و تأیید/رد انتخاب کنید:\n"
+            "<i>⚠ = پرداخت‌شده بدون سرویس (نیاز به تلاش مجدد تحویل)</i>\n"
             "<i>بازگشت از کیبورد پایین</i>",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
         )
