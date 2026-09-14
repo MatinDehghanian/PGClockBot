@@ -82,3 +82,4 @@ tests/test_v4_1_1_reseller_pg_role_access.py
 # Whenever you fix a security bug or add an access-control / tenant-isolation
 tests/test_phase0_phase1_hardening.py
 tests/test_phase2_web_panel_ia.py
+tests/test_phase3_phase4_bot_hygiene.py

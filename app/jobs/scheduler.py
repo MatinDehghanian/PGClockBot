@@ -504,7 +504,11 @@ async def run_admin_daily_report(bot: Bot) -> None:
                         try:
                             await shop_bot.session.close()
                         except Exception:
-                            pass
+                            logger.debug(
+                                "daily report shop bot session close failed rid=%s",
+                                rid,
+                                exc_info=True,
+                            )
         except Exception:
             logger.exception("admin daily report failed")
 
