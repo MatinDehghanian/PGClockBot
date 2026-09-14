@@ -16,6 +16,13 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "10.1.4": [
+        "باکس راهنما در سایدبار هم‌سبک بقیه باکس‌ها با رنگ سبز؛ فاصله یکسان با پاسارگارد",
+        "صفحه /help در PWA: هدر و safe-area مثل وب‌پنل (دیگر زیر نوتچ گم نمی‌شود)",
+        "پاپ‌اور ؟ کنار تیترها بازطراحی شد و داخل قاب می‌ماند",
+        "هماهنگی کامل‌تر ظاهر راهنما با زبان طراحی وب‌پنل",
+        "بدون مایگریشن DB؛ ریستور: restore/pre-v10.1.4-v10.1.3",
+    ],
     "10.1.3": [
         "لینک راهنما با آیکون مناسب در انتهای سایدبار وب‌پنل (رفتن به /help)",
         "بدون مایگریشن DB؛ ریستور: restore/pre-v10.1.3-v10.1.2",

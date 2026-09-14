@@ -1,28 +1,40 @@
 :root {
-  --bg: #0b1220;
-  --bg-elevated: #111827;
-  --panel: #151c2c;
-  --panel-2: #1a2234;
-  --border: rgba(148, 163, 184, 0.16);
-  --border-strong: rgba(148, 163, 184, 0.28);
-  --text: #e5e7eb;
-  --text-soft: #cbd5e1;
-  --muted: #94a3b8;
+  /* Match web panel chrome (PWA + mobile) */
+  --bg: #09090b;
+  --bg-elevated: #0c0c0e;
+  --panel: #0c0c0e;
+  --panel-2: #141416;
+  --border: #27272a;
+  --border-strong: #3f3f46;
+  --text: #fafafa;
+  --text-soft: #e4e4e7;
+  --muted: #a1a1aa;
   --brand: #f97316;
   --brand-2: #fb923c;
   --brand-soft: rgba(249, 115, 22, 0.14);
   --brand-ring: rgba(249, 115, 22, 0.35);
   --ok: #22c55e;
-  --warn: #f59e0b;
+  --warn: #eab308;
   --danger: #ef4444;
-  --radius: 14px;
-  --radius-sm: 10px;
-  --shadow: 0 18px 50px rgba(2, 6, 23, 0.45);
-  --sidebar-w: 300px;
-  --topbar-h: 64px;
+  --radius: 20px;
+  --radius-sm: 12px;
+  --control-radius: 999px;
+  --shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+  --sidebar-w: 280px;
+  /* Same as panel .topbar */
+  --topbar-h: 52px;
+  --btn-h: 36px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
   --content-max: 860px;
-  --font: "Vazirmatn", Tahoma, sans-serif;
+  --font: "Vazirmatn", sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --space-1: 8px;
+  --space-2: 16px;
+  --space-3: 24px;
+  --space-4: 32px;
 }
 
 *,
@@ -38,11 +50,16 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
+  min-height: 100dvh;
   font-family: var(--font);
   background: var(--bg);
   color: var(--text);
-  line-height: 1.75;
+  line-height: 1.65;
+  font-size: 14px;
   -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  overflow-x: hidden;
 }
 
 a {
@@ -131,16 +148,18 @@ pre code {
 .guide-topbar {
   position: sticky;
   top: 0;
-  z-index: 40;
+  z-index: 55;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.75rem;
-  min-height: var(--topbar-h);
-  padding: 0.7rem 1rem;
+  gap: var(--space-1);
+  height: calc(var(--topbar-h) + var(--safe-top));
+  min-height: calc(var(--topbar-h) + var(--safe-top));
+  padding: var(--safe-top) var(--space-2) 0;
   border-bottom: 1px solid var(--border);
-  background: rgba(11, 18, 32, 0.82);
-  backdrop-filter: blur(16px);
+  background: color-mix(in srgb, var(--bg-elevated) 92%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
 }
 
 .guide-brand {
@@ -157,17 +176,17 @@ pre code {
 }
 
 .guide-brand-mark {
-  width: 38px;
-  height: 38px;
-  border-radius: 11px;
+  width: var(--btn-h);
+  height: var(--btn-h);
+  border-radius: 10px;
   display: grid;
   place-items: center;
   flex-shrink: 0;
   background: linear-gradient(145deg, var(--brand), #ea580c);
   color: #fff;
   font-weight: 800;
-  font-size: 0.95rem;
-  box-shadow: 0 8px 22px rgba(249, 115, 22, 0.28);
+  font-size: 0.85rem;
+  box-shadow: 0 6px 16px rgba(249, 115, 22, 0.24);
 }
 
 .guide-brand-text {
@@ -178,14 +197,19 @@ pre code {
 }
 
 .guide-brand-name {
-  font-weight: 800;
-  font-size: 0.98rem;
-  letter-spacing: -0.01em;
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .guide-brand-sub {
   color: var(--muted);
-  font-size: 0.78rem;
+  font-size: 11px;
+  line-height: 1;
 }
 
 .guide-topbar-actions {
@@ -196,15 +220,17 @@ pre code {
 }
 
 .guide-icon-btn {
-  width: 42px;
-  height: 42px;
-  border-radius: 11px;
+  width: var(--btn-h);
+  height: var(--btn-h);
+  border-radius: 10px;
   border: 1px solid var(--border);
-  background: rgba(17, 24, 39, 0.85);
+  background: transparent;
   color: var(--text);
   display: inline-grid;
   place-items: center;
   cursor: pointer;
+  flex: 0 0 auto;
+  padding: 0;
   transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
 }
 
@@ -216,23 +242,24 @@ pre code {
 }
 
 .guide-icon-btn svg {
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
 }
 
 .guide-panel-link {
   display: none;
   align-items: center;
-  height: 42px;
-  padding: 0 0.95rem;
-  border-radius: 11px;
+  height: var(--btn-h);
+  padding: 0 0.85rem;
+  border-radius: var(--control-radius);
   border: 1px solid var(--border);
-  background: rgba(17, 24, 39, 0.85);
+  background: transparent;
   color: var(--text);
   font: inherit;
-  font-size: 0.88rem;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 600;
   text-decoration: none;
+  white-space: nowrap;
 }
 
 .guide-panel-link:hover {
@@ -247,18 +274,19 @@ pre code {
   z-index: 1;
   display: grid;
   grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
-  min-height: calc(100vh - var(--topbar-h));
+  min-height: calc(100dvh - var(--topbar-h) - var(--safe-top));
 }
 
 .guide-sidebar {
   position: sticky;
-  top: var(--topbar-h);
-  height: calc(100vh - var(--topbar-h));
+  top: calc(var(--topbar-h) + var(--safe-top));
+  height: calc(100dvh - var(--topbar-h) - var(--safe-top));
   overflow: auto;
   border-left: 1px solid var(--border);
-  background: rgba(15, 23, 42, 0.72);
-  backdrop-filter: blur(14px);
-  padding: 1rem 0.85rem 1.5rem;
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  padding: var(--space-2) var(--space-1) calc(var(--space-3) + var(--safe-bottom));
 }
 
 .guide-sidebar-head {
@@ -976,8 +1004,18 @@ pre code {
     display: inline-flex;
   }
 
+  /* Match panel mobile topbar: fixed under status bar / notch */
+  .guide-topbar {
+    position: fixed;
+    inset-inline: 0;
+    top: 0;
+    width: 100%;
+  }
+
   .guide-layout {
     grid-template-columns: 1fr;
+    padding-top: calc(var(--topbar-h) + var(--safe-top));
+    min-height: 100dvh;
   }
 
   .guide-sidebar {
@@ -986,13 +1024,17 @@ pre code {
     right: 0;
     bottom: 0;
     z-index: 60;
-    width: min(86vw, 340px);
-    height: 100vh;
+    width: min(86vw, 300px);
+    height: 100dvh;
+    max-height: 100dvh;
     transform: translateX(105%);
     transition: transform 0.22s ease;
     border-left: 1px solid var(--border-strong);
-    box-shadow: -18px 0 40px rgba(2, 6, 23, 0.45);
-    padding-top: 1rem;
+    box-shadow: -18px 0 40px rgba(0, 0, 0, 0.45);
+    padding-top: calc(var(--space-2) + var(--safe-top));
+    padding-bottom: calc(var(--space-2) + var(--safe-bottom));
+    padding-inline: var(--space-1);
+    background: var(--panel);
   }
 
   .guide-shell.nav-open .guide-sidebar {
@@ -1008,7 +1050,7 @@ pre code {
     position: fixed;
     inset: 0;
     z-index: 50;
-    background: rgba(2, 6, 23, 0.62);
+    background: rgba(0, 0, 0, 0.55);
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.2s ease;
@@ -1020,7 +1062,7 @@ pre code {
   }
 
   .guide-main {
-    padding: 1.15rem 1rem 2rem;
+    padding: var(--space-2) var(--space-2) calc(var(--space-4) + var(--safe-bottom));
   }
 
   .guide-feature-grid {
@@ -1039,6 +1081,18 @@ pre code {
   .guide-pager-prev {
     text-align: right;
     align-items: flex-end;
+  }
+
+  .guide-search input,
+  .guide-icon-btn,
+  .guide-panel-link {
+    height: var(--btn-h);
+    min-height: var(--btn-h);
+  }
+
+  .guide-search input {
+    border-radius: 10px;
+    font-size: 16px; /* prevent iOS zoom */
   }
 }
 

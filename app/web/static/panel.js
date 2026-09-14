@@ -2933,14 +2933,60 @@
       });
     })();
 
-    /* Page-title help (?) — close other/open on outside click */
-    document.addEventListener('click', (e) => {
-      const openHelp = document.querySelectorAll('details.page-help[open]');
-      if (!openHelp.length) return;
-      openHelp.forEach((el) => {
-        if (!el.contains(e.target)) el.removeAttribute('open');
+    /* Page-title help (?) — clamp popover into viewport; close on outside click */
+    (function () {
+      const PAD = 12;
+
+      function placeHelpPop(details) {
+        const btn = details.querySelector('.page-help-btn');
+        const pop = details.querySelector('.page-help-pop');
+        if (!btn || !pop) return;
+        pop.style.visibility = 'hidden';
+        pop.style.left = '0';
+        pop.style.top = '0';
+        const br = btn.getBoundingClientRect();
+        const pw = pop.offsetWidth || Math.min(300, window.innerWidth - PAD * 2);
+        const ph = pop.offsetHeight || 120;
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        const rtl = getComputedStyle(document.documentElement).direction === 'rtl';
+        let top = br.bottom + 8;
+        if (top + ph > vh - PAD) {
+          top = Math.max(PAD, br.top - ph - 8);
+        }
+        let left = rtl ? br.right - pw : br.left;
+        left = Math.min(Math.max(PAD, left), Math.max(PAD, vw - pw - PAD));
+        pop.style.top = `${Math.round(top)}px`;
+        pop.style.left = `${Math.round(left)}px`;
+        pop.style.visibility = '';
+      }
+
+      function placeOpenHelps() {
+        document.querySelectorAll('details.page-help[open]').forEach(placeHelpPop);
+      }
+
+      document.addEventListener('toggle', (e) => {
+        const el = e.target;
+        if (!(el instanceof HTMLDetailsElement) || !el.classList.contains('page-help')) return;
+        if (el.open) {
+          document.querySelectorAll('details.page-help[open]').forEach((other) => {
+            if (other !== el) other.removeAttribute('open');
+          });
+          requestAnimationFrame(() => placeHelpPop(el));
+        }
+      }, true);
+
+      document.addEventListener('click', (e) => {
+        const openHelp = document.querySelectorAll('details.page-help[open]');
+        if (!openHelp.length) return;
+        openHelp.forEach((el) => {
+          if (!el.contains(e.target)) el.removeAttribute('open');
+        });
       });
-    });
+
+      window.addEventListener('resize', placeOpenHelps);
+      window.addEventListener('scroll', placeOpenHelps, true);
+    })();
 
     /* Clear named fields and submit — CSP-safe replacement for inline onclick. */
     document.addEventListener('click', (e) => {
