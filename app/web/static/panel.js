@@ -2125,13 +2125,19 @@
 
       function commitReasonInput(input){
         if (!input) return '';
+        /* Read BEFORE blur — some Persian IMEs clear or delay flush on blur. */
+        let before = '';
+        try { before = String(input.value || '').trim(); } catch (_) { before = ''; }
         try {
           if (document.activeElement === input) {
             input.dispatchEvent(new Event('change', { bubbles: true }));
             input.blur();
           }
         } catch (_) {}
-        return String(input.value || '').trim();
+        let after = '';
+        try { after = String(input.value || '').trim(); } catch (_) { after = ''; }
+        if (after && after.length >= before.length) return after;
+        return before || after;
       }
 
       function renderReasonField(opts){
@@ -2381,9 +2387,11 @@
           /* Body-level POST with reason from JS memory — not form.submit() inside
              a display:none kebab menu (drops fields on mobile WebKit). */
           const overrides = {};
-          if (opts.requireReason && result.reason) {
-            overrides[opts.reasonName || 'reason'] = result.reason;
-            overrides.confirm_reason = result.reason;
+          if (opts.requireReason) {
+            const reasonText = String((result && result.reason) || '').trim();
+            if (!reasonText) return;
+            overrides[opts.reasonName || 'reason'] = reasonText;
+            overrides.confirm_reason = reasonText;
           }
           if (opts.confirmPhrase && result.phrase) {
             overrides[opts.phraseName || 'confirm_phrase'] = result.phrase;
@@ -2410,9 +2418,11 @@
           applyReason(form, opts, result.reason);
           applyPhrase(form, opts, result.phrase);
           const overrides = {};
-          if (opts.requireReason && result.reason) {
-            overrides[opts.reasonName || 'reason'] = result.reason;
-            overrides.confirm_reason = result.reason;
+          if (opts.requireReason) {
+            const reasonText = String((result && result.reason) || '').trim();
+            if (!reasonText) return;
+            overrides[opts.reasonName || 'reason'] = reasonText;
+            overrides.confirm_reason = reasonText;
           }
           if (opts.confirmPhrase && result.phrase) {
             overrides[opts.phraseName || 'confirm_phrase'] = result.phrase;
