@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "10.1.18": [
+        "ریشه واقعی «کاربر حذف نمی‌شود»: پاک‌نشدن ردیف‌های وابسته (قوانین/امتیاز/معرفی/گردونه/پذیرش قوانین) باعث خطای FK می‌شد",
+        "delete_bot_user حالا همه FKهای bot_users را قبل از DELETE پاک/خالی می‌کند",
+        "علت حذف همچنان الزامی است و به کاربر ارسال می‌شود؛ این پچ خودِ حذف را درست می‌کند نه فقط فرم علت",
+        "بدون مایگریشن DB؛ ریستور: restore/pre-v10.1.18-delete-fk-2026-09-15",
+    ],
     "10.1.17": [
         "ربات ادمین: حذف کاربر دیگر بدون علت انجام نمی‌شود؛ علت پرسیده و برای کاربر ارسال می‌شود",
         "رفع «خطایی رخ داد» بعد از حذف موفق در ربات: ReplyKeyboard دیگر به edit_text وصل نمی‌شود",
