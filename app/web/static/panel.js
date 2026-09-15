@@ -21,16 +21,72 @@
       input.value = tok;
       form.appendChild(input);
     }
+    function collectFormFields(form) {
+      var out = [];
+      if (!form || !form.elements) return out;
+      Array.prototype.forEach.call(form.elements, function (el) {
+        if (!el || !el.name || el.disabled) return;
+        var tag = (el.tagName || '').toLowerCase();
+        if (tag !== 'input' && tag !== 'select' && tag !== 'textarea') return;
+        var type = (el.type || 'text').toLowerCase();
+        if (type === 'submit' || type === 'button' || type === 'image' || type === 'reset' || type === 'file') return;
+        if ((type === 'checkbox' || type === 'radio') && !el.checked) return;
+        out.push([el.name, el.value]);
+      });
+      return out;
+    }
+    /**
+     * Submit via a temporary <form> on document.body.
+     *
+     * Root cause of «علت حذف الزامی است» even after typing a reason from عملیات:
+     * panelConfirm calls closeRowActions(), which un-ports the kebab menu so CSS
+     * `.row-actions-menu:not(.is-ported) { display:none !important; width:0; … }`
+     * hides the originating delete form. Native form.submit() from that inert
+     * menu drops fields on mobile WebKit — reason never reaches the server.
+     * Building a body-level form with explicit overrides (reason from JS memory)
+     * makes the POST independent of kebab/edit-modal visibility.
+     */
+    function submitFormPost(form, overrides) {
+      if (!form) return;
+      overrides = overrides || {};
+      var action = form.getAttribute('action') || form.action || window.location.href;
+      var method = (form.getAttribute('method') || form.method || 'post').toLowerCase();
+      if (method !== 'get') method = 'post';
+      var values = {};
+      collectFormFields(form).forEach(function (pair) {
+        values[pair[0]] = pair[1];
+      });
+      Object.keys(overrides).forEach(function (k) {
+        if (overrides[k] == null) return;
+        values[k] = String(overrides[k]);
+      });
+      var tok = csrfToken();
+      if (tok) values.csrf_token = tok;
+      var tmp = document.createElement('form');
+      tmp.method = method;
+      tmp.action = action;
+      tmp.style.display = 'none';
+      tmp.setAttribute('aria-hidden', 'true');
+      Object.keys(values).forEach(function (name) {
+        var input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = name;
+        input.value = values[name];
+        tmp.appendChild(input);
+      });
+      document.body.appendChild(tmp);
+      tmp.submit();
+    }
     /* form.submit() skips the submit event — always stamp CSRF before programmatic posts.
-       Prefer submit() over requestSubmit(): requestSubmit re-fires capture listeners and
-       raced with data-confirm + confirmSkip (delete reason never reached the server). */
+       Prefer body-level submitFormPost over in-place form.submit() so kebab/display:none
+       forms still deliver reason/csrf (delete-from-ops bug). */
     function submitFormWithCsrf(form) {
       if (!form) return;
-      ensureCsrfField(form);
-      form.submit();
+      submitFormPost(form, {});
     }
     window.panelEnsureCsrfField = ensureCsrfField;
     window.panelSubmitForm = submitFormWithCsrf;
+    window.panelSubmitFormPost = submitFormPost;
     document.addEventListener('submit', function (e) {
       ensureCsrfField(e.target);
     }, true);
@@ -1046,7 +1102,7 @@
       let touchStartY = 0;
       modalWheelGuard = (e) => {
         if (!document.body.classList.contains('modal-open')) return;
-        const modal = document.querySelector('.ui-modal.open');
+        const modal = topOpenModal();
         if (!modal) return;
         if (!modal.contains(e.target)) {
           e.preventDefault();
@@ -1069,7 +1125,7 @@
       };
       modalTouchGuard = (e) => {
         if (!document.body.classList.contains('modal-open')) return;
-        const modal = document.querySelector('.ui-modal.open');
+        const modal = topOpenModal();
         if (!modal) return;
         if (!modal.contains(e.target)
             || e.target === modal
@@ -1155,6 +1211,53 @@
       }
       ensureModalScrollShell(el);
     }
+    /* Among open modals, the topmost is highest z-index, then last in DOM. */
+    function topOpenModal(){
+      const open = Array.from(document.querySelectorAll('.ui-modal.open'));
+      if (!open.length) return null;
+      let best = open[0];
+      let bestZ = parseInt(best.style.zIndex || window.getComputedStyle(best).zIndex, 10) || 0;
+      for (let i = 1; i < open.length; i++) {
+        const m = open[i];
+        const z = parseInt(m.style.zIndex || window.getComputedStyle(m).zIndex, 10) || 0;
+        if (z > bestZ) {
+          best = m;
+          bestZ = z;
+        } else if (z === bestZ && (best.compareDocumentPosition(m) & Node.DOCUMENT_POSITION_FOLLOWING)) {
+          best = m;
+        }
+      }
+      return best;
+    }
+    /**
+     * Root cause of confirm-under-edit: edit modal is body-appended AFTER #modal-confirm,
+     * both share CSS z-index 4000, so edit paints on top and the reason field is unreachable.
+     * Always move the opened modal to the end of <body> and raise its inline z-index.
+     */
+    function bringModalToFront(el, opts){
+      if (!el) return;
+      ensureModalPorted(el);
+      /* Re-append even when already on body — last child wins same-z paint order. */
+      if (el.parentNode === document.body) {
+        document.body.appendChild(el);
+      }
+      document.querySelectorAll('.ui-modal.open.is-front').forEach((m) => {
+        if (m !== el) m.classList.remove('is-front');
+      });
+      let maxZ = 4000;
+      document.querySelectorAll('.ui-modal.open').forEach((m) => {
+        if (m === el) return;
+        const z = parseInt(m.style.zIndex || window.getComputedStyle(m).zIndex, 10);
+        if (!isNaN(z) && z > maxZ) maxZ = z;
+      });
+      /* Confirm / stacked dialogs sit clearly above edit modals (4000). */
+      const stack = !!(opts && opts.stack) || el.id === 'modal-confirm';
+      const base = stack ? 4600 : 4000;
+      el.style.zIndex = String(Math.max(maxZ + 20, base));
+      el.classList.add('is-front');
+    }
+    window.bringModalToFront = bringModalToFront;
+    window.topOpenModal = topOpenModal;
     function prefersReducedMotion(){
       try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; }
     }
@@ -1163,8 +1266,12 @@
       if (!el) return;
       const wasOpen = el.classList.contains('open') || el.classList.contains('is-closing');
       el.hidden = true;
-      el.classList.remove('open', 'is-closing');
+      el.classList.remove('open', 'is-closing', 'is-front', 'is-stack');
+      try { el.style.zIndex = ''; } catch (_) {}
       restoreModalHome(el);
+      /* After closing a stacked confirm, re-mark the remaining top modal. */
+      const still = topOpenModal();
+      if (still) still.classList.add('is-front');
       /* Drop sticky SSR form errors when closing (create/edit user modals) */
       el.querySelectorAll('.flash.err[id$="-form-err"]').forEach((err) => {
         err.hidden = true;
@@ -1252,16 +1359,18 @@
       if (keys && keys.length) stripQueryParams(keys);
     }
     function openModal(id, opts){
-      const el = document.getElementById(id);
+      opts = opts || {};
+      const el = (typeof id === 'string') ? document.getElementById(id) : id;
       if (!el) return;
       /* opts.stack: open on top without dismissing the caller (confirm over edit). */
-      const stack = !!(opts && opts.stack);
+      const stack = !!opts.stack;
       if (!stack) {
         document.querySelectorAll('.ui-modal.open').forEach((m) => {
           if (m !== el) closeModal(m, { instant: true });
         });
+      } else {
+        el.classList.add('is-stack');
       }
-      ensureModalPorted(el);
       /* Fresh open: clear prior form errors unless SSR keep flag is set */
       el.querySelectorAll('.flash.err[id$="-form-err"]').forEach((err) => {
         if (err.dataset.keep) return;
@@ -1271,6 +1380,8 @@
       el.classList.remove('is-closing');
       el.hidden = false;
       el.classList.add('open');
+      /* Must run AFTER .open so maxZ scans include siblings; re-appends to body end. */
+      bringModalToFront(el, opts);
       lockPageScroll();
       /* Ensure every select in this modal is custom (covers late DOM / fragments) */
       enhanceAllSelects(el);
@@ -1331,7 +1442,8 @@
     });
     document.addEventListener('keydown', (e) => {
       if (e.key !== 'Escape') return;
-      const open = document.querySelector('.ui-modal.open');
+      /* Only the topmost open modal — stacked confirm must not also dismiss edit. */
+      const open = topOpenModal();
       if (!open) return;
       if (modalStripKeys(open)) {
         closeModalSoft(open);
@@ -1342,7 +1454,7 @@
         window.location.href = href;
         return;
       }
-      document.querySelectorAll('.ui-modal.open').forEach(closeModal);
+      closeModal(open);
     });
 
     /* Domain settings modals: inner tab buttons */
@@ -2159,6 +2271,8 @@
       document.addEventListener('keydown', (e) => {
         if (e.key !== 'Escape' || !resolver) return;
         if (!modal.classList.contains('open')) return;
+        e.preventDefault();
+        e.stopPropagation();
         finish({ ok: false });
       }, true);
 
@@ -2264,9 +2378,17 @@
           if (!result || !result.ok) return;
           applyReason(form, opts, result.reason);
           applyPhrase(form, opts, result.phrase);
-          /* Native submit skips the submit event — avoids confirmSkip races. */
-          ensureCsrfField(form);
-          form.submit();
+          /* Body-level POST with reason from JS memory — not form.submit() inside
+             a display:none kebab menu (drops fields on mobile WebKit). */
+          const overrides = {};
+          if (opts.requireReason && result.reason) {
+            overrides[opts.reasonName || 'reason'] = result.reason;
+            overrides.confirm_reason = result.reason;
+          }
+          if (opts.confirmPhrase && result.phrase) {
+            overrides[opts.phraseName || 'confirm_phrase'] = result.phrase;
+          }
+          submitFormPost(form, overrides);
         });
       }, true);
 
@@ -2287,21 +2409,18 @@
           if (!form) return;
           applyReason(form, opts, result.reason);
           applyPhrase(form, opts, result.phrase);
-          if (btn && btn.name) {
-            let h = form.querySelector('input[type="hidden"][name="' + btn.name + '"][data-submitter-proxy]');
-            if (!h) {
-              h = document.createElement('input');
-              h.type = 'hidden';
-              h.name = btn.name;
-              h.value = btn.value || '1';
-              h.setAttribute('data-submitter-proxy', '1');
-              form.appendChild(h);
-            } else {
-              h.value = btn.value || '1';
-            }
+          const overrides = {};
+          if (opts.requireReason && result.reason) {
+            overrides[opts.reasonName || 'reason'] = result.reason;
+            overrides.confirm_reason = result.reason;
           }
-          ensureCsrfField(form);
-          form.submit();
+          if (opts.confirmPhrase && result.phrase) {
+            overrides[opts.phraseName || 'confirm_phrase'] = result.phrase;
+          }
+          if (btn && btn.name) {
+            overrides[btn.name] = btn.value || '1';
+          }
+          submitFormPost(form, overrides);
         });
       }, true);
     })();

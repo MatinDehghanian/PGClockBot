@@ -5490,6 +5490,15 @@ form.settings-form > .actions.sticky-actions,
   /* contain — trap overscroll inside modal chrome; none killed edge bounce */
   overscroll-behavior: contain;
 }
+/* Confirm must paint above edit/user modals when both are open (stacked delete).
+   Inline z-index from bringModalToFront raises further; this is the CSS floor. */
+#modal-confirm,
+.ui-modal.open.is-front {
+  z-index: 4600;
+}
+.ui-modal.open.is-stack:not(.is-front) {
+  z-index: 4000;
+}
 .ui-modal[hidden] { display: none !important; }
 .ui-modal.open { display: flex; }
 .ui-modal-backdrop {
