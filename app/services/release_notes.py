@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "10.1.17": [
+        "ربات ادمین: حذف کاربر دیگر بدون علت انجام نمی‌شود؛ علت پرسیده و برای کاربر ارسال می‌شود",
+        "رفع «خطایی رخ داد» بعد از حذف موفق در ربات: ReplyKeyboard دیگر به edit_text وصل نمی‌شود",
+        "پنل: خواندن علت حذف قبل از blur کیبورد فارسی (IME) تا مقدار گم نشود",
+        "بدون مایگریشن DB؛ ریستور: restore/pre-v10.1.17-bot-delete-reason-2026-09-15",
+    ],
     "10.1.16": [
         "رفع ریشه‌ای حذف کاربر: علت حذف دیگر بعد از تأیید گم نمی‌شود (حتی از دکمه عملیات/کebab)",
         "علت: بستن منوی عملیات فرم حذف را display:none می‌کرد و WebKit فیلد reason را در POST نمی‌فرستاد",

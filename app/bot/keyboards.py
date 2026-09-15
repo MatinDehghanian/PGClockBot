@@ -1949,7 +1949,7 @@ def admin_user_actions(
         rows.append(
             [
                 _ikb(
-                    "⚠️ تأیید حذف کامل کاربر",
+                    "⚠️ ادامه — نوشتن علت حذف",
                     callback_data=f"adm:users:del:{user_id}",
                     style=_style(ui, "reject", fallback="danger"),
                 )

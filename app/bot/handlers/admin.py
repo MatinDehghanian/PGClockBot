@@ -289,6 +289,7 @@ class AdminStates(StatesGroup):
     user_message = State()
     revoke_reseller_reason = State()
     block_user_reason = State()
+    delete_user_reason = State()
     broadcast_text = State()
     broadcast_audience = State()
     svc_adjust_days_input = State()
@@ -1894,7 +1895,10 @@ async def _render_user_card(
         f"<i>وب‌پنل: /users?uid={user.id}</i>"
     )
     if confirm_delete:
-        text += "\n\n⚠️ <b>حذف کامل برگشت‌ناپذیر است</b> (سفارش‌ها، سرویس‌ها، تیکت‌ها)."
+        text += (
+            "\n\n⚠️ <b>حذف کامل برگشت‌ناپذیر است</b> (سفارش‌ها، سرویس‌ها، تیکت‌ها)."
+            "\nبعد از تأیید، علت حذف پرسیده می‌شود و برای کاربر ارسال می‌گردد."
+        )
     ui = await get_all_settings(session)
     markup = kb.admin_user_actions(
         user.id,
@@ -2701,23 +2705,76 @@ async def adm_users_delask(callback: CallbackQuery, session: AsyncSession, db_us
 
 @router.callback_query(F.data.startswith("adm:users:del:"))
 @require_bot_owner_handler
-async def adm_users_delete(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+async def adm_users_delete_ask_reason(
+    callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser
+):
+    """Confirm button → ask typed delete reason (same pattern as block/revoke)."""
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
         return
     user_id = int(callback.data.split(":")[-1])
-    from app.services.notifications import notify_account_edit
-    from app.services.users import delete_bot_user
-
     user, deny = await _platform_shop_user(session, user_id)
     if deny:
         await callback.answer(deny, show_alert=True)
         return
+    from app.services.users import is_protected_admin
+
+    if is_protected_admin(user):
+        await callback.answer("حذف ادمین مجاز نیست", show_alert=True)
+        return
+    await callback.answer()
+    await state.set_state(AdminStates.delete_user_reason)
+    await state.update_data(delete_user_id=user_id)
+    if callback.message:
+        await callback.message.answer(
+            f"علت حذف کامل کاربر <code>{user.telegram_id}</code> را بنویسید "
+            "(حداقل ۳ کاراکتر — برای خود کاربر ارسال می‌شود):\n\nبرای لغو: انصراف",
+            reply_markup=kb.cancel_reply(),
+        )
+
+
+@router.message(AdminStates.delete_user_reason)
+@require_bot_owner_handler
+async def adm_users_delete_reason(
+    message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser
+):
+    if not _is_admin(db_user):
+        await state.clear()
+        return
+    if kb.is_cancel_text(message.text):
+        await state.clear()
+        await message.answer("لغو شد.", reply_markup=kb.admin_users_reply_keyboard())
+        return
+    reason = (message.text or "").strip()
+    if len(reason) < 3:
+        await message.answer("علت حداقل ۳ کاراکتر باشد. دوباره بنویسید یا انصراف بزنید:")
+        return
+    data = await state.get_data()
+    user_id = int(data.get("delete_user_id") or 0)
+    await state.clear()
+    if not user_id:
+        await message.answer("نشست منقضی شد. دوباره از کارت کاربر اقدام کنید.")
+        return
+
+    from app.services.notifications import notify_account_edit
+    from app.services.users import delete_bot_user, is_protected_admin
+
+    user, deny = await _platform_shop_user(session, user_id)
+    if deny:
+        await message.answer(deny, reply_markup=kb.admin_users_reply_keyboard())
+        return
+    if is_protected_admin(user):
+        await message.answer(
+            "حذف ادمین مجاز نیست.",
+            reply_markup=kb.admin_users_reply_keyboard(),
+        )
+        return
+
     await notify_account_edit(
         session,
         user=user,
         event="user_delete",
-        reason="حذف از پنل ربات ادمین",
+        reason=reason,
         actor=db_user.username or db_user.full_name or "ادمین ربات",
     )
     try:
@@ -2727,17 +2784,19 @@ async def adm_users_delete(callback: CallbackQuery, session: AsyncSession, db_us
             actor_user_id=db_user.id,
         )
     except ValueError as e:
-        await callback.answer(str(e), show_alert=True)
+        await message.answer(str(e), reply_markup=kb.admin_users_reply_keyboard())
         return
     except Exception as e:
-        await callback.answer(f"خطا: {e}", show_alert=True)
+        await message.answer(f"خطا: {e}", reply_markup=kb.admin_users_reply_keyboard())
         return
-    await callback.answer("حذف شد", show_alert=True)
-    if callback.message:
-        await callback.message.edit_text(
-            f"🗑 کاربر <code>{info.get('telegram_id')}</code> ({info.get('name')}) حذف شد.",
-            reply_markup=kb.admin_users_reply_keyboard(),
-        )
+
+    # ReplyKeyboard cannot be attached via edit_text — that threw and surfaced
+    # as «خطایی رخ داد» even after a successful delete. Send a new message.
+    await message.answer(
+        f"🗑 کاربر <code>{info.get('telegram_id')}</code> ({html.escape(str(info.get('name') or '—'))}) "
+        f"حذف شد.\nعلت: {html.escape(reason)}",
+        reply_markup=kb.admin_users_reply_keyboard(),
+    )
 
 
 @router.callback_query(F.data.startswith("adm:users:unres:"))
