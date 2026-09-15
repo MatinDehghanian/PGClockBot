@@ -4,13 +4,13 @@ Root causes covered:
 1) Confirm stacked under edit (z-index) — bringModalToFront.
 2) Ops kebab: panelConfirm → closeRowActions → menu display:none →
    native form.submit() drops fields on mobile WebKit → empty reason flash.
-   Fix: submitFormPost() builds a body-level form with reason from JS memory.
+3) v10.1.16 body-level display:none form.submit() STILL dropped fields on
+   mobile WebKit — same class of bug. v10.1.19 posts via fetch(URLSearchParams).
 """
 
 from __future__ import annotations
 
 import json
-import re
 import subprocess
 import tempfile
 import textwrap
@@ -45,6 +45,8 @@ def _run_node(script: str) -> dict:
     with tempfile.TemporaryDirectory() as td:
         path = Path(td) / "proof.js"
         path.write_text(script, encoding="utf-8")
+        env = dict(**{k: v for k, v in __import__("os").environ.items()})
+        env["NODE_PATH"] = "/tmp/jsdom-deps/node_modules"
         proc = subprocess.run(
             ["node", str(path)],
             cwd="/tmp",
@@ -52,6 +54,7 @@ def _run_node(script: str) -> dict:
             text=True,
             timeout=30,
             check=False,
+            env=env,
         )
         if proc.returncode != 0:
             raise AssertionError(proc.stderr or proc.stdout or "node failed")
@@ -64,18 +67,18 @@ class DeleteSubmitStaticTests(unittest.TestCase):
         self.assertIn("function submitFormPost(", js)
         self.assertIn("window.panelSubmitFormPost = submitFormPost", js)
         body = _fn_src(js, "submitFormPost")
-        self.assertIn("document.body.appendChild(tmp)", body)
-        self.assertIn("tmp.submit()", body)
+        self.assertIn("URLSearchParams", body)
+        self.assertIn("window.fetch(action", body)
+        self.assertIn("body.append(name", body)
+        self.assertIn("Must NOT use display:none", body)
 
     def test_confirm_success_uses_submit_form_post_not_native(self):
         js = JS.read_text(encoding="utf-8")
         start = js.find("window.panelConfirm(opts).then")
         self.assertGreater(start, 0)
-        # First then-handler (form submit intercept)
         block = js[start : start + 1100]
         self.assertIn("submitFormPost(form, overrides)", block)
         self.assertIn("overrides.confirm_reason", block)
-        # Executable native submit must not remain in the confirm success path.
         code_only = "\n".join(
             ln for ln in block.splitlines() if not ln.strip().startswith("/*") and "*/" not in ln
         )
@@ -83,7 +86,6 @@ class DeleteSubmitStaticTests(unittest.TestCase):
         self.assertIn("submitFormPost(form, overrides);", code_only)
 
     def test_kebab_css_hides_unported_menu(self):
-        """Documents the trap: un-ported menu is display:none (WebKit field drop)."""
         css = CSS.read_text(encoding="utf-8")
         block = css.split(".row-actions-menu:not(.is-ported) {", 1)[1].split("}", 1)[0]
         self.assertIn("display: none !important", block)
@@ -101,7 +103,6 @@ class DeleteSubmitStaticTests(unittest.TestCase):
 
 class DeleteSubmitRuntimeProof(unittest.TestCase):
     def test_reason_survives_when_origin_form_is_display_none(self):
-        """Simulate ops kebab after closeRowActions: form in display:none menu."""
         js_src = JS.read_text(encoding="utf-8")
         collect = _fn_src(js_src, "collectFormFields")
         submit = _fn_src(js_src, "submitFormPost")
@@ -125,32 +126,26 @@ class DeleteSubmitRuntimeProof(unittest.TestCase):
             __COLLECT__
             __SUBMIT__
             window.__posted = null;
-            const orig = window.HTMLFormElement.prototype.submit;
-            window.HTMLFormElement.prototype.submit = function(){
-              const entries = [];
-              this.querySelectorAll('input').forEach((el) => entries.push([el.name, el.value]));
-              window.__posted = {
-                parent: this.parentNode && this.parentNode.tagName,
-                action: this.getAttribute('action'),
-                entries,
-              };
+            window.fetch = function(url, init){
+              const params = Object.fromEntries(init.body.entries());
+              window.__posted = { url: String(url), method: init.method, params };
+              return Promise.resolve({ url: 'https://example.test/users?ok=1', ok: true });
             };
-            const form = document.getElementById('del');
-            // Reason lives in JS memory (confirm result) — stamp via overrides.
-            submitFormPost(form, {
+            window.location.assign = function(){};
+            submitFormPost(document.getElementById('del'), {
               reason: 'تخلف تکرار شده',
               confirm_reason: 'تخلف تکرار شده',
             });
-            const posted = window.__posted;
-            const map = Object.fromEntries(posted.entries);
+            const p = window.__posted;
             const out = {
-              parent: posted.parent,
-              action: posted.action,
-              reason: map.reason || '',
-              confirm_reason: map.confirm_reason || '',
-              csrf: map.csrf_token || '',
+              url: p && p.url,
+              method: p && p.method,
+              reason: p && p.params.reason || '',
+              confirm_reason: p && p.params.confirm_reason || '',
+              csrf: p && p.params.csrf_token || '',
             };
-            out.ok = out.parent === 'BODY'
+            out.ok = out.url.indexOf('/users/7/delete') >= 0
+              && out.method === 'POST'
               && out.reason === 'تخلف تکرار شده'
               && out.confirm_reason === 'تخلف تکرار شده'
               && out.csrf === 'tok-abc';
@@ -182,22 +177,27 @@ class DeleteSubmitRuntimeProof(unittest.TestCase):
             __COLLECT__
             __SUBMIT__
             window.__posted = null;
-            window.HTMLFormElement.prototype.submit = function(){
-              const entries = [];
-              this.querySelectorAll('input').forEach((el) => entries.push([el.name, el.value]));
-              window.__posted = Object.fromEntries(entries);
-              window.__parent = this.parentNode && this.parentNode.tagName;
+            window.fetch = function(url, init){
+              const params = Object.fromEntries(init.body.entries());
+              window.__posted = { url: String(url), params };
+              return Promise.resolve({ url: 'https://example.test/users?ok=1', ok: true });
             };
+            window.location.assign = function(){};
             submitFormPost(document.getElementById('del'), {
               reason: 'درخواست خود کاربر',
               confirm_reason: 'درخواست خود کاربر',
             });
+            const p = window.__posted;
             const out = {
-              parent: window.__parent,
-              reason: window.__posted.reason,
-              csrf: window.__posted.csrf_token,
+              reason: p.params.reason,
+              confirm_reason: p.params.confirm_reason,
+              csrf: p.params.csrf_token,
+              url: p.url,
             };
-            out.ok = out.parent === 'BODY' && out.reason === 'درخواست خود کاربر' && out.csrf === 'tok-edit';
+            out.ok = out.reason === 'درخواست خود کاربر'
+              && out.confirm_reason === 'درخواست خود کاربر'
+              && out.csrf === 'tok-edit'
+              && out.url.indexOf('/users/9/delete') >= 0;
             process.stdout.write(JSON.stringify(out));
             """
         ).replace("__COLLECT__", collect).replace("__SUBMIT__", submit)
