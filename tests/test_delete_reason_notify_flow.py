@@ -91,22 +91,60 @@ class DeleteNotifyIncludesReasonTests(unittest.IsolatedAsyncioTestCase):
 
 
 class PanelJsApplyReasonTests(unittest.TestCase):
-    def test_apply_reason_in_place_and_submit_bypasses_request_submit(self):
+    def test_apply_reason_then_body_level_submit_form_post(self):
         js = (ROOT / "app/web/static/panel.js").read_text(encoding="utf-8")
         self.assertIn("update existing hidden reason in place", js)
         # Delete-form success path inside setupPanelConfirm
         success = js.split("applyReason(form, opts, result.reason);")[1].split(
             "document.addEventListener('click'"
         )[0]
-        self.assertIn("ensureCsrfField(form)", success)
-        self.assertIn("form.submit()", success)
-        self.assertNotIn("submitFormWithCsrf(form)", success)
+        self.assertIn("submitFormPost(form, overrides)", success)
+        self.assertIn("overrides.confirm_reason", success)
         self.assertNotIn("requestSubmit(", success)
-        helper = js.split("function submitFormWithCsrf")[1].split(
-            "window.panelEnsureCsrfField"
+        # Executable native submit of the (possibly display:none) origin form must go.
+        code_only = "\n".join(
+            ln for ln in success.splitlines()
+            if not ln.strip().startswith("/*") and "*/" not in ln
+        )
+        self.assertNotIn("form.submit();", code_only)
+        helper = js.split("function submitFormPost(")[1].split(
+            "window.panelSubmitFormPost"
         )[0]
-        self.assertIn("form.submit()", helper)
+        self.assertIn("document.body.appendChild(tmp)", helper)
+        self.assertIn("tmp.submit()", helper)
         self.assertNotIn("requestSubmit", helper)
+
+
+class DeleteReasonCharsetTests(unittest.TestCase):
+    """Any script (Persian, Latin, digits, mixed) of length >= 3 is accepted."""
+
+    def test_persian_latin_mixed_accepted(self):
+        from starlette.datastructures import FormData
+
+        from app.services.delete_reason import delete_reason_too_short, extract_delete_reason
+
+        cases = [
+            "حذف کاربر",
+            "abc",
+            "AB12",
+            "حذف test",
+            "۱۲۳۴",  # Persian digits — still characters
+            "ممنوع — spam",
+        ]
+        for text in cases:
+            with self.subTest(text=text):
+                form = FormData([("reason", text)])
+                got = extract_delete_reason(form)
+                self.assertEqual(got, text)
+                self.assertFalse(delete_reason_too_short(got))
+
+    def test_notify_message_keeps_persian_and_latin_reason(self):
+        from app.services.notifications import format_account_edit_subject
+
+        for reason in ("تخلف تکرارشده", "policy violation", "حذف / ban"):
+            text = format_account_edit_subject(event="user_delete", reason=reason)
+            self.assertIn(reason, text)
+            self.assertIn("علت", text)
 
 
 if __name__ == "__main__":
