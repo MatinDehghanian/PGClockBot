@@ -1622,6 +1622,104 @@ async def delete_bot_user(
         delete(ResellerApplication).where(ResellerApplication.user_id == user_id)
     )
 
+    # --- Loyalty / referral / terms / org rows that previously BLOCKED delete ---
+    # These FKs have no ON DELETE CASCADE. Without this cleanup, session.commit()
+    # raises IntegrityError and the user row stays forever (the real "حذف نمی‌شود"
+    # bug). Must run BEFORE deleting UserService (spins/redemptions FK to services).
+    from app.db.models import (
+        ChargeCode,
+        DeliveryFailure,
+        FunnelEvent,
+        LoyaltyDiscountEntitlement,
+        LoyaltyReward,
+        LuckyWheelPrize,
+        LuckyWheelSpin,
+        LuckyWheelUserState,
+        OrgPrincipal,
+        PaymentSettlement,
+        PointsRule,
+        PointsTransaction,
+        ReferralEvent,
+        RewardRedemption,
+        TermsAcceptance,
+    )
+
+    await session.execute(
+        update(BotUser).where(BotUser.id == user_id).values(owner_principal_id=None)
+    )
+    await session.execute(
+        update(OrgPrincipal).where(OrgPrincipal.bot_user_id == user_id).values(bot_user_id=None)
+    )
+    await session.execute(
+        update(PaymentSettlement)
+        .where(PaymentSettlement.shop_owner_id == user_id)
+        .values(shop_owner_id=None)
+    )
+    await session.execute(
+        update(FunnelEvent).where(FunnelEvent.user_id == user_id).values(user_id=None)
+    )
+    await session.execute(
+        update(FunnelEvent).where(FunnelEvent.reseller_id == user_id).values(reseller_id=None)
+    )
+    await session.execute(
+        update(DeliveryFailure)
+        .where(DeliveryFailure.reseller_id == user_id)
+        .values(reseller_id=None)
+    )
+    await session.execute(
+        update(ChargeCode).where(ChargeCode.reseller_id == user_id).values(reseller_id=None)
+    )
+    await session.execute(
+        update(PointsRule).where(PointsRule.reseller_id == user_id).values(reseller_id=None)
+    )
+    await session.execute(
+        update(LoyaltyReward).where(LoyaltyReward.reseller_id == user_id).values(reseller_id=None)
+    )
+    await session.execute(
+        update(LuckyWheelPrize)
+        .where(LuckyWheelPrize.reseller_id == user_id)
+        .values(reseller_id=None)
+    )
+    await session.execute(
+        update(LuckyWheelSpin).where(LuckyWheelSpin.reseller_id == user_id).values(reseller_id=None)
+    )
+    await session.execute(
+        update(LuckyWheelUserState)
+        .where(LuckyWheelUserState.reseller_id == user_id)
+        .values(reseller_id=None)
+    )
+
+    await session.execute(
+        delete(LoyaltyDiscountEntitlement).where(LoyaltyDiscountEntitlement.user_id == user_id)
+    )
+    await session.execute(delete(RewardRedemption).where(RewardRedemption.user_id == user_id))
+    await session.execute(delete(LuckyWheelSpin).where(LuckyWheelSpin.user_id == user_id))
+    await session.execute(
+        delete(LuckyWheelUserState).where(LuckyWheelUserState.user_id == user_id)
+    )
+    pts = list(
+        (
+            await session.execute(
+                select(PointsTransaction.id).where(PointsTransaction.user_id == user_id)
+            )
+        ).scalars().all()
+    )
+    if pts:
+        await session.execute(
+            update(PointsTransaction)
+            .where(PointsTransaction.reversed_tx_id.in_(pts))
+            .values(reversed_tx_id=None)
+        )
+        await session.execute(
+            delete(PointsTransaction).where(PointsTransaction.user_id == user_id)
+        )
+    await session.execute(
+        delete(ReferralEvent).where(
+            (ReferralEvent.referrer_id == user_id) | (ReferralEvent.referred_id == user_id)
+        )
+    )
+    await session.execute(delete(TermsAcceptance).where(TermsAcceptance.bot_user_id == user_id))
+
     await session.execute(delete(Payment).where(Payment.user_id == user_id))
     await session.execute(delete(Order).where(Order.user_id == user_id))
     await session.execute(delete(UserService).where(UserService.bot_user_id == user_id))
