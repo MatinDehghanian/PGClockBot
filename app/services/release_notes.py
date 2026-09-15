@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "10.1.15": [
+        "رفع ریشه‌ای حذف از مودال کاربر: مودال تأیید دیگر زیر مودال ویرایش پنهان نمی‌شود",
+        "openModal همیشه مودال را به جلوی body می‌آورد و z-index را بالاتر از بقیه می‌برد (confirm=4600+)",
+        "Escape / اسکرول فقط روی مودال بالایی اعمال می‌شود؛ علت حذف دوباره قابل ورود و ارسال است",
+        "بدون مایگریشن DB؛ ریستور: restore/pre-v10.1.15-modal-stack-2026-09-15",
+    ],
     "10.1.14": [
         "حذف کاربر/نماینده/ادمین: علت حذف مثل قبل از v10 دوباره پرسیده می‌شود و برای کاربر ارسال می‌شود",
         "رفع لایهٔ JS: applyReason مقدار را روی فیلد مخفی موجود می‌نویسد؛ بعد از تأیید form.submit() بدون race با confirmSkip",

@@ -1046,7 +1046,7 @@
       let touchStartY = 0;
       modalWheelGuard = (e) => {
         if (!document.body.classList.contains('modal-open')) return;
-        const modal = document.querySelector('.ui-modal.open');
+        const modal = topOpenModal();
         if (!modal) return;
         if (!modal.contains(e.target)) {
           e.preventDefault();
@@ -1069,7 +1069,7 @@
       };
       modalTouchGuard = (e) => {
         if (!document.body.classList.contains('modal-open')) return;
-        const modal = document.querySelector('.ui-modal.open');
+        const modal = topOpenModal();
         if (!modal) return;
         if (!modal.contains(e.target)
             || e.target === modal
@@ -1155,6 +1155,53 @@
       }
       ensureModalScrollShell(el);
     }
+    /* Among open modals, the topmost is highest z-index, then last in DOM. */
+    function topOpenModal(){
+      const open = Array.from(document.querySelectorAll('.ui-modal.open'));
+      if (!open.length) return null;
+      let best = open[0];
+      let bestZ = parseInt(best.style.zIndex || window.getComputedStyle(best).zIndex, 10) || 0;
+      for (let i = 1; i < open.length; i++) {
+        const m = open[i];
+        const z = parseInt(m.style.zIndex || window.getComputedStyle(m).zIndex, 10) || 0;
+        if (z > bestZ) {
+          best = m;
+          bestZ = z;
+        } else if (z === bestZ && (best.compareDocumentPosition(m) & Node.DOCUMENT_POSITION_FOLLOWING)) {
+          best = m;
+        }
+      }
+      return best;
+    }
+    /**
+     * Root cause of confirm-under-edit: edit modal is body-appended AFTER #modal-confirm,
+     * both share CSS z-index 4000, so edit paints on top and the reason field is unreachable.
+     * Always move the opened modal to the end of <body> and raise its inline z-index.
+     */
+    function bringModalToFront(el, opts){
+      if (!el) return;
+      ensureModalPorted(el);
+      /* Re-append even when already on body — last child wins same-z paint order. */
+      if (el.parentNode === document.body) {
+        document.body.appendChild(el);
+      }
+      document.querySelectorAll('.ui-modal.open.is-front').forEach((m) => {
+        if (m !== el) m.classList.remove('is-front');
+      });
+      let maxZ = 4000;
+      document.querySelectorAll('.ui-modal.open').forEach((m) => {
+        if (m === el) return;
+        const z = parseInt(m.style.zIndex || window.getComputedStyle(m).zIndex, 10);
+        if (!isNaN(z) && z > maxZ) maxZ = z;
+      });
+      /* Confirm / stacked dialogs sit clearly above edit modals (4000). */
+      const stack = !!(opts && opts.stack) || el.id === 'modal-confirm';
+      const base = stack ? 4600 : 4000;
+      el.style.zIndex = String(Math.max(maxZ + 20, base));
+      el.classList.add('is-front');
+    }
+    window.bringModalToFront = bringModalToFront;
+    window.topOpenModal = topOpenModal;
     function prefersReducedMotion(){
       try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; }
     }
@@ -1163,8 +1210,12 @@
       if (!el) return;
       const wasOpen = el.classList.contains('open') || el.classList.contains('is-closing');
       el.hidden = true;
-      el.classList.remove('open', 'is-closing');
+      el.classList.remove('open', 'is-closing', 'is-front', 'is-stack');
+      try { el.style.zIndex = ''; } catch (_) {}
       restoreModalHome(el);
+      /* After closing a stacked confirm, re-mark the remaining top modal. */
+      const still = topOpenModal();
+      if (still) still.classList.add('is-front');
       /* Drop sticky SSR form errors when closing (create/edit user modals) */
       el.querySelectorAll('.flash.err[id$="-form-err"]').forEach((err) => {
         err.hidden = true;
@@ -1252,16 +1303,18 @@
       if (keys && keys.length) stripQueryParams(keys);
     }
     function openModal(id, opts){
-      const el = document.getElementById(id);
+      opts = opts || {};
+      const el = (typeof id === 'string') ? document.getElementById(id) : id;
       if (!el) return;
       /* opts.stack: open on top without dismissing the caller (confirm over edit). */
-      const stack = !!(opts && opts.stack);
+      const stack = !!opts.stack;
       if (!stack) {
         document.querySelectorAll('.ui-modal.open').forEach((m) => {
           if (m !== el) closeModal(m, { instant: true });
         });
+      } else {
+        el.classList.add('is-stack');
       }
-      ensureModalPorted(el);
       /* Fresh open: clear prior form errors unless SSR keep flag is set */
       el.querySelectorAll('.flash.err[id$="-form-err"]').forEach((err) => {
         if (err.dataset.keep) return;
@@ -1271,6 +1324,8 @@
       el.classList.remove('is-closing');
       el.hidden = false;
       el.classList.add('open');
+      /* Must run AFTER .open so maxZ scans include siblings; re-appends to body end. */
+      bringModalToFront(el, opts);
       lockPageScroll();
       /* Ensure every select in this modal is custom (covers late DOM / fragments) */
       enhanceAllSelects(el);
@@ -1331,7 +1386,8 @@
     });
     document.addEventListener('keydown', (e) => {
       if (e.key !== 'Escape') return;
-      const open = document.querySelector('.ui-modal.open');
+      /* Only the topmost open modal — stacked confirm must not also dismiss edit. */
+      const open = topOpenModal();
       if (!open) return;
       if (modalStripKeys(open)) {
         closeModalSoft(open);
@@ -1342,7 +1398,7 @@
         window.location.href = href;
         return;
       }
-      document.querySelectorAll('.ui-modal.open').forEach(closeModal);
+      closeModal(open);
     });
 
     /* Domain settings modals: inner tab buttons */
@@ -2159,6 +2215,8 @@
       document.addEventListener('keydown', (e) => {
         if (e.key !== 'Escape' || !resolver) return;
         if (!modal.classList.contains('open')) return;
+        e.preventDefault();
+        e.stopPropagation();
         finish({ ok: false });
       }, true);
 
