@@ -16,6 +16,13 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "10.1.16": [
+        "رفع ریشه‌ای حذف کاربر: علت حذف دیگر بعد از تأیید گم نمی‌شود (حتی از دکمه عملیات/کebab)",
+        "علت: بستن منوی عملیات فرم حذف را display:none می‌کرد و WebKit فیلد reason را در POST نمی‌فرستاد",
+        "submitFormPost: ارسال از فرم موقت روی body با reason از حافظهٔ JS + CSRF",
+        "همراه با stacking مودال تأیید بالای ویرایش (۱۰.۱.۱۵)",
+        "بدون مایگریشن DB؛ ریستور: restore/pre-v10.1.16-delete-post-2026-09-15",
+    ],
     "10.1.15": [
         "رفع ریشه‌ای حذف از مودال کاربر: مودال تأیید دیگر زیر مودال ویرایش پنهان نمی‌شود",
         "openModal همیشه مودال را به جلوی body می‌آورد و z-index را بالاتر از بقیه می‌برد (confirm=4600+)",

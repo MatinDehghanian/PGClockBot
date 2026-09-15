@@ -21,16 +21,72 @@
       input.value = tok;
       form.appendChild(input);
     }
+    function collectFormFields(form) {
+      var out = [];
+      if (!form || !form.elements) return out;
+      Array.prototype.forEach.call(form.elements, function (el) {
+        if (!el || !el.name || el.disabled) return;
+        var tag = (el.tagName || '').toLowerCase();
+        if (tag !== 'input' && tag !== 'select' && tag !== 'textarea') return;
+        var type = (el.type || 'text').toLowerCase();
+        if (type === 'submit' || type === 'button' || type === 'image' || type === 'reset' || type === 'file') return;
+        if ((type === 'checkbox' || type === 'radio') && !el.checked) return;
+        out.push([el.name, el.value]);
+      });
+      return out;
+    }
+    /**
+     * Submit via a temporary <form> on document.body.
+     *
+     * Root cause of «علت حذف الزامی است» even after typing a reason from عملیات:
+     * panelConfirm calls closeRowActions(), which un-ports the kebab menu so CSS
+     * `.row-actions-menu:not(.is-ported) { display:none !important; width:0; … }`
+     * hides the originating delete form. Native form.submit() from that inert
+     * menu drops fields on mobile WebKit — reason never reaches the server.
+     * Building a body-level form with explicit overrides (reason from JS memory)
+     * makes the POST independent of kebab/edit-modal visibility.
+     */
+    function submitFormPost(form, overrides) {
+      if (!form) return;
+      overrides = overrides || {};
+      var action = form.getAttribute('action') || form.action || window.location.href;
+      var method = (form.getAttribute('method') || form.method || 'post').toLowerCase();
+      if (method !== 'get') method = 'post';
+      var values = {};
+      collectFormFields(form).forEach(function (pair) {
+        values[pair[0]] = pair[1];
+      });
+      Object.keys(overrides).forEach(function (k) {
+        if (overrides[k] == null) return;
+        values[k] = String(overrides[k]);
+      });
+      var tok = csrfToken();
+      if (tok) values.csrf_token = tok;
+      var tmp = document.createElement('form');
+      tmp.method = method;
+      tmp.action = action;
+      tmp.style.display = 'none';
+      tmp.setAttribute('aria-hidden', 'true');
+      Object.keys(values).forEach(function (name) {
+        var input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = name;
+        input.value = values[name];
+        tmp.appendChild(input);
+      });
+      document.body.appendChild(tmp);
+      tmp.submit();
+    }
     /* form.submit() skips the submit event — always stamp CSRF before programmatic posts.
-       Prefer submit() over requestSubmit(): requestSubmit re-fires capture listeners and
-       raced with data-confirm + confirmSkip (delete reason never reached the server). */
+       Prefer body-level submitFormPost over in-place form.submit() so kebab/display:none
+       forms still deliver reason/csrf (delete-from-ops bug). */
     function submitFormWithCsrf(form) {
       if (!form) return;
-      ensureCsrfField(form);
-      form.submit();
+      submitFormPost(form, {});
     }
     window.panelEnsureCsrfField = ensureCsrfField;
     window.panelSubmitForm = submitFormWithCsrf;
+    window.panelSubmitFormPost = submitFormPost;
     document.addEventListener('submit', function (e) {
       ensureCsrfField(e.target);
     }, true);
@@ -2322,9 +2378,17 @@
           if (!result || !result.ok) return;
           applyReason(form, opts, result.reason);
           applyPhrase(form, opts, result.phrase);
-          /* Native submit skips the submit event — avoids confirmSkip races. */
-          ensureCsrfField(form);
-          form.submit();
+          /* Body-level POST with reason from JS memory — not form.submit() inside
+             a display:none kebab menu (drops fields on mobile WebKit). */
+          const overrides = {};
+          if (opts.requireReason && result.reason) {
+            overrides[opts.reasonName || 'reason'] = result.reason;
+            overrides.confirm_reason = result.reason;
+          }
+          if (opts.confirmPhrase && result.phrase) {
+            overrides[opts.phraseName || 'confirm_phrase'] = result.phrase;
+          }
+          submitFormPost(form, overrides);
         });
       }, true);
 
@@ -2345,21 +2409,18 @@
           if (!form) return;
           applyReason(form, opts, result.reason);
           applyPhrase(form, opts, result.phrase);
-          if (btn && btn.name) {
-            let h = form.querySelector('input[type="hidden"][name="' + btn.name + '"][data-submitter-proxy]');
-            if (!h) {
-              h = document.createElement('input');
-              h.type = 'hidden';
-              h.name = btn.name;
-              h.value = btn.value || '1';
-              h.setAttribute('data-submitter-proxy', '1');
-              form.appendChild(h);
-            } else {
-              h.value = btn.value || '1';
-            }
+          const overrides = {};
+          if (opts.requireReason && result.reason) {
+            overrides[opts.reasonName || 'reason'] = result.reason;
+            overrides.confirm_reason = result.reason;
           }
-          ensureCsrfField(form);
-          form.submit();
+          if (opts.confirmPhrase && result.phrase) {
+            overrides[opts.phraseName || 'confirm_phrase'] = result.phrase;
+          }
+          if (btn && btn.name) {
+            overrides[btn.name] = btn.value || '1';
+          }
+          submitFormPost(form, overrides);
         });
       }, true);
     })();
