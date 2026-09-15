@@ -62,20 +62,57 @@
       });
       var tok = csrfToken();
       if (tok) values.csrf_token = tok;
-      var tmp = document.createElement('form');
-      tmp.method = method;
-      tmp.action = action;
-      tmp.style.display = 'none';
-      tmp.setAttribute('aria-hidden', 'true');
+
+      /* v10.1.16 used a display:none <form>.submit() — on mobile WebKit that
+         STILL dropped fields (same class of bug as the kebab menu). Build the
+         body as an explicit string and POST via fetch so reason cannot vanish. */
+      var body = new URLSearchParams();
       Object.keys(values).forEach(function (name) {
-        var input = document.createElement('input');
-        input.type = 'hidden';
-        input.name = name;
-        input.value = values[name];
-        tmp.appendChild(input);
+        body.append(name, values[name] == null ? '' : String(values[name]));
       });
-      document.body.appendChild(tmp);
-      tmp.submit();
+
+      function fallbackFormSubmit() {
+        var tmp = document.createElement('form');
+        tmp.method = method;
+        tmp.action = action;
+        /* Must NOT use display:none — WebKit may omit fields on submit. */
+        tmp.setAttribute('aria-hidden', 'true');
+        tmp.style.cssText = 'position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0;overflow:hidden;';
+        Object.keys(values).forEach(function (name) {
+          var input = document.createElement('input');
+          input.type = 'hidden';
+          input.name = name;
+          input.value = values[name] == null ? '' : String(values[name]);
+          tmp.appendChild(input);
+        });
+        document.body.appendChild(tmp);
+        tmp.submit();
+      }
+
+      if (method === 'get' || typeof window.fetch !== 'function') {
+        fallbackFormSubmit();
+        return;
+      }
+
+      window.fetch(action, {
+        method: 'POST',
+        body: body,
+        credentials: 'same-origin',
+        redirect: 'follow',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+          'Accept': 'text/html,application/xhtml+xml',
+          'X-CSRF-Token': tok || ''
+        }
+      }).then(function (res) {
+        if (res && res.url) {
+          window.location.assign(res.url);
+          return;
+        }
+        window.location.reload();
+      }).catch(function () {
+        fallbackFormSubmit();
+      });
     }
     /* form.submit() skips the submit event — always stamp CSRF before programmatic posts.
        Prefer body-level submitFormPost over in-place form.submit() so kebab/display:none
@@ -3082,6 +3119,8 @@
         const form = document.createElement('form');
         form.method = 'post';
         form.action = url;
+        form.setAttribute('aria-hidden', 'true');
+        form.style.cssText = 'position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0;overflow:hidden;';
         const action = document.createElement('input');
         action.type = 'hidden';
         action.name = 'action';
@@ -3092,6 +3131,24 @@
         ret.name = 'return_to';
         ret.value = cleanReturnTo();
         form.appendChild(ret);
+        ids.forEach((id) => {
+          const inp = document.createElement('input');
+          inp.type = 'hidden';
+          inp.name = 'ids';
+          inp.value = id;
+          form.appendChild(inp);
+        });
+        document.body.appendChild(form);
+        const overrides = {};
+        if (reason) {
+          overrides.reason = reason;
+          overrides.confirm_reason = reason;
+        }
+        if (phrase) overrides.confirm_phrase = phrase;
+        if (typeof window.panelSubmitFormPost === 'function') {
+          window.panelSubmitFormPost(form, overrides);
+          return;
+        }
         if (reason) {
           const r = document.createElement('input');
           r.type = 'hidden';
@@ -3106,14 +3163,6 @@
           p.value = phrase;
           form.appendChild(p);
         }
-        ids.forEach((id) => {
-          const inp = document.createElement('input');
-          inp.type = 'hidden';
-          inp.name = 'ids';
-          inp.value = id;
-          form.appendChild(inp);
-        });
-        document.body.appendChild(form);
         ensureCsrfField(form);
         form.submit();
       }

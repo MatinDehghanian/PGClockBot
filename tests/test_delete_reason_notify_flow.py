@@ -110,8 +110,8 @@ class PanelJsApplyReasonTests(unittest.TestCase):
         helper = js.split("function submitFormPost(")[1].split(
             "window.panelSubmitFormPost"
         )[0]
-        self.assertIn("document.body.appendChild(tmp)", helper)
-        self.assertIn("tmp.submit()", helper)
+        self.assertIn("URLSearchParams", helper)
+        self.assertIn("window.fetch(action", helper)
         self.assertNotIn("requestSubmit", helper)
 
 

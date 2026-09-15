@@ -277,7 +277,7 @@ def build_manifest(cfg: dict[str, Any]) -> dict[str, Any]:
 
 def service_worker_js() -> str:
     return """/* PGClockBot panel service worker — static shell only */
-const CACHE = 'pgclock-shell-v51';
+const CACHE = 'pgclock-shell-v52';
 const PRECACHE = [
   '/static/logo.png',
   '/static/logo-64.png',
@@ -292,7 +292,8 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('activate', (event) => {
   /* Do NOT clients.claim() here — mid-load takeover aborts in-flight CSS/font
-     requests on iOS Safari (blank/unstyled panel). */
+     requests on iOS Safari (blank/unstyled panel). skipWaiting + cache bump
+     still retires the old SW on the next navigation. */
   event.waitUntil(
     caches.keys().then((keys) =>
       Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
@@ -307,23 +308,9 @@ function isVersionedPanelAsset(url) {
     || url.pathname.indexOf('/static/fonts/') === 0;
 }
 
-/* When network fails for ?v=8.5.xx URLs, fall back to any cached same-pathname
-   asset so the panel is never left unstyled/unscripted. */
-function matchIgnoreSearch(req) {
-  return caches.open(CACHE).then((cache) =>
-    cache.match(req).then((hit) => {
-      if (hit) return hit;
-      return cache.keys().then((keys) => {
-        const want = new URL(req.url).pathname;
-        for (const k of keys) {
-          try {
-            if (new URL(k.url).pathname === want) return cache.match(k);
-          } catch (e) {}
-        }
-        return undefined;
-      });
-    })
-  );
+/* Exact-URL cache only — never serve an older ?v= panel.js/css after a version bump. */
+function matchExact(req) {
+  return caches.open(CACHE).then((cache) => cache.match(req));
 }
 
 self.addEventListener('fetch', (event) => {
@@ -334,18 +321,26 @@ self.addEventListener('fetch', (event) => {
   if (!url.pathname.startsWith('/static/') && !url.pathname.startsWith('/pwa/')) return;
 
   if (isVersionedPanelAsset(url)) {
-    /* Network-first, but NEVER hand the page a failed/empty CSS/JS response
-       when an older same-pathname cache exists — that was the intermittent
-       black void with duplicate brands (color-scheme dark, no layout CSS). */
     event.respondWith(
       fetch(req).then((res) => {
         if (res && res.ok) {
           const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put(req, copy));
+          caches.open(CACHE).then((c) => {
+            c.keys().then((keys) => {
+              keys.forEach((k) => {
+                try {
+                  if (new URL(k.url).pathname === url.pathname && k.url !== req.url) {
+                    c.delete(k);
+                  }
+                } catch (e) {}
+              });
+            });
+            c.put(req, copy);
+          });
           return res;
         }
-        return matchIgnoreSearch(req).then((hit) => hit || res);
-      }).catch(() => matchIgnoreSearch(req))
+        return matchExact(req).then((hit) => hit || res);
+      }).catch(() => matchExact(req))
     );
     return;
   }

@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "10.1.19": [
+        "رفع قطعی خطای «علت حذف الزامی است» روی موبایل: ارسال حذف با fetch و بدنهٔ صریح (دیگر form display:none)",
+        "Service Worker دیگر panel.js قدیمی را به‌جای نسخهٔ جدید سرو نمی‌کند",
+        "حذف گروهی هم از همان مسیر امن ارسال می‌شود",
+        "بدون مایگریشن DB؛ ریستور: restore/pre-v10.1.19-delete-fetch-2026-09-15",
+    ],
     "10.1.18": [
         "ریشه واقعی «کاربر حذف نمی‌شود»: پاک‌نشدن ردیف‌های وابسته (قوانین/امتیاز/معرفی/گردونه/پذیرش قوانین) باعث خطای FK می‌شد",
         "delete_bot_user حالا همه FKهای bot_users را قبل از DELETE پاک/خالی می‌کند",
