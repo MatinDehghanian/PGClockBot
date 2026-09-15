@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "10.1.21": [
+        "PWA/موبایل: حاشیه امن بالای هدر بیشتر شد تا زیر Dynamic Island نرود",
+        "اکاردیون سایدبار: باکس رنگی دور تیتر فقط موقع press/hover (کپسولی)؛ باز/بسته دیگر باکس ثابت ندارد",
+        "بدون مایگریشن DB؛ ریستور: restore/pre-v10.1.21-safe-top-accordion-2026-09-15",
+    ],
     "10.1.20": [
         "سایدبار: راهنما از اکاردیون خارج شد و به‌صورت چیپ پایین منو با استایل تگ «فعال» قرار گرفت",
         "اکاردیون: حذف فلش طوسی هنگام باز شدن؛ سلکت مثل آیتم‌های داخلی",
