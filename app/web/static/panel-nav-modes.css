@@ -7,9 +7,9 @@
   gap: var(--space-1, 0.25rem);
   width: 100%;
   margin: 0;
-  padding: var(--space-1, 0.25rem);
+  padding: var(--space-1, 0.25rem) var(--space-2, 0.5rem);
   border: 1px solid transparent;
-  border-radius: var(--r-sm, 10px);
+  border-radius: 999px; /* capsule hit/select chrome */
   background: transparent;
   color: inherit;
   font: inherit;
@@ -27,13 +27,25 @@
     color var(--motion-fast, 0.15s) var(--ease-standard, ease);
 }
 
-.nav-label-toggle:hover,
-.nav-label-toggle:focus-visible,
+/* Press feedback on all devices — disappears when finger lifts */
 .nav-label-toggle:active {
-  /* Neutral fallback — section-specific rules in panel.css override */
   background: color-mix(in srgb, var(--muted-fg, #a1a1aa) 10%, transparent);
   border-color: color-mix(in srgb, var(--border, #27272a) 80%, transparent);
   color: inherit;
+}
+
+/* Sticky :hover after tap is an iOS quirk — only apply on real hover pointers */
+@media (hover: hover) and (pointer: fine) {
+  .nav-label-toggle:hover {
+    background: color-mix(in srgb, var(--muted-fg, #a1a1aa) 10%, transparent);
+    border-color: color-mix(in srgb, var(--border, #27272a) 80%, transparent);
+    color: inherit;
+  }
+}
+
+.nav-label-toggle:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--bot-line, #e08a3c) 45%, transparent);
+  outline-offset: 1px;
 }
 
 .nav-label-caret {

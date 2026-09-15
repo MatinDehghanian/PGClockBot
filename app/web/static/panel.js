@@ -3797,6 +3797,8 @@ const root = document.getElementById('upd-root');
         section.classList.add('is-collapsed');
         btn.setAttribute('aria-expanded', 'false');
       }
+      /* Drop sticky focus chrome after tap (iOS/PWA) */
+      if (typeof btn.blur === 'function') btn.blur();
     });
   }
 

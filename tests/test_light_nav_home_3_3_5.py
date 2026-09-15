@@ -1,4 +1,4 @@
-"""Light theme: web-panel sidebar box stays border-only (no gray fill)."""
+"""Light theme: accordion sections stay transparent (capsule only on title press/hover)."""
 
 from __future__ import annotations
 
@@ -12,15 +12,6 @@ CSS = ROOT / "app/web/static/panel.css"
 
 
 class LightNavHomeBoxTests(unittest.TestCase):
-    def _light_block(self) -> str:
-        css = CSS.read_text(encoding="utf-8")
-        marker = 'html[data-theme="light"] .nav-section-home'
-        self.assertIn(marker, css)
-        # From home section rule through bot section (covers home active/hover)
-        start = css.index(marker)
-        end = css.index('html[data-theme="light"] .nav-section-bot', start)
-        return css[start:end]
-
     def test_home_box_not_grouped_with_modal_backdrop(self):
         css = CSS.read_text(encoding="utf-8")
         # Regression: home was accidentally sharing rgba(0,0,0,0.28) with backdrop
@@ -31,15 +22,26 @@ class LightNavHomeBoxTests(unittest.TestCase):
         )
         self.assertIsNone(bad, "nav-section-home must not share modal backdrop background")
 
-    def test_home_box_is_transparent_with_border(self):
-        block = self._light_block()
-        home = block.split("{", 1)[1].split("}", 1)[0]
-        self.assertIn("background: transparent;", home)
-        self.assertIn("border-color: var(--border);", home)
-        self.assertNotIn("rgba(0, 0, 0", home)
+    def test_accordion_sections_stay_transparent(self):
+        css = CSS.read_text(encoding="utf-8")
+        marker = (
+            'html[data-theme="light"] .nav-section-home,\n'
+            'html[data-theme="light"] .nav-section-bot,\n'
+            'html[data-theme="light"] .nav-section-pg'
+        )
+        self.assertIn(marker, css)
+        block = css.split(marker, 1)[1].split("}", 1)[0]
+        self.assertIn("background: transparent;", block)
+        self.assertIn("border-color: transparent;", block)
+        self.assertNotIn("rgba(0, 0, 0", block)
 
     def test_home_active_and_hover_are_neutral(self):
-        block = self._light_block()
+        css = CSS.read_text(encoding="utf-8")
+        marker = 'html[data-theme="light"] .nav-item-home.active'
+        self.assertIn(marker, css)
+        start = css.index(marker)
+        end = css.index('html[data-theme="light"] .nav-label-bot', start)
+        block = css[start:end]
         self.assertIn(".nav-item-home.active", block)
         self.assertIn(".nav-item-home:hover", block)
         active = block.split(".nav-item-home.active", 1)[1].split("}", 1)[0]
