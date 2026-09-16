@@ -257,6 +257,73 @@ p, li, .hint, .flash, .flash-copy, label, small.muted,
   overflow-y: auto;
   overscroll-behavior-y: auto;
   -webkit-overflow-scrolling: touch;
+  position: relative;
+  isolation: isolate;
+}
+/* Soft atmospheric stage — section-tinted, never louder than content */
+.panel-atmosphere {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+}
+.panel-atmosphere-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(56px);
+  opacity: 0.28;
+  will-change: transform;
+}
+.panel-atmosphere-orb-a {
+  width: min(46vw, 380px);
+  height: min(46vw, 380px);
+  top: -14%;
+  inset-inline-end: -10%;
+  background: color-mix(in srgb, var(--panel-tone, var(--brand)) 32%, transparent);
+  animation: panel-status-drift-a 16s var(--ease-standard, ease) infinite alternate;
+}
+.panel-atmosphere-orb-b {
+  width: min(36vw, 280px);
+  height: min(36vw, 280px);
+  bottom: 12%;
+  inset-inline-start: -12%;
+  background: color-mix(in srgb, var(--panel-tone-alt, var(--primary)) 18%, transparent);
+  animation: panel-status-drift-b 20s var(--ease-standard, ease) infinite alternate;
+}
+.panel-atmosphere-grid {
+  position: absolute;
+  inset: 0;
+  opacity: 0.14;
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--border) 75%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--border) 75%, transparent) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse 75% 55% at 50% 28%, #000 15%, transparent 72%);
+  -webkit-mask-image: radial-gradient(ellipse 75% 55% at 50% 28%, #000 15%, transparent 72%);
+}
+body[data-panel-tone="bot"] {
+  --panel-tone: var(--bot-line);
+  --panel-tone-alt: var(--brand);
+}
+body[data-panel-tone="pg"] {
+  --panel-tone: var(--pg-line);
+  --panel-tone-alt: var(--primary);
+}
+body[data-panel-tone="home"] {
+  --panel-tone: var(--muted-fg);
+  --panel-tone-alt: var(--brand);
+}
+html[data-theme="light"] .panel-atmosphere-orb { opacity: 0.2; }
+html[data-theme="light"] .panel-atmosphere-grid { opacity: 0.22; }
+@media (prefers-reduced-motion: reduce) {
+  .panel-atmosphere-orb-a,
+  .panel-atmosphere-orb-b { animation: none; }
+}
+.main-body,
+.site-footer {
+  position: relative;
+  z-index: 1;
 }
 .main-body {
   /* flex-shrink:0 — long pages must grow so .main scrolls content+footer together.
@@ -767,6 +834,55 @@ tr.principal-row-l2 td:first-child {
   align-items: center;
   gap: var(--space-1);
   min-width: 0;
+}
+/* Icon box + large soft watermark (404-card language, icon instead of digits) */
+.page-title-mark {
+  position: relative;
+  flex: 0 0 auto;
+  width: var(--space-4_5);
+  height: var(--space-4_5);
+  display: grid;
+  place-items: center;
+}
+.page-title-mark .page-title-ico {
+  position: relative;
+  z-index: 1;
+}
+.page-title-watermark {
+  position: absolute;
+  inset-inline-end: -0.55rem;
+  top: -0.7rem;
+  width: 3.25rem;
+  height: 3.25rem;
+  color: color-mix(in srgb, var(--bot-line) 16%, transparent);
+  pointer-events: none;
+  user-select: none;
+  z-index: 0;
+}
+.page-title-watermark svg {
+  width: 100%;
+  height: 100%;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.35;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.95;
+}
+.page-title-watermark--pg {
+  color: color-mix(in srgb, var(--pg-line) 18%, transparent);
+}
+.page-title-watermark--neutral {
+  color: color-mix(in srgb, var(--muted-fg) 22%, transparent);
+}
+html[data-theme="light"] .page-title-watermark {
+  color: color-mix(in srgb, var(--bot-line) 22%, transparent);
+}
+html[data-theme="light"] .page-title-watermark--pg {
+  color: color-mix(in srgb, var(--pg-line) 24%, transparent);
+}
+html[data-theme="light"] .page-title-watermark--neutral {
+  color: color-mix(in srgb, var(--muted-fg) 28%, transparent);
 }
 .page-title-ico {
   display: inline-flex;
@@ -6107,10 +6223,40 @@ td.byte-size {
   margin: 0 0 var(--space-3);
   padding: 0;
 }
+.modal-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.modal-title .page-title-mark {
+  /* Match page titles — slightly roomier so watermark breathes in modal chrome */
+  width: 2.75rem;
+  height: 2.75rem;
+}
+.modal-title .page-title-ico {
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 16px;
+}
+.modal-title .page-title-ico svg {
+  width: 22px;
+  height: 22px;
+}
+.modal-title .page-title-watermark {
+  width: 3.6rem;
+  height: 3.6rem;
+  inset-inline-end: -0.65rem;
+  top: -0.85rem;
+}
 /* Modal chrome title matches page titles (not the tiny section --title-size) */
 .ui-modal-head h1,
 .ui-modal-head h2,
-.ui-modal-head h3 {
+.ui-modal-head h3,
+.modal-title h1,
+.modal-title h2,
+.modal-title h3 {
   margin: 0;
   font-size: 22px;
   font-weight: 600;
@@ -10025,12 +10171,50 @@ tbody tr.is-bulk-selected:hover {
   justify-content: space-between;
   gap: var(--space-2);
   flex-wrap: wrap;
+  margin: 0 0 var(--space-2);
   padding: var(--space-1_5) var(--space-2);
-  border-bottom: 1px solid var(--border);
-  background: rgba(249, 115, 22, 0.08);
+  border: 1px solid color-mix(in srgb, var(--panel-tone, var(--brand)) 28%, var(--border));
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--panel-tone, var(--brand)) 8%, var(--bg-card));
+  box-sizing: border-box;
 }
 .table-bulk-bar[hidden] {
   display: none !important;
+}
+.table-bulk-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.table-bulk-select-wrap {
+  margin: 0 !important;
+  min-width: 0;
+  flex: 1 1 12rem;
+  font-weight: 400;
+}
+.table-bulk-select {
+  width: 100%;
+  min-width: 11rem;
+  max-width: 18rem;
+  min-height: 36px;
+  padding: 0 var(--space-2);
+  border-radius: var(--control-radius);
+  border: 1px solid var(--border);
+  background: var(--control-bg);
+  color: var(--foreground);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+}
+.table-bulk-select:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--panel-tone, var(--brand)) 45%, transparent);
+  outline-offset: 1px;
+}
+.table-bulk-apply {
+  flex: 0 0 auto;
+  min-height: 36px;
 }
 .table-bulk-actions {
   display: flex;
@@ -10066,6 +10250,11 @@ tbody tr.is-bulk-selected:hover {
   transform: translateY(-0.5px);
   box-sizing: border-box;
   border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--panel-tone, var(--brand)) 14%, transparent);
+  color: var(--foreground);
+}
+.table-bulk-op-count[hidden] {
+  display: none !important;
 }
 /* Tonal pills — mirror each bulk button variant (not one shared gray disk) */
 .table-bulk-op.btn-ghost .table-bulk-op-count {
@@ -10107,6 +10296,111 @@ html[data-theme="light"] .table-bulk-op.btn-danger .table-bulk-op-count {
   background: rgba(220, 38, 38, 0.12);
   border-color: rgba(220, 38, 38, 0.35);
   color: #b91c1c;
+}
+
+/* Color tags — users / resellers */
+.color-tag-picker {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.color-tag-picker-label {
+  display: block;
+  margin: 0 0 var(--space-1);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--foreground);
+}
+.color-tag-options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+}
+.color-tag-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 0 var(--space-1_5);
+  min-height: 32px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--control-bg);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted-fg);
+}
+.color-tag-option input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.color-tag-option:has(input:checked),
+.color-tag-option:has(input:focus-visible) {
+  border-color: color-mix(in srgb, var(--foreground) 28%, var(--border));
+  color: var(--foreground);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--foreground) 10%, transparent);
+}
+.color-tag-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #000 18%, transparent);
+}
+.color-tag-option--blue .color-tag-swatch { background: #3b82f6; }
+.color-tag-option--red .color-tag-swatch { background: #ef4444; }
+.color-tag-option--green .color-tag-swatch { background: #22c55e; }
+.color-tag-option--yellow .color-tag-swatch { background: #eab308; }
+.color-tag-option--blue:has(input:checked) {
+  border-color: color-mix(in srgb, #3b82f6 45%, var(--border));
+  background: color-mix(in srgb, #3b82f6 12%, transparent);
+  color: #60a5fa;
+}
+.color-tag-option--red:has(input:checked) {
+  border-color: color-mix(in srgb, #ef4444 45%, var(--border));
+  background: color-mix(in srgb, #ef4444 12%, transparent);
+  color: #f87171;
+}
+.color-tag-option--green:has(input:checked) {
+  border-color: color-mix(in srgb, #22c55e 45%, var(--border));
+  background: color-mix(in srgb, #22c55e 12%, transparent);
+  color: #4ade80;
+}
+.color-tag-option--yellow:has(input:checked) {
+  border-color: color-mix(in srgb, #eab308 45%, var(--border));
+  background: color-mix(in srgb, #eab308 12%, transparent);
+  color: #facc15;
+}
+.cell-name-text.color-tag-blue { color: #60a5fa; }
+.cell-name-text.color-tag-red { color: #f87171; }
+.cell-name-text.color-tag-green { color: #4ade80; }
+.cell-name-text.color-tag-yellow { color: #facc15; }
+html[data-theme="light"] .cell-name-text.color-tag-blue { color: #2563eb; }
+html[data-theme="light"] .cell-name-text.color-tag-red { color: #dc2626; }
+html[data-theme="light"] .cell-name-text.color-tag-green { color: #16a34a; }
+html[data-theme="light"] .cell-name-text.color-tag-yellow { color: #ca8a04; }
+.cell-name-text.is-color-tagged { font-weight: 650; }
+
+/* Modal atmospheric wash — inherits body panel tone */
+.ui-modal-panel::before {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  background:
+    radial-gradient(ellipse 70% 55% at 100% 0%, color-mix(in srgb, var(--panel-tone, var(--brand)) 14%, transparent), transparent 70%),
+    radial-gradient(ellipse 55% 45% at 0% 100%, color-mix(in srgb, var(--panel-tone-alt, var(--primary)) 10%, transparent), transparent 72%);
+  opacity: 0.9;
+}
+.ui-modal-panel > *,
+.ui-modal-panel .ui-modal-scroll {
+  position: relative;
+  z-index: 1;
 }
 
 /* Capsule numeric stepper — outer pill, circular ± inside, centered value */

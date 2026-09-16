@@ -127,7 +127,7 @@
       {% set usage = (reseller_usage or {}).get(u.id) or {} %}
       <tr{% if owner_view %} data-bulk-ops="delete_reseller,delete_user"{% endif %}>
         {% if owner_view %}{{ table_select_cell(u.id) }}{% endif %}
-        <td data-sort-value="{{ u.full_name or u.username or '' }}">{{ u.full_name or u.username or '—' }}</td>
+        <td data-sort-value="{{ u.full_name or u.username or '' }}"><span class="cell-name-text{% if u.color_tag %} color-tag-{{ u.color_tag }} is-color-tagged{% endif %}">{{ u.full_name or u.username or '—' }}</span></td>
         <td class="mono col-hide-sm" dir="ltr" data-sort-value="{{ u.telegram_id }}">{{ u.telegram_id }}</td>
         <td class="col-hide-sm" data-sort-value="{{ u.role }}">
           <span class="badge {% if u.role=='admin' %}role-admin{% elif u.role=='reseller' %}role-reseller{% else %}role-user{% endif %}">

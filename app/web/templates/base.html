@@ -51,7 +51,19 @@
   <link rel="icon" href="/static/logo-64.png" type="image/png" />
   {% block head %}{% endblock %}
 </head>
-<body>
+{% if staff is defined and staff %}
+{% set path = request.url.path %}
+{% if path.startswith('/pg') %}
+{% set panel_tone = 'pg' %}
+{% elif path.startswith('/dashboard') or path.startswith('/users') or path.startswith('/finance') or path.startswith('/orders') or path.startswith('/payments') or path.startswith('/plans') or path.startswith('/broadcast') or path.startswith('/loyalty') or path.startswith('/funnel') or path.startswith('/shop') or path.startswith('/message-variables') or path.startswith('/resellers') or (path.startswith('/tickets') and not path.startswith('/pg')) %}
+{% set panel_tone = 'bot' %}
+{% else %}
+{% set panel_tone = 'home' %}
+{% endif %}
+{% else %}
+{% set panel_tone = 'home' %}
+{% endif %}
+<body data-panel-tone="{{ panel_tone }}">
   {% if staff is defined and staff %}
   {% set path = request.url.path %}
   {% set perms = staff.get('permissions') or [] %}
@@ -355,6 +367,11 @@
     <div class="side-backdrop" id="side-backdrop" aria-hidden="true"></div>
 
     <main class="main">
+      <div class="panel-atmosphere" aria-hidden="true">
+        <span class="panel-atmosphere-orb panel-atmosphere-orb-a"></span>
+        <span class="panel-atmosphere-orb panel-atmosphere-orb-b"></span>
+        <span class="panel-atmosphere-grid"></span>
+      </div>
       <div class="main-body">
         {# Page flashes stay above the title. When an edit/domain settings modal
            is reopening, the same message is shown inside the modal instead. #}
@@ -429,7 +446,8 @@
     <div class="ui-modal-backdrop" data-modal-close></div>
     <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
       <div class="ui-modal-head">
-        <h2 id="confirm-title">تأیید</h2>
+        {% from "macros.html" import modal_title %}
+        {{ modal_title('security', 'تأیید', tone='neutral', heading_id='confirm-title') }}
         <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
       </div>
       <form id="confirm-form" class="form-stack" action="#" method="post" data-panel-validate="0" novalidate>
