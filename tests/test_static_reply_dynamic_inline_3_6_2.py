@@ -15,8 +15,6 @@ from app.bot.keyboards import (
     reply_action_map,
     reseller_home,
     reseller_settings_reply_keyboard,
-    support_keyboard,
-    wallet_keyboard,
 )
 
 
@@ -133,10 +131,6 @@ class StaticReplyDynamicInline362Tests(unittest.TestCase):
 
     def test_legacy_hubs_no_longer_static_chrome(self):
         """Inline legacy hubs must not re-surface full static menus."""
-        wh = wallet_keyboard()
-        self.assertEqual(len(wh.inline_keyboard), 1)
-        sh = support_keyboard()
-        self.assertEqual(len(sh.inline_keyboard), 1)
         ah = admin_home()
         labels = [b.text for row in ah.inline_keyboard for b in row]
         self.assertNotIn("📊 داشبورد", labels)

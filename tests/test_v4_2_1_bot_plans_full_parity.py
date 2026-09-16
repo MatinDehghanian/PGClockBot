@@ -8,6 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 ADMIN_PLANS = (ROOT / "app/bot/handlers/admin_plans.py").read_text(encoding="utf-8")
 KEYBOARDS = (ROOT / "app/bot/keyboards.py").read_text(encoding="utf-8")
+REPLY_KEYBOARDS = (ROOT / "app/bot/reply_keyboards.py").read_text(encoding="utf-8")
 REPLY_NAV = (ROOT / "app/bot/handlers/reply_nav.py").read_text(encoding="utf-8")
 MENU_NAV = (ROOT / "app/bot/menu_nav.py").read_text(encoding="utf-8")
 ADMIN = (ROOT / "app/bot/handlers/admin.py").read_text(encoding="utf-8")
@@ -55,8 +56,11 @@ class ReplyKeyboardAudienceTests(unittest.TestCase):
     def test_audience_on_reply_keyboard(self):
         self.assertIn("REPLY_ACTION_ADM_PLANS_AUD_USERS", KEYBOARDS)
         self.assertIn("REPLY_ACTION_ADM_PLANS_AUD_RESELLERS", KEYBOARDS)
-        self.assertIn("def admin_plans_audience_reply_keyboard", KEYBOARDS)
-        self.assertIn("def admin_plans_kind_reply_keyboard", KEYBOARDS)
+        self.assertIn("def admin_plans_audience_reply_keyboard", REPLY_KEYBOARDS)
+        self.assertIn("def admin_plans_kind_reply_keyboard", REPLY_KEYBOARDS)
+        # Re-exported for bot callers via keyboards facade
+        self.assertIn("admin_plans_audience_reply_keyboard", KEYBOARDS)
+        self.assertIn("admin_plans_kind_reply_keyboard", KEYBOARDS)
 
     def test_reply_nav_handles_audience_and_kind(self):
         self.assertIn("REPLY_ACTION_ADM_PLANS_AUD_USERS", REPLY_NAV)
@@ -72,7 +76,7 @@ class InlineBackSanityTests(unittest.TestCase):
     def test_reseller_list_uses_view_not_hint(self):
         block = KEYBOARDS[
             KEYBOARDS.find("def admin_reseller_plans_list_keyboard")
-            : KEYBOARDS.find("def admin_users_keyboard")
+            : KEYBOARDS.find("def backup_files_keyboard")
         ]
         self.assertIn("adm:resplan:view:", block)
         self.assertNotIn("adm:resplan:hint", block)

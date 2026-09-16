@@ -1196,24 +1196,6 @@ def service_actions(service_id: int, ui: dict | None = None) -> InlineKeyboardMa
     return InlineKeyboardMarkup(inline_keyboard=[])
 
 
-def wallet_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
-    """Legacy inline wallet hub — prefer wallet_reply_keyboard (3.6+)."""
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text=_t(ui, "btn_back"), callback_data="menu:home")],
-        ]
-    )
-
-
-def support_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
-    """Legacy inline support hub — prefer support_reply_keyboard (3.6+)."""
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text=_t(ui, "btn_back"), callback_data="menu:home")],
-        ]
-    )
-
-
 def support_contacts_keyboard(contacts: list[dict], ui: dict | None = None) -> InlineKeyboardMarkup:
     """URL contact rows only — ticket/back live on support_reply_keyboard."""
     from app.services.button_styles import resolve_support_contact_style
@@ -1600,12 +1582,6 @@ def backup_files_keyboard(backups: list[dict] | None = None) -> InlineKeyboardMa
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def admin_users_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
-    """Legacy — prefer admin_users_reply_keyboard."""
-    back = InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:home")
-    return InlineKeyboardMarkup(inline_keyboard=[[back]])
-
-
 def admin_users_list_keyboard(
     *,
     page: int,
@@ -1627,12 +1603,6 @@ def admin_users_list_keyboard(
     if not kb_rows:
         kb_rows = [[InlineKeyboardButton(text="کاربری نیست", callback_data="adm:users:list:0")]]
     return InlineKeyboardMarkup(inline_keyboard=kb_rows)
-
-
-def admin_resellers_menu(ui: dict | None = None) -> InlineKeyboardMarkup:
-    """Legacy stub — prefer admin_resellers_reply_keyboard."""
-    _ = ui
-    return InlineKeyboardMarkup(inline_keyboard=[])
 
 
 def admin_resellers_list_keyboard(
@@ -2071,12 +2041,6 @@ def reseller_app_review(app_id: int, ui: dict | None = None) -> InlineKeyboardMa
             ],
         ]
     )
-
-
-def pg_admin_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
-    """Legacy — prefer pg_reply_keyboard."""
-    _ = ui
-    return InlineKeyboardMarkup(inline_keyboard=[])
 
 
 def reseller_home(profile=None, ui: dict | None = None) -> InlineKeyboardMarkup:
