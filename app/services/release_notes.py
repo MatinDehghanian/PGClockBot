@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "10.1.24": [
+        "هات‌فیکس: بازگردانی مایگریشن 0027 تا پنل بعد از رولبک v10.1.23 بالا بیاید",
+        "علت خرابی: دیتابیس روی revision حذف‌شده 0027 مانده بود و Alembic در استارتاپ می‌ترکید",
+        "UI همان v10.1.21/23 می‌ماند؛ فقط سازگاری schema/alembic",
+        "بدون تغییر اتمسفر/bulk/تگ؛ ریستور: restore/pre-v10.1.24-alembic-hotfix-2026-09-16",
+    ],
     "10.1.23": [
         "بازگشت کامل UI به وضعیت پایدار v10.1.21 (لغو پولیش اتمسفر / bulk menu / تگ رنگی v10.1.22)",
         "بدون مایگریشن جدید؛ اگر color_tag روی DB مانده باشد بی‌ضرر و بلااستفاده است",
