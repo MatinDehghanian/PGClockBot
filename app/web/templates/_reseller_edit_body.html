@@ -1,4 +1,4 @@
-{% from "macros.html" import switch, color_tag_picker %}
+{% from "macros.html" import switch %}
 {% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
 {% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
 
@@ -28,7 +28,6 @@
 
 <section class="edit-section">
   <form method="post" action="/resellers/{{ user.id }}/edit" class="form-stack">
-    {{ color_tag_picker(name='color_tag', value=user.color_tag, label='تگ رنگی') }}
     <div class="form-row">
       <div>
         <label class="form-field">حالت پرداخت

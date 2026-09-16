@@ -100,8 +100,6 @@ class BotUser(Base):
     )
     is_blocked: Mapped[bool] = mapped_column(Boolean, default=False)
     staff_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    # Staff color tag for list scanning — blue|red|green|yellow|NULL
-    color_tag: Mapped[Optional[str]] = mapped_column(String(16), nullable=True, index=True)
     risk_flags: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)  # CSV
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
