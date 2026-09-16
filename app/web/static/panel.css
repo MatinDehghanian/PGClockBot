@@ -5514,7 +5514,9 @@ form.settings-form > .actions.sticky-actions,
   justify-content: center;
   gap: var(--space-1);
   width: 100%;
-  margin-top: auto;
+  /* Equal air above/below — never margin-top:auto (collapses when nav grows).
+     .side-nav already flex:1 so the chip stays above the footer. */
+  margin-top: var(--space-1);
   margin-bottom: var(--space-1);
   min-height: 36px;
   padding: 0 var(--space-2);
