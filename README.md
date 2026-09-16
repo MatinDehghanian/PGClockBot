@@ -1,128 +1,75 @@
 # PGClockBot
 
-Telegram shop bot for **PasarGuard** — Persian bot UI, English management CLI, web panel on port `9000`.
+**v10.1.24** — Telegram shop bot for **PasarGuard**. Persian bot UI, English management CLI, web panel on port `9000`.
 
 ---
 
-## One-line manager (Ubuntu 22.04+)
-
-Works on **fresh servers** and when `PGClockBot` **already exists** (old/partial install):
+## Quick start (Ubuntu 22.04+)
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockBot/main/get.sh)
 ```
 
-(Use process substitution so the keyboard stays connected. `curl | bash` also works now, but the form above is preferred.)
+Works on a fresh server or an existing `PGClockBot` folder (syncs to latest, then opens the menu).
 
-What it does:
-
-1. If `./PGClockBot` is missing → `git clone`
-2. If it already exists → `cd` + sync to latest
-3. Opens the English menu (`pgclock.sh`)
-
-Already inside the project folder:
-
-```bash
-bash get.sh
-# or
-bash pgclock.sh
-```
-
-If the folder is broken beyond repair:
-
-```bash
-mv PGClockBot "PGClockBot.bak.$(date +%Y%m%d)"
-bash <(curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockBot/main/get.sh)
-```
-
-Or after clone:
+Already inside the repo:
 
 ```bash
 bash pgclock.sh
 ```
 
-Menu:
-
-| # | Action | What it does |
-|---|--------|----------------|
-| 1 | **Install** | Silent install (deps + systemd) — open `/setup` wizard in browser |
-| 2 | **Update** | `git pull` + deps — keeps `.env` |
-| 3 | **Edit .env** | Open config in nano/vi, optional restart |
-| 4 | **Web panel** | Show URL, reset password, `/health` check |
+| # | Action | |
+|---|--------|--|
+| 1 | **Install** | Deps + systemd → open `/setup` in the browser |
+| 2 | **Update** | `git pull` + deps (keeps `.env`) |
+| 3 | **Edit .env** | Open config, optional restart |
+| 4 | **Web panel** | URL, password reset, `/health` |
 | 5 | **Service** | Status / start / restart / stop / logs |
 | 6 | **Status** | Quick overview |
-| 7 | **Uninstall** | Remove systemd (+ optional wipe data) |
-| 0 | **Exit** | Quit |
-
-Direct commands (no menu):
+| 7 | **Uninstall** | Remove systemd (+ optional wipe) |
 
 ```bash
-bash pgclock.sh install
-bash pgclock.sh update
-bash pgclock.sh env
-bash pgclock.sh web
-bash pgclock.sh service
-bash pgclock.sh status
-bash pgclock.sh uninstall
-bash pgclock.sh help
+bash pgclock.sh install|update|env|web|service|status|uninstall|help
 ```
 
-Legacy wrappers still work: `./install.sh` → install, `./update.sh` → update.
+Legacy wrappers: `./install.sh` → install, `./update.sh` → update.
 
 ---
 
 ## Features
 
-- Guest purchase (plans, wallet, card-to-card)
-- My services, renew, support, expiry / traffic alerts
-- Reseller role (receipt approve)
-- Admin tools in bot + PasarGuard ops
-- Web admin panel on `:9000`
-- Optional Telegram Mini App (HTTPS URL)
+- Guest purchase (plans, wallet, card-to-card / gateway)
+- My services, renew, support, expiry & traffic alerts
+- Reseller role + PasarGuard ops
+- Web admin on `:9000` with in-panel Persian help (`/help`)
+- Optional Telegram Mini App (HTTPS)
 
 ---
 
 ## Requirements
 
-| Item | Notes |
-|------|--------|
-| OS | **Ubuntu 22.04+** |
-| PasarGuard panel | Reachable API |
-| Telegram bot | Token from [@BotFather](https://t.me/BotFather) |
-| Admin Telegram ID | Numeric ID from [@userinfobot](https://t.me/userinfobot) |
+| | |
+|--|--|
+| OS | Ubuntu 22.04+ |
+| PasarGuard | Reachable API |
+| Bot token | [@BotFather](https://t.me/BotFather) |
+| Admin ID | Numeric ID from [@userinfobot](https://t.me/userinfobot) |
 
 ---
 
 ## Web panel
 
-After Install, open a single URL:
+After install: `http://SERVER_IP:9000/`
 
-`http://SERVER_IP:9000/`
+- First visit → setup wizard  
+- Later → login  
 
-- **First time** → setup wizard automatically  
-- **Later** → login page  
-
-Then configure texts, buttons, card number, and plans from **Settings**.
-
-### Persian help / docs
-
-In-panel guide (all roles): `http://SERVER_IP:9000/help/`
-
-Circular **؟** next to page titles opens a short summary and links to the full article.
-
-To host the same docs on your own domain, copy `app/web/static/guide/` to your web root (see `docs/guide/README.md`). Optional:
-
-```env
-DOCS_BASE_URL="https://docs.example.com"
-```
-
-### Login / health issues
+Persian docs: `http://SERVER_IP:9000/help/` (circular **؟** next to page titles).  
+Optional public docs site: set `DOCS_BASE_URL` (see `docs/guide/README.md`).
 
 ```bash
 bash pgclock.sh web
-# or:
 curl http://127.0.0.1:9000/health
-bash pgclock.sh   # → Web panel → Reset password
 sudo ufw allow 9000/tcp
 ```
 
@@ -130,80 +77,60 @@ Credentials live in `data/web_admin.json` (not only `.env`).
 
 ---
 
-## Bot not answering /start
+## Database
+
+PostgreSQL is recommended for production (single `DATABASE_URL`):
 
 ```bash
-bash pgclock.sh service   # → Logs
-# or:
-journalctl -u pgclockbot -f
+sudo bash scripts/setup_postgres.sh
+# DATABASE_URL=postgresql+asyncpg://pgclock:SECRET@127.0.0.1:5432/pgclock
+.venv/bin/python -m scripts.alembic_upgrade
 ```
 
-Expect: `Bot online as @YourBot …`  
-Ensure only one bot process is running. Check `ADMIN_IDS` is your numeric ID.
-
----
-
-## Manual install (without menu)
+SQLite → Postgres cutover: `docs/PHASE_A_DATABASE.md`.  
+Installer hint: export `PGCLOCK_DATABASE_URL` before `bash pgclock.sh install`.
 
 ```bash
-git clone https://github.com/Mrclocks/PGClockBot.git
-cd PGClockBot
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env
-# Leave BOT_TOKEN / passwords empty — finish setup via the gated browser wizard
-chmod 600 .env
-python run.py
+sudo bash scripts/install_global_cli.sh
+pgclock status && pgclock doctor && pgclock backup
 ```
 
-Do **not** put example passwords in `.env`. Quote real secrets with special characters:
-
-```env
-WEB_ADMIN_PASSWORD="MyPass!A"
-PG_PASSWORD="Secret#1"
-```
+Full CLI: `docs/PHASE_B_CLI.md`.
 
 ---
 
 ## Mini App (optional)
 
-HTTPS reverse proxy → port `9000`, then in `.env`:
+HTTPS reverse proxy → `9000`, then:
 
 ```env
 PUBLIC_BASE_URL="https://bot.example.com"
 ```
 
-Or set `PUBLIC_BASE_URL` in the web setup wizard / Settings.
-
 ---
 
-## Database (production)
+## Troubleshooting
 
-PostgreSQL is the recommended production database. The process uses a single
-`DATABASE_URL` (SQLite defaults are lab/legacy only — not a dual-runtime path):
-
-```bash
-sudo bash scripts/setup_postgres.sh
-# then set DATABASE_URL=postgresql+asyncpg://pgclock:SECRET@127.0.0.1:5432/pgclock
-.venv/bin/python -m scripts.alembic_upgrade
-```
-
-Existing SQLite installs: run Phase 0 baseline, then offline ETL migrate
-(see `docs/PHASE_A_DATABASE.md`), then point `.env` at PostgreSQL and restart.
-
-Installer hint: export `PGCLOCK_DATABASE_URL` before `bash pgclock.sh install` to write PostgreSQL into `.env`.
-
-### Global CLI
+**Bot ignores `/start`**
 
 ```bash
-sudo bash scripts/install_global_cli.sh
-pgclock status
-pgclock doctor
-pgclock backup
+bash pgclock.sh service   # → Logs
+journalctl -u pgclockbot -f
 ```
 
-See `docs/PHASE_B_CLI.md` for the full command list.
+Expect `Bot online as @YourBot`. One bot process only; `ADMIN_IDS` must be numeric.
+
+**Manual install**
+
+```bash
+git clone https://github.com/Mrclocks/PGClockBot.git && cd PGClockBot
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env && chmod 600 .env
+python run.py   # finish secrets in the browser wizard
+```
+
+Quote secrets with special characters: `WEB_ADMIN_PASSWORD="MyPass!A"`.
 
 ---
 

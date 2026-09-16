@@ -624,11 +624,6 @@ def miniapp_inline_keyboard(
     )
 
 
-def miniapp_ops_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup | None:
-    """Admin/reseller shortcut into the ops (or shop) Mini App shell."""
-    return miniapp_inline_keyboard(ui, view="ops", label="📱 مینی‌اپ عملیات")
-
-
 def miniapp_reseller_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup | None:
     return miniapp_inline_keyboard(ui, view="home", label="📱 مینی‌اپ نماینده")
 
@@ -725,15 +720,6 @@ REPLY_ACTION_ADM_PLAN_CUSTOM = "adm_plan_custom"
 REPLY_ACTION_ADM_PLAN_TRIAL = "adm_plan_trial"
 
 
-def _admin_plans_legacy_entries(ui: dict | None = None) -> list[tuple[str, str]]:
-    _ = ui
-    return [
-        (REPLY_ACTION_ADM_PLAN_ADD, "➕ پلن جدید"),
-        (REPLY_ACTION_ADM_PLAN_CUSTOM, "پلن دلخواه"),
-        (REPLY_ACTION_ADM_PLAN_TRIAL, "پلن تست"),
-    ]
-
-
 def shop_kind_keyboard(
     ui: dict | None = None,
     *,
@@ -790,35 +776,6 @@ def shop_kind_keyboard(
     if not rows:
         rows = [[InlineKeyboardButton(text="پلنی نیست", callback_data="menu:home")]]
     return InlineKeyboardMarkup(inline_keyboard=rows)
-
-
-def admin_plan_audience_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
-    """Admin plans — audience step (users vs resellers)."""
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                _ikb(
-                    "👥 کاربران",
-                    callback_data="adm:plans:aud:users",
-                    style=_style(ui, "adm_plans_aud_users", fallback="primary"),
-                )
-            ],
-            [
-                _ikb(
-                    "🤝 نمایندگان",
-                    callback_data="adm:plans:aud:resellers",
-                    style=_style(ui, "adm_plans_aud_resellers", fallback="primary"),
-                )
-            ],
-            [
-                _ikb(
-                    "⬅️ بازگشت",
-                    callback_data="adm:home",
-                    style=_style(ui, "back"),
-                )
-            ],
-        ]
-    )
 
 
 def admin_plan_kind_keyboard(
@@ -1203,61 +1160,6 @@ def pay_methods(order_id: int, ui: dict | None = None) -> InlineKeyboardMarkup:
             _ikb(
                 _t(ui, "btn_cancel"),
                 callback_data="menu:home",
-                style=_style(ui, "cancel", fallback="danger"),
-            )
-        ]
-    )
-    return InlineKeyboardMarkup(inline_keyboard=rows)
-
-
-def topup_pay_methods(ui: dict | None = None) -> InlineKeyboardMarkup:
-    """Payment methods for wallet top-up (no wallet method). Amount lives in FSM."""
-    rows: list[list[InlineKeyboardButton]] = []
-    if on(_t(ui, "pay_card_enabled")):
-        rows.append(
-            [
-                _ikb(
-                    _t(ui, "btn_pay_card"),
-                    callback_data="wtop:card",
-                    style=_style(ui, "topup_card", fallback="primary"),
-                )
-            ]
-        )
-    if on(_t(ui, "pay_gateway_enabled")):
-        rows.append(
-            [
-                _ikb(
-                    _t(ui, "btn_pay_gateway"),
-                    callback_data="wtop:gateway",
-                    style=_style(ui, "topup_gateway", fallback="primary"),
-                )
-            ]
-        )
-    if on(_t(ui, "pay_psp_enabled")):
-        rows.append(
-            [
-                _ikb(
-                    _t(ui, "btn_pay_psp"),
-                    callback_data="wtop:psp",
-                    style=_style(ui, "pay_psp", fallback="primary"),
-                )
-            ]
-        )
-    if on(_t(ui, "pay_crypto_enabled")):
-        rows.append(
-            [
-                _ikb(
-                    _t(ui, "btn_pay_crypto"),
-                    callback_data="wtop:crypto",
-                    style=_style(ui, "topup_crypto", fallback="primary"),
-                )
-            ]
-        )
-    rows.append(
-        [
-            _ikb(
-                _t(ui, "btn_cancel"),
-                callback_data="wallet:home",
                 style=_style(ui, "cancel", fallback="danger"),
             )
         ]
