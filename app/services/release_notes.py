@@ -16,6 +16,16 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "10.1.23": [
+        "بازگشت کامل UI به وضعیت پایدار v10.1.21 (لغو پولیش اتمسفر / bulk menu / تگ رنگی v10.1.22)",
+        "بدون مایگریشن جدید؛ اگر color_tag روی DB مانده باشد بی‌ضرر و بلااستفاده است",
+        "ریستور اسنپ‌شات v10.1.22: restore/pre-v10.1.23-before-rollback-2026-09-16",
+        "ریستور هدف این رولبک: restore/pre-v10.1.22-global-ui-polish-2026-09-16",
+    ],
+    "10.1.22": [
+        "پولیش UI سراسری (اتمسفر، واترمارک تیتر، منوی bulk، تگ رنگی) — با v10.1.23 لغو شد",
+        "ریستور: restore/pre-v10.1.22-global-ui-polish-2026-09-16",
+    ],
     "10.1.21": [
         "PWA/موبایل: حاشیه امن بالای هدر بیشتر شد تا زیر Dynamic Island نرود",
         "اکاردیون سایدبار: باکس رنگی دور تیتر فقط موقع press/hover (کپسولی)؛ باز/بسته دیگر باکس ثابت ندارد",
