@@ -395,14 +395,17 @@
         <h2 id="inbox-dismiss-title">حذف اعلان</h2>
         <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
       </div>
-      <form method="post" action="/inbox/dismiss" class="form-stack" id="form-inbox-dismiss">
+      <form method="post" action="/inbox/dismiss" class="form-stack" id="form-inbox-dismiss" data-panel-validate="0" novalidate>
+        {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}" />{% endif %}
         <input type="hidden" name="alert_key" id="inbox-dismiss-key" value="" />
         <input type="hidden" name="entity_id" id="inbox-dismiss-entity" value="" />
         <input type="hidden" name="return_to" id="inbox-dismiss-return" value="" />
+        {# Explicit mode field — WebKit may omit zero-size radios from native submit #}
+        <input type="hidden" name="mode" id="inbox-dismiss-mode" value="24h" />
         <p class="muted" id="inbox-dismiss-hint">مدت مخفی‌سازی را انتخاب کنید، سپس تأیید کنید.</p>
         <div class="inbox-dismiss-options" role="radiogroup" aria-labelledby="inbox-dismiss-hint">
           <label class="inbox-dismiss-option is-selected">
-            <input type="radio" name="mode" value="24h" checked />
+            <input type="radio" name="mode_ui" value="24h" checked data-inbox-mode="24h" />
             <span class="inbox-dismiss-radio" aria-hidden="true"></span>
             <span class="inbox-dismiss-copy">
               <strong>۲۴ ساعت</strong>
@@ -410,7 +413,7 @@
             </span>
           </label>
           <label class="inbox-dismiss-option">
-            <input type="radio" name="mode" value="forever" />
+            <input type="radio" name="mode_ui" value="forever" data-inbox-mode="forever" />
             <span class="inbox-dismiss-radio" aria-hidden="true"></span>
             <span class="inbox-dismiss-copy">
               <strong>برای همیشه</strong>

@@ -2594,16 +2594,27 @@
       document.querySelectorAll('table[data-sortable]').forEach(bind);
     })();
 
-    /* Inbox alert dismiss modal */
+    /* Inbox alert dismiss modal — POST via panelSubmitFormPost so mode/csrf
+       cannot vanish the way zero-size native radios did on mobile WebKit. */
     (function () {
       const modal = document.getElementById('modal-inbox-dismiss');
       const form = document.getElementById('form-inbox-dismiss');
       const keyInput = document.getElementById('inbox-dismiss-key');
       const entityInput = document.getElementById('inbox-dismiss-entity');
       const returnInput = document.getElementById('inbox-dismiss-return');
+      const modeInput = document.getElementById('inbox-dismiss-mode');
       if (!modal || !keyInput || !form) return;
 
+      function selectedMode() {
+        const checked = form.querySelector('input[name="mode_ui"]:checked')
+          || form.querySelector('input[data-inbox-mode]:checked');
+        const v = checked && checked.value ? String(checked.value) : '24h';
+        return (v === 'forever') ? 'forever' : '24h';
+      }
+
       function syncSelected() {
+        const mode = selectedMode();
+        if (modeInput) modeInput.value = mode;
         form.querySelectorAll('.inbox-dismiss-option').forEach((opt) => {
           const input = opt.querySelector('input[type="radio"]');
           opt.classList.toggle('is-selected', !!(input && input.checked));
@@ -2614,7 +2625,8 @@
         keyInput.value = alertKey || '';
         if (entityInput) entityInput.value = entityId || '';
         if (returnInput) returnInput.value = window.location.pathname + window.location.search;
-        const first = form.querySelector('input[name="mode"][value="24h"]');
+        const first = form.querySelector('input[name="mode_ui"][value="24h"]')
+          || form.querySelector('input[data-inbox-mode="24h"]');
         if (first) first.checked = true;
         syncSelected();
         if (typeof openModal === 'function') openModal('modal-inbox-dismiss');
@@ -2625,7 +2637,7 @@
       }
 
       form.addEventListener('change', (e) => {
-        if (e.target && e.target.matches('input[name="mode"]')) syncSelected();
+        if (e.target && e.target.matches('input[type="radio"]')) syncSelected();
       });
       form.querySelectorAll('.inbox-dismiss-option').forEach((opt) => {
         opt.addEventListener('click', () => {
@@ -2636,12 +2648,42 @@
         });
       });
 
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        syncSelected();
+        const mode = selectedMode();
+        if (typeof window.panelSubmitFormPost === 'function') {
+          window.panelSubmitFormPost(form, { mode: mode });
+          return;
+        }
+        if (modeInput) modeInput.value = mode;
+        if (typeof window.panelEnsureCsrfField === 'function') {
+          window.panelEnsureCsrfField(form);
+        }
+        form.submit();
+      });
+
       document.addEventListener('click', (e) => {
         const btn = e.target.closest('[data-inbox-dismiss]');
         if (!btn) return;
         e.preventDefault();
         openDismiss(btn.getAttribute('data-inbox-dismiss'), btn.getAttribute('data-inbox-entity') || '');
       });
+
+      const resetForm = document.getElementById('form-inbox-dismiss-reset');
+      if (resetForm) {
+        resetForm.addEventListener('submit', (e) => {
+          e.preventDefault();
+          if (typeof window.panelSubmitFormPost === 'function') {
+            window.panelSubmitFormPost(resetForm, {});
+            return;
+          }
+          if (typeof window.panelEnsureCsrfField === 'function') {
+            window.panelEnsureCsrfField(resetForm);
+          }
+          resetForm.submit();
+        });
+      }
     })();
 
     /* Payment destination lists (+ / -) */

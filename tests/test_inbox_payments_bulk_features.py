@@ -82,18 +82,28 @@ class DashboardAndBulkTests(unittest.TestCase):
 
     def test_inbox_dismiss_modal(self):
         base = Path("app/web/templates/base.html").read_text(encoding="utf-8")
+        js = Path("app/web/static/panel.js").read_text(encoding="utf-8")
         self.assertIn("modal-inbox-dismiss", base)
         self.assertIn("/inbox/dismiss", base)
-        self.assertIn('name="mode" value="24h"', base)
+        self.assertIn('id="inbox-dismiss-mode"', base)
+        self.assertIn('name="mode"', base)
+        self.assertIn('name="mode_ui"', base)
         self.assertIn('type="radio"', base)
         self.assertIn("inbox-dismiss-submit", base)
         self.assertIn("انصراف", base)
+        self.assertIn('name="csrf_token"', base.split('id="form-inbox-dismiss"')[1].split("modal-confirm")[0])
         # Select then confirm — options must not be type=submit
         dismiss = base.split('id="form-inbox-dismiss"')[1].split("modal-confirm")[0]
         self.assertNotIn('type="submit" name="mode"', dismiss)
+        self.assertIn("panelSubmitFormPost", js.split("Inbox alert dismiss modal")[1].split("Payment destination")[0])
         css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
         self.assertIn(".inbox-dismiss-option.is-selected", css)
         self.assertIn(".inbox-dismiss-radio", css)
+        # Zero-size radios broke mobile WebKit form posts — use clip pattern
+        dismiss_css = css.split(".inbox-dismiss-option input {")[1].split("}")[0]
+        self.assertNotIn("width: 0;", dismiss_css)
+        self.assertNotIn("height: 0;", dismiss_css)
+        self.assertIn("clip:", dismiss_css)
         # No orange edge line on alert rows — circle beside name instead
         self.assertNotIn(".users-row.has-alert > td:first-child", css)
         users = Path("app/web/templates/users.html").read_text(encoding="utf-8")
