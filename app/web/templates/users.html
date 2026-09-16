@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import row_actions, page_title, modal_title, table_select_head, table_select_cell, table_bulk_bar %}
+{% from "macros.html" import row_actions, page_title, table_select_head, table_select_cell, table_bulk_bar %}
 {#- Declared at template top level (outside any block) so both {% block content %}
    and {% block page_scripts %} share the same values — {% set %} inside a block
    is local to that block only and would silently leave `manage` etc. undefined
@@ -138,7 +138,7 @@
         <td class="col-name" data-sort-value="{{ u.full_name or u.username or '' }}">
           <div class="cell-name">
             <span class="cell-name-primary">
-              <span class="cell-name-text{% if u.color_tag %} color-tag-{{ u.color_tag }} is-color-tagged{% endif %}">{{ u.full_name or u.username or "—" }}</span>
+              <span class="cell-name-text">{{ u.full_name or u.username or "—" }}</span>
               {% if row.has_alert %}<span class="alert-dot" title="اعلان سرویس" aria-label="اعلان سرویس"></span>{% endif %}
             </span>
             <span class="cell-name-tags">
@@ -257,7 +257,7 @@
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="user-msg-title">
     <div class="ui-modal-head">
-      {{ modal_title('broadcast', 'پیام به کاربر', tone='brand', heading_id='user-msg-title') }}
+      <h2 id="user-msg-title">پیام به کاربر</h2>
       <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
     <form method="post" action="/users/0/message" class="form-stack" id="user-msg-form">
@@ -279,7 +279,7 @@
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="users-bulk-title">
     <div class="ui-modal-head">
-      {{ modal_title('broadcast', 'پیام گروهی فیلتر', tone='brand', heading_id='users-bulk-title') }}
+      <h2 id="users-bulk-title">پیام گروهی فیلتر</h2>
       <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
     <form method="post" action="/users/bulk-message" class="form-stack"
@@ -307,7 +307,7 @@
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="user-create-title">
     <div class="ui-modal-head">
-      {{ modal_title('user', 'ساخت کاربر بات', tone='brand', heading_id='user-create-title') }}
+      <h2 id="user-create-title">ساخت کاربر بات</h2>
       <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
     <form method="post" action="/users/create" class="form-stack"
@@ -343,7 +343,7 @@
   <div class="ui-modal-backdrop" data-modal-close-strip></div>
   <div class="ui-modal-panel ui-modal-panel-xl" role="dialog" aria-modal="true" aria-labelledby="user-edit-title">
     <div class="ui-modal-head">
-      {{ modal_title('user', 'ویرایش کاربر', tone='brand', heading_id='user-edit-title') }}
+      <h2 id="user-edit-title">ویرایش کاربر</h2>
       <button type="button" class="icon-btn" data-modal-close-strip aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
     <div id="user-edit-body" class="edit-modal-body">

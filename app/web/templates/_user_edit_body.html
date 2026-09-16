@@ -1,11 +1,11 @@
-{% from "macros.html" import num_stepper, color_tag_picker %}
+{% from "macros.html" import num_stepper %}
 {% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
 {% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
 
 <section class="edit-section edit-section--identity">
   <div class="user-edit-identity">
     <div class="user-edit-identity-main">
-      <h3 class="user-edit-name{% if user.color_tag %} cell-name-text color-tag-{{ user.color_tag }} is-color-tagged{% endif %}">{{ user.full_name or user.username or 'کاربر' }}</h3>
+      <h3 class="user-edit-name">{{ user.full_name or user.username or 'کاربر' }}</h3>
       <p class="user-edit-meta muted">
         <span dir="ltr" class="mono">{{ user.telegram_id }}</span>
         {% if user.username %}<span>@{{ user.username }}</span>{% endif %}
@@ -24,8 +24,8 @@
 {% if manage_user %}
 <section class="edit-section">
   <header class="edit-section-head">
-    <h3>یادداشت داخلی، تگ و ریسک</h3>
-    <p class="muted">فقط ادمین می‌بیند — تگ رنگی نام را در جدول متمایز می‌کند</p>
+    <h3>یادداشت داخلی و ریسک</h3>
+    <p class="muted">فقط ادمین می‌بیند — برای پشتیبانی و جلوگیری از سوءاستفاده</p>
   </header>
   {% set flags = (user.risk_flags or '') %}
   {% if flags %}
@@ -35,7 +35,6 @@
     <label class="form-field">یادداشت داخلی
       <textarea name="note" rows="3" placeholder="مثلاً دیر کرد، کارت فلان…">{{ user.staff_note or '' }}</textarea>
     </label>
-    {{ color_tag_picker(name='color_tag', value=user.color_tag, label='تگ رنگی') }}
     <label class="ui-switch-row">
       <span class="ui-switch-copy"><strong>پرچم دستی ریسک</strong><small>برای کاربران مشکوک</small></span>
       <span class="ui-switch">

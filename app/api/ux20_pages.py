@@ -90,7 +90,6 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
         user_id: int,
         note: str = Form(""),
         risk_manual: str = Form(""),
-        color_tag: str = Form(""),
         staff: dict = Depends(require_staff),
         session: AsyncSession = Depends(get_db),
     ):
@@ -108,9 +107,6 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
         except ShopScopeError:
             return RedirectResponse("/home", status_code=303)
         user.staff_note = (note or "").strip()[:2000] or None
-        allowed_tags = {"blue", "red", "green", "yellow"}
-        tag = (color_tag or "").strip().lower()
-        user.color_tag = tag if tag in allowed_tags else None
         flags = [f for f in parse_risk_flags(user.risk_flags) if f != "manual"]
         if (risk_manual or "").strip() in {"1", "on", "true", "yes"}:
             flags.append("manual")
@@ -120,7 +116,7 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
         # Users UI is list + edit modal — there is no GET /users/{id}
         from app.api.user_pages import _redirect_user
 
-        return _redirect_user(user_id, ok="یادداشت، تگ و ریسک ذخیره شد")
+        return _redirect_user(user_id, ok="یادداشت و ریسک ذخیره شد")
 
     @app.post("/plans/gift-codes")
     async def gift_codes_create(

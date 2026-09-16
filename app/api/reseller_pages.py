@@ -708,9 +708,6 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             if profile.web_username and not profile.setup_completed_at:
                 profile.setup_completed_at = datetime.now(timezone.utc)
         user.role = Role.RESELLER.value if profile.is_active else Role.USER.value
-        allowed_tags = {"blue", "red", "green", "yellow"}
-        tag = str(form.get("color_tag") or "").strip().lower()
-        user.color_tag = tag if tag in allowed_tags else None
         await session.commit()
         return _redirect_reseller_edit(user_id, ok='ذخیره شد')
 
