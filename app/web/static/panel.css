@@ -5407,8 +5407,6 @@ form.settings-form > .actions.sticky-actions,
   margin-top: var(--space-2);
   padding: var(--space-1);
   border-radius: var(--radius);
-  border: 1px solid transparent; /* no sticky section box — chrome lives on the title capsule */
-  border-top: 1px solid transparent;
   gap: var(--space-0);
   background: transparent;
   transition:
@@ -5417,6 +5415,15 @@ form.settings-form > .actions.sticky-actions,
 }
 .nav-section-home {
   margin-top: var(--space-1);
+  border: 1px solid var(--border);
+  background: transparent;
+}
+/* Closed: soft tinted fill. Open: border only (transparent fill). */
+.nav-section-home.is-collapsed {
+  background: color-mix(in srgb, var(--muted-fg) 8%, transparent);
+}
+.nav-section-home:not(.is-collapsed) {
+  background: transparent;
 }
 .nav-section-home:first-child { margin-top: var(--space-1); }
 .nav-label-home {
@@ -5424,6 +5431,7 @@ form.settings-form > .actions.sticky-actions,
   font-weight: 600;
   letter-spacing: 0.02em;
 }
+/* Accordion title: capsule only while pressing (and hover on desktop) — never sticky open/closed */
 .nav-section-home > .nav-label-toggle:active {
   background: color-mix(in srgb, var(--muted-fg) 12%, var(--muted));
   border-color: var(--border);
@@ -5447,6 +5455,26 @@ form.settings-form > .actions.sticky-actions,
   color: var(--foreground);
 }
 .nav-section-bot:first-child { margin-top: var(--space-1); }
+.nav-section-bot {
+  border: 1px solid color-mix(in srgb, var(--bot-line) 38%, var(--border));
+  background: transparent;
+}
+.nav-section-bot.is-collapsed {
+  background: color-mix(in srgb, var(--bot-line) 10%, transparent);
+}
+.nav-section-bot:not(.is-collapsed) {
+  background: transparent;
+}
+.nav-section-pg {
+  border: 1px solid color-mix(in srgb, var(--pg-line) 35%, var(--border));
+  background: transparent;
+}
+.nav-section-pg.is-collapsed {
+  background: color-mix(in srgb, var(--pg-line) 10%, transparent);
+}
+.nav-section-pg:not(.is-collapsed) {
+  background: transparent;
+}
 .nav-label-bot {
   color: var(--bot-line);
   font-weight: 600;
@@ -6890,11 +6918,14 @@ html[data-theme="light"] .nav-item.active {
   background: var(--muted);
   color: var(--foreground);
 }
-/* Accordion sections stay transparent — title capsule only on hover/press */
-html[data-theme="light"] .nav-section-home,
-html[data-theme="light"] .nav-section-bot,
-html[data-theme="light"] .nav-section-pg {
-  border-color: transparent;
+/* Web-panel box stays colorless (border only) — never share backdrop fill */
+html[data-theme="light"] .nav-section-home {
+  border-color: var(--border);
+}
+html[data-theme="light"] .nav-section-home.is-collapsed {
+  background: color-mix(in srgb, var(--foreground) 5%, transparent);
+}
+html[data-theme="light"] .nav-section-home:not(.is-collapsed) {
   background: transparent;
 }
 html[data-theme="light"] .ui-modal-backdrop {
@@ -6916,6 +6947,24 @@ html[data-theme="light"] .nav-item-home:hover {
   background: color-mix(in srgb, var(--foreground) 4%, transparent);
   border-color: var(--border);
   color: var(--foreground);
+}
+html[data-theme="light"] .nav-section-bot {
+  border-color: color-mix(in srgb, var(--bot-line) 28%, var(--border));
+}
+html[data-theme="light"] .nav-section-bot.is-collapsed {
+  background: color-mix(in srgb, var(--bot-line) 8%, transparent);
+}
+html[data-theme="light"] .nav-section-bot:not(.is-collapsed) {
+  background: transparent;
+}
+html[data-theme="light"] .nav-section-pg {
+  border-color: color-mix(in srgb, var(--pg-line) 28%, var(--border));
+}
+html[data-theme="light"] .nav-section-pg.is-collapsed {
+  background: color-mix(in srgb, var(--pg-line) 8%, transparent);
+}
+html[data-theme="light"] .nav-section-pg:not(.is-collapsed) {
+  background: transparent;
 }
 html[data-theme="light"] .nav-label-bot,
 html[data-theme="light"] .nav-section-bot .nav-ico { color: var(--bot-line); }
