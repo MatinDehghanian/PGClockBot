@@ -76,15 +76,23 @@ class BulkUiContractTests(unittest.TestCase):
         macros = (ROOT / "app/web/templates/macros.html").read_text(encoding="utf-8")
         self.assertIn("table-bulk-op-count", macros)
         self.assertIn("data-bulk-op-count", macros)
+        self.assertIn("data-bulk-select-op", macros)
+        self.assertIn("data-bulk-apply", macros)
         self.assertIn("hidden", macros.split("data-bulk-op")[1][:200])
 
     def test_panel_js_uses_panel_confirm_and_eligible(self):
         js = (ROOT / "app/web/static/panel.js").read_text(encoding="utf-8")
-        bulk = js.split("Table bulk row selection")[1]
+        start = js.index("Table bulk row selection")
+        end = js.find("\n/* ===", start + 1)
+        if end < 0:
+            end = start + 12000
+        bulk = js[start:end]
         self.assertIn("panelConfirm", bulk)
         self.assertIn("eligibleIds", bulk)
         self.assertIn("data-bulk-ops", bulk)
         self.assertIn("cleanReturnTo", bulk)
+        self.assertIn("data-bulk-select-op", bulk)
+        self.assertIn("data-bulk-apply", bulk)
         self.assertNotIn("showConfirmModal", bulk)
         self.assertNotIn("window.confirm", bulk)
 

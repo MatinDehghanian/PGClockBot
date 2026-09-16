@@ -3056,20 +3056,53 @@
           tr.classList.toggle('is-bulk-selected', !!(cb && cb.checked));
         });
 
+        const select = bar.querySelector('[data-bulk-select-op]');
+        const apply = bar.querySelector('[data-bulk-apply]');
+        const badge = bar.querySelector('[data-bulk-op-count]');
         let anyEligible = false;
-        bar.querySelectorAll('[data-bulk-op]').forEach((btn) => {
+        let selectedStillValid = false;
+        const current = select ? select.value : '';
+
+        if (select) {
+          Array.from(select.options).forEach((opt) => {
+            if (!opt.value) return;
+            const op = opt.getAttribute('data-bulk-op') || opt.value;
+            const n = eligibleIds(table, op).length;
+            const show = count > 0 && n > 0;
+            if (show) anyEligible = true;
+            opt.hidden = !show;
+            opt.disabled = !show;
+            opt.dataset.eligibleCount = String(n);
+            if (show && opt.value === current) selectedStillValid = true;
+          });
+          if (!selectedStillValid) select.value = '';
+        }
+
+        /* Legacy button bars (tests / older markup) */
+        bar.querySelectorAll('button[data-bulk-op]').forEach((btn) => {
           const op = btn.getAttribute('data-bulk-op');
           const n = eligibleIds(table, op).length;
-          const badge = btn.querySelector('[data-bulk-op-count]');
-          if (badge) badge.textContent = faNum(n);
+          const btnBadge = btn.querySelector('[data-bulk-op-count]');
+          if (btnBadge) btnBadge.textContent = faNum(n);
           const show = count > 0 && n > 0;
           if (show) anyEligible = true;
           btn.hidden = !show;
           btn.disabled = !show;
           btn.classList.toggle('is-empty', n === 0);
-          btn.setAttribute('aria-label', (btn.querySelector('.table-bulk-op-label') || btn).textContent.trim() + ' (' + faNum(n) + ')');
         });
-        /* No eligible bulk op for current selection → nothing to do */
+
+        const activeOp = select ? select.value : '';
+        const activeN = activeOp ? eligibleIds(table, activeOp).length : 0;
+        if (badge) {
+          if (activeOp && activeN > 0) {
+            badge.hidden = false;
+            badge.textContent = faNum(activeN);
+          } else {
+            badge.hidden = true;
+            badge.textContent = faNum(0);
+          }
+        }
+        if (apply) apply.disabled = !(activeOp && activeN > 0);
         bar.hidden = count === 0 || !anyEligible;
       }
       function cleanReturnTo() {
@@ -3083,27 +3116,28 @@
           return window.location.pathname + window.location.search;
         }
       }
-      function submitBulk(table, actionKey, btn) {
+      function submitBulk(table, actionKey, sourceEl) {
         const bar = findBulkBar(table);
         const actionUrl = bar && bar.getAttribute('data-bulk-action');
         if (!actionUrl) return;
         const ids = eligibleIds(table, actionKey);
         if (!ids.length) return;
         const n = ids.length;
-        const baseMsg = btn.getAttribute('data-bulk-confirm') || 'ادامه می‌دهید؟';
+        const el = sourceEl || (bar && bar.querySelector('[data-bulk-op="' + actionKey + '"]'));
+        const baseMsg = (el && el.getAttribute('data-bulk-confirm')) || 'ادامه می‌دهید؟';
         const confirmMsg = baseMsg.replace(/\{n\}/g, faNum(n));
-        const needsReason = btn.hasAttribute('data-bulk-confirm-reason');
-        const confirmPhrase = (btn.getAttribute('data-bulk-confirm-phrase') || '').trim();
+        const needsReason = !!(el && el.hasAttribute('data-bulk-confirm-reason'));
+        const confirmPhrase = ((el && el.getAttribute('data-bulk-confirm-phrase')) || '').trim();
         const opts = {
-          title: btn.getAttribute('data-bulk-confirm-title') || 'تأیید',
+          title: (el && el.getAttribute('data-bulk-confirm-title')) || 'تأیید',
           message: confirmMsg,
-          confirmLabel: btn.getAttribute('data-bulk-confirm-label') || 'تأیید',
-          danger: btn.hasAttribute('data-bulk-confirm-danger'),
-          warn: btn.hasAttribute('data-bulk-confirm-warn'),
+          confirmLabel: (el && el.getAttribute('data-bulk-confirm-label')) || 'تأیید',
+          danger: !!(el && el.hasAttribute('data-bulk-confirm-danger')),
+          warn: !!(el && el.hasAttribute('data-bulk-confirm-warn')),
           requireReason: needsReason && !confirmPhrase,
-          reasonLabel: btn.getAttribute('data-bulk-confirm-reason-label') || 'علت',
+          reasonLabel: (el && el.getAttribute('data-bulk-confirm-reason-label')) || 'علت',
           confirmPhrase: confirmPhrase,
-          phraseLabel: btn.getAttribute('data-bulk-confirm-phrase-label') || '',
+          phraseLabel: (el && el.getAttribute('data-bulk-confirm-phrase-label')) || '',
         };
         const run = (reason, phrase) => postBulk(actionUrl, actionKey, ids, reason || '', phrase || '');
         if (typeof window.panelConfirm === 'function') {
@@ -3180,8 +3214,22 @@
         });
         const bar = findBulkBar(table);
         if (bar) {
+          bar.addEventListener('change', (e) => {
+            if (e.target && e.target.matches('[data-bulk-select-op]')) updateBar(table);
+          });
           bar.addEventListener('click', (e) => {
-            const btn = e.target.closest('[data-bulk-op]');
+            const apply = e.target.closest('[data-bulk-apply]');
+            if (apply) {
+              if (apply.disabled) return;
+              e.preventDefault();
+              const select = bar.querySelector('[data-bulk-select-op]');
+              const op = select && select.value;
+              if (!op) return;
+              const opt = select.selectedOptions && select.selectedOptions[0];
+              submitBulk(table, op, opt || select);
+              return;
+            }
+            const btn = e.target.closest('button[data-bulk-op]');
             if (!btn || btn.disabled || btn.hidden) return;
             e.preventDefault();
             submitBulk(table, btn.getAttribute('data-bulk-op'), btn);
