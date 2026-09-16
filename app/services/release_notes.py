@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "10.1.25": [
+        "اکاردیون سایدبار: حاشیه و رنگ باکس بخش‌ها (Home/Bot/PasarGuard) مثل قبل برگشت",
+        "تیتر اکاردیون فقط موقع press/hover کپسولی است؛ بعد از سلکت بدون باکس ثابت",
+        "بدون مایگریشن DB؛ ریستور: restore/pre-v10.1.25-accordion-section-chrome-2026-09-16",
+    ],
     "10.1.24": [
         "هات‌فیکس: بازگردانی مایگریشن 0027 تا پنل بعد از رولبک v10.1.23 بالا بیاید",
         "علت خرابی: دیتابیس روی revision حذف‌شده 0027 مانده بود و Alembic در استارتاپ می‌ترکید",
