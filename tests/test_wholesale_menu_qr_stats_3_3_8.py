@@ -49,29 +49,49 @@ class CompactAdminMenuTests(unittest.TestCase):
         kb = admin_home({"menu_layout": "classic"})
         self.assertTrue(all(len(r) == 1 for r in kb.inline_keyboard))
 
-    def test_pg_admin_is_legacy_stub(self):
-        from app.bot.keyboards import pg_admin_keyboard, pg_reply_keyboard
+    def test_pg_reply_keyboard_has_overview(self):
+        from app.bot.keyboards import pg_reply_keyboard
 
-        kb = pg_admin_keyboard({"menu_layout": "compact"})
-        self.assertEqual(kb.inline_keyboard, [])
-        flat = [b.text for row in pg_reply_keyboard({"menu_layout": "compact", "btn_back": "⬅️ بازگشت", "btn_menu_home": "🏠 منوی اصلی"}).keyboard for b in row]
+        flat = [
+            b.text
+            for row in pg_reply_keyboard(
+                {
+                    "menu_layout": "compact",
+                    "btn_back": "⬅️ بازگشت",
+                    "btn_menu_home": "🏠 منوی اصلی",
+                }
+            ).keyboard
+            for b in row
+        ]
         self.assertIn("🏠 نمای کلی", flat)
 
-    def test_admin_main_menu_is_legacy_stub(self):
-        from app.bot.keyboards import admin_main_menu, admin_ops_reply_keyboard, admin_reply_keyboard
+    def test_admin_reply_hubs(self):
+        from app.bot.keyboards import admin_ops_reply_keyboard, admin_reply_keyboard
 
-        kb = admin_main_menu({"menu_layout": "compact"})
-        self.assertEqual(kb.inline_keyboard, [])
-        hub = [b.text for row in admin_reply_keyboard({"menu_layout": "compact", "btn_back": "⬅️ بازگشت", "btn_menu_home": "🏠 منوی اصلی"}).keyboard for b in row]
+        hub = [
+            b.text
+            for row in admin_reply_keyboard(
+                {
+                    "menu_layout": "compact",
+                    "btn_back": "⬅️ بازگشت",
+                    "btn_menu_home": "🏠 منوی اصلی",
+                }
+            ).keyboard
+            for b in row
+        ]
         self.assertIn("🗓 عملیات روزانه", hub)
-        flat = [b.text for row in admin_ops_reply_keyboard({"menu_layout": "compact", "btn_back": "⬅️ بازگشت", "btn_menu_home": "🏠 منوی اصلی"}).keyboard for b in row]
+        flat = [
+            b.text
+            for row in admin_ops_reply_keyboard(
+                {
+                    "menu_layout": "compact",
+                    "btn_back": "⬅️ بازگشت",
+                    "btn_menu_home": "🏠 منوی اصلی",
+                }
+            ).keyboard
+            for b in row
+        ]
         self.assertIn("📊 داشبورد", flat)
-
-    def test_reseller_home_is_legacy_stub(self):
-        from app.bot.keyboards import reseller_home
-
-        kb = reseller_home(None, ui={"menu_layout": "compact"})
-        self.assertEqual(kb.inline_keyboard, [])
 
 
 class QrPreviewBackgroundTests(unittest.TestCase):

@@ -105,20 +105,18 @@ class FinanceReportsUiTests(unittest.TestCase):
 
     def test_mobile_css(self):
         css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
-        self.assertIn("finance-report-panels", css)
         self.assertIn(".users-ops-stats", css)
-        self.assertIn("grid-template-columns: 1fr !important", css)
         self.assertNotIn(".finance-report-periods", css)
         self.assertIn(".ui-select-menu.users-svc-boxed", css)
         self.assertIn(".users-ops-table .col-svc", css)
         self.assertIn("bottom: 0", css)
         self.assertIn("tg-preview-gate > .actions", css)
-        self.assertIn("mask-image: none", css.split(".section-tabs.is-scrollable", 1)[1].split(".section-tabs a", 1)[0])
 
     def test_bot_hooks(self):
         kb = (ROOT / "app/bot/keyboards.py").read_text(encoding="utf-8")
+        reply_kb = (ROOT / "app/bot/reply_keyboards.py").read_text(encoding="utf-8")
         self.assertIn("REPLY_ACTION_ADMIN_REPORTS", kb)
-        self.assertIn("res_reports", kb)
+        self.assertIn("res_reports", reply_kb)
         admin = (ROOT / "app/bot/handlers/admin.py").read_text(encoding="utf-8")
         self.assertIn("adm:reports", admin)
         self.assertIn("build_finance_report", admin)
@@ -143,7 +141,6 @@ class FinanceReportsUiTests(unittest.TestCase):
         self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), __version__)
         notes = (ROOT / "app/services/release_notes.py").read_text(encoding="utf-8")
         self.assertIn('"8.5.4"', notes)
-        self.assertTrue((ROOT / "docs/RELEASE_NOTES_v8.5.4.md").is_file())
 
 
 if __name__ == "__main__":

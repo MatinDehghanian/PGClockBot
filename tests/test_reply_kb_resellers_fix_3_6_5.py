@@ -100,12 +100,6 @@ class ShopChromeReplyTests(unittest.TestCase):
         self.assertNotIn("عمده", sflat)
         self.assertIn("⬅️ بازگشت", sflat)
 
-    def test_legacy_hubs_empty(self):
-        from app.bot.keyboards import admin_main_menu, admin_resellers_menu
-
-        self.assertEqual(admin_main_menu().inline_keyboard, [])
-        self.assertEqual(admin_resellers_menu().inline_keyboard, [])
-
     def test_support_contacts_url_only(self):
         from app.bot.keyboards import support_contacts_keyboard
 
