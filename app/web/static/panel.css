@@ -1437,7 +1437,9 @@ select option { background: #18181b; color: var(--foreground); font-weight: 400;
   vertical-align: middle;
 }
 .ui-select-native {
-  /* Hard-hide: opacity/clip alone still lets iOS open native pickers via <label> */
+  /* Hard-hide: opacity/clip alone still lets iOS open native pickers via <label>.
+     Value is mirrored to a normal hidden input (data-ui-select-mirror) so WebKit
+     cannot drop the display:none select from form payloads. */
   display: none !important;
   position: absolute !important;
   width: 0 !important;

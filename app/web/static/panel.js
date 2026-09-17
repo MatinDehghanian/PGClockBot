@@ -127,6 +127,24 @@
     document.addEventListener('submit', function (e) {
       ensureCsrfField(e.target);
     }, true);
+    /* Kebab/row-action forms without data-confirm still native-submit. If the
+       menu un-ports (display:none) mid-click, WebKit can drop fields — same
+       class as delete-reason. Always POST those via panelSubmitFormPost. */
+    document.addEventListener('submit', function (e) {
+      const form = e.target;
+      if (!(form instanceof HTMLFormElement)) return;
+      if (form.hasAttribute('data-confirm')) return;
+      if (form.id === 'confirm-form' || form.id === 'form-inbox-dismiss') return;
+      if (form.dataset.kebabPostSkip === '1') {
+        delete form.dataset.kebabPostSkip;
+        return;
+      }
+      if (!form.closest('.row-actions-menu, .row-actions')) return;
+      if (typeof window.panelSubmitFormPost !== 'function') return;
+      e.preventDefault();
+      e.stopPropagation();
+      window.panelSubmitFormPost(form, {});
+    }, true);
     var _fetch = window.fetch;
     if (typeof _fetch === 'function') {
       window.fetch = function (input, init) {
@@ -829,11 +847,32 @@
         wrap.appendChild(sel);
       }
       wrap._nativeSelect = sel;
+      /* display:none + 0×0 native <select> can be dropped from WebKit form
+         payloads (same class as inbox radios / kebab delete). Mirror the
+         value into a normal hidden input and strip the select's name so only
+         the mirror submits. Custom UI still drives sel.value for JS. */
+      if (sel.name) {
+        const mirror = document.createElement('input');
+        mirror.type = 'hidden';
+        mirror.name = sel.name;
+        mirror.value = sel.value == null ? '' : String(sel.value);
+        mirror.setAttribute('data-ui-select-mirror', '1');
+        if (sel.disabled) mirror.disabled = true;
+        sel.setAttribute('data-ui-select-name', sel.name);
+        sel.removeAttribute('name');
+        (sel.parentNode || wrap).insertBefore(mirror, sel);
+        wrap._valueMirror = mirror;
+      }
 
       function syncDisabled(){
         const off = !!sel.disabled;
         wrap.classList.toggle('is-disabled', off);
         toggle.disabled = off;
+        if (wrap._valueMirror) wrap._valueMirror.disabled = off;
+      }
+      function syncMirror(){
+        if (!wrap._valueMirror) return;
+        wrap._valueMirror.value = sel.value == null ? '' : String(sel.value);
       }
       function syncLabel(){
         const opt = sel.options[sel.selectedIndex];
@@ -852,6 +891,7 @@
           btn.classList.toggle('active', btn.dataset.value === sel.value);
           btn.setAttribute('aria-selected', btn.dataset.value === sel.value ? 'true' : 'false');
         });
+        syncMirror();
         syncDisabled();
         syncUsersSvcToggleAlert();
       }
@@ -2606,9 +2646,10 @@
       if (!modal || !keyInput || !form) return;
 
       function selectedMode() {
-        const checked = form.querySelector('input[name="mode_ui"]:checked')
-          || form.querySelector('input[data-inbox-mode]:checked');
-        const v = checked && checked.value ? String(checked.value) : '24h';
+        const checked = form.querySelector('input[data-inbox-mode]:checked');
+        const v = checked && (checked.getAttribute('data-inbox-mode') || checked.value)
+          ? String(checked.getAttribute('data-inbox-mode') || checked.value)
+          : '24h';
         return (v === 'forever') ? 'forever' : '24h';
       }
 
@@ -2625,8 +2666,7 @@
         keyInput.value = alertKey || '';
         if (entityInput) entityInput.value = entityId || '';
         if (returnInput) returnInput.value = window.location.pathname + window.location.search;
-        const first = form.querySelector('input[name="mode_ui"][value="24h"]')
-          || form.querySelector('input[data-inbox-mode="24h"]');
+        const first = form.querySelector('input[data-inbox-mode="24h"]');
         if (first) first.checked = true;
         syncSelected();
         if (typeof openModal === 'function') openModal('modal-inbox-dismiss');
