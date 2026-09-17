@@ -3781,7 +3781,8 @@ form.settings-form > .actions.sticky-actions,
 }
 
 /* Domain settings modals (finance / support / loyalty)
-   Outer panel clips to radius; .ui-modal-scroll (JS) owns the scrollbar. */
+   Outer panel clips to radius before JS; with scroll-shell the inner scroll
+   owns chrome + radius (same split as .ui-modal-panel[data-scroll-shell]). */
 .settings-modal-panel {
   display: flex;
   flex-direction: column;
@@ -3789,6 +3790,9 @@ form.settings-form > .actions.sticky-actions,
   overflow: hidden;
   overscroll-behavior: contain;
   touch-action: pan-y;
+}
+.settings-modal-panel[data-scroll-shell="1"] {
+  overflow: visible;
 }
 .settings-modal-panel .ui-modal-scroll > .ui-modal-head,
 .settings-modal-panel > .ui-modal-head {
@@ -5642,7 +5646,7 @@ form.settings-form > .actions.sticky-actions,
   z-index: 1;
   width: min(560px, 100%);
   max-height: min(84vh, 900px);
-  /* Clip to radius — scrollbar lives on the inner .ui-modal-scroll shell */
+  /* Fallback clip before JS wraps .ui-modal-scroll (see [data-scroll-shell] below). */
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -5662,6 +5666,24 @@ form.settings-form > .actions.sticky-actions,
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
 }
+/*
+  Root cause of “broken / less-round” top corners on iOS/Android:
+  overflow:hidden + border-radius on the SAME box that runs a transform
+  animation fails to clip, so the panel paints square into the corner and
+  page chrome (brand/bot tint) peeks through as a warm sliver.
+
+  After panel.js wraps contents in .ui-modal-scroll, move the opaque chrome
+  + radius clip onto that inner box (never transformed on its own). The outer
+  panel keeps only motion + rounded box-shadow.
+*/
+.ui-modal-panel[data-scroll-shell="1"] {
+  overflow: visible;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  /* radius retained so the outer shadow stays rounded */
+  isolation: isolate;
+}
 .ui-modal-scroll {
   flex: 1 1 auto;
   min-height: 0;
@@ -5677,10 +5699,23 @@ form.settings-form > .actions.sticky-actions,
   padding: var(--space-3);
   box-sizing: border-box;
 }
+.ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll {
+  margin: 0;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  isolation: isolate;
+  /* Own the rounded frame — content + scrollbar stay inside the curve. */
+  overflow-x: hidden;
+  overflow-y: auto;
+}
 .ui-modal-panel-lg { width: min(720px, 100%); }
 .ui-modal-panel-xl {
   width: min(720px, 100%);
   overflow: hidden;
+}
+.ui-modal-panel-xl[data-scroll-shell="1"] {
+  overflow: visible;
 }
 .edit-modal-body {
   display: flex;
@@ -6936,6 +6971,12 @@ html[data-theme="light"] .ui-modal-backdrop {
 html[data-theme="light"] .ui-modal-panel {
   background: var(--bg-card);
   box-shadow: 0 12px 36px rgba(0, 0, 0, 0.14);
+}
+html[data-theme="light"] .ui-modal-panel[data-scroll-shell="1"] {
+  background: transparent;
+}
+html[data-theme="light"] .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll {
+  background: var(--bg-card);
 }
 html[data-theme="light"] .nav-label-home { color: var(--foreground); }
 /* Neutral select/hover for the border-only home box (no brand tint) */
