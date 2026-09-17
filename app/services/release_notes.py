@@ -16,6 +16,13 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "10.1.26": [
+        "رفع حذف اعلان: مخفی‌سازی دستی (۲۴س/همیشه) دوباره کار می‌کند — فیلد mode دیگر روی موبایل WebKit گم نمی‌شود",
+        "حذف خودکار forever وقتی مشکل برطرف شود، حتی اگر action-center موقتاً fail باشد",
+        "سخت‌سازی همان کلاس باگ: mirror مقدار ui-select + POST امن فرم‌های منوی عملیات/kebab",
+        "فلش موفقیت/خطا روی /inbox و /home؛ CSRF روی dismiss/reset؛ پاک‌سازی هر دو کش سایدبار",
+        "بدون مایگریشن DB؛ ریستور: restore/pre-v10.1.26-inbox-dismiss-webkit-2026-09-17",
+    ],
     "10.1.25": [
         "اکاردیون سایدبار: حاشیه و رنگ باکس بخش‌ها (Home/Bot/PasarGuard) مثل قبل برگشت",
         "تیتر اکاردیون فقط موقع press/hover کپسولی است؛ بعد از سلکت بدون باکس ثابت",
