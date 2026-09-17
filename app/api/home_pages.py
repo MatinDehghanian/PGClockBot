@@ -283,6 +283,26 @@ async def _reseller_shop_stats(session: AsyncSession, rid: int) -> dict[str, int
 
 
 def register_home_pages(app, *, render, require_admin, require_staff, get_db):
+    def _flash_from_query(request: Request, ctx: dict) -> dict:
+        out = dict(ctx)
+        ok = (request.query_params.get("ok") or "").strip()
+        err = (request.query_params.get("err") or "").strip()
+        if ok:
+            out["flash_ok"] = ok
+        if err:
+            out["flash_err"] = err
+        return out
+
+    def _invalidate_inbox_caches(staff: dict) -> None:
+        from app.services.panel_inbox import invalidate_inbox_sidebar_cache
+        from app.services.panel_sidebar_cache import (
+            invalidate_sidebar_counts,
+            sidebar_cache_key,
+        )
+
+        invalidate_inbox_sidebar_cache(staff)
+        invalidate_sidebar_counts(sidebar_cache_key(staff))
+
     @app.get("/inbox", response_class=HTMLResponse)
     async def inbox_page(
         request: Request,
@@ -295,7 +315,7 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
         mark(request, "handler")
         ctx = await build_inbox_context(session, request, staff)
         mark(request, "page_data")
-        return render(request, "inbox.html", ctx)
+        return render(request, "inbox.html", _flash_from_query(request, ctx))
 
     @app.post("/inbox/dismiss")
     async def inbox_dismiss(
@@ -306,7 +326,6 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
         from urllib.parse import quote
 
         from app.services.inbox_dismissals import upsert_dismissal
-        from app.services.panel_inbox import invalidate_inbox_sidebar_cache
 
         form = await request.form()
         alert_key = str(form.get("alert_key") or "").strip()
@@ -330,7 +349,7 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 f"{return_to}?err={quote(str(e))}",
                 status_code=303,
             )
-        invalidate_inbox_sidebar_cache(staff)
+        _invalidate_inbox_caches(staff)
         return RedirectResponse(
             f"{return_to}?ok={quote('اعلان مخفی شد')}",
             status_code=303,
@@ -345,7 +364,6 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
         from urllib.parse import quote
 
         from app.services.inbox_dismissals import clear_staff_dismissals
-        from app.services.panel_inbox import invalidate_inbox_sidebar_cache
 
         form = await request.form()
         from app.services.table_bulk import sanitize_return_to
@@ -354,7 +372,7 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
             str(form.get("return_to") or "/inbox"), default="/inbox"
         )
         removed = await clear_staff_dismissals(session, staff)
-        invalidate_inbox_sidebar_cache(staff)
+        _invalidate_inbox_caches(staff)
         msg = "اعلان‌های مخفی‌شده بازنشانی شدند" if removed else "اعلان مخفی‌شده‌ای نبود"
         return RedirectResponse(
             f"{return_to}?ok={quote(msg)}",
@@ -414,7 +432,7 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
             ctx["widgets_body_url"] = "/home/body"
             # Intentionally not dashboard_degraded — shell is planned, not failed.
             ctx["dashboard_degraded"] = False
-            return render(request, template, ctx)
+            return render(request, template, _flash_from_query(request, ctx))
 
         try:
             result = await _home_dashboard_context(request, staff, session)
@@ -430,7 +448,7 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
         template, ctx = result
         ctx = dict(ctx)
         ctx["widgets_deferred"] = False
-        return render(request, template, ctx)
+        return render(request, template, _flash_from_query(request, ctx))
 
     @app.get("/home/body", response_class=HTMLResponse)
     async def home_dashboard_body(

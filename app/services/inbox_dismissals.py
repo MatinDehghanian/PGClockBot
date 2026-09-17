@@ -264,17 +264,20 @@ async def cleanup_resolved_dismissals(
     ctx: dict[str, Any],
 ) -> None:
     """Drop forever-dismiss rows once their alert is no longer active."""
-    if not ctx.get("action_center_ok", True):
-        return
     rows = await load_dismissals(session, staff)
     if not rows:
         return
 
     active = _alert_active_map(ctx)
+    ac_ok = bool(ctx.get("action_center_ok", True))
 
     stale_ids: list[int] = []
     for row in rows:
         if row.mode != MODE_FOREVER:
+            continue
+        # When action-center build failed, do not guess AC keys are gone —
+        # still clean non-AC forever rows (update/capacity/payg/…).
+        if not ac_ok and str(row.alert_key or "").startswith("ac:"):
             continue
         if row.alert_key == "ticket_alert":
             ta = ctx.get("ticket_alert")

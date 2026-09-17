@@ -127,6 +127,24 @@
     document.addEventListener('submit', function (e) {
       ensureCsrfField(e.target);
     }, true);
+    /* Kebab/row-action forms without data-confirm still native-submit. If the
+       menu un-ports (display:none) mid-click, WebKit can drop fields — same
+       class as delete-reason. Always POST those via panelSubmitFormPost. */
+    document.addEventListener('submit', function (e) {
+      const form = e.target;
+      if (!(form instanceof HTMLFormElement)) return;
+      if (form.hasAttribute('data-confirm')) return;
+      if (form.id === 'confirm-form' || form.id === 'form-inbox-dismiss') return;
+      if (form.dataset.kebabPostSkip === '1') {
+        delete form.dataset.kebabPostSkip;
+        return;
+      }
+      if (!form.closest('.row-actions-menu, .row-actions')) return;
+      if (typeof window.panelSubmitFormPost !== 'function') return;
+      e.preventDefault();
+      e.stopPropagation();
+      window.panelSubmitFormPost(form, {});
+    }, true);
     var _fetch = window.fetch;
     if (typeof _fetch === 'function') {
       window.fetch = function (input, init) {
@@ -829,11 +847,32 @@
         wrap.appendChild(sel);
       }
       wrap._nativeSelect = sel;
+      /* display:none + 0×0 native <select> can be dropped from WebKit form
+         payloads (same class as inbox radios / kebab delete). Mirror the
+         value into a normal hidden input and strip the select's name so only
+         the mirror submits. Custom UI still drives sel.value for JS. */
+      if (sel.name) {
+        const mirror = document.createElement('input');
+        mirror.type = 'hidden';
+        mirror.name = sel.name;
+        mirror.value = sel.value == null ? '' : String(sel.value);
+        mirror.setAttribute('data-ui-select-mirror', '1');
+        if (sel.disabled) mirror.disabled = true;
+        sel.setAttribute('data-ui-select-name', sel.name);
+        sel.removeAttribute('name');
+        (sel.parentNode || wrap).insertBefore(mirror, sel);
+        wrap._valueMirror = mirror;
+      }
 
       function syncDisabled(){
         const off = !!sel.disabled;
         wrap.classList.toggle('is-disabled', off);
         toggle.disabled = off;
+        if (wrap._valueMirror) wrap._valueMirror.disabled = off;
+      }
+      function syncMirror(){
+        if (!wrap._valueMirror) return;
+        wrap._valueMirror.value = sel.value == null ? '' : String(sel.value);
       }
       function syncLabel(){
         const opt = sel.options[sel.selectedIndex];
@@ -852,6 +891,7 @@
           btn.classList.toggle('active', btn.dataset.value === sel.value);
           btn.setAttribute('aria-selected', btn.dataset.value === sel.value ? 'true' : 'false');
         });
+        syncMirror();
         syncDisabled();
         syncUsersSvcToggleAlert();
       }
@@ -2594,16 +2634,28 @@
       document.querySelectorAll('table[data-sortable]').forEach(bind);
     })();
 
-    /* Inbox alert dismiss modal */
+    /* Inbox alert dismiss modal — POST via panelSubmitFormPost so mode/csrf
+       cannot vanish the way zero-size native radios did on mobile WebKit. */
     (function () {
       const modal = document.getElementById('modal-inbox-dismiss');
       const form = document.getElementById('form-inbox-dismiss');
       const keyInput = document.getElementById('inbox-dismiss-key');
       const entityInput = document.getElementById('inbox-dismiss-entity');
       const returnInput = document.getElementById('inbox-dismiss-return');
+      const modeInput = document.getElementById('inbox-dismiss-mode');
       if (!modal || !keyInput || !form) return;
 
+      function selectedMode() {
+        const checked = form.querySelector('input[data-inbox-mode]:checked');
+        const v = checked && (checked.getAttribute('data-inbox-mode') || checked.value)
+          ? String(checked.getAttribute('data-inbox-mode') || checked.value)
+          : '24h';
+        return (v === 'forever') ? 'forever' : '24h';
+      }
+
       function syncSelected() {
+        const mode = selectedMode();
+        if (modeInput) modeInput.value = mode;
         form.querySelectorAll('.inbox-dismiss-option').forEach((opt) => {
           const input = opt.querySelector('input[type="radio"]');
           opt.classList.toggle('is-selected', !!(input && input.checked));
@@ -2614,7 +2666,7 @@
         keyInput.value = alertKey || '';
         if (entityInput) entityInput.value = entityId || '';
         if (returnInput) returnInput.value = window.location.pathname + window.location.search;
-        const first = form.querySelector('input[name="mode"][value="24h"]');
+        const first = form.querySelector('input[data-inbox-mode="24h"]');
         if (first) first.checked = true;
         syncSelected();
         if (typeof openModal === 'function') openModal('modal-inbox-dismiss');
@@ -2625,7 +2677,7 @@
       }
 
       form.addEventListener('change', (e) => {
-        if (e.target && e.target.matches('input[name="mode"]')) syncSelected();
+        if (e.target && e.target.matches('input[type="radio"]')) syncSelected();
       });
       form.querySelectorAll('.inbox-dismiss-option').forEach((opt) => {
         opt.addEventListener('click', () => {
@@ -2636,12 +2688,42 @@
         });
       });
 
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        syncSelected();
+        const mode = selectedMode();
+        if (typeof window.panelSubmitFormPost === 'function') {
+          window.panelSubmitFormPost(form, { mode: mode });
+          return;
+        }
+        if (modeInput) modeInput.value = mode;
+        if (typeof window.panelEnsureCsrfField === 'function') {
+          window.panelEnsureCsrfField(form);
+        }
+        form.submit();
+      });
+
       document.addEventListener('click', (e) => {
         const btn = e.target.closest('[data-inbox-dismiss]');
         if (!btn) return;
         e.preventDefault();
         openDismiss(btn.getAttribute('data-inbox-dismiss'), btn.getAttribute('data-inbox-entity') || '');
       });
+
+      const resetForm = document.getElementById('form-inbox-dismiss-reset');
+      if (resetForm) {
+        resetForm.addEventListener('submit', (e) => {
+          e.preventDefault();
+          if (typeof window.panelSubmitFormPost === 'function') {
+            window.panelSubmitFormPost(resetForm, {});
+            return;
+          }
+          if (typeof window.panelEnsureCsrfField === 'function') {
+            window.panelEnsureCsrfField(resetForm);
+          }
+          resetForm.submit();
+        });
+      }
     })();
 
     /* Payment destination lists (+ / -) */

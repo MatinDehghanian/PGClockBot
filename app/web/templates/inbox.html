@@ -25,7 +25,8 @@
     <span class="muted">اگر اعلانی را اشتباه مخفی کرده‌اید، از این دکمه استفاده کنید.</span>
     {% endif %}
   </div>
-  <form method="post" action="/inbox/dismiss/reset" class="inbox-reset-form">
+  <form method="post" action="/inbox/dismiss/reset" class="inbox-reset-form" id="form-inbox-dismiss-reset">
+    {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}" />{% endif %}
     <input type="hidden" name="return_to" value="{{ request.url.path }}" />
     <button type="submit" class="btn btn-sm">بازنشانی اعلان‌های مخفی</button>
   </form>
