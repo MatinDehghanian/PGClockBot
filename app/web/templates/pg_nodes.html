@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import row_actions, page_title, table_select_head, table_select_cell, table_bulk_bar %}
+{% from "macros.html" import row_actions, page_title, table_select_head, table_select_cell, table_bulk_bar, modal_title %}
 {% block title %}نودهای پاسارگارد{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -113,7 +113,7 @@
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true">
     <div class="ui-modal-head">
-      <h2>ساخت نود</h2>
+      {{ modal_title('nodes', 'ساخت نود', caption='نود جدید پاسارگارد', tone='pg') }}
       <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
     <form method="post" action="/pg/nodes" class="form-stack js-busy-form" data-busy-label="در حال ساخت…">

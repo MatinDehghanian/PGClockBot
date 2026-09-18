@@ -1,3 +1,4 @@
+{% from "macros.html" import modal_title %}
 <!DOCTYPE html>
 <html lang="fa" dir="rtl" data-theme="dark">
 <head>
@@ -392,8 +393,8 @@
     <div class="ui-modal-backdrop" data-modal-close></div>
     <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="inbox-dismiss-title">
       <div class="ui-modal-head">
-        <h2 id="inbox-dismiss-title">حذف اعلان</h2>
-        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        {{ modal_title('inbox', 'حذف اعلان', caption='مدت مخفی‌سازی را انتخاب کنید', tone='neutral', heading_id='inbox-dismiss-title') }}
+      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
       </div>
       <form method="post" action="/inbox/dismiss" class="form-stack" id="form-inbox-dismiss" data-panel-validate="0" novalidate>
         {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}" />{% endif %}
@@ -432,8 +433,8 @@
     <div class="ui-modal-backdrop" data-modal-close></div>
     <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
       <div class="ui-modal-head">
-        <h2 id="confirm-title">تأیید</h2>
-        <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        {{ modal_title('overview', 'تأیید', caption='این عمل را تأیید کنید', tone='neutral', heading_id='confirm-title') }}
+      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
       </div>
       <form id="confirm-form" class="form-stack" action="#" method="post" data-panel-validate="0" novalidate>
         {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}" />{% endif %}

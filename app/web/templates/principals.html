@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import row_actions, page_title %}
+{% from "macros.html" import row_actions, page_title, modal_title %}
 {% block title %}نمایندگان من{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -155,7 +155,7 @@
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true">
     <div class="ui-modal-head">
-      <h2>افزودن نماینده</h2>
+      {{ modal_title('resellers', 'افزودن نماینده', caption='مدیریت نمایندگی', tone='brand') }}
       <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
     <form method="post" action="/principals/create" class="form-stack" autocomplete="off">
@@ -192,7 +192,7 @@
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true">
     <div class="ui-modal-head">
-      <h2>افزودن نماینده</h2>
+      {{ modal_title('resellers', 'افزودن نماینده', caption='مدیریت نمایندگی', tone='brand') }}
       <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
     <form method="post" action="/principals/create-l2" class="form-stack" autocomplete="off">
@@ -228,7 +228,7 @@
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="principal-detail-title">
     <div class="ui-modal-head">
-      <h2 id="principal-detail-title">جزئیات نماینده</h2>
+      {{ modal_title('resellers', 'جزئیات نماینده', caption='مدیریت نمایندگی', tone='brand', heading_id='principal-detail-title') }}
       <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
     {% if detail %}
@@ -306,7 +306,7 @@
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true">
     <div class="ui-modal-head">
-      <h2>فعال‌سازی ورود وب</h2>
+      {{ modal_title('settings', 'فعال‌سازی ورود وب', caption='تنظیمات پنل', tone='brand') }}
       <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
     <form method="post" action="/principals/{{ detail.principal_id }}/web-identity" class="form-stack" autocomplete="off">
@@ -331,7 +331,7 @@
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true">
     <div class="ui-modal-head">
-      <h2>اتصال تلگرام</h2>
+      {{ modal_title('settings', 'اتصال تلگرام', caption='تنظیمات پنل', tone='brand') }}
       <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
     <form method="post" action="/principals/{{ detail.principal_id }}/telegram-bind" class="form-stack" autocomplete="off">

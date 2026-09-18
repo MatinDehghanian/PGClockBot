@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import switch, row_actions, page_title %}
+{% from "macros.html" import switch, row_actions, page_title, modal_title %}
 {% block title %}ادمین{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -171,7 +171,7 @@
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true">
     <div class="ui-modal-head">
-      <h2>{% if src == 'pg_staff' %}ویرایش ادمین فرعی{% else %}اعطای ادمین فرعی (فقط پاسارگارد){% endif %}</h2>
+      {{ modal_title('nodes', ('ویرایش ادمین فرعی' if src == 'pg_staff' else 'اعطای ادمین فرعی (فقط پاسارگارد)'), caption='مدیریت پاسارگارد', tone='pg') }}
       <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
     <form method="post" action="/pg/admins/{{ uname }}/web-access/staff" class="form-stack js-busy-form" data-busy-label="در حال ذخیره…">
@@ -243,7 +243,7 @@
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true">
     <div class="ui-modal-head">
-      <h2>تبدیل به نماینده</h2>
+      {{ modal_title('resellers', 'تبدیل به نماینده', caption='مدیریت نمایندگی', tone='brand') }}
       <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
     <form method="post" action="/pg/admins/{{ uname }}/convert-to-reseller" class="form-stack js-busy-form" data-busy-label="در حال تبدیل…">
@@ -285,7 +285,7 @@
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true">
     <div class="ui-modal-head">
-      <h2>اعطای دسترسی نماینده (فروشگاه)</h2>
+      {{ modal_title('resellers', 'اعطای دسترسی نماینده (فروشگاه)', caption='مدیریت نمایندگی', tone='brand') }}
       <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
     <form method="post" action="/pg/admins/{{ uname }}/web-access/reseller" class="form-stack js-busy-form" data-busy-label="در حال ذخیره…">
@@ -332,7 +332,7 @@
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel ui-modal-panel-lg" role="dialog" aria-modal="true">
     <div class="ui-modal-head">
-      <h2>ساخت ادمین پنل</h2>
+      {{ modal_title('admins', 'ساخت ادمین پنل', caption='ادمین پاسارگارد جدید', tone='pg') }}
       <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
     <form method="post" action="/pg/admins" class="form-stack js-busy-form" data-busy-label="در حال ساخت…">
