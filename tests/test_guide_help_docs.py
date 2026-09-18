@@ -47,6 +47,20 @@ class GuideCatalogTests(unittest.TestCase):
         self.assertIn("--pg-line", css)
         self.assertIn(".guide-hero--bot", css)
         self.assertIn(".guide-hero--pg", css)
+        # Safe header/footer insets match web panel tokens
+        self.assertIn("--safe-top-extra", css)
+        self.assertIn("--bottom-inset", css)
+        self.assertIn("--page-title-gap", css)
+        self.assertIn("--foot-gap", css)
+        self.assertIn(
+            "--safe-top: calc(env(safe-area-inset-top, 0px) + var(--safe-top-extra));",
+            css,
+        )
+        self.assertIn("padding-bottom: var(--bottom-inset);", css)
+        self.assertIn(
+            "padding: var(--page-title-gap) var(--space-2) calc(var(--page-title-gap) + var(--bottom-inset));",
+            css,
+        )
         self.assertIn('class="guide-callout guide-callout--error"', html)
         self.assertNotIn("&lt;div", html)
         self.assertNotIn("{% for", html)
