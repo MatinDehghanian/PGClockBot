@@ -31,17 +31,41 @@
   /* Same as panel .topbar */
   --topbar-h: 52px;
   --btn-h: 36px;
-  --safe-top: env(safe-area-inset-top, 0px);
-  --safe-bottom: env(safe-area-inset-bottom, 0px);
-  --safe-left: env(safe-area-inset-left, 0px);
-  --safe-right: env(safe-area-inset-right, 0px);
-  --content-max: 860px;
-  --font: "Vazirmatn", sans-serif;
-  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --space-1: 8px;
   --space-2: 16px;
   --space-3: 24px;
   --space-4: 32px;
+  /* Notch / home indicator — same tokens + extras as web panel */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-top-extra: 0px;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --page-title-gap: var(--space-3);
+  --foot-gap: var(--space-2);
+  /* ONE bottom inset owner (header air ≠ footer air; never double-stack) */
+  --bottom-inset: calc(var(--foot-gap) + var(--safe-bottom));
+  --content-max: 860px;
+  --font: "Vazirmatn", sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* Top safe inset extras — keep on :root (bare props inside @media are dropped).
+   Same breakpoints / values as panel.css so notch air matches the web panel. */
+@media (max-width: 900px) {
+  :root {
+    --safe-top-extra: 16px;
+    --safe-top: calc(env(safe-area-inset-top, 0px) + var(--safe-top-extra));
+  }
+}
+/* Installed PWA / fullscreen: more air under Dynamic Island / status bar. */
+@media (display-mode: standalone),
+       (display-mode: fullscreen),
+       (display-mode: window-controls-overlay) {
+  :root {
+    --safe-top-extra: 24px;
+    --safe-top: calc(env(safe-area-inset-top, 0px) + var(--safe-top-extra));
+  }
 }
 
 *,
@@ -295,7 +319,8 @@ pre code {
   background: color-mix(in srgb, var(--panel) 88%, transparent);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  padding: var(--space-2) var(--space-1) calc(var(--space-3) + var(--safe-bottom));
+  /* Bottom safe air = panel --bottom-inset (foot-gap + safe-bottom) */
+  padding: var(--space-2) var(--space-1) var(--bottom-inset);
 }
 
 .guide-sidebar-head {
@@ -601,7 +626,8 @@ pre code {
 
 .guide-main {
   min-width: 0;
-  padding: 1.5rem 1.35rem 2.5rem;
+  /* Top air ≈ panel .main (--page-title-gap); bottom = content gap + footer inset */
+  padding: var(--page-title-gap) 1.35rem calc(var(--page-title-gap) + var(--bottom-inset));
 }
 
 .guide-article,
@@ -764,7 +790,7 @@ pre code {
 
 .guide-content h2,
 .guide-content h3 {
-  scroll-margin-top: calc(var(--topbar-h) + 1rem);
+  scroll-margin-top: calc(var(--topbar-h) + var(--safe-top) + 1rem);
   line-height: 1.4;
   letter-spacing: -0.01em;
 }
@@ -1193,8 +1219,9 @@ pre code {
     transition: transform 0.22s ease;
     border-left: 1px solid var(--border-strong);
     box-shadow: -18px 0 40px rgba(0, 0, 0, 0.45);
+    /* Drawer chrome: top uses panel safe-top (incl. extra); bottom = --bottom-inset */
     padding-top: calc(var(--space-2) + var(--safe-top));
-    padding-bottom: calc(var(--space-2) + var(--safe-bottom));
+    padding-bottom: var(--bottom-inset);
     padding-inline: var(--space-1);
     background: var(--panel);
     /* Closed drawer must not steal taps from the page */
@@ -1235,7 +1262,8 @@ pre code {
   }
 
   .guide-main {
-    padding: var(--space-2) var(--space-2) calc(var(--space-4) + var(--safe-bottom));
+    /* Same rhythm as panel mobile .main + .site-footer bottom inset */
+    padding: var(--page-title-gap) var(--space-2) calc(var(--page-title-gap) + var(--bottom-inset));
   }
 
   .guide-feature-grid {
