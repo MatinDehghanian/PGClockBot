@@ -1102,7 +1102,7 @@
       if (!modal) return null;
       const panel = modal.querySelector('.ui-modal-panel');
       if (!panel) return null;
-      /* Prefer the inner scroll shell so the panel can clip to border-radius. */
+      /* Prefer the inner scroll shell (owns rounded chrome after wrap). */
       return panel.querySelector(':scope > .ui-modal-scroll') || panel;
     }
 
@@ -1121,6 +1121,8 @@
         while (panel.firstChild) scroll.appendChild(panel.firstChild);
         panel.appendChild(scroll);
       }
+      /* Marks panel so CSS moves radius/chrome onto .ui-modal-scroll — keeps
+         overflow+radius off the transform-animated outer box (square corners). */
       panel.dataset.scrollShell = '1';
     }
 

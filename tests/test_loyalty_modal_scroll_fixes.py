@@ -63,6 +63,27 @@ class ModalScrollLockTests(unittest.TestCase):
         self.assertIn("Prefer the inner scroll shell", js)
         self.assertIn("isModalInteriorScroller", js)
 
+    def test_modal_radius_clip_split_from_transform(self):
+        """Outer panel animates; inner scroll owns radius chrome (no square corners)."""
+        css = CSS.read_text(encoding="utf-8")
+        self.assertIn('.ui-modal-panel[data-scroll-shell="1"]', css)
+        shell = css.split('.ui-modal-panel[data-scroll-shell="1"] {', 1)[1].split("}", 1)[0]
+        self.assertIn("overflow: visible;", shell)
+        self.assertIn("background: transparent;", shell)
+        self.assertIn(
+            '.ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll {',
+            css,
+        )
+        scroll_chrome = css.split(
+            '.ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll {', 1
+        )[1].split("}", 1)[0]
+        self.assertIn("border-radius: var(--radius);", scroll_chrome)
+        self.assertIn("background: var(--bg-card);", scroll_chrome)
+        self.assertIn("isolation: isolate;", scroll_chrome)
+        js = JS.read_text(encoding="utf-8")
+        self.assertIn('panel.dataset.scrollShell = \'1\'', js)
+        self.assertIn("square corners", js)
+
 
 if __name__ == "__main__":
     unittest.main()
