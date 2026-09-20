@@ -16,6 +16,13 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "10.1.27": [
+        "مودال: گوشه بالای گرد دوباره درست شد (جدا کردن transform از کلیپ radius روی WebKit/Android)",
+        "مودال: تیتر با آیکن‌باکس + کپشن کوتاه؛ فاصله مساوی بالا/پایین محتوا",
+        "مودال دسکتاپ: حداکثر دو ستون؛ فیلدهای تمام‌عرض (پاداش دعوت، کارت‌به‌کارت، رنگ دکمه، گروه‌های پاسارگارد)",
+        "راهنما: فاصله امن هدر/فوتر مثل وب‌پنل (--safe-top-extra و --bottom-inset)",
+        "بدون مایگریشن DB؛ ریستور: restore/pre-v10.1.27-modal-guide-ui-2026-09-20",
+    ],
     "10.1.26": [
         "رفع حذف اعلان: مخفی‌سازی دستی (۲۴س/همیشه) دوباره کار می‌کند — فیلد mode دیگر روی موبایل WebKit گم نمی‌شود",
         "حذف خودکار forever وقتی مشکل برطرف شود، حتی اگر action-center موقتاً fail باشد",
