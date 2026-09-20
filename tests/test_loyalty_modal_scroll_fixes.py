@@ -80,9 +80,66 @@ class ModalScrollLockTests(unittest.TestCase):
         self.assertIn("border-radius: var(--radius);", scroll_chrome)
         self.assertIn("background: var(--bg-card);", scroll_chrome)
         self.assertIn("isolation: isolate;", scroll_chrome)
+        # Equal vertical air: flex column + gap + symmetric padding
+        self.assertIn("display: flex;", scroll_chrome)
+        self.assertIn("flex-direction: column;", scroll_chrome)
+        self.assertIn("gap: var(--space-3);", scroll_chrome)
+        self.assertIn("padding: var(--space-3);", scroll_chrome)
         js = JS.read_text(encoding="utf-8")
         self.assertIn('panel.dataset.scrollShell = \'1\'', js)
         self.assertIn("square corners", js)
+
+
+class ModalLayoutPolishTests(unittest.TestCase):
+    def test_modal_title_macro_and_css(self):
+        macros = (ROOT / "app/web/templates/macros.html").read_text(encoding="utf-8")
+        self.assertIn("{% macro modal_title(", macros)
+        self.assertIn('class="modal-title"', macros)
+        self.assertIn("modal-title-caption", macros)
+        css = CSS.read_text(encoding="utf-8")
+        self.assertIn(".modal-title {", css)
+        self.assertIn(".modal-title-caption {", css)
+
+    def test_desktop_modal_grids_cap_at_two_columns(self):
+        css = CSS.read_text(encoding="utf-8")
+        self.assertIn("@media (min-width: 641px)", css)
+        self.assertIn(
+            ".ui-modal-panel .form-row,\n  .ui-modal-panel .pay-dest-fields {",
+            css,
+        )
+        # Two-col lock (never auto-fit into a third track inside modals)
+        self.assertIn(
+            "grid-template-columns: repeat(2, minmax(0, 1fr));",
+            css,
+        )
+
+    def test_modal_color_chips_full_width(self):
+        css = CSS.read_text(encoding="utf-8")
+        self.assertIn(
+            ".ui-modal-panel .pay-dest-color .plan-color-card {",
+            css,
+        )
+        self.assertIn(
+            ".ui-modal-panel .support-fields .item-color-field .plan-color-card {",
+            css,
+        )
+        field = (ROOT / "app/web/templates/_settings_field.html").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("referral_bonus", field)
+        self.assertIn("btn_pay_card", field)
+
+    def test_plan_modal_uses_modal_title(self):
+        plans = (ROOT / "app/web/templates/plans.html").read_text(encoding="utf-8")
+        self.assertIn("modal_title('plans'", plans)
+        self.assertIn("heading_id='plan-unified-title'", plans)
+        # Name/price/duration/volume share one form-row (2-col on desktop via CSS)
+        self.assertIn("نام پلن", plans)
+        block = plans.split('id="panel-user-fixed"', 1)[1].split("</form>", 1)[0]
+        self.assertIn('class="form-row"', block)
+        self.assertIn('name="price"', block)
+        self.assertIn('name="duration_days"', block)
+        self.assertIn('name="data_limit_gb"', block)
 
 
 if __name__ == "__main__":

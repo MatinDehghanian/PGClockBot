@@ -1,6 +1,5 @@
 ﻿{% extends "base.html" %}
-{% from "macros.html" import switch, switch_chip, page_title %}
-{% from "macros.html" import row_actions, table_select_head, table_select_cell, table_bulk_bar %}
+{% from "macros.html" import switch, switch_chip, page_title, modal_title, row_actions, table_select_head, table_select_cell, table_bulk_bar %}
 {% block title %}پلن‌ها{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -319,25 +318,27 @@
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel ui-modal-panel-lg" role="dialog" aria-modal="true">
     <div class="ui-modal-head">
-      <h2>افزودن پلن</h2>
+      {{ modal_title('plans', 'افزودن پلن', caption='پلن فروشگاه یا نمایندگی را اینجا بسازید', heading_id='plan-unified-title') }}
       <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
 
-    <div class="form-stack" style="margin-bottom: var(--space-2)" data-ui-select-watch>
-      <label class="form-field">مخاطب پلن
-        <select id="plan-audience">
-          <option value="users">کاربران</option>
-          {% if is_platform_admin %}
-          <option value="resellers">نمایندگان</option>
-          {% endif %}
-        </select>
-      </label>
-      <label class="form-field">نوع پلن
-        {# Options are filled by JS from USER_KINDS / RESELLER_KINDS — must stay dynamic #}
-        <select id="plan-kind" data-plan-kind-dynamic="1">
-          <option value="fixed">ثابت</option>
-        </select>
-      </label>
+    <div class="form-stack" style="margin-bottom: 0" data-ui-select-watch>
+      <div class="form-row">
+        <label class="form-field">مخاطب پلن
+          <select id="plan-audience">
+            <option value="users">کاربران</option>
+            {% if is_platform_admin %}
+            <option value="resellers">نمایندگان</option>
+            {% endif %}
+          </select>
+        </label>
+        <label class="form-field">نوع پلن
+          {# Options are filled by JS from USER_KINDS / RESELLER_KINDS — must stay dynamic #}
+          <select id="plan-kind" data-plan-kind-dynamic="1">
+            <option value="fixed">ثابت</option>
+          </select>
+        </label>
+      </div>
     </div>
 
     {# —— User fixed —— #}
@@ -749,7 +750,7 @@
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel ui-modal-panel-lg" role="dialog" aria-modal="true" aria-labelledby="gift-codes-title">
     <div class="ui-modal-head">
-      <h2 id="gift-codes-title">کد هدیه / شارژ</h2>
+      {{ modal_title('plans', 'کد هدیه / شارژ', caption='کد شارژ کیف‌پول بسازید و مدیریت کنید', tone='brand', heading_id='gift-codes-title') }}
       <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
     <form method="post" action="/plans/gift-codes" class="form-stack">

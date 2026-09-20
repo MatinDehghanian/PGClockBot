@@ -1,4 +1,6 @@
 {# SSL — دریافت گواهی و فعال‌سازی خودکار HTTPS #}
+{% from "macros.html" import modal_title %}
+
 {% set st = ssl %}
 
 {% if request.query_params.get('working') == '1' %}
@@ -121,7 +123,7 @@ letsencrypt live: {{ st.letsencrypt_live }}{% endif %}</pre>
   <div class="ui-modal-backdrop" data-ssl-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="ssl-done-title">
     <div class="ui-modal-head">
-      <h2 id="ssl-done-title">گواهی SSL فعال شد</h2>
+      {{ modal_title('security', 'گواهی SSL فعال شد', caption='گواهی و دامنه', tone='neutral', heading_id='ssl-done-title') }}
       <button type="button" class="icon-btn" data-ssl-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
     <div class="form-stack">

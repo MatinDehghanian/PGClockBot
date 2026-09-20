@@ -3800,10 +3800,14 @@ form.settings-form > .actions.sticky-actions,
 }
 .settings-modal-flash {
   flex: 0 0 auto;
-  margin: 0 0 var(--space-2);
+  /* Vertical air owned by .ui-modal-scroll gap when shell is present */
+  margin: 0;
 }
 .settings-modal-flash .flash {
   margin: 0;
+}
+.settings-modal-panel:not([data-scroll-shell="1"]) > .settings-modal-flash {
+  margin-bottom: var(--space-2);
 }
 .settings-modal-panel .ui-modal-scroll > .modal-section-tabs,
 .settings-modal-panel > .modal-section-tabs {
@@ -3814,18 +3818,23 @@ form.settings-form > .actions.sticky-actions,
   overscroll-behavior-x: contain;
   touch-action: pan-x;
   max-width: 100%;
-  margin-bottom: var(--space-2);
+  /* Vertical rhythm owned by .ui-modal-scroll gap when shell is present */
+  margin-bottom: 0;
   padding-bottom: var(--space-0);
 }
 .settings-modal-panel .ui-modal-scroll > .modal-section-tabs .tab-btn,
 .settings-modal-panel > .modal-section-tabs .tab-btn {
   flex: 0 0 auto;
 }
+/* Fallback when scroll shell not yet wrapped: keep a little air under tabs */
+.settings-modal-panel:not([data-scroll-shell="1"]) > .modal-section-tabs {
+  margin-bottom: var(--space-2);
+}
 .settings-modal-body {
   flex: 0 0 auto;
   min-height: 0;
   overflow: visible;
-  padding-bottom: var(--space-1);
+  padding-bottom: 0;
 }
 .settings-modal-body .settings-card {
   margin-top: 0;
@@ -5708,6 +5717,12 @@ form.settings-form > .actions.sticky-actions,
   /* Own the rounded frame — content + scrollbar stay inside the curve. */
   overflow-x: hidden;
   overflow-y: auto;
+  /* Equal air above the title and below the last block */
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  box-sizing: border-box;
 }
 .ui-modal-panel-lg { width: min(720px, 100%); }
 .ui-modal-panel-xl {
@@ -6166,16 +6181,61 @@ td.byte-size {
 }
 .ui-modal-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: var(--space-2);
-  margin: 0 0 var(--space-3);
+  /* Gap to body comes from .ui-modal-scroll flex gap — keep outer pad symmetric */
+  margin: 0;
   padding: 0;
+  flex: 0 0 auto;
+}
+/* Fallback before panel.js wraps .ui-modal-scroll */
+.ui-modal-panel:not([data-scroll-shell="1"]) > .ui-modal-head {
+  margin-bottom: var(--space-3);
+}
+.ui-modal-head > .icon-btn,
+.ui-modal-head > a.icon-btn {
+  /* Optical align with the icon-box (not the caption line) */
+  margin-top: 6px;
+  flex: 0 0 auto;
+}
+.modal-title {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1_5);
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.modal-title .page-title-ico {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 16px;
+}
+.modal-title .page-title-ico svg {
+  width: 20px;
+  height: 20px;
+}
+.modal-title-copy {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0);
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.modal-title-caption {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
+  color: var(--muted-fg);
 }
 /* Modal chrome title matches page titles (not the tiny section --title-size) */
 .ui-modal-head h1,
 .ui-modal-head h2,
-.ui-modal-head h3 {
+.ui-modal-head h3,
+.modal-title h1,
+.modal-title h2,
+.modal-title h3 {
   margin: 0;
   font-size: 22px;
   font-weight: 600;
@@ -6268,6 +6328,79 @@ td.byte-size {
     border-radius: var(--radius);
     font-size: 14px;
   }
+}
+
+/* —— Modal layout polish (desktop / tablet only; mobile keeps stacked flow) —— */
+@media (min-width: 641px) {
+  /* Never leave a 3-track auto-fit row inside modals — always 2 cols max */
+  .ui-modal-panel .form-row,
+  .ui-modal-panel .pay-dest-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+  .ui-modal-panel .ui-switch-grid,
+  .ui-modal-panel .checks.ui-switch-grid,
+  .ui-modal-panel .checks:has(.ui-switch-chip) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+  .ui-modal-panel .btn-color-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+  .ui-modal-panel .settings-grid {
+    width: 100%;
+  }
+  /* Trailing lone cell in a 2-col settings grid should span full width */
+  .ui-modal-panel .settings-grid > .setting-item:last-child:nth-child(odd):not(.full) {
+    grid-column: 1 / -1;
+  }
+}
+
+/* Block fields + color pickers stretch the modal chrome (no 320px orphan chips) */
+.ui-modal-panel .form-field,
+.ui-modal-panel .form-row,
+.ui-modal-panel .form-stack,
+.ui-modal-panel .ui-switch-grid,
+.ui-modal-panel .plan-color-field,
+.ui-modal-panel .btn-color-grid,
+.ui-modal-panel .settings-grid,
+.ui-modal-panel .pay-dest-list,
+.ui-modal-panel .pay-dest-row,
+.ui-modal-panel .pay-dest-fields,
+.ui-modal-panel .pay-dest-color,
+.ui-modal-panel .support-fields,
+.ui-modal-panel .supports-fields-grid,
+.ui-modal-panel .item-color-field {
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+}
+.ui-modal-panel .btn-color-card,
+.ui-modal-panel .btn-color-card.plan-color-card,
+.ui-modal-panel .pay-dest-color .plan-color-card,
+.ui-modal-panel .item-color-field .plan-color-card,
+.ui-modal-panel .support-fields .item-color-field .plan-color-card,
+.ui-modal-panel .supports-fields-grid .item-color-field .plan-color-card {
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+}
+.ui-modal-panel .setting-item {
+  min-width: 0;
+  width: 100%;
+}
+.ui-modal-panel .setting-item > label,
+.ui-modal-panel .setting-item > .plan-color-field,
+.ui-modal-panel .setting-item > .pay-dest-list,
+.ui-modal-panel .setting-item > .image-setting,
+.ui-modal-panel .setting-item > .force-channels {
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+}
+.ui-modal-panel .setting-item.full {
+  grid-column: 1 / -1;
 }
 
 /* —— Reseller PG meters —— */
@@ -9842,6 +9975,11 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
 .pay-dest-color .plan-color-card {
   max-width: 320px;
 }
+/* Inside modals, color chips must stretch with the row (not a 320px orphan) */
+.ui-modal-panel .pay-dest-color .plan-color-card {
+  max-width: none;
+  width: 100%;
+}
 
 .supports-fields-grid .supports-enabled-field {
   display: flex !important;
@@ -9870,6 +10008,10 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
 }
 .support-fields .item-color-field .plan-color-card {
   max-width: 320px;
+}
+.ui-modal-panel .support-fields .item-color-field .plan-color-card {
+  max-width: none;
+  width: 100%;
 }
 
 /* —— Colors tab (section-tabs, accordions, dynamic summary) —— */

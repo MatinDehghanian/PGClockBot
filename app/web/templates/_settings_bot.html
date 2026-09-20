@@ -1,3 +1,4 @@
+{% from "macros.html" import modal_title %}
 {% set update_mode = bot_update_mode or env_values.get('BOT_UPDATE_MODE') or 'polling' %}
 {% set wh_url = env_values.get('WEBHOOK_URL','') %}
 {% set wh_path = env_values.get('WEBHOOK_PATH','/telegram/webhook') %}
@@ -220,8 +221,8 @@
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="bot-restart-confirm-title">
     <div class="ui-modal-head">
-      <h3 id="bot-restart-confirm-title">تأیید ری‌استارت</h3>
-      <button type="button" class="icon-btn" data-modal-close aria-label="بستن">×</button>
+      {{ modal_title('bot-settings', 'تأیید ری‌استارت', caption='اعمال تغییرات با یک‌بار ری‌استارت سرویس', tone='neutral', heading='h3', heading_id='bot-restart-confirm-title') }}
+      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
     <p class="muted">
       برای اعمال این تغییرات سرویس یک‌بار ری‌استارت می‌شود. چند ثانیه قطعی طبیعی است؛
@@ -238,7 +239,7 @@
   <div class="ui-modal-backdrop"></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="bot-restart-progress-title">
     <div class="ui-modal-head">
-      <h3 id="bot-restart-progress-title">در حال اعمال تغییرات</h3>
+      {{ modal_title('bot-settings', 'در حال اعمال تغییرات', caption='تا پایان عملیات در این صفحه بمانید', tone='neutral', heading='h3', heading_id='bot-restart-progress-title') }}
     </div>
     <div class="flash warn update-stay-warn" role="status">
       <div class="flash-copy">

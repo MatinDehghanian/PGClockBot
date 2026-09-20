@@ -1,5 +1,5 @@
 ﻿{% extends "base.html" %}
-{% from "macros.html" import switch, switch_chip, row_actions, page_title, table_select_head, table_select_cell, table_bulk_bar %}
+{% from "macros.html" import switch, switch_chip, row_actions, page_title, table_select_head, table_select_cell, table_bulk_bar, modal_title %}
 {% block title %}گروه‌های پاسارگارد{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -65,7 +65,7 @@
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true">
     <div class="ui-modal-head">
-      <h2>ساخت گروه</h2>
+      {{ modal_title('groups', 'ساخت گروه', caption='گروه پاسارگارد جدید', tone='pg') }}
       <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
     <form method="post" action="/pg/groups" class="form-stack">
@@ -96,7 +96,7 @@
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="pg-group-edit-title">
     <div class="ui-modal-head">
-      <h2 id="pg-group-edit-title">ویرایش گروه</h2>
+      {{ modal_title('groups', 'ویرایش گروه', caption='نام و تگ‌های گروه', tone='pg', heading_id='pg-group-edit-title') }}
       <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
     <form method="post" action="/pg/groups/0/edit" class="form-stack" id="pg-group-edit-form">

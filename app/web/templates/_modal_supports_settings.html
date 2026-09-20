@@ -1,4 +1,6 @@
 {# Support contacts + support_text modal on /tickets #}
+{% from "macros.html" import modal_title %}
+
 {% set open_supports = open_supports_modal %}
 {% set strip_keys = 'settings,supports,stab,saved,ok,err,msg,_' %}
 <div class="ui-modal{% if open_supports %} open{% endif %}" id="modal-supports-settings"
@@ -7,7 +9,7 @@
   <div class="ui-modal-backdrop" data-modal-close-strip></div>
   <div class="ui-modal-panel ui-modal-panel-xl settings-modal-panel" role="dialog" aria-modal="true" aria-labelledby="supports-settings-title">
     <div class="ui-modal-head">
-      <h2 id="supports-settings-title">پشتیبان‌ها</h2>
+      {{ modal_title('panel-settings', 'پشتیبان‌ها', caption='مخاطبین و متن پشتیبانی ربات', tone='neutral', heading_id='supports-settings-title') }}
       <button type="button" class="icon-btn" data-modal-close-strip aria-label="بستن">
         <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
