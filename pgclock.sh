@@ -303,7 +303,11 @@ ensure_apt_packages() {
     return 1
   fi
   # Core packages required for install/run. nano/certbot are optional (edit/SSL).
-  local required=(python3 python3-venv python3-pip ca-certificates curl git openssl)
+  # PostgreSQL server + client are required for production installs (pg_dump backup).
+  local required=(
+    python3 python3-venv python3-pip ca-certificates curl git openssl
+    postgresql postgresql-contrib postgresql-client
+  )
   local missing=()
   local pkg
   for pkg in "${required[@]}"; do
@@ -314,7 +318,8 @@ ensure_apt_packages() {
   if [[ ${#missing[@]} -eq 0 ]] \
     && command -v python3 >/dev/null 2>&1 \
     && command -v curl >/dev/null 2>&1 \
-    && command -v git >/dev/null 2>&1; then
+    && command -v git >/dev/null 2>&1 \
+    && command -v psql >/dev/null 2>&1; then
     ok "Prerequisites already installed (skip apt)"
     return 0
   fi
@@ -322,6 +327,103 @@ ensure_apt_packages() {
   sudo_wrap apt-get update -y >/dev/null
   sudo_wrap apt-get install -y "${missing[@]}" >/dev/null
   ok "Prerequisites ready"
+}
+
+# Start local PostgreSQL and ensure a DATABASE_URL for fresh installs.
+# Honors PGCLOCK_DATABASE_URL (external/managed Postgres). Never scaffolds SQLite.
+ensure_postgresql() {
+  info "Preparing PostgreSQL..."
+
+  if [[ -n "${PGCLOCK_DATABASE_URL:-}" ]]; then
+    case "${PGCLOCK_DATABASE_URL}" in
+      postgresql://*|postgresql+asyncpg://*|postgres://*)
+        ok "Using PGCLOCK_DATABASE_URL from environment"
+        return 0
+        ;;
+      *)
+        err "PGCLOCK_DATABASE_URL must be a PostgreSQL URL (got non-Postgres value)."
+        return 1
+        ;;
+    esac
+  fi
+
+  if [[ -f .env ]]; then
+    local existing
+    existing="$(env_get DATABASE_URL "")"
+    case "$existing" in
+      postgresql://*|postgresql+asyncpg://*|postgres://*)
+        export PGCLOCK_DATABASE_URL="$existing"
+        ok "Using PostgreSQL DATABASE_URL from existing .env"
+        ;;
+      sqlite*|*"sqlite"*)
+        err "Existing .env still points at SQLite. New installs require PostgreSQL."
+        err "Set DATABASE_URL to postgresql+asyncpg://… or remove .env and re-run install."
+        return 1
+        ;;
+      "")
+        ;;
+      *)
+        err "Unsupported DATABASE_URL in .env (PostgreSQL required)."
+        return 1
+        ;;
+    esac
+  fi
+
+  # Local server for default installs (and when .env already has local PG URL).
+  if systemctl list-unit-files postgresql.service >/dev/null 2>&1 \
+    || dpkg -s postgresql >/dev/null 2>&1; then
+    sudo_wrap systemctl enable postgresql >/dev/null 2>&1 || true
+    sudo_wrap systemctl start postgresql >/dev/null 2>&1 || true
+  fi
+
+  if command -v pg_isready >/dev/null 2>&1; then
+    local i
+    for i in $(seq 1 45); do
+      if sudo_wrap -u postgres pg_isready -q 2>/dev/null \
+        || pg_isready -h 127.0.0.1 -q 2>/dev/null; then
+        break
+      fi
+      sleep 1
+    done
+    if ! sudo_wrap -u postgres pg_isready -q 2>/dev/null \
+      && ! pg_isready -h 127.0.0.1 -q 2>/dev/null; then
+      err "PostgreSQL did not become ready. Check: systemctl status postgresql"
+      return 1
+    fi
+  fi
+
+  if [[ -n "${PGCLOCK_DATABASE_URL:-}" ]]; then
+    ok "PostgreSQL ready"
+    return 0
+  fi
+
+  local emit_file
+  emit_file="$(mktemp /tmp/pgclock-dburl.XXXXXX)"
+  chmod 600 "$emit_file"
+  # Run as root so role/db creation works; read URL back via sudo (file may be root-owned).
+  if ! sudo_wrap env PGCLOCK_EMIT_URL_FILE="$emit_file" \
+    bash "${SCRIPT_DIR}/scripts/setup_postgres.sh" pgclock pgclock; then
+    sudo_wrap rm -f "$emit_file" 2>/dev/null || rm -f "$emit_file"
+    err "Failed to provision PostgreSQL database (scripts/setup_postgres.sh)."
+    return 1
+  fi
+  if ! sudo_wrap test -s "$emit_file"; then
+    sudo_wrap rm -f "$emit_file" 2>/dev/null || rm -f "$emit_file"
+    err "setup_postgres.sh did not emit DATABASE_URL."
+    return 1
+  fi
+  export PGCLOCK_DATABASE_URL
+  PGCLOCK_DATABASE_URL="$(sudo_wrap cat "$emit_file" | tr -d '\r\n')"
+  sudo_wrap rm -f "$emit_file" 2>/dev/null || rm -f "$emit_file"
+  case "${PGCLOCK_DATABASE_URL}" in
+    postgresql://*|postgresql+asyncpg://*|postgres://*)
+      ok "PostgreSQL database provisioned (role/db: pgclock)"
+      ;;
+    *)
+      err "Invalid URL from setup_postgres.sh"
+      return 1
+      ;;
+  esac
 }
 
 ensure_python() {
@@ -427,15 +529,21 @@ payload = {
     "WEB_SECRET": os.environ["WEB_SECRET"],
     "WEB_ADMIN_USER": os.environ["WEB_ADMIN_USER"],
     "WEB_ADMIN_PASSWORD": os.environ["WEB_ADMIN_PASSWORD"],
-    # Production default: PostgreSQL when PGCLOCK_DATABASE_URL is set; else SQLite for zero-config labs.
-    "DATABASE_URL": os.environ.get("PGCLOCK_DATABASE_URL")
-        or f"sqlite+aiosqlite:///{Path.cwd() / 'data' / 'bot.db'}",
+    # Fresh installs always write PostgreSQL (provisioned by ensure_postgresql).
+    "DATABASE_URL": os.environ.get("PGCLOCK_DATABASE_URL", "").strip(),
     "WEBHOOK_URL": "",
     "WEBHOOK_PATH": "/telegram/webhook",
     "PUBLIC_BASE_URL": os.environ.get("PUBLIC_BASE_URL", ""),
     "CURRENCY": os.environ.get("CURRENCY", "Toman"),
     "DEFAULT_LOCALE": "fa",
 }
+db_url = payload["DATABASE_URL"]
+if not db_url.startswith(("postgresql://", "postgresql+asyncpg://", "postgres://")):
+    print(
+        "DATABASE_URL missing or not PostgreSQL — ensure_postgresql must run first",
+        file=sys.stderr,
+    )
+    sys.exit(1)
 proc = subprocess.run(
     [sys.executable, str(Path("scripts/write_env.py"))],
     input=json.dumps(payload),
@@ -490,7 +598,8 @@ install_systemd() {
   local content
   content="[Unit]
 Description=PGClockBot — PasarGuard Telegram shop
-After=network.target
+After=network.target postgresql.service
+Wants=postgresql.service
 
 [Service]
 Type=simple
@@ -561,6 +670,9 @@ cmd_install() {
     fresh=1
   fi
 
+  step "PostgreSQL"
+  ensure_postgresql || return 1
+
   step "Python packages"
   ensure_venv || return 1
   mkdir -p data
@@ -570,7 +682,7 @@ cmd_install() {
     write_env_file
     rm -f data/web_admin.json data/setup_complete.flag data/setup_in_progress.flag \
       data/setup_gate.token data/setup_gate.json data/setup_entry.url 2>/dev/null || true
-    ok ".env scaffold written · finish setup in the browser"
+    ok ".env scaffold written · PostgreSQL · finish setup in the browser"
   fi
 
   step "systemd service"
@@ -875,6 +987,8 @@ cmd_uninstall() {
   warn "FULL uninstall removes EVERYTHING for this bot:"
   warn "  systemd service, running processes, .venv, data, .env, backups,"
   warn "  and the entire project folder: ${SCRIPT_DIR}"
+  warn "PostgreSQL system packages and the 'pgclock' database are NOT dropped"
+  warn "(safe default — remove manually if you want a full DB wipe)."
   if ! ask_yn "Continue full uninstall?" "N"; then
     info "Cancelled."
     return 0
@@ -935,6 +1049,15 @@ cmd_status() {
   banner_small "Status"
   if [[ -f .env ]]; then
     ok ".env present"
+    local db_url db_kind
+    db_url="$(env_get DATABASE_URL "")"
+    case "$db_url" in
+      postgresql://*|postgresql+asyncpg://*|postgres://*) db_kind="PostgreSQL" ;;
+      sqlite*) db_kind="SQLite (unsupported for new installs)" ;;
+      "") db_kind="missing DATABASE_URL" ;;
+      *) db_kind="unknown" ;;
+    esac
+    echo -e "  Database: ${B}${db_kind}${N}"
   else
     warn ".env missing"
   fi

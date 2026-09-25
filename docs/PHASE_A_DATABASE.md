@@ -4,9 +4,10 @@
 **Scope:** PostgreSQL + Alembic + SQLite→PG tooling + engine-aware backup/restore  
 **Out of scope:** global CLI, identity sync, permissions parity, node ops
 
-**Runtime model:** one `DATABASE_URL` per process. SQLite is lab/legacy and the
-ETL *source* for cutover; PostgreSQL is the production target. There is no
-dual-write / dual-runtime path — migrate offline, then point `.env` at Postgres.
+**Runtime model:** one `DATABASE_URL` per process. Fresh product installs use
+PostgreSQL only (auto-provisioned by `pgclock.sh install`). SQLite remains for
+unit tests and the optional offline ETL source documented below — not for new
+production scaffolds. There is no dual-write / dual-runtime path.
 
 ---
 
@@ -36,11 +37,22 @@ Restore verification is a **sandbox dry-run** (live data is not overwritten).
 
 ## Phase A — PostgreSQL production setup
 
+**Default path:** `bash pgclock.sh install` installs PostgreSQL packages, starts
+the service, creates role/database `pgclock`, and writes `DATABASE_URL` into `.env`.
+No SQLite scaffold on fresh installs.
+
+Optional override (managed/remote Postgres):
+
+```bash
+export PGCLOCK_DATABASE_URL="postgresql+asyncpg://user:SECRET@host:5432/db"
+bash pgclock.sh install
+```
+
+Manual provision (if you are not using the installer):
+
 ```bash
 sudo bash scripts/setup_postgres.sh pgclock pgclock
 # prints DATABASE_URL=postgresql+asyncpg://...
-
-# Put that URL in .env, then:
 .venv/bin/python -m scripts.alembic_upgrade
 ```
 
@@ -49,8 +61,6 @@ Recommended `.env`:
 ```env
 DATABASE_URL="postgresql+asyncpg://pgclock:SECRET@127.0.0.1:5432/pgclock"
 ```
-
-Installer: set `PGCLOCK_DATABASE_URL` before `bash pgclock.sh install` to write PostgreSQL into `.env`. Otherwise install still scaffolds SQLite for zero-config labs.
 
 ---
 

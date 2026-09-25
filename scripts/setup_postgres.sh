@@ -4,6 +4,9 @@
 #
 # Identifiers and the password are passed via psql variables and quoted with
 # format(%I) / format(%L) — never string-interpolated into SQL.
+#
+# Optional: set PGCLOCK_EMIT_URL_FILE to a path; the DATABASE_URL is written
+# there (mode 0600) for the installer to consume without scraping stdout.
 set -euo pipefail
 
 DB_NAME="${1:-pgclock}"
@@ -23,6 +26,20 @@ fi
 if [[ ! "$DB_NAME" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || [[ ! "$DB_USER" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
   echo "ERROR: db_name and db_user must be simple SQL identifiers (letters, digits, underscore)." >&2
   exit 1
+fi
+
+# Ensure the cluster is accepting connections (fresh apt install may need a moment).
+if command -v pg_isready >/dev/null 2>&1; then
+  for _ in $(seq 1 30); do
+    if sudo -u postgres pg_isready -q 2>/dev/null; then
+      break
+    fi
+    sleep 1
+  done
+  if ! sudo -u postgres pg_isready -q 2>/dev/null; then
+    echo "ERROR: PostgreSQL is not ready (pg_isready failed)." >&2
+    exit 1
+  fi
 fi
 
 sudo -u postgres psql -v ON_ERROR_STOP=1 \
@@ -46,9 +63,17 @@ SELECT format('GRANT ALL ON SCHEMA public TO %I', :'db_user')\gexec
 SELECT format('ALTER DATABASE %I OWNER TO %I', :'db_name', :'db_user')\gexec
 SQL
 
+DATABASE_URL="postgresql+asyncpg://${DB_USER}:${DB_PASS}@127.0.0.1:5432/${DB_NAME}"
+
+if [[ -n "${PGCLOCK_EMIT_URL_FILE:-}" ]]; then
+  umask 077
+  printf '%s\n' "$DATABASE_URL" > "${PGCLOCK_EMIT_URL_FILE}"
+  chmod 600 "${PGCLOCK_EMIT_URL_FILE}" 2>/dev/null || true
+fi
+
 echo
 echo "PostgreSQL ready."
 echo "Add to .env:"
-echo "DATABASE_URL=\"postgresql+asyncpg://${DB_USER}:${DB_PASS}@127.0.0.1:5432/${DB_NAME}\""
+echo "DATABASE_URL=\"${DATABASE_URL}\""
 echo
 echo "Then: .venv/bin/python -c 'import asyncio; from app.db.session import init_db; asyncio.run(init_db())'"
