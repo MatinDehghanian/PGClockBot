@@ -377,16 +377,16 @@ ensure_postgresql() {
   fi
 
   if command -v pg_isready >/dev/null 2>&1; then
-    local i
+    local i ready=0
     for i in $(seq 1 45); do
-      if sudo_wrap -u postgres pg_isready -q 2>/dev/null \
-        || pg_isready -h 127.0.0.1 -q 2>/dev/null; then
+      # Prefer TCP probe — works as root or non-root without `sudo -u` pitfalls.
+      if pg_isready -h 127.0.0.1 -q 2>/dev/null; then
+        ready=1
         break
       fi
       sleep 1
     done
-    if ! sudo_wrap -u postgres pg_isready -q 2>/dev/null \
-      && ! pg_isready -h 127.0.0.1 -q 2>/dev/null; then
+    if [[ "$ready" -ne 1 ]]; then
       err "PostgreSQL did not become ready. Check: systemctl status postgresql"
       return 1
     fi
