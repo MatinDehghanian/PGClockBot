@@ -67,6 +67,9 @@ DATABASE_URL="postgresql+asyncpg://${DB_USER}:${DB_PASS}@127.0.0.1:5432/${DB_NAM
 
 if [[ -n "${PGCLOCK_EMIT_URL_FILE:-}" ]]; then
   umask 077
+  # Create a fresh file as the current user (usually root via sudo). Do not
+  # overwrite a foreign-owned pre-created path under sticky /tmp.
+  rm -f "${PGCLOCK_EMIT_URL_FILE}"
   printf '%s\n' "$DATABASE_URL" > "${PGCLOCK_EMIT_URL_FILE}"
   chmod 600 "${PGCLOCK_EMIT_URL_FILE}" 2>/dev/null || true
 fi

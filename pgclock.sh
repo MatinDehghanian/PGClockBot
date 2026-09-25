@@ -398,8 +398,11 @@ ensure_postgresql() {
   fi
 
   local emit_file
-  emit_file="$(mktemp /tmp/pgclock-dburl.XXXXXX)"
-  chmod 600 "$emit_file"
+  # Prefer project data/ over /tmp: sticky + fs.protected_regular blocks root
+  # from overwriting another user's pre-created file under /tmp.
+  mkdir -p "${SCRIPT_DIR}/data"
+  emit_file="${SCRIPT_DIR}/data/.pgclock_database_url.tmp"
+  rm -f "$emit_file"
   # Run as root so role/db creation works; read URL back via sudo (file may be root-owned).
   if ! sudo_wrap env PGCLOCK_EMIT_URL_FILE="$emit_file" \
     bash "${SCRIPT_DIR}/scripts/setup_postgres.sh" pgclock pgclock; then
