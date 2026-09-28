@@ -1,6 +1,6 @@
 # PGClockBot
 
-**v10.1.28** — Telegram shop bot for **PasarGuard**. Persian bot UI, English management CLI, web panel on port `9000`.
+**v11.0.0** — Telegram shop bot for **PasarGuard**. Persian bot UI, English management CLI, web panel on port `9000`.
 
 ---
 
