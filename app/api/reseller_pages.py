@@ -690,7 +690,17 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         session: AsyncSession = Depends(get_db),
     ):
         from app.services.color_tags import color_tags_for_ui
+        from app.services.representative_unification import (
+            RepresentativeUnifyError,
+            assert_live_parent_for_child,
+        )
         from fastapi import HTTPException
+
+        # Same live-parent gate as GET /resellers (no weaker color-tag bypass).
+        try:
+            await assert_live_parent_for_child(session, staff)
+        except RepresentativeUnifyError:
+            raise HTTPException(status_code=403, detail="forbidden")
 
         user, _profile, status = await _load_scoped_reseller(session, staff, user_id)
         if status == "forbidden":
@@ -718,6 +728,17 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         """Set color tag on a reseller BotUser within actor scope."""
         from app.services.color_tags import apply_color_tag
         from app.services.platform_identity import is_explicit_owner_staff
+        from app.services.representative_unification import (
+            RepresentativeUnifyError,
+            assert_live_parent_for_child,
+        )
+        from fastapi import HTTPException
+
+        # Same live-parent gate as GET /resellers (no weaker color-tag bypass).
+        try:
+            await assert_live_parent_for_child(session, staff)
+        except RepresentativeUnifyError:
+            raise HTTPException(status_code=403, detail="forbidden")
 
         form = await request.form()
         user, _profile, status = await _load_scoped_reseller(session, staff, user_id)
