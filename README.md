@@ -79,16 +79,16 @@ Credentials live in `data/web_admin.json` (not only `.env`).
 
 ## Database
 
-PostgreSQL is recommended for production (single `DATABASE_URL`):
+Fresh installs provision **PostgreSQL automatically** (packages, role, database, `.env`).
+Optional override for managed/remote Postgres:
 
 ```bash
-sudo bash scripts/setup_postgres.sh
-# DATABASE_URL=postgresql+asyncpg://pgclock:SECRET@127.0.0.1:5432/pgclock
-.venv/bin/python -m scripts.alembic_upgrade
+export PGCLOCK_DATABASE_URL="postgresql+asyncpg://user:SECRET@127.0.0.1:5432/pgclock"
+bash pgclock.sh install
 ```
 
-SQLite → Postgres cutover: `docs/PHASE_A_DATABASE.md`.  
-Installer hint: export `PGCLOCK_DATABASE_URL` before `bash pgclock.sh install`.
+Manual provision (rare): `sudo bash scripts/setup_postgres.sh`  
+Schema/migrations notes: `docs/PHASE_A_DATABASE.md`.
 
 ```bash
 sudo bash scripts/install_global_cli.sh

@@ -110,8 +110,8 @@ class Settings(BaseSettings):
     web_admin_user: str = Field(default="admin", alias="WEB_ADMIN_USER")
     web_admin_password: str = Field(default="", alias="WEB_ADMIN_PASSWORD")
 
-    # Lab/legacy default only. Production should use PostgreSQL
-    # (see docs/PHASE_A_DATABASE.md). SQLite→PG is offline ETL, not dual runtime.
+    # Installs always provision local PostgreSQL (or honor PGCLOCK_DATABASE_URL).
+    # SQLite remains only as an in-memory option for unit tests — not for product installs.
     database_url: str = Field(
         default=f"sqlite+aiosqlite:///{DATA_DIR / 'bot.db'}",
         alias="DATABASE_URL",
