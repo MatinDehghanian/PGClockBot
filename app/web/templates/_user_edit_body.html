@@ -96,6 +96,21 @@
 </section>
 
 {% endif %}
+
+<section class="edit-section">
+  <header class="edit-section-head">
+    <h3>تگ رنگی</h3>
+    <p class="muted">دایره کنار نام در لیست — فقط برای اسکن سریع کارکنان</p>
+  </header>
+  <form method="post" action="/users/{{ user.id }}/color-tag" class="form-stack">
+    {% set selected_color = user.color_tag or '' %}
+    {% include "_color_tag_picker.html" %}
+    <div class="actions">
+      <button class="btn" type="submit">ذخیره تگ</button>
+    </div>
+  </form>
+</section>
+
 {% if can_pg_create %}
 <section class="edit-section">
   <header class="edit-section-head">

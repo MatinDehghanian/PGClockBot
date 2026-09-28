@@ -1122,6 +1122,8 @@ async def seed_reseller_shop_settings(session: AsyncSession, reseller_user_id: i
         "admin_daily_report_hour",
         "admin_daily_report_template",
         "admin_daily_report_metrics",
+        "subordinate_report_enabled",
+        "subordinate_report_last",
     )
     added = False
     for key in seed_keys:
@@ -1135,6 +1137,11 @@ async def seed_reseller_shop_settings(session: AsyncSession, reseller_user_id: i
         elif key == "admin_daily_report_enabled":
             # Shops opt in — do not spam by default.
             value = "0"
+        elif key == "subordinate_report_enabled":
+            # L1 shops opt in for L2 digests.
+            value = "0"
+        elif key == "subordinate_report_last":
+            value = ""
         elif key not in DEFAULT_SETTINGS:
             continue
         else:

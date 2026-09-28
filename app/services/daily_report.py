@@ -510,7 +510,8 @@ async def _today_activity(session: AsyncSession, *, reseller_id: int | None) -> 
     from app.services.home_overview import shop_period_stats
 
     periods = await shop_period_stats(session, reseller_id=reseller_id)
-    today = periods.get("today") or {}
+    # shop_period_stats keys are day/week/month (not "today").
+    today = periods.get("day") or {}
     # Services created today (shop-scoped)
     since = datetime.now(timezone.utc).astimezone(_TEHRAN).replace(
         hour=0, minute=0, second=0, microsecond=0

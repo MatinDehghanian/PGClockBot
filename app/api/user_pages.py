@@ -206,6 +206,8 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
         can_pg_create = bool(pg_acts.get("create"))
         can_pg_update = bool(pg_acts.get("update"))
         can_pg_delete = bool(pg_acts.get("delete"))
+        from app.services.color_tags import color_tags_for_ui
+
         ctx = {
             "staff": staff,
             "user": user,
@@ -222,6 +224,7 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
             "can_pg_create": can_pg_create,
             "can_pg_update": can_pg_update,
             "can_pg_delete": can_pg_delete,
+            "color_tags": color_tags_for_ui(),
         }
         if as_fragment:
             return render(request, "_user_edit_body.html", ctx)

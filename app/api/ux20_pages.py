@@ -118,6 +118,32 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
 
         return _redirect_user(user_id, ok="یادداشت و ریسک ذخیره شد")
 
+    @app.post("/users/{user_id}/color-tag")
+    async def users_color_tag(
+        user_id: int,
+        color_tag: str = Form(""),
+        staff: dict = Depends(require_staff),
+        session: AsyncSession = Depends(get_db),
+    ):
+        from app.services.color_tags import apply_color_tag
+
+        if not is_platform_admin(staff) and not can_shop(authz_from_staff(staff), "users"):
+            return RedirectResponse("/home", status_code=303)
+        user = (
+            await session.execute(select(BotUser).where(BotUser.id == int(user_id)))
+        ).scalar_one_or_none()
+        if not user:
+            return RedirectResponse("/users", status_code=303)
+        try:
+            assert_bot_user_in_scope(staff, user)
+        except ShopScopeError:
+            return RedirectResponse("/home", status_code=303)
+        apply_color_tag(user, color_tag)
+        await session.commit()
+        from app.api.user_pages import _redirect_user
+
+        return _redirect_user(user_id, ok="تگ رنگی ذخیره شد")
+
     @app.post("/plans/gift-codes")
     async def gift_codes_create(
         amount: int = Form(...),

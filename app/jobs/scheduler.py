@@ -398,7 +398,7 @@ async def run_admin_daily_report(bot: Bot) -> None:
             from sqlalchemy import select
 
             from app.config import get_settings
-            from app.db.models import ResellerProfile
+            from app.db.models import OrgPrincipal, ResellerProfile
             from app.services.daily_report import (
                 ACTOR_OWNER,
                 ACTOR_SHOP,
@@ -406,42 +406,141 @@ async def run_admin_daily_report(bot: Bot) -> None:
                 build_daily_report,
                 shop_daily_report_chat_ids,
             )
+            from app.services.org_principals import DEPTH_ONE, STATUS_ACTIVE
             from app.services.reseller_bots import open_notify_bot_for_reseller
+            from app.services.subordinate_report import (
+                SETTING_ENABLED as SUB_REPORT_ENABLED,
+                SETTING_LAST as SUB_REPORT_LAST,
+                build_subordinate_report_for_parent,
+                load_owner_parent,
+            )
             from app.services.users import get_all_settings, get_setting, on, set_setting
 
             now = datetime.now(timezone.utc)
             day_key = now.strftime("%Y-%m-%d")
 
-            # —— Platform Owner report ——
-            if on(await get_setting(session, "admin_daily_report_enabled", "1")):
+            async def _traffic_map_for_shops(shops) -> dict[int, str]:
+                """Best-effort PG traffic labels; never fails the digest."""
+                out: dict[int, str] = {}
+                if not shops:
+                    return out
                 try:
-                    hour = int(await get_setting(session, "admin_daily_report_hour", "0") or 0)
-                except Exception:
-                    hour = 0
-                if now.hour == max(0, min(23, hour)):
-                    last = (await get_setting(session, "admin_daily_report_last", "")) or ""
-                    if last != day_key:
-                        text = await build_daily_report(
-                            session,
-                            reseller_id=None,
-                            actor=ACTOR_OWNER,
-                            admin_name="مالک سیستم",
-                            template=(
-                                await get_setting(session, "admin_daily_report_template", "")
+                    from app.services.pasarguard import get_pg
+                    from app.services.pg_overview import admin_usage_snapshot
+
+                    pg = get_pg()
+                    admins = await pg.get_admins()
+                    roles = await pg.get_admin_roles()
+                    role_by_id = {
+                        int(r["id"]): r
+                        for r in (roles or [])
+                        if isinstance(r, dict) and r.get("id") is not None
+                    }
+                    by_username = {
+                        str(a.get("username") or "").strip().lower(): a
+                        for a in (admins or [])
+                        if isinstance(a, dict) and a.get("username")
+                    }
+                    profile_ids = [int(s.reseller_profile_id) for s in shops]
+                    profiles = (
+                        await session.execute(
+                            select(ResellerProfile).where(
+                                ResellerProfile.id.in_(profile_ids or [0])
                             )
-                            or DEFAULT_REPORT_TEMPLATE,
-                            metrics_raw=await get_setting(
-                                session, "admin_daily_report_metrics", ""
-                            ),
                         )
-                        for aid in get_settings().admin_ids or []:
+                    ).scalars().all()
+                    for profile in profiles:
+                        uname = (profile.pg_admin_username or "").strip().lower()
+                        if not uname:
+                            continue
+                        admin = by_username.get(uname)
+                        if not admin:
+                            continue
+                        role = None
+                        rid = admin.get("role_id")
+                        if rid is not None:
                             try:
-                                await bot.send_message(int(aid), text, parse_mode="HTML")
-                            except Exception:
-                                logger.debug(
-                                    "daily report send failed admin=%s", aid, exc_info=True
-                                )
-                        await set_setting(session, "admin_daily_report_last", day_key)
+                                role = role_by_id.get(int(rid))
+                            except (TypeError, ValueError):
+                                role = None
+                        snap = admin_usage_snapshot(admin, role)
+                        out[int(profile.user_id)] = str(
+                            snap.get("traffic_text") or "—"
+                        )
+                except Exception:
+                    logger.debug(
+                        "subordinate report traffic map skipped", exc_info=True
+                    )
+                return out
+
+            # —— Platform Owner report ——
+            try:
+                hour = int(await get_setting(session, "admin_daily_report_hour", "0") or 0)
+            except Exception:
+                hour = 0
+            owner_hour_ok = now.hour == max(0, min(23, hour))
+
+            if owner_hour_ok and on(
+                await get_setting(session, "admin_daily_report_enabled", "1")
+            ):
+                last = (await get_setting(session, "admin_daily_report_last", "")) or ""
+                if last != day_key:
+                    text = await build_daily_report(
+                        session,
+                        reseller_id=None,
+                        actor=ACTOR_OWNER,
+                        admin_name="مالک سیستم",
+                        template=(
+                            await get_setting(session, "admin_daily_report_template", "")
+                        )
+                        or DEFAULT_REPORT_TEMPLATE,
+                        metrics_raw=await get_setting(
+                            session, "admin_daily_report_metrics", ""
+                        ),
+                    )
+                    for aid in get_settings().admin_ids or []:
+                        try:
+                            await bot.send_message(int(aid), text, parse_mode="HTML")
+                        except Exception:
+                            logger.debug(
+                                "daily report send failed admin=%s", aid, exc_info=True
+                            )
+                    await set_setting(session, "admin_daily_report_last", day_key)
+                    await session.commit()
+
+            # —— Platform Owner: direct L1 subordinate digest ——
+            if owner_hour_ok and on(
+                await get_setting(session, SUB_REPORT_ENABLED, "1")
+            ):
+                last_sub = (await get_setting(session, SUB_REPORT_LAST, "")) or ""
+                if last_sub != day_key:
+                    owner = await load_owner_parent(session)
+                    if owner is not None:
+                        from app.services.subordinate_report import (
+                            list_direct_subordinate_shops,
+                        )
+
+                        shops = await list_direct_subordinate_shops(
+                            session, parent=owner
+                        )
+                        if shops:
+                            traffic = await _traffic_map_for_shops(shops)
+                            text = await build_subordinate_report_for_parent(
+                                session, parent=owner, traffic_by_user_id=traffic
+                            )
+                            if text:
+                                for aid in get_settings().admin_ids or []:
+                                    try:
+                                        await bot.send_message(
+                                            int(aid), text, parse_mode="HTML"
+                                        )
+                                    except Exception:
+                                        logger.debug(
+                                            "subordinate report send failed admin=%s",
+                                            aid,
+                                            exc_info=True,
+                                        )
+                        await set_setting(session, SUB_REPORT_LAST, day_key)
                         await session.commit()
 
             # —— Shop reports (explicit reseller_id scope) ——
@@ -456,59 +555,131 @@ async def run_admin_daily_report(bot: Bot) -> None:
             for profile in profiles:
                 rid = int(profile.user_id)
                 ui = await get_all_settings(session, reseller_id=rid)
-                if not on(ui.get("admin_daily_report_enabled")):
-                    continue
                 try:
                     hour = int(ui.get("admin_daily_report_hour") or 0)
                 except Exception:
                     hour = 0
-                if now.hour != max(0, min(23, hour)):
+                hour_ok = now.hour == max(0, min(23, hour))
+                if not hour_ok:
                     continue
-                if (ui.get("admin_daily_report_last") or "").strip() == day_key:
-                    continue
-                admin_name = (ui.get("shop_title") or profile.bot_username or "فروشگاه").strip()
-                text = await build_daily_report(
-                    session,
-                    reseller_id=rid,
-                    actor=ACTOR_SHOP,
-                    admin_name=admin_name,
-                    template=(ui.get("admin_daily_report_template") or "").strip()
-                    or DEFAULT_REPORT_TEMPLATE,
-                    metrics_raw=ui.get("admin_daily_report_metrics"),
-                )
-                shop_bot, should_close = await open_notify_bot_for_reseller(session, rid)
-                if shop_bot is None:
-                    continue
-                try:
-                    for chat_id in await shop_daily_report_chat_ids(session, rid):
-                        try:
-                            await shop_bot.send_message(
-                                int(chat_id), text, parse_mode="HTML"
-                            )
-                        except Exception:
-                            logger.debug(
-                                "daily report shop send failed rid=%s chat=%s",
-                                rid,
-                                chat_id,
-                                exc_info=True,
-                            )
-                    await set_setting(
+
+                if on(ui.get("admin_daily_report_enabled")) and (
+                    ui.get("admin_daily_report_last") or ""
+                ).strip() != day_key:
+                    admin_name = (
+                        ui.get("shop_title") or profile.bot_username or "فروشگاه"
+                    ).strip()
+                    text = await build_daily_report(
                         session,
-                        "admin_daily_report_last",
-                        day_key,
                         reseller_id=rid,
+                        actor=ACTOR_SHOP,
+                        admin_name=admin_name,
+                        template=(ui.get("admin_daily_report_template") or "").strip()
+                        or DEFAULT_REPORT_TEMPLATE,
+                        metrics_raw=ui.get("admin_daily_report_metrics"),
+                    )
+                    shop_bot, should_close = await open_notify_bot_for_reseller(
+                        session, rid
+                    )
+                    if shop_bot is not None:
+                        try:
+                            for chat_id in await shop_daily_report_chat_ids(
+                                session, rid
+                            ):
+                                try:
+                                    await shop_bot.send_message(
+                                        int(chat_id), text, parse_mode="HTML"
+                                    )
+                                except Exception:
+                                    logger.debug(
+                                        "daily report shop send failed rid=%s chat=%s",
+                                        rid,
+                                        chat_id,
+                                        exc_info=True,
+                                    )
+                            await set_setting(
+                                session,
+                                "admin_daily_report_last",
+                                day_key,
+                                reseller_id=rid,
+                            )
+                            await session.commit()
+                        finally:
+                            if should_close:
+                                try:
+                                    await shop_bot.session.close()
+                                except Exception:
+                                    logger.debug(
+                                        "daily report shop bot session close failed rid=%s",
+                                        rid,
+                                        exc_info=True,
+                                    )
+
+                # L1 shop → L2 subordinate digest (same hour, opt-in)
+                if on(ui.get(SUB_REPORT_ENABLED)) and (
+                    ui.get(SUB_REPORT_LAST) or ""
+                ).strip() != day_key:
+                    parent = (
+                        await session.execute(
+                            select(OrgPrincipal).where(
+                                OrgPrincipal.reseller_profile_id == int(profile.id),
+                                OrgPrincipal.depth == DEPTH_ONE,
+                                OrgPrincipal.status == STATUS_ACTIVE,
+                            )
+                        )
+                    ).scalar_one_or_none()
+                    if parent is None:
+                        await set_setting(
+                            session, SUB_REPORT_LAST, day_key, reseller_id=rid
+                        )
+                        await session.commit()
+                        continue
+                    from app.services.subordinate_report import (
+                        list_direct_subordinate_shops,
+                    )
+
+                    shops = await list_direct_subordinate_shops(
+                        session, parent=parent
+                    )
+                    if shops:
+                        traffic = await _traffic_map_for_shops(shops)
+                        text = await build_subordinate_report_for_parent(
+                            session, parent=parent, traffic_by_user_id=traffic
+                        )
+                        if text:
+                            shop_bot, should_close = await open_notify_bot_for_reseller(
+                                session, rid
+                            )
+                            if shop_bot is not None:
+                                try:
+                                    for chat_id in await shop_daily_report_chat_ids(
+                                        session, rid
+                                    ):
+                                        try:
+                                            await shop_bot.send_message(
+                                                int(chat_id), text, parse_mode="HTML"
+                                            )
+                                        except Exception:
+                                            logger.debug(
+                                                "subordinate report shop send failed rid=%s chat=%s",
+                                                rid,
+                                                chat_id,
+                                                exc_info=True,
+                                            )
+                                finally:
+                                    if should_close:
+                                        try:
+                                            await shop_bot.session.close()
+                                        except Exception:
+                                            logger.debug(
+                                                "subordinate report shop bot close failed rid=%s",
+                                                rid,
+                                                exc_info=True,
+                                            )
+                    await set_setting(
+                        session, SUB_REPORT_LAST, day_key, reseller_id=rid
                     )
                     await session.commit()
-                finally:
-                    if should_close:
-                        try:
-                            await shop_bot.session.close()
-                        except Exception:
-                            logger.debug(
-                                "daily report shop bot session close failed rid=%s",
-                                rid,
-                                exc_info=True,
-                            )
         except Exception:
             logger.exception("admin daily report failed")
 
