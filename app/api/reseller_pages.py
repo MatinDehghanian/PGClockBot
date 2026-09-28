@@ -235,6 +235,23 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         if not owner_view:
             allowed = await descendant_shop_profile_ids(session, staff)
             rows = [pair for pair in rows if int(pair[1].id) in allowed]
+        from app.services.color_tags import (
+            FILTER_NONE,
+            color_tag_meta,
+            color_tags_for_ui,
+            normalize_color_filter,
+        )
+
+        color_filter = normalize_color_filter(request.query_params.get("color"))
+        if color_filter == FILTER_NONE:
+            rows = [pair for pair in rows if not getattr(pair[0], "color_tag", None)]
+        elif color_filter:
+            rows = [
+                pair
+                for pair in rows
+                if (getattr(pair[0], "color_tag", None) or "") == color_filter
+            ]
+
         search_q = ""
         try:
             from app.services.list_query import filter_by_search, normalize_search_q
@@ -366,6 +383,9 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
                 "owner_view": owner_view,
                 "can_create_l2": not owner_view,
                 "l2_pg_roles": l2_pg_roles,
+                "color_filter": color_filter,
+                "color_tags": color_tags_for_ui(),
+                "color_tag_meta": color_tag_meta,
             },
         )
 
@@ -615,6 +635,8 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
                     "base_gb": base,
                     "total_gb": base + extra,
                 }
+        from app.services.color_tags import color_tags_for_ui
+
         ctx = {
             "staff": staff,
             "user": user,
@@ -634,11 +656,84 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             "topup_nonce": secrets.token_hex(8),
             "flash_ok": request.query_params.get("ok"),
             "flash_err": request.query_params.get("err"),
+            "color_tags": color_tags_for_ui(),
         }
         if request.query_params.get("fragment") == "1":
             return render(request, "_reseller_edit_body.html", ctx)
         return render(request, "reseller_edit.html", ctx)
 
+    async def _load_scoped_reseller(
+        session: AsyncSession, staff: dict, user_id: int
+    ):
+        from app.services.platform_identity import is_explicit_owner_staff
+        from app.services.representative_unification import descendant_shop_profile_ids
+
+        user = await session.get(BotUser, int(user_id))
+        profile = (
+            await session.execute(
+                select(ResellerProfile).where(ResellerProfile.user_id == int(user_id))
+            )
+        ).scalar_one_or_none()
+        if not user or not profile:
+            return None, None, "missing"
+        if not is_explicit_owner_staff(staff):
+            allowed = await descendant_shop_profile_ids(session, staff)
+            if int(profile.id) not in allowed:
+                return None, None, "forbidden"
+        return user, profile, "ok"
+
+    @app.get("/resellers/{user_id}/color-tag", response_class=HTMLResponse)
+    async def reseller_color_tag_page(
+        user_id: int,
+        request: Request,
+        staff: dict = Depends(staff_dep),
+        session: AsyncSession = Depends(get_db),
+    ):
+        from app.services.color_tags import color_tags_for_ui
+        from fastapi import HTTPException
+
+        user, _profile, status = await _load_scoped_reseller(session, staff, user_id)
+        if status == "forbidden":
+            raise HTTPException(status_code=403, detail="forbidden")
+        if status != "ok" or user is None:
+            return RedirectResponse(f"/resellers?err={_q('نماینده یافت نشد')}", status_code=303)
+        ctx = {
+            "staff": staff,
+            "user": user,
+            "color_tags": color_tags_for_ui(),
+            "flash_ok": request.query_params.get("ok"),
+            "flash_err": request.query_params.get("err"),
+        }
+        if request.query_params.get("fragment") == "1":
+            return render(request, "_reseller_color_tag_body.html", ctx)
+        return render(request, "_reseller_color_tag_body.html", ctx)
+
+    @app.post("/resellers/{user_id}/color-tag")
+    async def reseller_color_tag_save(
+        user_id: int,
+        request: Request,
+        staff: dict = Depends(staff_dep),
+        session: AsyncSession = Depends(get_db),
+    ):
+        """Set color tag on a reseller BotUser within actor scope."""
+        from app.services.color_tags import apply_color_tag
+        from app.services.platform_identity import is_explicit_owner_staff
+
+        form = await request.form()
+        user, _profile, status = await _load_scoped_reseller(session, staff, user_id)
+        if status == "forbidden":
+            return RedirectResponse("/home", status_code=303)
+        if status != "ok" or user is None:
+            return RedirectResponse(f"/resellers?err={_q('نماینده یافت نشد')}", status_code=303)
+        apply_color_tag(user, str(form.get("color_tag") or ""))
+        await session.commit()
+        referer = str(request.headers.get("referer") or "")
+        if is_explicit_owner_staff(staff) and "/edit" in referer:
+            return _redirect_reseller_edit(user_id, ok="تگ رنگی ذخیره شد")
+        return RedirectResponse(
+            f"/resellers?ok={_q('تگ رنگی ذخیره شد')}",
+            status_code=303,
+        )
     @app.post("/resellers/{user_id}/edit")
     async def reseller_edit_save(
         user_id: int,

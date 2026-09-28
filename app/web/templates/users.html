@@ -74,11 +74,26 @@
   <a class="{% if flt=='blocked' %}active{% endif %}" href="{{ filter_href(filter_key='blocked', q=q) }}">مسدود</a>
   <a class="{% if flt=='alerts' %}active{% endif %}" href="{{ filter_href(filter_key='alerts', q=q) }}">دارای اعلان</a>
 </nav>
+{% if color_tags is defined and color_tags %}
+<div class="color-tag-filters" aria-label="فیلتر تگ رنگی">
+  <a class="color-tag-filter{% if not color_filter %} is-active{% endif %}" href="{{ filter_href(filter_key=flt, q=q, color=none) }}">همه رنگ‌ها</a>
+  <a class="color-tag-filter{% if color_filter == '_none' %} is-active{% endif %}" href="{{ filter_href(filter_key=flt, q=q, color='_none') }}">بدون تگ</a>
+  {% for t in color_tags %}
+  <a class="color-tag-filter{% if color_filter == t.key %} is-active{% endif %}" href="{{ filter_href(filter_key=flt, q=q, color=t.key) }}">
+    <span class="color-tag-dot" style="--tag-color: {{ t.hex }}" aria-hidden="true"></span>
+    {{ t.title_fa }}
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
 
 <div class="card card-flush">
   <form method="get" action="/users" class="search-bar">
     {% if flt and flt != 'all' %}
     <input type="hidden" name="filter" value="{{ flt }}" />
+    {% endif %}
+    {% if color_filter %}
+    <input type="hidden" name="color" value="{{ color_filter }}" />
     {% endif %}
     <label class="search-bar-field">
       <input name="q" value="{{ q or '' }}" placeholder="نام، تلگرام، نقش…" autocomplete="off" />
@@ -138,6 +153,8 @@
         <td class="col-name" data-sort-value="{{ u.full_name or u.username or '' }}">
           <div class="cell-name">
             <span class="cell-name-primary">
+              {% set tag = color_tag_meta(u.color_tag) if color_tag_meta is defined else none %}
+              {% if tag %}<span class="color-tag-dot" style="--tag-color: {{ tag.hex }}" title="{{ tag.title_fa }}" aria-label="تگ {{ tag.title_fa }}"></span>{% endif %}
               <span class="cell-name-text">{{ u.full_name or u.username or "—" }}</span>
               {% if row.has_alert %}<span class="alert-dot" title="اعلان سرویس" aria-label="اعلان سرویس"></span>{% endif %}
             </span>

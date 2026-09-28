@@ -485,6 +485,89 @@ a.topbar-brand:focus-visible {
   box-shadow: 0 0 0 2px color-mix(in srgb, #f97316 28%, transparent);
   flex: 0 0 auto;
 }
+/* Staff color tag — small circle beside list names */
+.color-tag-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--tag-color, #64748b);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--tag-color, #64748b) 28%, transparent);
+  flex: 0 0 auto;
+}
+.cell-name-primary > .color-tag-dot {
+  flex: 0 0 auto;
+}
+.color-tag-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+}
+.color-tag-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm, 10px);
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+  background: color-mix(in srgb, var(--surface, #111) 88%, transparent);
+  cursor: pointer;
+  user-select: none;
+}
+.color-tag-option input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.color-tag-option.is-selected,
+.color-tag-option:has(input:checked) {
+  border-color: color-mix(in srgb, var(--brand, #f97316) 55%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--brand, #f97316) 35%, transparent);
+}
+.color-tag-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--tag-color, #64748b);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--tag-color, #64748b) 28%, transparent);
+  flex: 0 0 auto;
+}
+.color-tag-swatch--none {
+  background: transparent;
+  border: 1.5px dashed color-mix(in srgb, var(--muted, #94a3b8) 70%, transparent);
+  box-shadow: none;
+}
+.color-tag-label {
+  font-size: 12px;
+  line-height: 1.2;
+  color: var(--text, inherit);
+}
+.color-tag-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  margin: 0 0 var(--space-2);
+}
+.color-tag-filters .color-tag-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+  text-decoration: none;
+  color: inherit;
+  font-size: 12px;
+}
+.color-tag-filters .color-tag-filter.is-active {
+  border-color: color-mix(in srgb, var(--brand, #f97316) 55%, transparent);
+  background: color-mix(in srgb, var(--brand, #f97316) 12%, transparent);
+}
+html[data-theme="light"] .color-tag-option {
+  background: color-mix(in srgb, #fff 92%, var(--border, #e2e8f0));
+}
 .badge.badge-inline {
   font-size: 11px;
   padding: 2px 8px;

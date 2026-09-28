@@ -70,8 +70,11 @@ def users_list_href(
     filter_key: UserFilter | str = "all",
     uid: int | None = None,
     q: str | None = None,
+    color: str | None = None,
 ) -> str:
     """Build a safe deep-link into ``/users`` (whitelist query keys only)."""
+    from app.services.color_tags import normalize_color_filter
+
     parts: list[str] = []
     fk = normalize_users_filter(str(filter_key))
     if fk != "all":
@@ -79,6 +82,11 @@ def users_list_href(
     focus = parse_focus_uid(str(uid) if uid is not None else None)
     if focus:
         parts.append(f"uid={focus}")
+    color_key = normalize_color_filter(color)
+    if color_key:
+        from urllib.parse import quote
+
+        parts.append(f"color={quote(color_key, safe='')}")
     if q:
         from urllib.parse import quote
 

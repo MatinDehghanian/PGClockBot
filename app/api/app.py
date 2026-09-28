@@ -3324,12 +3324,19 @@ def create_api_app(lifespan=None) -> FastAPI:
         from app.services.platform_identity import is_explicit_owner_staff
         from app.services.shop_scope import ShopScopeError, resolve_shop_scope_id
         from app.services.pg_access import staff_user_actions
+        from app.services.color_tags import (
+            FILTER_NONE,
+            color_tag_meta,
+            color_tags_for_ui,
+            normalize_color_filter,
+        )
         from app.services.users_ops import (
             build_users_ops_page,
             parse_focus_uid,
             scoped_users_where,
             users_list_href,
         )
+        from sqlalchemy import and_
 
         try:
             scope = resolve_shop_scope_id(staff)
@@ -3339,13 +3346,19 @@ def create_api_app(lifespan=None) -> FastAPI:
         search_q = normalize_search_q(request.query_params.get("q"))
         filter_raw = request.query_params.get("filter")
         focus_uid = parse_focus_uid(request.query_params.get("uid"))
+        color_filter = normalize_color_filter(request.query_params.get("color"))
         fetch_limit = 500 if search_q else 200
 
         # Shop scope: Owner → platform users only; reseller → own customers.
         # Pure resellers (no shop services) stay on /resellers.
+        where = scoped_users_where(scope)
+        if color_filter == FILTER_NONE:
+            where = and_(where, BotUser.color_tag.is_(None))
+        elif color_filter:
+            where = and_(where, BotUser.color_tag == color_filter)
         result = await session.execute(
             select(BotUser)
-            .where(scoped_users_where(scope))
+            .where(where)
             .order_by(BotUser.id.desc())
             .limit(fetch_limit)
         )
@@ -3377,6 +3390,11 @@ def create_api_app(lifespan=None) -> FastAPI:
                 focus_uid = None
         pg_acts = staff_user_actions(staff)
         in_shop = is_explicit_owner_staff(staff) or scope is not None
+
+        def _users_href(**kwargs):
+            kwargs.setdefault("color", color_filter)
+            return users_list_href(**kwargs)
+
         return render(
             request,
             "users.html",
@@ -3387,8 +3405,11 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "counts": counts,
                 "filter": filter_key,
                 "focus_uid": focus_uid,
-                "filter_href": users_list_href,
+                "filter_href": _users_href,
                 "q": search_q,
+                "color_filter": color_filter,
+                "color_tags": color_tags_for_ui(),
+                "color_tag_meta": color_tag_meta,
                 "flash_ok": request.query_params.get("ok"),
                 "flash_err": request.query_params.get("err"),
                 "open_edit": request.query_params.get("edit"),
