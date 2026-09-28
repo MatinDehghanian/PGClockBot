@@ -104,6 +104,10 @@ class GuideCatalogTests(unittest.TestCase):
         )
         self.assertIn("page-help-btn", macros)
         self.assertIn("help=None", macros)
+        # Direct link to guide — no intermediate popover / details menu
+        self.assertNotIn("page-help-pop", macros)
+        self.assertNotIn("<details", macros)
+        self.assertNotIn("مطالعه کامل", macros)
         plans = (ROOT / "app" / "web" / "templates" / "plans.html").read_text(
             encoding="utf-8"
         )
@@ -127,8 +131,10 @@ class GuideCatalogTests(unittest.TestCase):
         )
         html = tpl.render()
         self.assertIn("page-help-btn", html)
-        self.assertIn("مطالعه کامل", html)
-        self.assertIn("/help/plans", html)
+        self.assertIn('href="/help/plans/', html)
+        self.assertNotIn("مطالعه کامل", html)
+        self.assertNotIn("page-help-pop", html)
+        self.assertNotIn("<details", html)
 
     def test_help_mounted_in_app_factory(self):
         src = (ROOT / "app" / "api" / "app.py").read_text(encoding="utf-8")
@@ -151,10 +157,11 @@ class GuideCatalogTests(unittest.TestCase):
         self.assertIn(".side-help-btn", css)
         self.assertIn("rgba(34, 197, 94", css)
         self.assertNotIn(".nav-section-help", css)
-        self.assertIn(".page-help-pop", css)
-        self.assertIn("position: fixed", css)
+        self.assertIn(".page-help-btn", css)
+        self.assertNotIn(".page-help-pop", css)
         js = (ROOT / "app" / "web" / "static" / "panel.js").read_text(encoding="utf-8")
-        self.assertIn("placeHelpPop", js)
+        self.assertNotIn("placeHelpPop", js)
+        self.assertNotIn("details.page-help", js)
 
 
 
