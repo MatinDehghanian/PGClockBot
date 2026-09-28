@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "11.0.1": [
+        "سخت‌سازی تگ رنگی نمایندگان: همان گیت live-parent که لیست /resellers دارد (بدون مسیر ضعیف‌تر)",
+        "صفحه پلن‌ها: خطای سهمیه پاسارگارد دیگر ۵۰۰ نمی‌دهد؛ اسنپ‌شات UI degrade می‌شود",
+        "دبل‌چک صفحات پنل، هماهنگی UI تگ رنگی، و بازبینی نشتی نقش/tenant",
+        "بدون مایگریشن DB؛ ریستور: restore/pre-v11.0.1-v11.0.0-2026-09-28",
+    ],
     "11.0.0": [
         "نصب تازه فقط PostgreSQL: پکیج، دیتابیس، نقش و DATABASE_URL به‌صورت خودکار در install",
         "گزارش دوره‌ای نمایندگان زیرمجموعه برای هر مالک (فقط فرزندان مستقیم؛ کاربر/خرید/فروش/حجم)",

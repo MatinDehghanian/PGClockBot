@@ -384,27 +384,35 @@ async def load_staff_limit_snapshot(
     client: Any | None = None,
 ) -> dict[str, Any]:
     """Return the actor's effective live PasarGuard limits for UI/policy use."""
+    empty = {
+        "restricted": False,
+        "admin": None,
+        "role": None,
+        "limits": {},
+        "max_users": None,
+        "current_users": None,
+        "remaining_users": None,
+        "account_data_limit": None,
+        "account_used_traffic": None,
+        "account_remaining_traffic": None,
+        "per_user_data_min": None,
+        "per_user_data_max": None,
+        "per_user_expire_min": None,
+        "per_user_expire_max": None,
+        "hwid_min": None,
+        "hwid_max": None,
+    }
     if not staff_needs_quota_check(staff):
-        return {
-            "restricted": False,
-            "admin": None,
-            "role": None,
-            "limits": {},
-            "max_users": None,
-            "current_users": None,
-            "remaining_users": None,
-            "account_data_limit": None,
-            "account_used_traffic": None,
-            "account_remaining_traffic": None,
-            "per_user_data_min": None,
-            "per_user_data_max": None,
-            "per_user_expire_min": None,
-            "per_user_expire_max": None,
-            "hwid_min": None,
-            "hwid_max": None,
-        }
+        return empty
 
-    admin, role = await _load_admin_and_role(staff, session=session, client=client)
+    # UI path: never 500 the page when PG is unreachable / unset.
+    # Mutating asserts still fail closed via _load_admin_and_role.
+    try:
+        admin, role = await _load_admin_and_role(staff, session=session, client=client)
+    except PgQuotaError as exc:
+        out = dict(empty)
+        out["error"] = exc.message
+        return out
     limits = merge_role_limits(admin, role)
     max_users = _as_int(limits.get("max_users")) or _as_int(admin.get("max_users"))
     current_users = (
