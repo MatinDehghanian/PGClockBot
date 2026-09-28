@@ -231,16 +231,9 @@
   {% if help %}
   {% set topic = (guide_topics or {}).get(help) %}
   {% if topic %}
-  <details class="page-help">
-    <summary class="page-help-btn" aria-label="راهنمای {{ text }}" title="راهنما">
-      <span aria-hidden="true">؟</span>
-    </summary>
-    <div class="page-help-pop" role="dialog" aria-label="خلاصه راهنما">
-      <strong class="page-help-pop-title">{{ topic.title }}</strong>
-      <p class="page-help-pop-sum">{{ topic.summary }}</p>
-      <a class="btn btn-sm page-help-pop-link" href="{{ topic.href }}">مطالعه کامل</a>
-    </div>
-  </details>
+  <a class="page-help-btn" href="{{ topic.href }}" aria-label="راهنمای {{ text }}" title="راهنما">
+    <span aria-hidden="true">؟</span>
+  </a>
   {% endif %}
   {% endif %}
 </div>
