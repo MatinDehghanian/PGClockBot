@@ -92,7 +92,22 @@
 
 <div class="card card-flush">
   <h2>لیست نمایندگان</h2>
+  {% if color_tags is defined and color_tags %}
+  <div class="color-tag-filters" aria-label="فیلتر تگ رنگی">
+    <a class="color-tag-filter{% if not color_filter %} is-active{% endif %}" href="/resellers{% if q %}?q={{ q | urlencode }}{% endif %}">همه رنگ‌ها</a>
+    <a class="color-tag-filter{% if color_filter == '_none' %} is-active{% endif %}" href="/resellers?color=_none{% if q %}&q={{ q | urlencode }}{% endif %}">بدون تگ</a>
+    {% for t in color_tags %}
+    <a class="color-tag-filter{% if color_filter == t.key %} is-active{% endif %}" href="/resellers?color={{ t.key }}{% if q %}&q={{ q | urlencode }}{% endif %}">
+      <span class="color-tag-dot" style="--tag-color: {{ t.hex }}" aria-hidden="true"></span>
+      {{ t.title_fa }}
+    </a>
+    {% endfor %}
+  </div>
+  {% endif %}
   <form method="get" action="/resellers" class="search-bar">
+    {% if color_filter %}
+    <input type="hidden" name="color" value="{{ color_filter }}" />
+    {% endif %}
     <label class="search-bar-field">
       <input name="q" value="{{ q or '' }}" placeholder="نام، تلگرام، وب، ربات…" autocomplete="off" />
     </label>
@@ -127,7 +142,15 @@
       {% set usage = (reseller_usage or {}).get(u.id) or {} %}
       <tr{% if owner_view %} data-bulk-ops="delete_reseller,delete_user"{% endif %}>
         {% if owner_view %}{{ table_select_cell(u.id) }}{% endif %}
-        <td data-sort-value="{{ u.full_name or u.username or '' }}">{{ u.full_name or u.username or '—' }}</td>
+        <td data-sort-value="{{ u.full_name or u.username or '' }}">
+          <div class="cell-name">
+            <span class="cell-name-primary">
+              {% set tag = color_tag_meta(u.color_tag) if color_tag_meta is defined else none %}
+              {% if tag %}<span class="color-tag-dot" style="--tag-color: {{ tag.hex }}" title="{{ tag.title_fa }}" aria-label="تگ {{ tag.title_fa }}"></span>{% endif %}
+              <span class="cell-name-text">{{ u.full_name or u.username or '—' }}</span>
+            </span>
+          </div>
+        </td>
         <td class="mono col-hide-sm" dir="ltr" data-sort-value="{{ u.telegram_id }}">{{ u.telegram_id }}</td>
         <td class="col-hide-sm" data-sort-value="{{ u.role }}">
           <span class="badge {% if u.role=='admin' %}role-admin{% elif u.role=='reseller' %}role-reseller{% else %}role-user{% endif %}">
@@ -165,8 +188,8 @@
         <td class="mono col-hide-sm" dir="ltr" data-sort-value="{{ p.bot_username or '' }}">{% if p.bot_username %}@{{ p.bot_username }}{% else %}—{% endif %}</td>
         <td class="col-hide-sm" data-sort-value="{% if p.setup_completed_at %}2{% elif p.web_username %}1{% else %}0{% endif %}">{% if p.setup_completed_at %}<span class="badge approved">کامل</span>{% elif p.web_username %}<span class="badge pending">بدون ربات</span>{% else %}—{% endif %}</td>
         <td class="col-actions">
-          {% if owner_view %}
           {% call row_actions() %}
+          {% if owner_view %}
             <button type="button" class="btn btn-ghost btn-sm"
                     data-modal-open="modal-reseller-edit"
                     data-edit-url="/resellers/{{ u.id }}/edit?fragment=1"
@@ -194,8 +217,12 @@
               <input type="hidden" name="reason" value="" />
               <button class="btn btn-sm btn-danger" type="submit">حذف کاربر</button>
             </form>
-          {% endcall %}
           {% endif %}
+            <button type="button" class="btn btn-ghost btn-sm"
+                    data-modal-open="modal-reseller-color"
+                    data-edit-url="/resellers/{{ u.id }}/color-tag?fragment=1"
+                    data-edit-title="تگ رنگی #{{ u.id }}">تگ رنگی</button>
+          {% endcall %}
         </td>
       </tr>
     {% else %}
@@ -323,45 +350,62 @@
     </div>
   </div>
 </div>
+
+<div class="ui-modal" id="modal-reseller-color" hidden>
+  <div class="ui-modal-backdrop" data-modal-close></div>
+  <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="reseller-color-title">
+    <div class="ui-modal-head">
+      {{ modal_title('reseller-color', 'تگ رنگی', caption='نشان کنار نام در لیست', tone='brand', heading_id='reseller-color-title') }}
+      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <div id="reseller-color-body" class="edit-modal-body">
+      <p class="muted">در حال بارگذاری…</p>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block page_scripts %}
 <script>
 (function(){
-  const body = document.getElementById('reseller-edit-body');
-  const titleEl = document.getElementById('reseller-edit-title');
-  if (!body) return;
-
-  async function loadEdit(url, title){
-    body.innerHTML = '<p class="muted">در حال بارگذاری…</p>';
-    if (titleEl && title) titleEl.textContent = title;
-    try {
-      const resp = await fetch(url, { credentials: 'same-origin', headers: { 'Accept': 'text/html' } });
-      if (!resp.ok) throw new Error('HTTP ' + resp.status);
-      body.innerHTML = await resp.text();
-      if (typeof window.enhanceAllSelects === 'function') window.enhanceAllSelects(body);
-      document.dispatchEvent(new CustomEvent('panel:dom-ready', { detail: { root: body } }));
-    } catch (e) {
-      body.innerHTML = '<div class="flash err">بارگذاری ویرایش ناموفق بود.</div>';
+  function bindFragmentModal(modalId, bodyId, titleId, openAttr){
+    const body = document.getElementById(bodyId);
+    const titleEl = document.getElementById(titleId);
+    if (!body) return null;
+    async function load(url, title){
+      body.innerHTML = '<p class="muted">در حال بارگذاری…</p>';
+      if (titleEl && title) titleEl.textContent = title;
+      try {
+        const resp = await fetch(url, { credentials: 'same-origin', headers: { 'Accept': 'text/html' } });
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        body.innerHTML = await resp.text();
+        if (typeof window.enhanceAllSelects === 'function') window.enhanceAllSelects(body);
+        document.dispatchEvent(new CustomEvent('panel:dom-ready', { detail: { root: body } }));
+      } catch (e) {
+        body.innerHTML = '<div class="flash err">بارگذاری ناموفق بود.</div>';
+      }
     }
+    document.addEventListener('click', function(e){
+      const btn = e.target.closest('[data-modal-open="' + openAttr + '"][data-edit-url]');
+      if (!btn) return;
+      load(btn.getAttribute('data-edit-url'), btn.getAttribute('data-edit-title') || '');
+    });
+    return { load: load, modalId: modalId };
   }
 
-  document.addEventListener('click', function(e){
-    const btn = e.target.closest('[data-modal-open="modal-reseller-edit"][data-edit-url]');
-    if (!btn) return;
-    loadEdit(btn.getAttribute('data-edit-url'), btn.getAttribute('data-edit-title') || 'ویرایش نماینده');
-  });
+  const edit = bindFragmentModal('modal-reseller-edit', 'reseller-edit-body', 'reseller-edit-title', 'modal-reseller-edit');
+  bindFragmentModal('modal-reseller-color', 'reseller-color-body', 'reseller-color-title', 'modal-reseller-color');
 
   const openId = {{ (open_edit or '')|tojson }};
   const flashOk = {{ (flash_ok or '')|tojson }};
   const flashErr = {{ (flash_err or '')|tojson }};
-  if (openId) {
+  if (openId && edit) {
     let url = '/resellers/' + openId + '/edit?fragment=1';
     if (flashOk) url += '&ok=' + encodeURIComponent(flashOk);
     if (flashErr) url += '&err=' + encodeURIComponent(flashErr);
     const open = function(){
       if (window.openModal) window.openModal('modal-reseller-edit');
-      loadEdit(url, 'ویرایش نماینده #' + openId);
+      edit.load(url, 'ویرایش نماینده #' + openId);
     };
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', open);
     else setTimeout(open, 0);

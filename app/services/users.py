@@ -848,6 +848,8 @@ DEFAULT_SETTINGS = {
     "admin_daily_report_last": "",
     "admin_daily_report_template": "",
     "admin_daily_report_metrics": "",
+    "subordinate_report_enabled": "1",
+    "subordinate_report_last": "",
     "backup_schedule_enabled": "1",
     "backup_schedule_hour": "3",
     "backup_include_env_scheduled": "0",
@@ -1029,6 +1031,12 @@ SETTING_GROUPS = {
             "ارسال گزارش روزانه در تلگرام",
             "toggle",
             "هر روز در ساعت مشخص‌شده خلاصهٔ انتخابی به ادمین‌ها فرستاده می‌شود",
+        ),
+        (
+            "subordinate_report_enabled",
+            "گزارش نمایندگان زیرمجموعه",
+            "toggle",
+            "همان ساعت، خلاصهٔ عملکرد هر نمایندهٔ مستقیم (کاربر، خرید، فروش، حجم) برای شما ارسال می‌شود",
         ),
         (
             "admin_daily_report_hour",
