@@ -820,11 +820,16 @@ ensure_apt_packages() {
     err "apt-get not found."
     return 1
   fi
+  # Keep a full PATH for apt/debconf postinst scripts (Ubuntu 24+/26 can
+  # invoke postgresql.config with a stripped PATH → "pg_lsclusters: not found").
+  export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH:-}"
+
   # Core packages required for install/run. nano/certbot are optional (edit/SSL).
-  # PostgreSQL server + client are required for production installs (pg_dump backup).
+  # postgresql-common MUST be present before the server package configures —
+  # otherwise debconf prints: pg_lsclusters: not found
   local required=(
     python3 python3-venv python3-pip ca-certificates curl git openssl
-    postgresql postgresql-contrib postgresql-client
+    postgresql-common postgresql postgresql-contrib postgresql-client
   )
   local missing=()
   local pkg
@@ -837,14 +842,54 @@ ensure_apt_packages() {
     && command -v python3 >/dev/null 2>&1 \
     && command -v curl >/dev/null 2>&1 \
     && command -v git >/dev/null 2>&1 \
-    && command -v psql >/dev/null 2>&1; then
+    && command -v psql >/dev/null 2>&1 \
+    && command -v pg_lsclusters >/dev/null 2>&1; then
     ok "Prerequisites already installed (skip apt)"
     return 0
   fi
   export DEBIAN_FRONTEND=noninteractive
   sudo_wrap apt-get update -y >/dev/null
-  sudo_wrap apt-get install -y "${missing[@]}" >/dev/null
-  ok "Prerequisites ready"
+
+  # Phase 1: postgresql-common first (provides /usr/bin/pg_lsclusters).
+  if ! dpkg -s postgresql-common >/dev/null 2>&1 \
+    || ! command -v pg_lsclusters >/dev/null 2>&1; then
+    info "Installing postgresql-common (pg_lsclusters)…"
+    if ! sudo_wrap apt-get install -y postgresql-common; then
+      err "Failed to install postgresql-common"
+      return 1
+    fi
+  fi
+
+  # Phase 2: remaining packages (including postgresql server/client).
+  missing=()
+  for pkg in "${required[@]}"; do
+    if ! dpkg -s "$pkg" >/dev/null 2>&1; then
+      missing+=("$pkg")
+    fi
+  done
+  if [[ ${#missing[@]} -gt 0 ]]; then
+    info "Installing: ${missing[*]}"
+    if ! sudo_wrap env PATH="$PATH" DEBIAN_FRONTEND=noninteractive \
+      apt-get install -y "${missing[@]}"; then
+      err "apt-get install failed"
+      return 1
+    fi
+  fi
+
+  if ! command -v psql >/dev/null 2>&1; then
+    err "psql still missing after apt — install postgresql-client manually"
+    return 1
+  fi
+  if ! command -v pg_lsclusters >/dev/null 2>&1; then
+    warn "pg_lsclusters still missing — installing postgresql-common again"
+    sudo_wrap apt-get install -y --reinstall postgresql-common || true
+  fi
+  if command -v pg_lsclusters >/dev/null 2>&1; then
+    ok "Prerequisites ready (pg_lsclusters=$(command -v pg_lsclusters))"
+  else
+    warn "Prerequisites installed but pg_lsclusters not in PATH — setup_postgres will use /etc/postgresql fallback"
+    ok "Prerequisites ready"
+  fi
 }
 
 # Start local PostgreSQL and ensure a DATABASE_URL for fresh installs.
