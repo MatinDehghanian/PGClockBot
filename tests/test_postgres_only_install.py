@@ -25,6 +25,11 @@ def test_setup_postgres_emits_url_file():
     assert "urllib.parse.quote" in src
     assert "PGPASSWORD=" in src
     assert "127.0.0.1" in src
+    # Socket-ready alone is not enough — force TCP listen + hba password rules.
+    assert "listen_addresses" in src
+    assert "_ensure_tcp_listener_and_hba" in src
+    assert "scram-sha-256" in src
+    assert "systemctl restart postgresql" in src or "pg_ctlcluster" in src
 
 
 def test_install_waits_for_panel_health():

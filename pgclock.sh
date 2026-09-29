@@ -353,7 +353,7 @@ ensure_postgresql() {
     case "$existing" in
       postgresql://*|postgresql+asyncpg://*|postgres://*)
         export PGCLOCK_DATABASE_URL="$existing"
-        ok "Using PostgreSQL DATABASE_URL from existing .env"
+        ok "Found PostgreSQL DATABASE_URL in existing .env"
         ;;
       sqlite*|*"sqlite"*)
         err "Existing .env still points at SQLite. New installs require PostgreSQL."
@@ -384,6 +384,14 @@ ensure_postgresql() {
         ready=1
         break
       fi
+      # Socket-only clusters still count as "postgres up"; setup_postgres.sh
+      # will enable listen_addresses=localhost before emitting DATABASE_URL.
+      # Use `sudo -u` even as root — sudo_wrap drops -u when already root.
+      if sudo -u postgres pg_isready -q 2>/dev/null \
+        || pg_isready -q 2>/dev/null; then
+        ready=1
+        break
+      fi
       sleep 1
     done
     if [[ "$ready" -ne 1 ]]; then
@@ -392,9 +400,36 @@ ensure_postgresql() {
     fi
   fi
 
+  # Reuse existing URL only if password auth over TCP still works; else re-provision.
+  # (venv/asyncpg may not exist yet — probe with psql + urllib.)
   if [[ -n "${PGCLOCK_DATABASE_URL:-}" ]]; then
-    ok "PostgreSQL ready"
-    return 0
+    if DATABASE_URL="${PGCLOCK_DATABASE_URL}" python3 - <<'PY' 2>/dev/null
+import os, subprocess, urllib.parse
+raw = os.environ["DATABASE_URL"].strip()
+for prefix in ("postgresql+asyncpg://", "postgres://", "postgresql://"):
+    if raw.startswith(prefix):
+        raw = "postgresql://" + raw[len(prefix):]
+        break
+u = urllib.parse.urlparse(raw)
+user = urllib.parse.unquote(u.username or "")
+password = urllib.parse.unquote(u.password or "") if u.password is not None else ""
+host = u.hostname or "127.0.0.1"
+port = str(u.port or 5432)
+dbname = (u.path or "/pgclock").lstrip("/") or "pgclock"
+env = os.environ.copy()
+env["PGPASSWORD"] = password
+r = subprocess.run(
+    ["psql", "-h", host, "-p", port, "-U", user, "-d", dbname, "-v", "ON_ERROR_STOP=1", "-c", "SELECT 1"],
+    env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=8,
+)
+raise SystemExit(0 if r.returncode == 0 else 1)
+PY
+    then
+      ok "PostgreSQL ready (existing DATABASE_URL)"
+      return 0
+    fi
+    warn "Existing DATABASE_URL is not reachable — re-provisioning local Postgres role/db"
+    unset PGCLOCK_DATABASE_URL
   fi
 
   local emit_file
@@ -686,6 +721,28 @@ cmd_install() {
     rm -f data/web_admin.json data/setup_complete.flag data/setup_in_progress.flag \
       data/setup_gate.token data/setup_gate.json data/setup_entry.url 2>/dev/null || true
     ok ".env scaffold written · PostgreSQL · finish setup in the browser"
+  elif [[ -n "${PGCLOCK_DATABASE_URL:-}" && -f .env ]]; then
+    # Re-provision may have rotated the role password — keep .env in sync.
+    local cur_db
+    cur_db="$(env_get DATABASE_URL "")"
+    if [[ "$cur_db" != "$PGCLOCK_DATABASE_URL" ]]; then
+      DATABASE_URL="$PGCLOCK_DATABASE_URL" python3 - <<'PY'
+import os, re
+from pathlib import Path
+path = Path(".env")
+text = path.read_text(encoding="utf-8")
+url = os.environ["DATABASE_URL"].replace("\\", "\\\\").replace('"', '\\"')
+line = f'DATABASE_URL="{url}"'
+if re.search(r"^DATABASE_URL=", text, flags=re.M):
+    text = re.sub(r"^DATABASE_URL=.*$", line, text, count=1, flags=re.M)
+else:
+    text = text.rstrip("\n") + "\n" + line + "\n"
+path.write_text(text, encoding="utf-8")
+path.chmod(0o600)
+print("updated")
+PY
+      ok "Synced DATABASE_URL into existing .env"
+    fi
   fi
 
   step "systemd service"
