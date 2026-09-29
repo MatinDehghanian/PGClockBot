@@ -86,6 +86,9 @@ class MiniAppKeyboardGuardTests(unittest.TestCase):
         self.assertIn('startswith("https://")', src)
         start = open("app/bot/handlers/start.py", encoding="utf-8").read()
         self.assertIn("Never let Mini App keyboard failure break /start", start)
+        cfg = open("app/config.py", encoding="utf-8").read()
+        self.assertIn("_miniapp_https_base", cfg)
+        self.assertIn("public_panel_base_url", cfg)
 
 
 class BotRiskTagKeyboardTests(unittest.TestCase):

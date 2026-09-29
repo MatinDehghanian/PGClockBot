@@ -171,6 +171,31 @@ class MiniAppSourceTests(unittest.TestCase):
         self.assertTrue(s.miniapp_url.endswith("/miniapp/"))
         self.assertEqual(s.miniapp_deep_url("ops"), s.miniapp_url + "#ops")
 
+    def test_miniapp_prefers_live_https_panel_over_http_public_base(self):
+        """When TLS is on, WebApp URL must follow the live panel HTTPS origin."""
+        from unittest.mock import patch
+
+        from app.config import Settings
+
+        s = Settings.model_construct(
+            public_base_url="http://203.0.113.10:9000",
+            bot_token="",
+        )
+        with (
+            patch("app.services.ssl_certs.https_is_active", return_value=True),
+            patch(
+                "app.services.ssl_certs.public_panel_base_url",
+                return_value="https://panel.example.com",
+            ),
+        ):
+            self.assertTrue(s.miniapp_enabled)
+            self.assertEqual(s.miniapp_url, "https://panel.example.com/miniapp/")
+
+        # HTTP PUBLIC_BASE_URL alone must never enable WebApp (Telegram rejects it).
+        with patch("app.services.ssl_certs.https_is_active", return_value=False):
+            self.assertFalse(s.miniapp_enabled)
+            self.assertEqual(s.miniapp_url, "")
+
     def test_csp_allows_telegram_for_miniapp(self):
         src = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
         self.assertIn('path.startswith("/miniapp")', src)
