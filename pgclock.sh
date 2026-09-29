@@ -1247,7 +1247,7 @@ cmd_status() {
   banner_small "Status"
   if [[ -f .env ]]; then
     ok ".env present"
-    local db_url db_kind
+    local db_url db_kind web_host
     db_url="$(env_get DATABASE_URL "")"
     case "$db_url" in
       postgresql://*|postgresql+asyncpg://*|postgres://*) db_kind="PostgreSQL" ;;
@@ -1256,6 +1256,13 @@ cmd_status() {
       *) db_kind="unknown" ;;
     esac
     echo -e "  Database: ${B}${db_kind}${N}"
+    web_host="$(env_get WEB_HOST "0.0.0.0")"
+    echo -e "  WEB_HOST: ${B}${web_host}${N}"
+    case "$web_host" in
+      127.0.0.1|localhost|::1)
+        warn "WEB_HOST is loopback — public URLs will fail. Fix: set WEB_HOST=0.0.0.0 and restart."
+        ;;
+    esac
   else
     warn ".env missing"
   fi
@@ -1266,18 +1273,54 @@ cmd_status() {
   fi
   local port
   port="$(env_get WEB_PORT 9000)"
+  echo -e "  WEB_PORT: ${B}${port}${N}"
   if service_installed; then
     echo -e "  Service: ${B}$(systemctl is-active "$SERVICE_NAME" 2>/dev/null || echo unknown)${N}"
   else
     echo -e "  Service: ${D}not installed${N}"
   fi
+
+  # Show what the kernel actually has listening (env can lie if service not restarted).
+  local listen_lines=""
+  if command -v ss >/dev/null 2>&1; then
+    listen_lines="$(ss -ltnp 2>/dev/null | grep -E ":${port}\\b" || true)"
+  fi
+  if [[ -z "$listen_lines" ]]; then
+    listen_lines="$(python3 - <<PY 2>/dev/null || true
+port=${port}
+try:
+    with open("/proc/net/tcp") as f:
+        next(f)
+        for line in f:
+            parts = line.split()
+            lip, lport = parts[1].split(":")
+            if int(lport, 16) != port:
+                continue
+            ipn = int(lip, 16)
+            a, b, c, d = ipn & 255, (ipn >> 8) & 255, (ipn >> 16) & 255, (ipn >> 24) & 255
+            print(f"{a}.{b}.{c}.{d}:{port}")
+except Exception:
+    pass
+PY
+)"
+  fi
+  if [[ -n "$listen_lines" ]]; then
+    echo -e "  Listen:  ${B}$(echo "$listen_lines" | tr '\n' ' ' | head -c 200)${N}"
+    if echo "$listen_lines" | grep -qE '127\.0\.0\.1|:1:|::1'       && ! echo "$listen_lines" | grep -qE '0\.0\.0\.0|\*:|\[::\]'; then
+      warn "Process is listening on loopback only — restart after WEB_HOST=0.0.0.0"
+    fi
+  else
+    warn "Nothing listening on :${port} — start/restart the service"
+  fi
+
   if command -v curl >/dev/null 2>&1; then
     local health
     health="$(curl -sS --max-time 3 "http://127.0.0.1:${port}/health" 2>/dev/null || true)"
     if [[ -n "$health" ]]; then
-      ok "Web health: ${health}"
+      ok "Local health: ${health}"
     else
-      warn "Web health: unreachable on :${port}"
+      warn "Local health: unreachable on 127.0.0.1:${port}"
+      warn "Logs: journalctl -u ${SERVICE_NAME} -n 80 --no-pager"
     fi
   fi
   if [[ ! -f data/setup_complete.flag ]]; then
@@ -1288,6 +1331,7 @@ cmd_status() {
       echo -e "  (valid 15 min — disabled after setup or login)"
     fi
   fi
+  info "If browser fails but local health is OK: open Cloud Firewall TCP ${port} (Hetzner/AWS)"
   print_success "Status check"
   return 0
 }
