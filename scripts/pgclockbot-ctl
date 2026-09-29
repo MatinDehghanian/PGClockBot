@@ -85,6 +85,8 @@ case "$cmd" in
       --email "$email"
       --cert-name "pgclock-${domain}"
       -d "$domain"
+      --key-type ecdsa
+      --elliptic-curve secp256r1
       --webroot
       -w "$webroot"
     )

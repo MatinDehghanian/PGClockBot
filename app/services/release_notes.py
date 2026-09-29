@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "11.0.8": [
+        "نصب: انتخاب پورت پنل + سه حالت SSL (دامنه Let's Encrypt / گواهی موقت خودامضا برای IP / بدون گواهی)",
+        "نصب: جایگذاری WEB_PORT و PUBLIC_BASE_URL و فعال‌سازی TLS قبل از استارت پنل؛ health با https در صورت نیاز",
+        "SSL: گواهی ECDSA P-256 (سبک‌تر/سریع‌تر)؛ مسیر خودامضای IP با SAN؛ enable_https برای دامنه و IP",
+        "بدون مایگریشن DB؛ ریستور: restore/pre-v11.0.8-v11.0.7-2026-09-29",
+    ],
     "11.0.7": [
         "نصب/آپدیت: اگر WEB_HOST=127.0.0.1 باشد به 0.0.0.0 اصلاح می‌شود (علت ERR_EMPTY_RESPONSE از اینترنت)",
         "Setup URL و بنر SUCCESS یک IP مشترک دارند؛ لینک ?gate= همیشه چاپ می‌شود",

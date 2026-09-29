@@ -12,8 +12,13 @@ ROOT = Path(__file__).resolve().parents[1]
 class SslAutoEnableTests(unittest.TestCase):
     def test_issue_or_renew_calls_enable_https(self):
         src = (ROOT / "app/services/ssl_certs.py").read_text(encoding="utf-8")
-        block = src[src.find("def issue_or_renew") : src.find("def enable_https")]
-        self.assertIn("enable_https(restart=True)", block)
+        start = src.find("def issue_or_renew")
+        end = src.find("\ndef issue_self_signed_ip", start)
+        if end < 0:
+            end = src.find("\ndef enable_https", start)
+        block = src[start:end]
+        self.assertIn("restart: bool = True", block)
+        self.assertIn("enable_https(restart=restart)", block)
         self.assertNotIn("needs_enable", block)
 
     def test_ssl_template_no_enable_confirm(self):

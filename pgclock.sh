@@ -229,6 +229,235 @@ PY
   ok "WEB_HOST set to 0.0.0.0 (was '${host}' — unreachable from the internet)"
 }
 
+# Install-time panel port + SSL mode (domain LE / temp IP / none).
+# Env overrides (non-interactive): PGCLOCK_WEB_PORT, PGCLOCK_SSL_MODE,
+# PGCLOCK_SSL_DOMAIN, PGCLOCK_SSL_EMAIL.
+# Sets: WEB_PORT, INSTALL_SSL_MODE, INSTALL_SSL_DOMAIN, INSTALL_SSL_EMAIL
+prompt_install_port_and_ssl() {
+  INSTALL_SSL_MODE="${PGCLOCK_SSL_MODE:-none}"
+  INSTALL_SSL_DOMAIN="${PGCLOCK_SSL_DOMAIN:-}"
+  INSTALL_SSL_EMAIL="${PGCLOCK_SSL_EMAIL:-}"
+
+  local port_in mode_in
+  if [[ -n "${PGCLOCK_WEB_PORT:-}" ]]; then
+    WEB_PORT="${PGCLOCK_WEB_PORT}"
+  elif [[ -r /dev/tty ]]; then
+    while true; do
+      port_in="$(ask "Panel TCP port" "${WEB_PORT:-9000}")"
+      if [[ "$port_in" =~ ^[0-9]+$ ]] && (( port_in >= 1 && port_in <= 65535 )); then
+        WEB_PORT="$port_in"
+        break
+      fi
+      err "Enter a port number between 1 and 65535."
+    done
+  else
+    WEB_PORT="${WEB_PORT:-9000}"
+  fi
+
+  if [[ -n "${PGCLOCK_SSL_MODE:-}" ]]; then
+    case "${PGCLOCK_SSL_MODE,,}" in
+      1|domain|letsencrypt|le) INSTALL_SSL_MODE="domain" ;;
+      2|ip|self_signed|self-signed|temp_ip|self_signed_ip) INSTALL_SSL_MODE="ip" ;;
+      3|none|off|http|"") INSTALL_SSL_MODE="none" ;;
+      *)
+        err "PGCLOCK_SSL_MODE must be domain|ip|none (got: ${PGCLOCK_SSL_MODE})"
+        return 1
+        ;;
+    esac
+  elif [[ -r /dev/tty ]]; then
+    info "SSL certificate for the panel:"
+    printf '    %s1%s) Domain — Let'\''s Encrypt (DNS → this server, port 80 free)\n' "$B" "$N" > /dev/tty
+    printf '    %s2%s) Temporary self-signed for this server IP (browser warning OK)\n' "$B" "$N" > /dev/tty
+    printf '    %s3%s) No certificate — HTTP only\n' "$B" "$N" > /dev/tty
+    while true; do
+      mode_in="$(ask "Select SSL mode" "3")"
+      case "${mode_in,,}" in
+        1|domain|letsencrypt|le) INSTALL_SSL_MODE="domain"; break ;;
+        2|ip|self_signed|self-signed|temp_ip) INSTALL_SSL_MODE="ip"; break ;;
+        3|none|off|http|"") INSTALL_SSL_MODE="none"; break ;;
+        *) err "Choose 1, 2, or 3." ;;
+      esac
+    done
+  else
+    INSTALL_SSL_MODE="none"
+  fi
+
+  if [[ "$INSTALL_SSL_MODE" == "domain" ]]; then
+    if [[ -z "$INSTALL_SSL_DOMAIN" ]]; then
+      if [[ ! -r /dev/tty ]]; then
+        err "PGCLOCK_SSL_DOMAIN is required for domain SSL in non-interactive mode."
+        return 1
+      fi
+      while true; do
+        INSTALL_SSL_DOMAIN="$(ask "Panel domain (e.g. panel.example.com)")"
+        INSTALL_SSL_DOMAIN="${INSTALL_SSL_DOMAIN,,}"
+        INSTALL_SSL_DOMAIN="${INSTALL_SSL_DOMAIN#http://}"
+        INSTALL_SSL_DOMAIN="${INSTALL_SSL_DOMAIN#https://}"
+        INSTALL_SSL_DOMAIN="${INSTALL_SSL_DOMAIN%%/*}"
+        INSTALL_SSL_DOMAIN="${INSTALL_SSL_DOMAIN%%:*}"
+        if [[ "$INSTALL_SSL_DOMAIN" =~ ^[a-z0-9]([a-z0-9.-]*[a-z0-9])?(\.[a-z0-9-]+)+$ ]]; then
+          break
+        fi
+        err "Invalid domain."
+      done
+    fi
+    if [[ -z "$INSTALL_SSL_EMAIL" ]]; then
+      if [[ ! -r /dev/tty ]]; then
+        err "PGCLOCK_SSL_EMAIL is required for domain SSL in non-interactive mode."
+        return 1
+      fi
+      while true; do
+        INSTALL_SSL_EMAIL="$(ask "Let's Encrypt email")"
+        if [[ "$INSTALL_SSL_EMAIL" == *@*.* ]]; then
+          break
+        fi
+        err "Enter a valid email."
+      done
+    fi
+  fi
+
+  ok "Port ${WEB_PORT} · SSL mode=${INSTALL_SSL_MODE}"
+  return 0
+}
+
+ssl_is_enabled_on_disk() {
+  [[ -f data/certs/meta.json && -f data/certs/fullchain.pem && -f data/certs/privkey.pem ]] || return 1
+  python3 - <<'PY' 2>/dev/null
+import json
+from pathlib import Path
+p = Path("data/certs/meta.json")
+try:
+    m = json.loads(p.read_text(encoding="utf-8"))
+except Exception:
+    raise SystemExit(1)
+raise SystemExit(0 if m.get("ssl_enabled") else 1)
+PY
+}
+
+panel_public_base_url() {
+  # Prefer live HTTPS meta; else http://IP:PORT
+  local port ip https
+  port="$(env_get WEB_PORT "${WEB_PORT:-9000}")"
+  ip="$(detect_server_ip)"
+  if ssl_is_enabled_on_disk; then
+    https="$(
+      python3 - <<'PY' 2>/dev/null || true
+import json
+from pathlib import Path
+m = json.loads(Path("data/certs/meta.json").read_text(encoding="utf-8"))
+print((m.get("public_https") or "").strip().rstrip("/"))
+PY
+    )"
+    if [[ -n "$https" ]]; then
+      printf '%s\n' "$https"
+      return 0
+    fi
+    local host
+    host="$(
+      python3 - <<'PY' 2>/dev/null || true
+import json
+from pathlib import Path
+m = json.loads(Path("data/certs/meta.json").read_text(encoding="utf-8"))
+print((m.get("domain") or m.get("host") or "").strip())
+PY
+    )"
+    if [[ -n "$host" ]]; then
+      if [[ "$port" == "443" ]]; then
+        printf 'https://%s\n' "$host"
+      else
+        printf 'https://%s:%s\n' "$host" "$port"
+      fi
+      return 0
+    fi
+  fi
+  printf 'http://%s:%s\n' "$ip" "$port"
+}
+
+apply_install_ssl() {
+  # Issue cert + wire PUBLIC_BASE_URL before the panel starts (restart=False).
+  local mode="${INSTALL_SSL_MODE:-none}"
+  local domain="${INSTALL_SSL_DOMAIN:-}"
+  local email="${INSTALL_SSL_EMAIL:-}"
+  local ip
+  ip="$(detect_server_ip)"
+
+  if [[ "$mode" == "none" ]]; then
+    info "SSL: skipped (HTTP only)"
+    return 0
+  fi
+
+  local py="$PY"
+  if [[ ! -x "$py" ]]; then
+    py="${SCRIPT_DIR}/.venv/bin/python"
+  fi
+  if [[ ! -x "$py" ]]; then
+    err "Python venv missing — cannot configure SSL"
+    return 1
+  fi
+
+  if [[ "$mode" == "domain" ]]; then
+    step "SSL · Let's Encrypt (${domain})"
+    # ACME HTTP-01 needs inbound :80 (and free locally).
+    if command -v ufw >/dev/null 2>&1; then
+      sudo_wrap ufw allow 80/tcp >/dev/null 2>&1 || true
+    fi
+    if ! command -v certbot >/dev/null 2>&1; then
+      info "Installing certbot…"
+      sudo_wrap apt-get install -y certbot >/dev/null 2>&1 \
+        || sudo_wrap apt-get install -y certbot || true
+    fi
+  else
+    step "SSL · temporary self-signed for ${ip}"
+  fi
+
+  local result_json
+  result_json="$(
+    cd "$SCRIPT_DIR" && \
+    PGCLOCK_INSTALL_SSL_MODE="$mode" \
+    PGCLOCK_INSTALL_SSL_DOMAIN="$domain" \
+    PGCLOCK_INSTALL_SSL_EMAIL="$email" \
+    PGCLOCK_INSTALL_SSL_IP="$ip" \
+    PGCLOCK_INSTALL_WEB_PORT="${WEB_PORT}" \
+    PYTHONPATH="$SCRIPT_DIR${PYTHONPATH:+:$PYTHONPATH}" \
+    "$py" - <<'PY'
+import json, os, sys
+from app.services.ssl_certs import configure_for_install
+
+mode = (os.environ.get("PGCLOCK_INSTALL_SSL_MODE") or "none").strip()
+result = configure_for_install(
+    mode=mode,
+    domain=os.environ.get("PGCLOCK_INSTALL_SSL_DOMAIN") or "",
+    email=os.environ.get("PGCLOCK_INSTALL_SSL_EMAIL") or "",
+    ip=os.environ.get("PGCLOCK_INSTALL_SSL_IP") or "",
+    web_port=os.environ.get("PGCLOCK_INSTALL_WEB_PORT") or "9000",
+)
+print(json.dumps(result, ensure_ascii=False))
+sys.exit(0 if result.get("ok") else 1)
+PY
+  )" || true
+
+  if [[ -z "$result_json" ]]; then
+    err "SSL configuration produced no output"
+    return 1
+  fi
+  if ! printf '%s' "$result_json" | python3 -c 'import json,sys; d=json.load(sys.stdin); raise SystemExit(0 if d.get("ok") else 1)' 2>/dev/null; then
+    err "SSL configuration failed:"
+    printf '%s\n' "$result_json" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("error") or d)' 2>/dev/null \
+      || printf '%s\n' "$result_json"
+    return 1
+  fi
+
+  local https_url
+  https_url="$(printf '%s' "$result_json" | python3 -c 'import json,sys; print((json.load(sys.stdin).get("public_https") or "").strip())' 2>/dev/null || true)"
+  if [[ -n "$https_url" ]]; then
+    PUBLIC_BASE_URL="$https_url"
+    ok "HTTPS ready · ${https_url}"
+  else
+    ok "SSL mode ${mode} applied"
+  fi
+  return 0
+}
+
 read_app_version() {
   # Prefer VERSION file (works before venv); fallback to app.version after deps exist.
   local v=""
@@ -333,18 +562,24 @@ print_success() {
   if [[ "${1:-}" == "--setup-only" ]]; then
     shift || true
   fi
-  local port ip user
+  local port ip user panel_base health_local
   port="$(env_get WEB_PORT "${WEB_PORT:-9000}")"
   ip="$(detect_server_ip)"
   user="$(web_username)"
+  panel_base="$(panel_public_base_url)"
+  if ssl_is_enabled_on_disk; then
+    health_local="https://127.0.0.1:${port}/health"
+  else
+    health_local="http://127.0.0.1:${port}/health"
+  fi
   local body
   body="$(
     echo ""
     printf '%s==========================================%s\n' "$G" "$N"
     printf '%s  SUCCESS · %s%s\n' "$G" "$title" "$N"
     printf '%s==========================================%s\n' "$G" "$N"
-    printf '  Web panel:  %shttp://%s:%s/%s\n' "$B" "$ip" "$port" "$N"
-    printf '  Health:     %shttp://127.0.0.1:%s/health%s\n' "$B" "$port" "$N"
+    printf '  Web panel:  %s%s/%s\n' "$B" "$panel_base" "$N"
+    printf '  Health:     %s%s%s\n' "$B" "$health_local" "$N"
     if [[ -f data/setup_complete.flag ]]; then
       printf '  Username:   %s%s%s\n' "$B" "$user" "$N"
     else
@@ -787,6 +1022,9 @@ cmd_install() {
   WEB_ADMIN_PASSWORD=""
   PUBLIC_BASE_URL=""
   CURRENCY="Toman"
+  INSTALL_SSL_MODE="none"
+  INSTALL_SSL_DOMAIN=""
+  INSTALL_SSL_EMAIL=""
 
   local fresh=0
   if [[ -f .env ]]; then
@@ -795,6 +1033,8 @@ cmd_install() {
     ok "Using existing config · port=${WEB_PORT}"
   else
     fresh=1
+    step "Panel port & SSL"
+    prompt_install_port_and_ssl || return 1
   fi
 
   step "PostgreSQL"
@@ -837,6 +1077,17 @@ PY
   # Critical: loopback bind makes every public Setup URL fail (ERR_EMPTY_RESPONSE).
   ensure_public_web_host
 
+  # Cert + PUBLIC_BASE_URL before the panel process starts (TLS from first boot).
+  if [[ "$fresh" -eq 1 && "${INSTALL_SSL_MODE:-none}" != "none" ]]; then
+    apply_install_ssl || {
+      err "SSL setup failed — install aborted (fix DNS/port 80 or choose mode 3)."
+      return 1
+    }
+    # Reload WEB_PORT / PUBLIC_BASE_URL after Python wrote them.
+    WEB_PORT="$(env_get WEB_PORT "${WEB_PORT}")"
+    PUBLIC_BASE_URL="$(env_get PUBLIC_BASE_URL "${PUBLIC_BASE_URL}")"
+  fi
+
   step "systemd service"
   svc_user="$(whoami)"
   if [[ "$svc_user" == "root" ]]; then
@@ -859,9 +1110,20 @@ PY
 
   step "Panel health"
   local health_ok=0
-  local hi health_body
+  local hi health_body health_url health_scheme
+  if ssl_is_enabled_on_disk; then
+    health_scheme="https"
+    health_url="https://127.0.0.1:${WEB_PORT}/health"
+  else
+    health_scheme="http"
+    health_url="http://127.0.0.1:${WEB_PORT}/health"
+  fi
   for hi in $(seq 1 40); do
-    health_body="$(curl -sS --max-time 2 "http://127.0.0.1:${WEB_PORT}/health" 2>/dev/null || true)"
+    if [[ "$health_scheme" == "https" ]]; then
+      health_body="$(curl -skS --max-time 2 "$health_url" 2>/dev/null || true)"
+    else
+      health_body="$(curl -sS --max-time 2 "$health_url" 2>/dev/null || true)"
+    fi
     if [[ "$health_body" == *'"ok"'* ]] || [[ "$health_body" == *'ok'* && "$health_body" == *'true'* ]]; then
       health_ok=1
       break
@@ -869,9 +1131,9 @@ PY
     sleep 1
   done
   if [[ "$health_ok" -eq 1 ]]; then
-    ok "Panel health OK on :${WEB_PORT}"
+    ok "Panel health OK on ${health_scheme}://127.0.0.1:${WEB_PORT}"
   else
-    err "Panel did not answer /health on 127.0.0.1:${WEB_PORT}"
+    err "Panel did not answer /health on ${health_scheme}://127.0.0.1:${WEB_PORT}"
     warn "Check logs: journalctl -u ${SERVICE_NAME} -n 80 --no-pager"
     warn "DB URL / Postgres: grep DATABASE_URL .env && systemctl status postgresql --no-pager"
     # Still continue so operator gets the setup URL once the crash is fixed.
@@ -881,15 +1143,27 @@ PY
   if command -v ufw >/dev/null 2>&1; then
     sudo_wrap ufw allow "${WEB_PORT}/tcp" >/dev/null 2>&1 || true
     ok "UFW: allowed ${WEB_PORT}/tcp (if UFW is active)"
+    if [[ "${INSTALL_SSL_MODE:-}" == "domain" ]] || ssl_is_enabled_on_disk; then
+      # Keep 80 open for future LE renewals when domain cert is in use.
+      if [[ -f data/certs/meta.json ]] && grep -q 'letsencrypt' data/certs/meta.json 2>/dev/null; then
+        sudo_wrap ufw allow 80/tcp >/dev/null 2>&1 || true
+        ok "UFW: allowed 80/tcp (ACME renewals)"
+      fi
+    fi
   else
     info "UFW not installed — open port ${WEB_PORT} manually if needed"
   fi
   info "Cloud firewall (Hetzner/AWS/…): also allow inbound TCP ${WEB_PORT} in the provider panel"
 
-  local ip setup_url panel_url
+  local ip setup_url panel_url health_hint
   _DETECTED_SERVER_IP=""  # refresh once for this SUCCESS block
   ip="$(detect_server_ip)"
-  panel_url="http://${ip}:${WEB_PORT}/"
+  panel_url="$(panel_public_base_url)/"
+  if ssl_is_enabled_on_disk; then
+    health_hint="curl -skS https://127.0.0.1:${WEB_PORT}/health"
+  else
+    health_hint="curl -sS http://127.0.0.1:${WEB_PORT}/health"
+  fi
   setup_url=""
   if [[ "$fresh" -eq 1 ]] || [[ ! -f data/setup_complete.flag ]]; then
     setup_url="$(setup_wizard_url "$panel_url" || true)"
@@ -919,7 +1193,7 @@ PY
         "Open that exact URL (must include ?gate=…)." \
         "Bare ${panel_url} from the internet is blocked until setup finishes." \
         "Cloud firewall (Hetzner/AWS/…): allow inbound TCP ${WEB_PORT}." \
-        "On-server test: curl -sS http://127.0.0.1:${WEB_PORT}/health" \
+        "On-server test: ${health_hint}" \
         "Hint file: ${SCRIPT_DIR}/data/setup_entry.url"
     else
       print_success "Install complete" \

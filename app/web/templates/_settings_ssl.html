@@ -86,6 +86,9 @@
     {% else %}
     <span class="badge warn">صادر شده · منتظر فعال‌سازی</span>
     {% endif %}
+    {% if st.self_signed %}
+    <span class="badge warn">موقت · خودامضا (IP)</span>
+    {% endif %}
     <code class="ssl-status-code" dir="ltr">{{ st.domain }}</code>
   </p>
   {% if st.public_https %}
