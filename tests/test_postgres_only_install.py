@@ -46,14 +46,34 @@ def test_setup_postgres_emits_url_file():
     assert 'password_encryption = "md5"' not in src
     assert "_enable_trust_fallback" in src
     assert 'mode=scram' in src or "mode=${mode}" in src
-    assert "_cluster_ver" in src
+    # v11.1.0: pin ALL admin/TCP/restart ops to one resolved cluster+port.
+    assert "_resolve_target_cluster" in src
+    assert "CLUSTER_SPEC" in src
+    assert "--cluster" in src
+    assert "unset PGHOST" in src
     # v11.0.11: never emit Unix-socket DATABASE_URL (asyncpg Errno 2 on VPS).
     assert 'DATABASE_URL="postgresql+asyncpg://${DB_USER}:${DB_PASS_ENC}@/${DB_NAME}?host=' not in src
     assert 'AUTH_MODE="socket"' not in src
     assert "Never emit Unix-socket URLs" in src
-    assert "@127.0.0.1:5432/${DB_NAME}" in src
+    assert "@127.0.0.1:${CLUSTER_PORT}/${DB_NAME}" in src
     sh = (ROOT / "pgclock.sh").read_text(encoding="utf-8")
     assert "rewrite_socket_database_url" in sh
+    # Env URL must be verified over TCP (no silent skip).
+    assert "will verify TCP" in sh
+    assert "-u PGHOST" in sh
+
+
+def test_setup_postgres_cluster_pin_guards():
+    """Regression: socket OK + TCP fail from hitting two clusters."""
+    src = (ROOT / "scripts" / "setup_postgres.sh").read_text(encoding="utf-8")
+    assert "_resolve_target_cluster" in src
+    assert "Could not restart PostgreSQL cluster" in src or "could not restart PostgreSQL cluster" in src
+    assert "hostnossl" in src
+    assert "pg_reload_conf" in src
+    # Restart must not silently succeed when pg_ctlcluster fails.
+    assert "return 0" in src  # still has success paths
+    # But the failure path must exist (no bare trailing return 0 after failed restart).
+    assert 'echo "ERROR: could not restart PostgreSQL cluster' in src
 
 
 def test_install_waits_for_panel_health():
