@@ -900,8 +900,7 @@ ensure_postgresql() {
   if [[ -n "${PGCLOCK_DATABASE_URL:-}" ]]; then
     case "${PGCLOCK_DATABASE_URL}" in
       postgresql://*|postgresql+asyncpg://*|postgres://*)
-        ok "Using PGCLOCK_DATABASE_URL from environment"
-        return 0
+        ok "Using PGCLOCK_DATABASE_URL from environment (will verify TCP)"
         ;;
       *)
         err "PGCLOCK_DATABASE_URL must be a PostgreSQL URL (got non-Postgres value)."
@@ -910,7 +909,7 @@ ensure_postgresql() {
     esac
   fi
 
-  if [[ -f .env ]]; then
+  if [[ -z "${PGCLOCK_DATABASE_URL:-}" && -f .env ]]; then
     local existing
     existing="$(env_get DATABASE_URL "")"
     case "$existing" in
@@ -937,6 +936,16 @@ ensure_postgresql() {
     || dpkg -s postgresql >/dev/null 2>&1; then
     sudo_wrap systemctl enable postgresql >/dev/null 2>&1 || true
     sudo_wrap systemctl start postgresql >/dev/null 2>&1 || true
+    # Debian multi-cluster: also start the cluster on 5432 if pg_ctlcluster exists.
+    if command -v pg_lsclusters >/dev/null 2>&1 && command -v pg_ctlcluster >/dev/null 2>&1; then
+      local _pg_line _pg_ver _pg_name
+      _pg_line="$(pg_lsclusters --no-header 2>/dev/null | awk '$3=="5432"{print; exit}')"
+      if [[ -n "$_pg_line" ]]; then
+        _pg_ver="$(awk '{print $1}' <<<"$_pg_line")"
+        _pg_name="$(awk '{print $2}' <<<"$_pg_line")"
+        sudo_wrap pg_ctlcluster "$_pg_ver" "$_pg_name" start >/dev/null 2>&1 || true
+      fi
+    fi
   fi
 
   if command -v pg_isready >/dev/null 2>&1; then
@@ -963,8 +972,8 @@ ensure_postgresql() {
     fi
   fi
 
-  # Reuse existing URL only if password auth over TCP still works; else re-provision.
-  # (venv/asyncpg may not exist yet — probe with psql + urllib.)
+  # Reuse existing URL only if TCP auth still works; else re-provision local.
+  # Never skip verify for env-provided URLs (that caused silent dead panels).
   if [[ -n "${PGCLOCK_DATABASE_URL:-}" ]]; then
     if DATABASE_URL="${PGCLOCK_DATABASE_URL}" python3 - <<'PY' 2>/dev/null
 import os, subprocess, urllib.parse
@@ -979,10 +988,18 @@ password = urllib.parse.unquote(u.password or "") if u.password is not None else
 host = u.hostname or "127.0.0.1"
 port = str(u.port or 5432)
 dbname = (u.path or "/pgclock").lstrip("/") or "pgclock"
+# Reject Unix-socket URLs — panel/asyncpg cannot use them.
+qs = urllib.parse.parse_qs(u.query)
+host_q = (qs.get("host") or [""])[0]
+if host_q.startswith("/") or (not u.hostname and host_q.startswith("/")):
+    raise SystemExit(1)
 env = os.environ.copy()
 env["PGPASSWORD"] = password
+# Clear conflicting libpq overrides from the installer shell.
+for k in ("PGHOST", "PGHOSTADDR", "PGPORT", "PGCLUSTER", "PGPASSFILE"):
+    env.pop(k, None)
 r = subprocess.run(
-    ["psql", "-h", host, "-p", port, "-U", user, "-d", dbname, "-v", "ON_ERROR_STOP=1", "-c", "SELECT 1"],
+    ["psql", "-h", host, "-p", port, "-U", user, "-d", dbname, "-w", "-v", "ON_ERROR_STOP=1", "-c", "SELECT 1"],
     env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=8,
 )
 raise SystemExit(0 if r.returncode == 0 else 1)
@@ -991,8 +1008,31 @@ PY
       ok "PostgreSQL ready (existing DATABASE_URL)"
       return 0
     fi
-    warn "Existing DATABASE_URL is not reachable — re-provisioning local Postgres role/db"
-    unset PGCLOCK_DATABASE_URL
+    # Only auto-reprovision when the URL points at local Postgres.
+    local _db_host
+    _db_host="$(
+      DATABASE_URL="${PGCLOCK_DATABASE_URL}" python3 - <<'PY'
+import os, urllib.parse
+raw = os.environ["DATABASE_URL"].strip()
+for prefix in ("postgresql+asyncpg://", "postgres://", "postgresql://"):
+    if raw.startswith(prefix):
+        raw = "postgresql://" + raw[len(prefix):]
+        break
+u = urllib.parse.urlparse(raw)
+print(u.hostname or "")
+PY
+    )"
+    case "${_db_host}" in
+      127.0.0.1|localhost|"" )
+        warn "Existing DATABASE_URL is not reachable — re-provisioning local Postgres role/db"
+        unset PGCLOCK_DATABASE_URL
+        ;;
+      *)
+        err "PGCLOCK_DATABASE_URL / DATABASE_URL is not reachable at ${_db_host}."
+        err "Fix the remote Postgres auth/URL, or unset it to provision local Postgres."
+        return 1
+        ;;
+    esac
   fi
 
   local emit_file
@@ -1002,7 +1042,9 @@ PY
   emit_file="${SCRIPT_DIR}/data/.pgclock_database_url.tmp"
   rm -f "$emit_file"
   # Run as root so role/db creation works; read URL back via sudo (file may be root-owned).
-  if ! sudo_wrap env PGCLOCK_EMIT_URL_FILE="$emit_file" \
+  # Clear PG* so a polluted installer shell cannot point setup at the wrong cluster.
+  if ! sudo_wrap env -u PGHOST -u PGHOSTADDR -u PGPORT -u PGCLUSTER -u PGPASSWORD -u PGPASSFILE \
+    PGCLOCK_EMIT_URL_FILE="$emit_file" \
     bash "${SCRIPT_DIR}/scripts/setup_postgres.sh" pgclock pgclock; then
     sudo_wrap rm -f "$emit_file" 2>/dev/null || rm -f "$emit_file"
     err "Failed to provision PostgreSQL database (scripts/setup_postgres.sh)."
