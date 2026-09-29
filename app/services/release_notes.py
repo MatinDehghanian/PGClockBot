@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "11.0.6": [
+        "نصب: پایان نصب همیشه Setup URL انگلیسی با ?gate= چاپ می‌شود (دیگر پیام فارسی / لینک خالی نیست)",
+        "نصب: پیام SUCCESS هم به tty و هم stdout؛ تولید لینک با PYTHONPATH پایدار",
+        "صفحه ۴۰۳ ویزارد بدون gate به انگلیسی؛ باز کردن IP:PORT خالی از اینترنت عمداً بسته است",
+        "بدون مایگریشن DB؛ ریستور: restore/pre-v11.0.6-v11.0.5-2026-09-29",
+    ],
     "11.0.5": [
         "نصب Postgres: حذف fallback md5 که با HBAی scram-first پسورد را خراب می‌کرد (علت اصلی password authentication failed روی VPS)",
         "فقط SCRAM؛ ریستارت کلاستر آنلاین درست؛ اگر لازم شد trust فقط برای localhost نقش pgclock",
