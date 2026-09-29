@@ -117,8 +117,12 @@ letsencrypt live: {{ st.letsencrypt_live }}{% endif %}</pre>
   {% endif %}
 
   <p class="muted ssl-status-line">
+    پورت پنل: <code dir="ltr">{{ st.web_port }}</code>
+    {% if st.mode %}<span class="muted"> · حالت: <code dir="ltr">{{ st.mode }}</code></span>{% endif %}
+  </p>
+  <p class="muted ssl-status-line">
     ۱) DNS دامنه → IP سرور · ۲) پورت <code dir="ltr">80</code> آزاد · ۳) دریافت گواهی (HTTPS خودکار فعال می‌شود) ·
-    ۴) ورود با <code dir="ltr">https://دامنه:{{ st.web_port }}</code>
+    ۴) ورود با آدرس HTTPS بالا (پورت <code dir="ltr">{{ st.web_port }}</code>)
   </p>
 </div>
 

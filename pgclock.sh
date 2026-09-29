@@ -1545,9 +1545,19 @@ cmd_status() {
   else
     warn "venv missing"
   fi
-  local port
+  local port panel_base
   port="$(env_get WEB_PORT 9000)"
   echo -e "  WEB_PORT: ${B}${port}${N}"
+  panel_base="$(panel_public_base_url)"
+  echo -e "  Panel URL: ${B}${panel_base}/${N}"
+  if ssl_is_enabled_on_disk; then
+    local ssl_mode ssl_host
+    ssl_mode="$(python3 -c 'import json;from pathlib import Path;m=json.loads(Path("data/certs/meta.json").read_text());print(m.get("mode") or ("self_signed_ip" if m.get("self_signed") else "letsencrypt"))' 2>/dev/null || echo on)"
+    ssl_host="$(python3 -c 'import json;from pathlib import Path;m=json.loads(Path("data/certs/meta.json").read_text());print(m.get("domain") or m.get("host") or "")' 2>/dev/null || true)"
+    ok "HTTPS enabled · mode=${ssl_mode}${ssl_host:+ · host=${ssl_host}}"
+  else
+    echo -e "  HTTPS: ${D}off${N}"
+  fi
   if service_installed; then
     echo -e "  Service: ${B}$(systemctl is-active "$SERVICE_NAME" 2>/dev/null || echo unknown)${N}"
   else
@@ -1589,7 +1599,11 @@ PY
 
   if command -v curl >/dev/null 2>&1; then
     local health
-    health="$(curl -sS --max-time 3 "http://127.0.0.1:${port}/health" 2>/dev/null || true)"
+    if ssl_is_enabled_on_disk; then
+      health="$(curl -skS --max-time 3 "https://127.0.0.1:${port}/health" 2>/dev/null || true)"
+    else
+      health="$(curl -sS --max-time 3 "http://127.0.0.1:${port}/health" 2>/dev/null || true)"
+    fi
     if [[ -n "$health" ]]; then
       ok "Local health: ${health}"
     else

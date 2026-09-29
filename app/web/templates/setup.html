@@ -473,9 +473,13 @@
       const panelEl = document.getElementById('panel-url');
       const shown = (panelEl && panelEl.textContent || '').trim();
       let loginUrl = '';
+      const httpsReady = {{ 'true' if https_ready else 'false' }};
       try {
         const base = new URL(shown || '{{ finish_login_url }}');
-        base.protocol = 'http:';
+        // Only force http when TLS is not live yet (pre-cert installs).
+        if (!httpsReady) {
+          base.protocol = 'http:';
+        }
         if (!/\/login\/?$/i.test(base.pathname)) {
           base.pathname = (base.pathname.replace(/\/?$/, '/') + 'login').replace(/\/{2,}/g, '/');
         }
