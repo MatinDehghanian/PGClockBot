@@ -176,19 +176,57 @@ ask_yn() {
   esac
 }
 
+# Cached so Setup URL + SUCCESS banner never disagree on the public IP.
+_DETECTED_SERVER_IP=""
 detect_server_ip() {
+  if [[ -n "${_DETECTED_SERVER_IP:-}" ]]; then
+    printf '%s\n' "$_DETECTED_SERVER_IP"
+    return 0
+  fi
   local ip=""
-  ip="$(curl -4 -fsS --max-time 4 https://api.ipify.org 2>/dev/null || true)"
-  if [[ -z "$ip" ]]; then
+  # Prefer kernel route source (stable on VPS); then public echo services.
+  if command -v ip >/dev/null 2>&1; then
+    ip="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src"){print $(i+1); exit}}' || true)"
+  fi
+  if [[ -z "$ip" || "$ip" == 127.* ]]; then
+    ip="$(curl -4 -fsS --max-time 4 https://api.ipify.org 2>/dev/null || true)"
+  fi
+  if [[ -z "$ip" || "$ip" == 127.* ]]; then
     ip="$(curl -4 -fsS --max-time 4 https://ifconfig.me 2>/dev/null || true)"
   fi
-  if [[ -z "$ip" ]]; then
+  if [[ -z "$ip" || "$ip" == 127.* ]]; then
     ip="$(hostname -I 2>/dev/null | awk '{print $1}' || true)"
   fi
   if [[ -z "$ip" ]]; then
     ip="YOUR_SERVER_IP"
   fi
+  _DETECTED_SERVER_IP="$ip"
   printf '%s\n' "$ip"
+}
+
+# Existing .env from failed installs often has WEB_HOST=127.0.0.1 — panel then
+# answers only on loopback and every public Setup URL looks "dead".
+ensure_public_web_host() {
+  [[ -f .env ]] || return 0
+  local host
+  host="$(env_get WEB_HOST "0.0.0.0")"
+  case "$host" in
+    0.0.0.0|"::"|'*') return 0 ;;
+  esac
+  python3 - <<'PY'
+from pathlib import Path
+import re
+path = Path(".env")
+text = path.read_text(encoding="utf-8")
+line = 'WEB_HOST="0.0.0.0"'
+if re.search(r"^WEB_HOST=", text, flags=re.M):
+    text = re.sub(r"^WEB_HOST=.*$", line, text, count=1, flags=re.M)
+else:
+    text = text.rstrip("\n") + "\n" + line + "\n"
+path.write_text(text, encoding="utf-8")
+print("updated")
+PY
+  ok "WEB_HOST set to 0.0.0.0 (was '${host}' — unreachable from the internet)"
 }
 
 read_app_version() {
@@ -226,12 +264,19 @@ setup_wizard_url() {
   # setup_complete.flag file is absent. Do NOT call is_setup_complete() here —
   # that helper can auto-create the flag from leftover .env credentials and
   # then return an empty URL (install looked "done" with no link printed).
+  #
+  # Optional $1 = base URL override (use the same IP as the SUCCESS banner).
   if [[ -f data/setup_complete.flag ]]; then
     return 0
   fi
-  local port ip py
+  local port ip py base
   port="$(env_get WEB_PORT "${WEB_PORT:-9000}")"
   ip="$(detect_server_ip)"
+  base="${1:-}"
+  if [[ -z "$base" ]]; then
+    base="http://${ip}:${port}"
+  fi
+  base="${base%/}"
   py="$PY"
   if [[ ! -x "$py" ]]; then
     py="${SCRIPT_DIR}/.venv/bin/python"
@@ -243,7 +288,6 @@ setup_wizard_url() {
   errf="$(mktemp)"
   url="$(
     cd "$SCRIPT_DIR" && PYTHONPATH="$SCRIPT_DIR${PYTHONPATH:+:$PYTHONPATH}" "$py" - <<PY 2>"$errf"
-from pathlib import Path
 from app.services.setup_wizard import (
     SETUP_ENTRY_FILE,
     SETUP_FLAG,
@@ -255,7 +299,7 @@ from app.services.setup_wizard import (
 if SETUP_FLAG.exists():
     raise SystemExit(0)
 
-base = f"http://${ip}:${port}".rstrip("/")
+base = """${base}""".rstrip("/")
 token = create_setup_gate_session()
 url = build_setup_entry_url(base, token=token)
 _ensure_data_dir()
@@ -790,6 +834,9 @@ PY
     fi
   fi
 
+  # Critical: loopback bind makes every public Setup URL fail (ERR_EMPTY_RESPONSE).
+  ensure_public_web_host
+
   step "systemd service"
   svc_user="$(whoami)"
   if [[ "$svc_user" == "root" ]]; then
@@ -840,14 +887,15 @@ PY
   info "Cloud firewall (Hetzner/AWS/…): also allow inbound TCP ${WEB_PORT} in the provider panel"
 
   local ip setup_url panel_url
+  _DETECTED_SERVER_IP=""  # refresh once for this SUCCESS block
   ip="$(detect_server_ip)"
   panel_url="http://${ip}:${WEB_PORT}/"
   setup_url=""
   if [[ "$fresh" -eq 1 ]] || [[ ! -f data/setup_complete.flag ]]; then
-    setup_url="$(setup_wizard_url || true)"
+    setup_url="$(setup_wizard_url "$panel_url" || true)"
     if [[ -z "$setup_url" || "$setup_url" != *"?gate="* ]]; then
       sleep 2
-      setup_url="$(setup_wizard_url || true)"
+      setup_url="$(setup_wizard_url "$panel_url" || true)"
     fi
     # File fallback if python printed nothing but wrote the hint file.
     if [[ -z "$setup_url" || "$setup_url" != *"?gate="* ]]; then
@@ -947,6 +995,8 @@ PY
     fi
   fi
 
+  ensure_public_web_host
+
   # Ensure passwordless restart helper exists for in-panel SSL/updates
   if service_installed; then
     local svc_user
@@ -957,7 +1007,7 @@ PY
 
   restart_service_if_any
   print_success "Update complete" \
-    "Config:     .env was not changed" \
+    "Config:     .env kept (WEB_HOST forced public if it was loopback)" \
     "Logs:       journalctl -u ${SERVICE_NAME} -f"
   return 0
 }
@@ -1197,7 +1247,7 @@ cmd_status() {
   banner_small "Status"
   if [[ -f .env ]]; then
     ok ".env present"
-    local db_url db_kind
+    local db_url db_kind web_host
     db_url="$(env_get DATABASE_URL "")"
     case "$db_url" in
       postgresql://*|postgresql+asyncpg://*|postgres://*) db_kind="PostgreSQL" ;;
@@ -1206,6 +1256,13 @@ cmd_status() {
       *) db_kind="unknown" ;;
     esac
     echo -e "  Database: ${B}${db_kind}${N}"
+    web_host="$(env_get WEB_HOST "0.0.0.0")"
+    echo -e "  WEB_HOST: ${B}${web_host}${N}"
+    case "$web_host" in
+      127.0.0.1|localhost|::1)
+        warn "WEB_HOST is loopback — public URLs will fail. Fix: set WEB_HOST=0.0.0.0 and restart."
+        ;;
+    esac
   else
     warn ".env missing"
   fi
@@ -1216,18 +1273,54 @@ cmd_status() {
   fi
   local port
   port="$(env_get WEB_PORT 9000)"
+  echo -e "  WEB_PORT: ${B}${port}${N}"
   if service_installed; then
     echo -e "  Service: ${B}$(systemctl is-active "$SERVICE_NAME" 2>/dev/null || echo unknown)${N}"
   else
     echo -e "  Service: ${D}not installed${N}"
   fi
+
+  # Show what the kernel actually has listening (env can lie if service not restarted).
+  local listen_lines=""
+  if command -v ss >/dev/null 2>&1; then
+    listen_lines="$(ss -ltnp 2>/dev/null | grep -E ":${port}\\b" || true)"
+  fi
+  if [[ -z "$listen_lines" ]]; then
+    listen_lines="$(python3 - <<PY 2>/dev/null || true
+port=${port}
+try:
+    with open("/proc/net/tcp") as f:
+        next(f)
+        for line in f:
+            parts = line.split()
+            lip, lport = parts[1].split(":")
+            if int(lport, 16) != port:
+                continue
+            ipn = int(lip, 16)
+            a, b, c, d = ipn & 255, (ipn >> 8) & 255, (ipn >> 16) & 255, (ipn >> 24) & 255
+            print(f"{a}.{b}.{c}.{d}:{port}")
+except Exception:
+    pass
+PY
+)"
+  fi
+  if [[ -n "$listen_lines" ]]; then
+    echo -e "  Listen:  ${B}$(echo "$listen_lines" | tr '\n' ' ' | head -c 200)${N}"
+    if echo "$listen_lines" | grep -qE '127\.0\.0\.1|:1:|::1'       && ! echo "$listen_lines" | grep -qE '0\.0\.0\.0|\*:|\[::\]'; then
+      warn "Process is listening on loopback only — restart after WEB_HOST=0.0.0.0"
+    fi
+  else
+    warn "Nothing listening on :${port} — start/restart the service"
+  fi
+
   if command -v curl >/dev/null 2>&1; then
     local health
     health="$(curl -sS --max-time 3 "http://127.0.0.1:${port}/health" 2>/dev/null || true)"
     if [[ -n "$health" ]]; then
-      ok "Web health: ${health}"
+      ok "Local health: ${health}"
     else
-      warn "Web health: unreachable on :${port}"
+      warn "Local health: unreachable on 127.0.0.1:${port}"
+      warn "Logs: journalctl -u ${SERVICE_NAME} -n 80 --no-pager"
     fi
   fi
   if [[ ! -f data/setup_complete.flag ]]; then
@@ -1238,6 +1331,7 @@ cmd_status() {
       echo -e "  (valid 15 min — disabled after setup or login)"
     fi
   fi
+  info "If browser fails but local health is OK: open Cloud Firewall TCP ${port} (Hetzner/AWS)"
   print_success "Status check"
   return 0
 }

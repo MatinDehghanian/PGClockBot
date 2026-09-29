@@ -81,6 +81,8 @@ class PgclockInstallHintTests(unittest.TestCase):
         self.assertIn("?gate=", src)
         # Must not call is_setup_complete() when minting install URL (auto-flag side effect).
         self.assertIn("Do NOT call is_setup_complete()", src)
+        self.assertIn("ensure_public_web_host", src)
+        self.assertIn('WEB_HOST="0.0.0.0"', src)
         # Install finish copy must stay English (CLI is English).
         self.assertNotIn("لینک یک‌بارمصرف", src)
         self.assertNotIn("فایروال ابری", src)
