@@ -22,8 +22,12 @@ _engine_kwargs: dict = {"echo": False, "future": True}
 if _engine_info.is_sqlite:
     _engine_kwargs["connect_args"] = {"timeout": 30}
 elif _engine_info.is_postgresql:
-    # Production-friendly pool defaults (override via env later if needed)
+    # Never hang forever on a dead/mis-authed Postgres — panel boot was
+    # blocked on init_db() with no listener until this connect returned.
+    _engine_kwargs["connect_args"] = {"timeout": 15}
     _engine_kwargs.setdefault("pool_pre_ping", True)
+    _engine_kwargs.setdefault("pool_size", 5)
+    _engine_kwargs.setdefault("max_overflow", 10)
 engine = create_async_engine(_db_url, **_engine_kwargs)
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
@@ -76,8 +80,18 @@ def _alembic_version_exists(sync_conn) -> bool:
 
 
 async def init_db() -> None:
-    """Initialize schema via Alembic; legacy create_all only as controlled fallback."""
+    """Initialize schema via Alembic; legacy create_all only as controlled fallback.
+
+    Must not hang forever — uvicorn only binds *after* this returns. Postgres
+    connect/auth failures previously left the unit \"active\" with no listener.
+    """
     from app.db.alembic_runner import stamp_head, upgrade_head
+
+    log.info(
+        "init_db start · dialect=%s · target=%s",
+        _engine_info.dialect,
+        (_db_url.split("@", 1)[-1] if "@" in _db_url else _engine_info.dialect),
+    )
 
     async with engine.begin() as conn:
         has_tables = await conn.run_sync(lambda c: _tables_exist(c))
@@ -91,8 +105,8 @@ async def init_db() -> None:
             "compatibility migrator then stamping Alembic head"
         )
         async with engine.begin() as conn:
-            await conn.run_sync(_migrate_sqlite_legacy)
             if _engine_info.is_sqlite:
+                await conn.run_sync(_migrate_sqlite_legacy)
                 await conn.run_sync(_ensure_indexes)
             await conn.run_sync(_assert_ready_to_stamp_head)
         stamp_head(_db_url)
@@ -108,8 +122,8 @@ async def init_db() -> None:
                 )
                 async with engine.begin() as conn:
                     await conn.run_sync(Base.metadata.create_all)
-                    await conn.run_sync(_migrate_sqlite_legacy)
                     if _engine_info.is_sqlite:
+                        await conn.run_sync(_migrate_sqlite_legacy)
                         await conn.run_sync(_ensure_indexes)
                 try:
                     stamp_head(_db_url)
@@ -118,13 +132,14 @@ async def init_db() -> None:
             else:
                 raise
 
-    # Idempotent additive columns for DBs already stamped at an older Alembic
-    # head (create_all in 0001 only runs once). Keeps ORM fields like
-    # reseller_plans.billing_mode from 500'ing /plans before a new revision lands.
-    async with engine.begin() as conn:
-        await conn.run_sync(_migrate_sqlite_legacy)
-        if _engine_info.is_sqlite:
+    # SQLite-era additive migrator uses SQLite DDL — never run it on PostgreSQL.
+    # Alembic owns the Postgres schema after v11.
+    if _engine_info.is_sqlite:
+        async with engine.begin() as conn:
+            await conn.run_sync(_migrate_sqlite_legacy)
             await conn.run_sync(_ensure_indexes)
+
+    log.info("init_db done · dialect=%s", _engine_info.dialect)
 
 
 # ---------------------------------------------------------------------------

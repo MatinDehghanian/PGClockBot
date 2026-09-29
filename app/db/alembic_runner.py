@@ -28,13 +28,22 @@ def alembic_config(database_url: str | None = None) -> Config:
     return cfg
 
 
+def _sync_engine(url: str):
+    from sqlalchemy import create_engine
+
+    # psycopg3 honors connect_timeout; prevents Alembic hanging forever on bad PG.
+    connect_args: dict = {}
+    if "postgresql" in (url or ""):
+        connect_args["connect_timeout"] = 15
+    return create_engine(url, connect_args=connect_args) if connect_args else create_engine(url)
+
+
 def current_revision(database_url: str | None = None) -> str | None:
     cfg = alembic_config(database_url)
     from alembic.runtime.migration import MigrationContext
-    from sqlalchemy import create_engine
 
     url = cfg.get_main_option("sqlalchemy.url")
-    engine = create_engine(url)
+    engine = _sync_engine(url)
     try:
         with engine.connect() as conn:
             ctx = MigrationContext.configure(conn)
@@ -46,6 +55,11 @@ def current_revision(database_url: str | None = None) -> str | None:
 def upgrade_head(database_url: str | None = None) -> None:
     cfg = alembic_config(database_url)
     log.info("Alembic upgrade head")
+    # Force connect timeout into the URL env Alembic/SQLAlchemy will use.
+    url = cfg.get_main_option("sqlalchemy.url") or ""
+    if url.startswith("postgresql") and "connect_timeout=" not in url:
+        sep = "&" if "?" in url else "?"
+        cfg.set_main_option("sqlalchemy.url", f"{url}{sep}connect_timeout=15")
     command.upgrade(cfg, "head")
 
 

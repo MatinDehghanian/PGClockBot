@@ -114,6 +114,10 @@ class SslUiWiredTests(unittest.TestCase):
         self.assertIn("configure_for_install", src)
         self.assertIn("probe_panel_health", src)
         self.assertIn("verify_tls_material", src)
+        self.assertIn("ensure_db_schema", src)
+        self.assertIn("PGCLOCK_SSL_INSTALL", src)
+        self.assertIn("SSL certificate READY", src)
+        self.assertIn("SSL certificate FAILED", src)
         # Setup URL must still print when /health fails (v11.0.8 regression).
         self.assertIn("Setup URL (one-time, 15 min) — open after", src)
         self.assertIn("ALWAYS print Setup URL", src)
