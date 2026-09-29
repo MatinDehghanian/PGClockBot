@@ -16,11 +16,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
-    "11.0.13": [
-        "ریشه قطعی نصب Postgres: همهٔ عملیات (پسورد/HBA/ری‌استارت/TCP) روی یک کلاستر پین می‌شود — دیگر سوکت OK و TCP fail نمی‌شود",
-        "پاک‌سازی PGHOST/PGPORT/PGCLUSTER؛ ری‌استارت باید موفق شود؛ hostnossl + pg_reload_conf؛ trust با تأیید واقعی",
+    "11.1.0": [
+        "ریلیز پایدار نصب Postgres: همهٔ عملیات (پسورد/HBA/ری‌استارت/TCP) روی یک کلاستر پین می‌شود — دیگر سوکت OK و TCP fail نمی‌شود",
+        "پاک‌سازی PGHOST/PGPORT/PGCLUSTER؛ ری‌استارت اجباری موفق؛ hostnossl + pg_reload_conf؛ trust با تأیید واقعی",
         "نصب: DATABASE_URL محیطی بدون verify دیگر skip نمی‌شود؛ فقط localhost دوباره provision می‌شود",
-        "بدون مایگریشن DB؛ ریستور: restore/pre-v11.0.13-v11.0.12-2026-09-29",
+        "شامل اصلاحات زنجیرهٔ v11.0.3–v11.0.12 (listen/scram، بدون md5، بدون socket URL، WEB_HOST=0.0.0.0، Setup URL، SSL)",
+        "بدون مایگریشن DB؛ ریستور: restore/pre-v11.1.0-v11.0.12-2026-09-29",
     ],
     "11.0.12": [
         "نصب apt: اول postgresql-common نصب می‌شود تا خطای pg_lsclusters: not found در debconf نیاید",
