@@ -97,7 +97,10 @@ class UserEditUiTests(unittest.TestCase):
         self.assertIn('/users/{user_id}/staff-note', ux)
         self.assertIn("_redirect_user", ux)
         self.assertNotIn('f"/users/{user_id}?ok=', ux)
-        self.assertIn("یادداشت داخلی و ریسک", Path("app/web/templates/_user_edit_body.html").read_text(encoding="utf-8"))
+        edit_body = Path("app/web/templates/_user_edit_body.html").read_text(encoding="utf-8")
+        self.assertIn("یادداشت داخلی", edit_body)
+        self.assertIn("تگ ریسک", edit_body)
+        self.assertIn("_color_tag_picker.html", edit_body)
 
     def test_panel_persian_form_validation(self):
         js = Path("app/web/static/panel.js").read_text(encoding="utf-8")
@@ -110,12 +113,12 @@ class UserEditUiTests(unittest.TestCase):
 
     def test_users_list_risk_tag_and_search_pad(self):
         users = Path("app/web/templates/users.html").read_text(encoding="utf-8")
-        self.assertIn("badge-risk", users)
-        self.assertIn("u.risk_flags", users)
+        self.assertIn("badge-risk-tag", users)
+        self.assertIn("u.color_tag", users)
         self.assertIn("cell-name", users)
         self.assertNotIn("risk-dot", users)
         css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
-        self.assertIn(".badge.badge-risk", css)
+        self.assertIn(".badge.badge-risk-tag", css)
         self.assertNotIn(".risk-dot {", css)
         self.assertIn(".card.card-flush > .search-bar:first-child", css)
         self.assertIn("padding-top: var(--card-pad)", css)

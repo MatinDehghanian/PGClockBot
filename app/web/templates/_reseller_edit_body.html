@@ -4,14 +4,14 @@
 
 <section class="edit-section">
   <header class="edit-section-head">
-    <h3>تگ رنگی</h3>
-    <p class="muted">دایره کنار نام در لیست نمایندگان — فقط برای اسکن سریع کارکنان</p>
+    <h3>تگ ریسک</h3>
+    <p class="muted">چهار سطح ثابت برای نماینده — دیفالت «مطمئن». فقط کارکنان می‌بینند.</p>
   </header>
-  <form method="post" action="/resellers/{{ user.id }}/color-tag" class="form-stack">
-    {% set selected_color = user.color_tag or '' %}
+  <form method="post" action="/resellers/{{ user.id }}/color-tag" class="form-stack" data-color-tag-form>
+    {% set selected_color = (user.color_tag or 'green') %}
     {% include "_color_tag_picker.html" %}
     <div class="actions">
-      <button class="btn" type="submit">ذخیره تگ</button>
+      <button class="btn" type="submit">ذخیره تگ ریسک</button>
     </div>
   </form>
 </section>

@@ -223,6 +223,7 @@ async def admin_create_bot_user(
     full_name: str | None = None,
     reseller_id: int | None = None,
     staff: dict | None = None,
+    color_tag: str | None = None,
 ) -> BotUser:
     """Create a shop BotUser manually (web panel). Always role=user.
 
@@ -232,6 +233,7 @@ async def admin_create_bot_user(
     import secrets
     import string
 
+    from app.services.color_tags import normalize_color_tag
     from app.services.platform_identity import (
         deliverable_telegram_id,
         is_explicit_owner_staff,
@@ -291,6 +293,7 @@ async def admin_create_bot_user(
         role=Role.USER.value,
         referral_code=referral_code,
         reseller_id=assign_reseller,
+        color_tag=normalize_color_tag(color_tag),
     )
     session.add(user)
     await session.commit()

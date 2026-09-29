@@ -3337,7 +3337,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         from app.services.shop_scope import ShopScopeError, resolve_shop_scope_id
         from app.services.pg_access import staff_user_actions
         from app.services.color_tags import (
-            FILTER_NONE,
+            DEFAULT_COLOR_TAG,
             color_tag_meta,
             color_tags_for_ui,
             normalize_color_filter,
@@ -3348,7 +3348,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             scoped_users_where,
             users_list_href,
         )
-        from sqlalchemy import and_
+        from sqlalchemy import and_, or_
 
         try:
             scope = resolve_shop_scope_id(staff)
@@ -3364,8 +3364,18 @@ def create_api_app(lifespan=None) -> FastAPI:
         # Shop scope: Owner → platform users only; reseller → own customers.
         # Pure resellers (no shop services) stay on /resellers.
         where = scoped_users_where(scope)
-        if color_filter == FILTER_NONE:
-            where = and_(where, BotUser.color_tag.is_(None))
+        if color_filter == DEFAULT_COLOR_TAG:
+            # Default green also matches legacy NULL / unmapped rows.
+            where = and_(
+                where,
+                or_(
+                    BotUser.color_tag == DEFAULT_COLOR_TAG,
+                    BotUser.color_tag.is_(None),
+                    BotUser.color_tag.in_(("blue", "violet", "pink", "slate", "")),
+                ),
+            )
+        elif color_filter == "yellow":
+            where = and_(where, BotUser.color_tag.in_(("yellow", "amber")))
         elif color_filter:
             where = and_(where, BotUser.color_tag == color_filter)
         result = await session.execute(

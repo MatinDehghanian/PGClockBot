@@ -597,7 +597,11 @@ def miniapp_inline_keyboard(
     view: str = "",
     label: str | None = None,
 ) -> InlineKeyboardMarkup | None:
-    """WebApp can only live on inline keyboards. Platform bot only."""
+    """WebApp can only live on inline keyboards. Platform bot only.
+
+    Telegram rejects non-HTTPS WebApp URLs — never emit a button unless the
+    URL is https://… (otherwise /start shows the welcome then an error).
+    """
     from app.services.users import current_shop_reseller_id
 
     # Shop bots never advertise the platform miniapp (HMAC uses main bot token)
@@ -607,7 +611,7 @@ def miniapp_inline_keyboard(
     if not settings.miniapp_enabled:
         return None
     url = settings.miniapp_deep_url(view) if view else settings.miniapp_url
-    if not url:
+    if not url or not str(url).startswith("https://"):
         return None
     if not view and "miniapp" not in _menu_order(ui):
         return None
@@ -1627,8 +1631,16 @@ def admin_resellers_list_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=kb_rows)
 
 
-def admin_reseller_actions(user_id: int, *, has_shop_services: bool = False) -> InlineKeyboardMarkup:
+def admin_reseller_actions(
+    user_id: int,
+    *,
+    has_shop_services: bool = False,
+    color_tag: str | None = None,
+) -> InlineKeyboardMarkup:
     """Reseller card actions — PG-owned services are primary; optional shop UserServices link."""
+    from app.services.color_tags import bot_tag_button_label
+
+    tag_label = bot_tag_button_label(color_tag)
     rows: list[list[InlineKeyboardButton]] = [
         [
             InlineKeyboardButton(
@@ -1640,6 +1652,12 @@ def admin_reseller_actions(user_id: int, *, has_shop_services: bool = False) -> 
             InlineKeyboardButton(
                 text="⏱ تغییر ظرفیت",
                 callback_data=f"adm:resellers:capadj:{user_id}",
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text=f"🏷 تگ: {tag_label}"[:64],
+                callback_data=f"adm:resellers:tag:{user_id}",
             )
         ],
     ]
@@ -1662,6 +1680,39 @@ def admin_reseller_actions(user_id: int, *, has_shop_services: bool = False) -> 
     )
     rows.append(
         [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:resellers:list:0")]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def admin_reseller_risk_tag_keyboard(
+    user_id: int, *, current: str | None = None
+) -> InlineKeyboardMarkup:
+    """Inline picker for the 4 staff risk-color levels on a reseller card."""
+    from app.services.color_tags import COLOR_TAGS, normalize_color_tag
+
+    cur = normalize_color_tag(current)
+    rows: list[list[InlineKeyboardButton]] = []
+    row: list[InlineKeyboardButton] = []
+    for t in COLOR_TAGS:
+        mark = "✓ " if t.key == cur else ""
+        row.append(
+            InlineKeyboardButton(
+                text=f"{mark}{t.emoji} {t.title_fa}"[:64],
+                callback_data=f"adm:resellers:tagset:{user_id}:{t.key}",
+            )
+        )
+        if len(row) == 2:
+            rows.append(row)
+            row = []
+    if row:
+        rows.append(row)
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text="⬅️ بازگشت",
+                callback_data=f"adm:resellers:view:{user_id}",
+            )
+        ]
     )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -1780,8 +1831,12 @@ def admin_user_actions(
     confirm_delete: bool = False,
     ui: dict | None = None,
     has_services: bool = False,
+    color_tag: str | None = None,
 ) -> InlineKeyboardMarkup:
+    from app.services.color_tags import bot_tag_button_label
+
     block_label = "🔓 رفع مسدودی" if is_blocked else "🚫 مسدود کردن"
+    tag_label = bot_tag_button_label(color_tag)
     rows: list[list[InlineKeyboardButton]] = [
         [
             InlineKeyboardButton(
@@ -1789,6 +1844,12 @@ def admin_user_actions(
             ),
             InlineKeyboardButton(
                 text="📦 سرویس‌ها", callback_data=f"adm:users:svcs:{user_id}"
+            ),
+        ],
+        [
+            InlineKeyboardButton(
+                text=f"🏷 تگ: {tag_label}"[:64],
+                callback_data=f"adm:users:tag:{user_id}",
             ),
         ],
         [
@@ -1845,6 +1906,32 @@ def admin_user_actions(
                 )
             ]
         )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def admin_user_risk_tag_keyboard(user_id: int, *, current: str | None = None) -> InlineKeyboardMarkup:
+    """Inline picker for the 4 staff risk-color levels."""
+    from app.services.color_tags import COLOR_TAGS, normalize_color_tag
+
+    cur = normalize_color_tag(current)
+    rows: list[list[InlineKeyboardButton]] = []
+    row: list[InlineKeyboardButton] = []
+    for t in COLOR_TAGS:
+        mark = "✓ " if t.key == cur else ""
+        row.append(
+            InlineKeyboardButton(
+                text=f"{mark}{t.emoji} {t.title_fa}"[:64],
+                callback_data=f"adm:users:tagset:{user_id}:{t.key}",
+            )
+        )
+        if len(row) == 2:
+            rows.append(row)
+            row = []
+    if row:
+        rows.append(row)
+    rows.append(
+        [InlineKeyboardButton(text="⬅️ بازگشت", callback_data=f"adm:users:view:{user_id}")]
+    )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 

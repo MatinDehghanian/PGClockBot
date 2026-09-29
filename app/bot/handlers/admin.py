@@ -1883,11 +1883,15 @@ async def _render_user_card(
         if ops.low_volume:
             bits.append(f"حجم {ops.volume_text}")
         alert_line = "\n🔔 اعلان: " + " · ".join(bits) if bits else "\n🔔 اعلان فعال"
+    from app.services.color_tags import bot_tag_button_label, effective_color_tag
+
+    tag_line = bot_tag_button_label(effective_color_tag(user))
     text = (
         f"{flags} <b>{html.escape(user.full_name or user.username or '—')}</b>\n\n"
         f"آیدی تلگرام: <code>{user.telegram_id}</code>\n"
         f"یوزرنیم: @{html.escape(user.username or '—')}\n"
         f"نقش: {html.escape(user.role)}\n"
+        f"تگ ریسک: {html.escape(tag_line)}\n"
         f"کیف پول: {format_toman(user.wallet_balance, get_settings().currency)}\n"
         f"سرویس‌ها: {ops.service_count}\n"
         f"مسدود: {blocked}"
@@ -1907,6 +1911,7 @@ async def _render_user_card(
         confirm_delete=confirm_delete,
         ui=ui,
         has_services=ops.service_count > 0,
+        color_tag=effective_color_tag(user),
     )
     if edit:
         try:
@@ -1988,6 +1993,80 @@ async def adm_users_view(callback: CallbackQuery, session: AsyncSession, db_user
         await callback.answer(deny, show_alert=True)
         return
     await callback.answer()
+    if callback.message:
+        await _render_user_card(callback.message, session, user, edit=True)
+
+
+@router.callback_query(F.data.regexp(r"^adm:users:tag:\d+$"))
+@require_bot_owner_handler
+async def adm_users_tag_picker(
+    callback: CallbackQuery, session: AsyncSession, db_user: BotUser
+):
+    """Show the 4-level risk-color picker for a bot user."""
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    try:
+        uid = int((callback.data or "").rsplit(":", 1)[-1])
+    except ValueError:
+        await callback.answer("نامعتبر", show_alert=True)
+        return
+    user = await session.get(BotUser, uid)
+    deny = _deny_if_outside_platform_shop(user)
+    if deny:
+        await callback.answer(deny, show_alert=True)
+        return
+    from app.services.color_tags import bot_tag_button_label, effective_color_tag
+
+    await callback.answer()
+    if callback.message:
+        cur = effective_color_tag(user)
+        await safe_edit_text(
+            callback.message,
+            f"🏷 <b>تگ ریسک</b> — {html.escape(user.full_name or str(user.telegram_id))}\n"
+            f"فعلی: {html.escape(bot_tag_button_label(cur))}\n\n"
+            "یکی از چهار سطح را انتخاب کنید:",
+            reply_markup=kb.admin_user_risk_tag_keyboard(user.id, current=cur),
+        )
+
+
+@router.callback_query(F.data.regexp(r"^adm:users:tagset:\d+:[a-z]+$"))
+@require_bot_owner_handler
+async def adm_users_tag_set(
+    callback: CallbackQuery, session: AsyncSession, db_user: BotUser
+):
+    """Persist a whitelisted risk-color tag from the bot picker."""
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    parts = (callback.data or "").split(":")
+    # adm:users:tagset:{uid}:{key}
+    if len(parts) != 5:
+        await callback.answer("نامعتبر", show_alert=True)
+        return
+    try:
+        uid = int(parts[3])
+    except ValueError:
+        await callback.answer("نامعتبر", show_alert=True)
+        return
+    key = parts[4]
+    user = await session.get(BotUser, uid)
+    deny = _deny_if_outside_platform_shop(user)
+    if deny:
+        await callback.answer(deny, show_alert=True)
+        return
+    from app.services.color_tags import (
+        VALID_COLOR_KEYS,
+        apply_color_tag,
+        bot_tag_button_label,
+    )
+
+    if key not in VALID_COLOR_KEYS:
+        await callback.answer("تگ نامعتبر", show_alert=True)
+        return
+    apply_color_tag(user, key)
+    await session.commit()
+    await callback.answer(f"ذخیره شد: {bot_tag_button_label(key)}"[:180])
     if callback.message:
         await _render_user_card(callback.message, session, user, edit=True)
 
@@ -2981,6 +3060,7 @@ async def _render_reseller_card(
     *,
     edit: bool = False,
 ) -> None:
+    from app.services.color_tags import bot_tag_button_label, effective_color_tag
     from app.services.resellers import get_reseller_profile
 
     profile = await get_reseller_profile(session, int(user.id))
@@ -2994,10 +3074,12 @@ async def _render_reseller_card(
     if profile and profile.billing_suspended_at:
         suspended = "\nوضعیت PAYG: <b>مسدود</b>"
     bot_uname = f"@{profile.bot_username}" if profile and profile.bot_username else "—"
+    tag_line = bot_tag_button_label(effective_color_tag(user))
     text = (
         f"🤝 <b>{html.escape(user.full_name or user.username or '—')}</b>\n\n"
         f"آیدی تلگرام: <code>{user.telegram_id}</code>\n"
         f"یوزرنیم: @{html.escape(user.username or '—')}\n"
+        f"تگ ریسک: {html.escape(tag_line)}\n"
         f"کیف پول: {format_toman(user.wallet_balance, get_settings().currency)}\n"
         f"ادمین پاسارگارد: <code>{html.escape(str(pg_uname))}</code>\n"
         f"حالت پرداخت: {html.escape(mode)}\n"
@@ -3007,7 +3089,9 @@ async def _render_reseller_card(
         f"<i>سرویس‌های پاسارگارد = کاربران VPN زیر ادمین نماینده</i>"
     )
     markup = kb.admin_reseller_actions(
-        user.id, has_shop_services=int(shop_svc_count) > 0
+        user.id,
+        has_shop_services=int(shop_svc_count) > 0,
+        color_tag=effective_color_tag(user),
     )
     if edit:
         try:
@@ -3033,6 +3117,80 @@ async def adm_resellers_view(
         await callback.answer("نماینده یافت نشد", show_alert=True)
         return
     await callback.answer()
+    if callback.message:
+        await _render_reseller_card(callback.message, session, user, edit=True)
+
+
+@router.callback_query(F.data.regexp(r"^adm:resellers:tag:\d+$"))
+@require_bot_owner_handler
+@require_platform_rep_mgmt
+async def adm_resellers_tag_picker(
+    callback: CallbackQuery, session: AsyncSession, db_user: BotUser
+):
+    """Show the 4-level risk-color picker for a reseller."""
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    try:
+        uid = int((callback.data or "").rsplit(":", 1)[-1])
+    except ValueError:
+        await callback.answer("نامعتبر", show_alert=True)
+        return
+    user = await session.get(BotUser, uid)
+    if not user or user.role != Role.RESELLER.value:
+        await callback.answer("نماینده یافت نشد", show_alert=True)
+        return
+    from app.services.color_tags import bot_tag_button_label, effective_color_tag
+
+    await callback.answer()
+    if callback.message:
+        cur = effective_color_tag(user)
+        await safe_edit_text(
+            callback.message,
+            f"🏷 <b>تگ ریسک نماینده</b> — {html.escape(user.full_name or str(user.telegram_id))}\n"
+            f"فعلی: {html.escape(bot_tag_button_label(cur))}\n\n"
+            "یکی از چهار سطح را انتخاب کنید:",
+            reply_markup=kb.admin_reseller_risk_tag_keyboard(user.id, current=cur),
+        )
+
+
+@router.callback_query(F.data.regexp(r"^adm:resellers:tagset:\d+:[a-z]+$"))
+@require_bot_owner_handler
+@require_platform_rep_mgmt
+async def adm_resellers_tag_set(
+    callback: CallbackQuery, session: AsyncSession, db_user: BotUser
+):
+    """Persist a whitelisted risk-color tag from the reseller bot picker."""
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    parts = (callback.data or "").split(":")
+    # adm:resellers:tagset:{uid}:{key}
+    if len(parts) != 5:
+        await callback.answer("نامعتبر", show_alert=True)
+        return
+    try:
+        uid = int(parts[3])
+    except ValueError:
+        await callback.answer("نامعتبر", show_alert=True)
+        return
+    key = parts[4]
+    user = await session.get(BotUser, uid)
+    if not user or user.role != Role.RESELLER.value:
+        await callback.answer("نماینده یافت نشد", show_alert=True)
+        return
+    from app.services.color_tags import (
+        VALID_COLOR_KEYS,
+        apply_color_tag,
+        bot_tag_button_label,
+    )
+
+    if key not in VALID_COLOR_KEYS:
+        await callback.answer("تگ نامعتبر", show_alert=True)
+        return
+    apply_color_tag(user, key)
+    await session.commit()
+    await callback.answer(f"ذخیره شد: {bot_tag_button_label(key)}"[:180])
     if callback.message:
         await _render_reseller_card(callback.message, session, user, edit=True)
 
@@ -3133,12 +3291,17 @@ async def adm_resellers_capacity_adjust(
         shop_count = await session.scalar(
             select(func.count()).select_from(UserService).where(UserService.bot_user_id == user_id)
         ) or 0
+        from app.services.color_tags import effective_color_tag
+
+        reseller_user = await session.get(BotUser, user_id)
         if callback.message:
             await safe_edit_text(
                 callback.message,
                 f"✅ ظرفیت اشتراک به‌روز شد\n\nحجم کل: <b>{total}</b> گیگ\nانقضا: {html.escape(exp_txt)}",
                 reply_markup=kb.admin_reseller_actions(
-                    user_id, has_shop_services=int(shop_count) > 0
+                    user_id,
+                    has_shop_services=int(shop_count) > 0,
+                    color_tag=effective_color_tag(reseller_user) if reseller_user else None,
                 ),
             )
         return

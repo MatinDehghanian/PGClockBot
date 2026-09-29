@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "11.1.1": [
+        "رفع خطای /start ربات وقتی مینی‌اپ بدون HTTPS بود (دیگر بعد از منو پیام خطا نمی‌آید)",
+        "تگ ریسک چهارسطحی: سبز مطمئن · زرد مشکوک · نارنجی ریسک · قرمز ریسک بالا — دیفالت همه مطمئن",
+        "ادغام تگ رنگی با ریسک؛ فیلتر جدول با نام سطح؛ ذخیره قابل‌اعتماد در پنل؛ انتخاب در ساخت/ویرایش و داخل بات",
+        "مایگریشن: color_tagهای قدیمی به ۴ سطح نگاشت و NULL→green؛ ریستور: restore/pre-v11.1.1-v11.1.0-2026-09-29",
+    ],
     "11.1.0": [
         "ریلیز پایدار نصب Postgres: همهٔ عملیات (پسورد/HBA/ری‌استارت/TCP) روی یک کلاستر پین می‌شود — دیگر سوکت OK و TCP fail نمی‌شود",
         "پاک‌سازی PGHOST/PGPORT/PGCLUSTER؛ ری‌استارت اجباری موفق؛ hostnossl + pg_reload_conf؛ trust با تأیید واقعی",

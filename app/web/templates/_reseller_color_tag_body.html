@@ -3,13 +3,13 @@
 <section class="edit-section">
   <header class="edit-section-head">
     <h3>{{ user.full_name or user.username or 'نماینده' }}</h3>
-    <p class="muted">تگ رنگی فقط برای اسکن سریع لیست است؛ کاربر نهایی آن را نمی‌بیند.</p>
+    <p class="muted">تگ ریسک فقط برای اسکن سریع لیست است؛ کاربر نهایی آن را نمی‌بیند.</p>
   </header>
-  <form method="post" action="/resellers/{{ user.id }}/color-tag" class="form-stack">
-    {% set selected_color = user.color_tag or '' %}
+  <form method="post" action="/resellers/{{ user.id }}/color-tag" class="form-stack" data-color-tag-form>
+    {% set selected_color = (user.color_tag or 'green') %}
     {% include "_color_tag_picker.html" %}
     <div class="actions">
-      <button class="btn" type="submit">ذخیره تگ</button>
+      <button class="btn" type="submit">ذخیره تگ ریسک</button>
     </div>
   </form>
 </section>

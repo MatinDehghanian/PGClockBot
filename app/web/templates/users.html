@@ -75,9 +75,8 @@
   <a class="{% if flt=='alerts' %}active{% endif %}" href="{{ filter_href(filter_key='alerts', q=q) }}">دارای اعلان</a>
 </nav>
 {% if color_tags is defined and color_tags %}
-<div class="color-tag-filters" aria-label="فیلتر تگ رنگی">
-  <a class="color-tag-filter{% if not color_filter %} is-active{% endif %}" href="{{ filter_href(filter_key=flt, q=q, color=none) }}">همه رنگ‌ها</a>
-  <a class="color-tag-filter{% if color_filter == '_none' %} is-active{% endif %}" href="{{ filter_href(filter_key=flt, q=q, color='_none') }}">بدون تگ</a>
+<div class="color-tag-filters" aria-label="فیلتر تگ ریسک">
+  <a class="color-tag-filter{% if not color_filter %} is-active{% endif %}" href="{{ filter_href(filter_key=flt, q=q, color=none) }}">همه تگ‌ها</a>
   {% for t in color_tags %}
   <a class="color-tag-filter{% if color_filter == t.key %} is-active{% endif %}" href="{{ filter_href(filter_key=flt, q=q, color=t.key) }}">
     <span class="color-tag-dot" style="--tag-color: {{ t.hex }}" aria-hidden="true"></span>
@@ -162,7 +161,7 @@
               <span class="badge {% if u.role=='admin' %}role-admin{% elif u.role=='reseller' %}role-reseller{% else %}role-user{% endif %}">
                 {% if u.role=='admin' %}مدیر{% elif u.role=='reseller' %}نماینده{% else %}کاربر{% endif %}
               </span>
-              {% if u.risk_flags %}<span class="badge badge-risk" title="پرچم ریسک فعال">ریسک</span>{% endif %}
+              {% if tag %}<span class="badge badge-risk-tag" style="--tag-color: {{ tag.hex }}" title="تگ ریسک">{{ tag.title_fa }}</span>{% endif %}
             </span>
           </div>
         </td>
@@ -345,6 +344,13 @@
       <label class="form-field">نام نمایشی
         <input name="full_name" type="text" maxlength="255" placeholder="نام کامل (اختیاری)" autocomplete="off" />
       </label>
+      {% if color_tags is defined and color_tags %}
+      <div class="form-field">
+        <span class="form-label">تگ ریسک</span>
+        {% set selected_color = 'green' %}
+        {% include "_color_tag_picker.html" %}
+      </div>
+      {% endif %}
       <div class="actions">
         <button class="btn" type="submit">ساخت کاربر</button>
         <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
