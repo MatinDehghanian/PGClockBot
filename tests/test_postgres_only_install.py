@@ -21,6 +21,25 @@ def test_setup_postgres_emits_url_file():
     src = (ROOT / "scripts" / "setup_postgres.sh").read_text(encoding="utf-8")
     assert "PGCLOCK_EMIT_URL_FILE" in src
     assert "postgresql+asyncpg://" in src
+    # Password must be URL-encoded; TCP auth verified after role create.
+    assert "urllib.parse.quote" in src
+    assert "PGPASSWORD=" in src
+    assert "127.0.0.1" in src
+
+
+def test_install_waits_for_panel_health():
+    src = (ROOT / "pgclock.sh").read_text(encoding="utf-8")
+    assert 'Panel health' in src or "Panel health" in src
+    assert "/health" in src
+    assert "journalctl -u" in src
+
+
+def test_install_global_cli_avoids_dev_stdin():
+    src = (ROOT / "scripts" / "install_global_cli.sh").read_text(encoding="utf-8")
+    # Must not feed /dev/stdin to `install` (fails under some sudo/pipe setups).
+    assert "install -m 755 /dev/stdin" not in src
+    assert "mktemp" in src
+    assert 'install -m 755 "${tmp_bin}"' in src
 
 
 def test_readme_documents_auto_postgres_install():
