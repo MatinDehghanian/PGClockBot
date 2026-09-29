@@ -73,19 +73,23 @@ class PgclockInstallHintTests(unittest.TestCase):
     def test_install_prints_setup_entry_url_helper(self):
         src = Path("pgclock.sh").read_text(encoding="utf-8")
         self.assertIn("setup_wizard_url", src)
-        self.assertIn("persist_setup_entry_url", src)
-        self.assertIn("read_setup_entry_url", src)
+        self.assertIn("create_setup_gate_session", src)
+        self.assertIn("build_setup_entry_url", src)
         self.assertIn("setup_gate.json", src)
-        self.assertIn("--setup-only", src)
-        self.assertIn("لینک یک‌بارمصرف (اعتبار ۱۵ دقیقه):", src)
-        self.assertIn('print_success "Install complete" --setup-only', src)
+        self.assertIn("Setup URL (one-time, 15 min)", src)
+        self.assertIn('print_success "Install complete"', src)
+        self.assertIn("?gate=", src)
+        # Must not call is_setup_complete() when minting install URL (auto-flag side effect).
+        self.assertIn("Do NOT call is_setup_complete()", src)
+        # Install finish copy must stay English (CLI is English).
+        self.assertNotIn("لینک یک‌بارمصرف", src)
+        self.assertNotIn("فایروال ابری", src)
 
     def test_banner_shows_dynamic_release_version(self):
         src = Path("pgclock.sh").read_text(encoding="utf-8")
         self.assertIn("read_app_version", src)
         self.assertIn("Release v", src)
         self.assertNotIn("One command for everything", src)
-        self.assertNotIn("English", src)
 
 
 class SetupGateTtlTests(unittest.TestCase):

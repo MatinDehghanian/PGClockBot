@@ -792,18 +792,20 @@ def create_api_app(lifespan=None) -> FastAPI:
                         )
                 return response
             return HTMLResponse(
-                "<!DOCTYPE html><html lang='fa' dir='rtl'><head><meta charset='utf-8'/>"
+                "<!DOCTYPE html><html lang='en'><head><meta charset='utf-8'/>"
                 "<meta name='viewport' content='width=device-width,initial-scale=1'/>"
-                "<title>لینک ویزارد نصب</title></head><body style='font-family:Vazirmatn,sans-serif;"
-                "max-width:42rem;margin:3rem auto;padding:0 1rem;line-height:1.8;color:#18181b'>"
-                "<h1>ویزارد نصب اولیه</h1>"
-                "<p>برای امنیت، ورود از اینترنت فقط با <b>لینک یک‌بارمصرف</b> ممکن است "
-                "(اعتبار حداکثر ۱۵ دقیقه؛ پس از اتمام تنظیمات یا ورود به پنل غیرفعال می‌شود).</p>"
-                "<p><b>روی سرور</b> لینک را از خروجی نصب یا این دستور بگیرید:</p>"
+                "<title>Setup link required</title></head><body style='font-family:system-ui,sans-serif;"
+                "max-width:42rem;margin:3rem auto;padding:0 1rem;line-height:1.6;color:#18181b'>"
+                "<h1>First-run setup</h1>"
+                "<p>For security, internet access to the setup wizard requires the "
+                "<b>one-time Setup URL</b> from the install output "
+                "(valid up to 15 minutes; disabled after setup finishes).</p>"
+                "<p><b>On the server</b>, print it with:</p>"
                 "<p><code style='background:#f4f4f5;padding:6px 10px;border-radius:4px;display:block'>"
                 "bash pgclock.sh status</code></p>"
                 "<p style='font-size:14px;color:#71717a'>"
-                "فقط از خود سرور با <code>127.0.0.1</code> / <code>::1</code> بدون لینک باز می‌شود؛ دسترسی از شبکه داخلی/اینترنت فقط با لینک یک‌بارمصرف."
+                "Loopback (<code>127.0.0.1</code> / <code>::1</code>) works without the link. "
+                "Remote access needs the URL that includes <code>?gate=…</code>."
                 "</p></body></html>",
                 status_code=403,
             )

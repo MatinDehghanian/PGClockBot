@@ -28,11 +28,20 @@ R=$'\033[0;31m'; G=$'\033[0;32m'; C=$'\033[0;36m'
 Y=$'\033[1;33m'; B=$'\033[1;37m'; D=$'\033[2m'; N=$'\033[0m'
 BOLD=$'\033[1m'
 
-info()  { printf '  %s>%s %s\n' "$C" "$N" "$*" > /dev/tty; }
-ok()    { printf '  %s+%s %s\n' "$G" "$N" "$*" > /dev/tty; }
-warn()  { printf '  %s!%s %s\n' "$Y" "$N" "$*" > /dev/tty; }
-err()   { printf '  %sx%s %s\n' "$R" "$N" "$*" > /dev/tty; }
-step()  { printf '\n%s%s-- %s --%s\n\n' "$BOLD" "$C" "$*" "$N" > /dev/tty; }
+# Prefer /dev/tty so menus stay clean when stdout is captured; fall back so
+# SUCCESS banners still appear under curl|bash / no-TTY edge cases.
+_tty() {
+  if [[ -w /dev/tty ]]; then
+    printf '%b' "$*" > /dev/tty 2>/dev/null || printf '%b' "$*"
+  else
+    printf '%b' "$*"
+  fi
+}
+info()  { _tty "  ${C}>${N} $*\n"; }
+ok()    { _tty "  ${G}+${N} $*\n"; }
+warn()  { _tty "  ${Y}!${N} $*\n"; }
+err()   { _tty "  ${R}x${N} $*\n"; }
+step()  { _tty "\n${BOLD}${C}-- $* --${N}\n\n"; }
 pause() {
   printf '\n  Press Enter to continue... ' > /dev/tty
   read -r _ < /dev/tty || true
@@ -213,59 +222,92 @@ PY
 }
 
 setup_wizard_url() {
+  # Always emit a one-time setup URL (http://IP:PORT/?gate=…) when the
+  # setup_complete.flag file is absent. Do NOT call is_setup_complete() here —
+  # that helper can auto-create the flag from leftover .env credentials and
+  # then return an empty URL (install looked "done" with no link printed).
   if [[ -f data/setup_complete.flag ]]; then
     return 0
   fi
-  if [[ ! -f "$PY" && ! -x "$PY" ]]; then
-    return 0
-  fi
-  local port ip
+  local port ip py
   port="$(env_get WEB_PORT "${WEB_PORT:-9000}")"
   ip="$(detect_server_ip)"
-  "$PY" - <<PY 2>/dev/null || true
-import os
-os.chdir(r"""${SCRIPT_DIR}""")
-from app.services.setup_wizard import read_setup_entry_url, persist_setup_entry_url
+  py="$PY"
+  if [[ ! -x "$py" ]]; then
+    py="${SCRIPT_DIR}/.venv/bin/python"
+  fi
+  if [[ ! -x "$py" ]]; then
+    py="${SYSTEM_PY:-python3}"
+  fi
+  local errf url
+  errf="$(mktemp)"
+  url="$(
+    cd "$SCRIPT_DIR" && PYTHONPATH="$SCRIPT_DIR${PYTHONPATH:+:$PYTHONPATH}" "$py" - <<PY 2>"$errf"
+from pathlib import Path
+from app.services.setup_wizard import (
+    SETUP_ENTRY_FILE,
+    SETUP_FLAG,
+    build_setup_entry_url,
+    create_setup_gate_session,
+    _ensure_data_dir,
+)
+
+if SETUP_FLAG.exists():
+    raise SystemExit(0)
+
 base = f"http://${ip}:${port}".rstrip("/")
-url = read_setup_entry_url()
-if not url:
-    url = persist_setup_entry_url(base)
-if url:
-    print(url)
+token = create_setup_gate_session()
+url = build_setup_entry_url(base, token=token)
+_ensure_data_dir()
+SETUP_ENTRY_FILE.write_text(url + chr(10), encoding="utf-8")
+try:
+    SETUP_ENTRY_FILE.chmod(0o600)
+except OSError:
+    pass
+print(url)
 PY
+  )" || true
+  url="$(printf '%s' "$url" | tr -d '\r\n')"
+  if [[ -n "$url" && "$url" == *"?gate="* ]]; then
+    rm -f "$errf"
+    printf '%s\n' "$url"
+    return 0
+  fi
+  if [[ -s "$errf" ]]; then
+    warn "Could not build setup URL (python): $(head -n 2 "$errf" | tr '\n' ' ')"
+  fi
+  rm -f "$errf"
+  return 0
 }
 
 print_success() {
-  # print_success "Title" [--setup-only] [extra lines...]
+  # print_success "Title" [extra lines...]
+  # Always prints panel + health URLs. Extra lines are English operator hints.
   local title="$1"
   shift || true
-  local setup_only=0
+  # Back-compat: ignore legacy --setup-only flag if callers still pass it.
   if [[ "${1:-}" == "--setup-only" ]]; then
-    setup_only=1
     shift || true
   fi
   local port ip user
   port="$(env_get WEB_PORT "${WEB_PORT:-9000}")"
   ip="$(detect_server_ip)"
   user="$(web_username)"
-  {
+  local body
+  body="$(
     echo ""
     printf '%s==========================================%s\n' "$G" "$N"
     printf '%s  SUCCESS · %s%s\n' "$G" "$title" "$N"
     printf '%s==========================================%s\n' "$G" "$N"
-    if [[ "$setup_only" -eq 0 ]]; then
-      printf '  Web panel:  %shttp://%s:%s/%s\n' "$B" "$ip" "$port" "$N"
-      printf '  Health:     %shttp://127.0.0.1:%s/health%s\n' "$B" "$port" "$N"
-      if [[ -f data/setup_complete.flag ]]; then
-        printf '  Username:   %s%s%s\n' "$B" "$user" "$N"
-      else
-        printf '  Next step:  %sopen the URL above (first time = setup wizard)%s\n' "$B" "$N"
-      fi
+    printf '  Web panel:  %shttp://%s:%s/%s\n' "$B" "$ip" "$port" "$N"
+    printf '  Health:     %shttp://127.0.0.1:%s/health%s\n' "$B" "$port" "$N"
+    if [[ -f data/setup_complete.flag ]]; then
+      printf '  Username:   %s%s%s\n' "$B" "$user" "$N"
+    else
+      printf '  Next step:  %sopen the Setup URL below (first-run wizard)%s\n' "$B" "$N"
     fi
     if [[ $# -gt 0 ]]; then
-      if [[ "$setup_only" -eq 0 ]]; then
-        echo ""
-      fi
+      echo ""
       local line
       for line in "$@"; do
         printf '  %b\n' "$line"
@@ -273,7 +315,10 @@ print_success() {
     fi
     printf '%s==========================================%s\n' "$G" "$N"
     echo ""
-  } > /dev/tty
+  )"
+  _tty "$body"
+  # Also mirror to stdout so captured install logs retain the URLs.
+  printf '%s' "$body"
 }
 
 require_ubuntu_22_plus() {
@@ -697,7 +742,7 @@ cmd_install() {
   WEB_ADMIN_USER="admin"
   WEB_ADMIN_PASSWORD=""
   PUBLIC_BASE_URL=""
-  CURRENCY="تومان"
+  CURRENCY="Toman"
 
   local fresh=0
   if [[ -f .env ]]; then
@@ -794,36 +839,51 @@ PY
   fi
   info "Cloud firewall (Hetzner/AWS/…): also allow inbound TCP ${WEB_PORT} in the provider panel"
 
-  local ip setup_url
+  local ip setup_url panel_url
   ip="$(detect_server_ip)"
+  panel_url="http://${ip}:${WEB_PORT}/"
   setup_url=""
   if [[ "$fresh" -eq 1 ]] || [[ ! -f data/setup_complete.flag ]]; then
-    setup_url="$(setup_wizard_url)"
-    if [[ -z "$setup_url" ]]; then
-      sleep 3
-      setup_url="$(setup_wizard_url)"
+    setup_url="$(setup_wizard_url || true)"
+    if [[ -z "$setup_url" || "$setup_url" != *"?gate="* ]]; then
+      sleep 2
+      setup_url="$(setup_wizard_url || true)"
+    fi
+    # File fallback if python printed nothing but wrote the hint file.
+    if [[ -z "$setup_url" || "$setup_url" != *"?gate="* ]]; then
+      if [[ -f data/setup_entry.url ]]; then
+        setup_url="$(tr -d '\r\n' < data/setup_entry.url)"
+      fi
     fi
   fi
 
   if [[ "$fresh" -eq 1 ]] || [[ ! -f data/setup_complete.flag ]]; then
     if [[ "$health_ok" -ne 1 ]]; then
-      print_success "Install finished — panel not healthy yet" --setup-only \
-        "سرویس بالا نیامد؛ اول لاگ را ببینید:" \
+      print_success "Install finished — panel not healthy yet" \
+        "Service did not answer /health. Check logs first:" \
         "journalctl -u ${SERVICE_NAME} -n 80 --no-pager" \
-        "بعد از سبز شدن /health دوباره: bash pgclock.sh status"
-    elif [[ -n "$setup_url" ]]; then
-      print_success "Install complete" --setup-only \
-        "لینک یک‌بارمصرف (اعتبار ۱۵ دقیقه):" \
-        "${setup_url}" \
-        "اگر از بیرون ERR_EMPTY_RESPONSE دیدید: فایروال ابری پورت ${WEB_PORT} را باز کنید" \
-        "تست روی خود سرور: curl -sS http://127.0.0.1:${WEB_PORT}/health"
+        "Then: bash pgclock.sh status"
+    elif [[ -n "$setup_url" && "$setup_url" == *"?gate="* ]]; then
+      print_success "Install complete" \
+        "${B}Setup URL (one-time, 15 min):${N}" \
+        "${B}${setup_url}${N}" \
+        "" \
+        "Open that exact URL (must include ?gate=…)." \
+        "Bare ${panel_url} from the internet is blocked until setup finishes." \
+        "Cloud firewall (Hetzner/AWS/…): allow inbound TCP ${WEB_PORT}." \
+        "On-server test: curl -sS http://127.0.0.1:${WEB_PORT}/health" \
+        "Hint file: ${SCRIPT_DIR}/data/setup_entry.url"
     else
-      print_success "Install complete" --setup-only \
-        "لینک یک‌بارمصرف آماده نیست — bash pgclock.sh status"
+      print_success "Install complete" \
+        "Setup URL was not generated automatically." \
+        "Run:  bash pgclock.sh status" \
+        "Or:   cat ${SCRIPT_DIR}/data/setup_entry.url" \
+        "Panel base: ${panel_url}" \
+        "Cloud firewall: allow inbound TCP ${WEB_PORT}."
     fi
   else
     print_success "Install/refresh complete" \
-      "Panel:      http://${ip}:${WEB_PORT}/" \
+      "Panel:      ${panel_url}" \
       "Manage:     bash pgclock.sh" \
       "Logs:       journalctl -u ${SERVICE_NAME} -f"
   fi
