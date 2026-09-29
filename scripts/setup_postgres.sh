@@ -203,8 +203,13 @@ SQL
 GRANT ALL ON SCHEMA public TO ${DB_USER};
 ALTER DATABASE ${DB_NAME} OWNER TO ${DB_USER};
 -- Force password again after DB grants (belt and suspenders).
+-- Always via format(%L); never raw PASSWORD literal interpolation.
 SET password_encryption = 'scram-sha-256';
-ALTER ROLE ${DB_USER} WITH LOGIN PASSWORD '${DB_PASS}';
+DO \$\$
+BEGIN
+  EXECUTE format('ALTER ROLE %I WITH LOGIN PASSWORD %L', '${DB_USER}', '${DB_PASS}');
+END
+\$\$;
 SQL
 }
 
@@ -223,7 +228,11 @@ _verify_tcp_password() {
   # Some images negotiate md5; store an md5 verifier and keep md5 hba lines.
   _as_postgres psql -v ON_ERROR_STOP=1 <<SQL
 SET password_encryption = 'md5';
-ALTER ROLE ${DB_USER} WITH LOGIN PASSWORD '${DB_PASS}';
+DO \$\$
+BEGIN
+  EXECUTE format('ALTER ROLE %I WITH LOGIN PASSWORD %L', '${DB_USER}', '${DB_PASS}');
+END
+\$\$;
 SQL
   _reload_postgres
   sleep 1

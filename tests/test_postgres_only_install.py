@@ -32,7 +32,8 @@ def test_setup_postgres_emits_url_file():
     assert "systemctl restart postgresql" in src or "pg_ctlcluster" in src
     # Root fix: hex password applied via DO/EXECUTE — never psql -v / :'var' for secrets.
     assert "SET password_encryption" in src
-    assert "EXECUTE format('ALTER ROLE" in src or "ALTER ROLE ${DB_USER} WITH LOGIN PASSWORD" in src
+    assert "EXECUTE format('ALTER ROLE %I WITH LOGIN PASSWORD %L'" in src
+    assert "PASSWORD '${DB_PASS}'" not in src
     assert "-v db_pass=" not in src
     assert ":'db_pass'" not in src
 
