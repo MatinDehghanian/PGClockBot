@@ -421,7 +421,7 @@ apply_install_ssl() {
     PYTHONPATH="$SCRIPT_DIR${PYTHONPATH:+:$PYTHONPATH}" \
     "$py" - <<'PY'
 import json, os, sys
-from app.services.ssl_certs import configure_for_install
+from app.services.ssl_certs import configure_for_install, verify_tls_material
 
 mode = (os.environ.get("PGCLOCK_INSTALL_SSL_MODE") or "none").strip()
 result = configure_for_install(
@@ -431,6 +431,12 @@ result = configure_for_install(
     ip=os.environ.get("PGCLOCK_INSTALL_SSL_IP") or "",
     web_port=os.environ.get("PGCLOCK_INSTALL_WEB_PORT") or "9000",
 )
+if result.get("ok") and mode not in ("", "none", "off", "http", "3"):
+    check = verify_tls_material()
+    if not check.get("ok"):
+        result = {"ok": False, "error": check.get("error") or "TLS material check failed"}
+    else:
+        result["tls_ok"] = True
 print(json.dumps(result, ensure_ascii=False))
 sys.exit(0 if result.get("ok") else 1)
 PY
@@ -455,7 +461,76 @@ PY
   else
     ok "SSL mode ${mode} applied"
   fi
+  # Absolute paths + readable by service user
+  chmod 644 data/certs/fullchain.pem 2>/dev/null || true
+  chmod 600 data/certs/privkey.pem 2>/dev/null || true
+  chmod 600 data/certs/meta.json 2>/dev/null || true
   return 0
+}
+
+wait_port_listen() {
+  # wait_port_listen <port> <seconds>
+  local port="$1"
+  local seconds="${2:-60}"
+  local i
+  for i in $(seq 1 "$seconds"); do
+    if command -v ss >/dev/null 2>&1; then
+      if ss -ltn 2>/dev/null | grep -qE ":${port}\\b"; then
+        return 0
+      fi
+    elif python3 - <<PY 2>/dev/null
+import socket
+s=socket.socket(); s.settimeout(0.3)
+try:
+    # connect_ex == 0 means something accepts on the port
+    raise SystemExit(0 if s.connect_ex(("127.0.0.1", int("${port}"))) == 0 else 1)
+finally:
+    s.close()
+PY
+    then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+probe_panel_health() {
+  # Sets: health_ok (0/1), health_scheme (http|https), health_url
+  # Tries HTTPS first when SSL meta is on, then HTTP fallback (detects TLS mismatch).
+  local port="${WEB_PORT:-9000}"
+  health_ok=0
+  health_scheme="http"
+  health_url="http://127.0.0.1:${port}/health"
+  local want_ssl=0
+  if ssl_is_enabled_on_disk; then
+    want_ssl=1
+  fi
+  local body
+  if [[ "$want_ssl" -eq 1 ]]; then
+    body="$(curl -skS --max-time 2 "https://127.0.0.1:${port}/health" 2>/dev/null || true)"
+    if [[ "$body" == *'"ok"'* ]] || [[ "$body" == *'ok'* && "$body" == *'true'* ]]; then
+      health_ok=1
+      health_scheme="https"
+      health_url="https://127.0.0.1:${port}/health"
+      return 0
+    fi
+  fi
+  body="$(curl -sS --max-time 2 "http://127.0.0.1:${port}/health" 2>/dev/null || true)"
+  if [[ "$body" == *'"ok"'* ]] || [[ "$body" == *'ok'* && "$body" == *'true'* ]]; then
+    health_ok=1
+    health_scheme="http"
+    health_url="http://127.0.0.1:${port}/health"
+    if [[ "$want_ssl" -eq 1 ]]; then
+      warn "Panel answers HTTP but SSL meta is on — TLS not active in the running process"
+    fi
+    return 0
+  fi
+  if [[ "$want_ssl" -eq 1 ]]; then
+    health_scheme="https"
+    health_url="https://127.0.0.1:${port}/health"
+  fi
+  return 1
 }
 
 read_app_version() {
@@ -1110,33 +1185,46 @@ PY
 
   step "Panel health"
   local health_ok=0
-  local hi health_body health_url health_scheme
-  if ssl_is_enabled_on_disk; then
-    health_scheme="https"
-    health_url="https://127.0.0.1:${WEB_PORT}/health"
-  else
-    health_scheme="http"
-    health_url="http://127.0.0.1:${WEB_PORT}/health"
-  fi
-  for hi in $(seq 1 40); do
-    if [[ "$health_scheme" == "https" ]]; then
-      health_body="$(curl -skS --max-time 2 "$health_url" 2>/dev/null || true)"
-    else
-      health_body="$(curl -sS --max-time 2 "$health_url" 2>/dev/null || true)"
+  local health_url="" health_scheme="http"
+  local hi
+  # Wait until something accepts on WEB_PORT (lifespan/DB can take a while).
+  if ! wait_port_listen "${WEB_PORT}" 75; then
+    warn "Nothing listening on :${WEB_PORT} yet — restarting service once"
+    if service_installed; then
+      sudo_wrap systemctl restart "$SERVICE_NAME" || true
+      wait_port_listen "${WEB_PORT}" 45 || true
     fi
-    if [[ "$health_body" == *'"ok"'* ]] || [[ "$health_body" == *'ok'* && "$health_body" == *'true'* ]]; then
-      health_ok=1
+  fi
+  for hi in $(seq 1 45); do
+    if probe_panel_health; then
       break
     fi
     sleep 1
   done
+  # One more restart if SSL expected but still dead (common after cert copy).
+  if [[ "$health_ok" -ne 1 ]] && ssl_is_enabled_on_disk && service_installed; then
+    warn "HTTPS health still failing — restarting ${SERVICE_NAME} and retrying"
+    sudo_wrap systemctl restart "$SERVICE_NAME" || true
+    wait_port_listen "${WEB_PORT}" 45 || true
+    for hi in $(seq 1 30); do
+      if probe_panel_health; then
+        break
+      fi
+      sleep 1
+    done
+  fi
   if [[ "$health_ok" -eq 1 ]]; then
     ok "Panel health OK on ${health_scheme}://127.0.0.1:${WEB_PORT}"
   else
-    err "Panel did not answer /health on ${health_scheme}://127.0.0.1:${WEB_PORT}"
+    err "Panel did not answer /health on ${health_url:-127.0.0.1:${WEB_PORT}}"
     warn "Check logs: journalctl -u ${SERVICE_NAME} -n 80 --no-pager"
     warn "DB URL / Postgres: grep DATABASE_URL .env && systemctl status postgresql --no-pager"
-    # Still continue so operator gets the setup URL once the crash is fixed.
+    if command -v journalctl >/dev/null 2>&1; then
+      info "Last service log lines:"
+      sudo_wrap journalctl -u "$SERVICE_NAME" -n 25 --no-pager 2>/dev/null \
+        | sed 's/^/    /' || true
+    fi
+    # Still continue — Setup URL must always be printed below.
   fi
 
   step "Firewall"
@@ -1159,7 +1247,7 @@ PY
   _DETECTED_SERVER_IP=""  # refresh once for this SUCCESS block
   ip="$(detect_server_ip)"
   panel_url="$(panel_public_base_url)/"
-  if ssl_is_enabled_on_disk; then
+  if [[ "$health_scheme" == "https" ]] || ssl_is_enabled_on_disk; then
     health_hint="curl -skS https://127.0.0.1:${WEB_PORT}/health"
   else
     health_hint="curl -sS http://127.0.0.1:${WEB_PORT}/health"
@@ -1179,22 +1267,37 @@ PY
     fi
   fi
 
+  # ALWAYS print Setup URL when setup is incomplete — even if /health failed.
   if [[ "$fresh" -eq 1 ]] || [[ ! -f data/setup_complete.flag ]]; then
-    if [[ "$health_ok" -ne 1 ]]; then
+    if [[ -n "$setup_url" && "$setup_url" == *"?gate="* ]]; then
+      if [[ "$health_ok" -eq 1 ]]; then
+        print_success "Install complete" \
+          "${B}Setup URL (one-time, 15 min):${N}" \
+          "${B}${setup_url}${N}" \
+          "" \
+          "Open that exact URL (must include ?gate=…)." \
+          "Bare ${panel_url} from the internet is blocked until setup finishes." \
+          "Use the full host:port (e.g. https://domain:8443/…), not port 443." \
+          "Cloud firewall (Hetzner/AWS/…): allow inbound TCP ${WEB_PORT}." \
+          "On-server test: ${health_hint}" \
+          "Hint file: ${SCRIPT_DIR}/data/setup_entry.url"
+      else
+        print_success "Install finished — panel not healthy yet" \
+          "${B}Setup URL (one-time, 15 min) — open after service is up:${N}" \
+          "${B}${setup_url}${N}" \
+          "" \
+          "Service did not answer /health yet. Fix, then open the Setup URL above." \
+          "journalctl -u ${SERVICE_NAME} -n 80 --no-pager" \
+          "Then: bash pgclock.sh status" \
+          "On-server test: ${health_hint}" \
+          "Hint file: ${SCRIPT_DIR}/data/setup_entry.url"
+      fi
+    elif [[ "$health_ok" -ne 1 ]]; then
       print_success "Install finished — panel not healthy yet" \
         "Service did not answer /health. Check logs first:" \
         "journalctl -u ${SERVICE_NAME} -n 80 --no-pager" \
-        "Then: bash pgclock.sh status"
-    elif [[ -n "$setup_url" && "$setup_url" == *"?gate="* ]]; then
-      print_success "Install complete" \
-        "${B}Setup URL (one-time, 15 min):${N}" \
-        "${B}${setup_url}${N}" \
-        "" \
-        "Open that exact URL (must include ?gate=…)." \
-        "Bare ${panel_url} from the internet is blocked until setup finishes." \
-        "Cloud firewall (Hetzner/AWS/…): allow inbound TCP ${WEB_PORT}." \
-        "On-server test: ${health_hint}" \
-        "Hint file: ${SCRIPT_DIR}/data/setup_entry.url"
+        "Then: bash pgclock.sh status" \
+        "Or:   cat ${SCRIPT_DIR}/data/setup_entry.url"
     else
       print_success "Install complete" \
         "Setup URL was not generated automatically." \

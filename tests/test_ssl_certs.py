@@ -112,8 +112,16 @@ class SslUiWiredTests(unittest.TestCase):
         self.assertIn("PGCLOCK_WEB_PORT", src)
         self.assertIn("Temporary self-signed", src)
         self.assertIn("configure_for_install", src)
+        self.assertIn("probe_panel_health", src)
+        self.assertIn("verify_tls_material", src)
+        # Setup URL must still print when /health fails (v11.0.8 regression).
+        self.assertIn("Setup URL (one-time, 15 min) — open after", src)
+        self.assertIn("ALWAYS print Setup URL", src)
         ctl = Path("scripts/pgclockbot-ctl").read_text(encoding="utf-8")
         self.assertIn("--key-type ecdsa", ctl)
+        main = Path("app/main.py").read_text(encoding="utf-8")
+        self.assertIn("TLS cert not loadable", main)
+        self.assertIn("verify_tls_material", main)
 
 
 class UpdateCopyTests(unittest.TestCase):

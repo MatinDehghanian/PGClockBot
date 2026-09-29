@@ -267,12 +267,36 @@ def main() -> None:
     except Exception:
         creds = load_web_admin()
 
-    from app.services.ssl_certs import uvicorn_ssl_kwargs
+    from app.services.ssl_certs import uvicorn_ssl_kwargs, verify_tls_material
 
     ssl_kwargs = uvicorn_ssl_kwargs() or {}
-    scheme = "https" if ssl_kwargs else "http"
-    host_hint = settings.web_host if settings.web_host not in {"0.0.0.0", "::"} else "127.0.0.1"
-    entry = f"{scheme}://{host_hint}:{settings.web_port}/"
+    if ssl_kwargs:
+        check = verify_tls_material()
+        if not check.get("ok"):
+            # Do NOT silently fall back to HTTP — browsers get ERR_CONNECTION_CLOSED
+            # when clients speak TLS to a plain-HTTP listener (and install health
+            # would keep probing https:// while the process looks "active").
+            logger.error("TLS enabled but cert/key not loadable: %s", check.get("error"))
+            raise SystemExit(f"TLS cert not loadable: {check.get('error')}")
+        logger.info("TLS enabled · cert=%s", ssl_kwargs.get("ssl_certfile"))
+
+    # Public URL for setup gate (never 0.0.0.0; prefer real IP / HTTPS host).
+    try:
+        from app.services.setup_wizard import default_http_panel_url
+        from app.services.ssl_certs import public_panel_base_url
+
+        if ssl_kwargs:
+            entry = (public_panel_base_url() or "").rstrip("/") + "/"
+        else:
+            entry = default_http_panel_url(web_port=settings.web_port).rstrip("/") + "/"
+    except Exception:
+        scheme = "https" if ssl_kwargs else "http"
+        host_hint = settings.web_host if settings.web_host not in {"0.0.0.0", "::"} else "127.0.0.1"
+        entry = f"{scheme}://{host_hint}:{settings.web_port}/"
+    if not entry or entry == "/":
+        scheme = "https" if ssl_kwargs else "http"
+        entry = f"{scheme}://127.0.0.1:{settings.web_port}/"
+
     if not creds.get("password") or not is_setup_complete():
         setup_url = persist_setup_entry_url(entry.rstrip("/"))
         if setup_url:
@@ -294,8 +318,6 @@ def main() -> None:
             creds.get("username") or "admin",
             entry,
         )
-        if ssl_kwargs:
-            logger.info("TLS enabled · cert=%s", ssl_kwargs.get("ssl_certfile"))
 
     uvicorn.run(
         api,
