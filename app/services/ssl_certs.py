@@ -20,6 +20,19 @@ from app.util_which import which
 
 logger = logging.getLogger(__name__)
 
+
+def _install_progress(message: str) -> None:
+    """Visible progress during `pgclock.sh` install (stderr → operator tty)."""
+    if not (os.environ.get("PGCLOCK_SSL_INSTALL") or "").strip():
+        return
+    try:
+        import sys
+
+        print(f"  [ssl] {message}", file=sys.stderr, flush=True)
+    except Exception:
+        pass
+
+
 CERT_DIR = DATA_DIR / "certs"
 WEBROOT_DIR = DATA_DIR / "acme-www"
 META_PATH = CERT_DIR / "meta.json"
@@ -529,8 +542,10 @@ def _certbot_issue(domain: str, email: str, *, force: bool = False) -> tuple[boo
             )
 
         _set_progress(pct=35, stage="acme_http", message="راه‌اندازی موقت ACME روی پورت ۸۰…", done=False)
+        _install_progress("opening temporary ACME helper on :80…")
         helper = _start_acme_http()
         if not helper:
+            _install_progress("FAILED · could not bind :80 for ACME challenge")
             return (
                 False,
                 "نتوانستیم پورت ۸۰ را برای تأیید دامنه باز کنیم. "
@@ -538,6 +553,7 @@ def _certbot_issue(domain: str, email: str, *, force: bool = False) -> tuple[boo
             )
 
         _set_progress(pct=50, stage="challenge", message="درخواست گواهی از Let's Encrypt…", done=False)
+        _install_progress("ACME challenge running — waiting for Let's Encrypt…")
         # Prefer constrained ctl helper (no raw certbot sudo). Fall back only if helper missing.
         from app.services.service_control import HELPER_INSTALL_PATH, ensure_restart_helper
 
@@ -591,8 +607,10 @@ def issue_or_renew(
         return {"ok": False, "error": "ایمیل معتبر برای Let's Encrypt لازم است"}
 
     _set_progress(pct=5, stage="start", message="شروع دریافت گواهی…", done=False)
+    _install_progress(f"start issue/renew · domain={domain}")
 
     if not certbot_available():
+        _install_progress("certbot missing — installing via apt…")
         inst = install_certbot()
         if not inst.get("ok"):
             err = str(inst.get("error") or "نصب certbot ناموفق")
@@ -600,9 +618,11 @@ def issue_or_renew(
             meta = read_meta()
             meta.update({"last_error": err, "domain": domain, "email": email})
             write_meta(meta)
+            _install_progress(f"certbot install failed: {err[:200]}")
             return {"ok": False, "error": err}
 
     _set_progress(pct=22, stage="ready", message="certbot آماده است", done=False)
+    _install_progress("certbot ready · requesting certificate (HTTP-01 on :80)…")
     ok, log = _certbot_issue(domain, email, force=force)
     if not ok:
         meta = read_meta()
@@ -846,6 +866,7 @@ def configure_for_install(
 ) -> dict[str, Any]:
     """Install-time SSL wiring: issue cert + set PUBLIC_BASE_URL (no panel restart)."""
     mode_n = (mode or "none").strip().lower().replace("-", "_")
+    _install_progress(f"mode={mode_n}")
     if mode_n in ("", "none", "off", "http", "3"):
         ensure_dirs()
         meta = read_meta()
@@ -858,6 +879,7 @@ def configure_for_install(
             }
         )
         write_meta(meta)
+        _install_progress("skipped (HTTP only)")
         return {"ok": True, "mode": "none", "ssl_enabled": False, "public_https": ""}
 
     if web_port is not None:
@@ -875,17 +897,34 @@ def configure_for_install(
                 logger.warning("install WEB_PORT update failed: %s", exc)
 
     if mode_n in ("ip", "self_signed", "self_signed_ip", "temp_ip", "2"):
-        return issue_self_signed_ip(ip or None, enable=True, restart=False)
+        _install_progress(f"issuing temporary self-signed cert for IP {ip or '(auto)'}…")
+        result = issue_self_signed_ip(ip or None, enable=True, restart=False)
+        if result.get("ok"):
+            _install_progress(
+                f"OK · self-signed · {result.get('public_https') or ''} · expires {result.get('expires_at') or '?'}"
+            )
+        else:
+            _install_progress(f"FAILED · {str(result.get('error') or 'unknown')[:300]}")
+        return result
 
     if mode_n in ("domain", "letsencrypt", "le", "1"):
-        return issue_or_renew(
+        _install_progress(f"Let's Encrypt for {domain} (email={email}) — needs DNS→this server + port 80…")
+        result = issue_or_renew(
             domain=domain,
             email=email,
             force=False,
             enable=True,
             restart=False,
         )
+        if result.get("ok"):
+            _install_progress(
+                f"OK · Let's Encrypt · {result.get('public_https') or domain} · expires {result.get('expires_at') or '?'}"
+            )
+        else:
+            _install_progress(f"FAILED · {str(result.get('error') or 'unknown')[:400]}")
+        return result
 
+    _install_progress(f"invalid mode: {mode}")
     return {"ok": False, "error": f"حالت SSL نامعتبر: {mode}"}
 
 

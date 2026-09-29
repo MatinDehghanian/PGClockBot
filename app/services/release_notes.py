@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "11.0.10": [
+        "ریشه باز نشدن پنل بعد از Postgres: uvicorn تا پایان init_db پورت را باز نمی‌کرد — تایم‌اوت ۱۵s اتصال + ۱۲۰s init و خطای واضح در journal",
+        "نصب/آپدیت: مایگریشن schema قبل از استارت سرویس؛ اگر DB خراب باشد نصب همان‌جا می‌ایستد (دیگر پنل silent-dead نیست)",
+        "Postgres: دیگر migrator دوران SQLite روی PG اجرا نمی‌شود؛ SSL نصب با خروجی مرحله‌به‌مرحله موفقیت/خطا روی ترمینال",
+        "بدون مایگریشن DB جدید؛ ریستور: restore/pre-v11.0.10-v11.0.9-2026-09-29",
+    ],
     "11.0.9": [
         "نصب: حتی اگر /health هنوز جواب ندهد، Setup URL با ?gate= حتماً چاپ می‌شود (رفع رگرسیون v11.0.8)",
         "نصب SSL: تأیید بارگذاری cert قبل از استارت؛ health هم https و هم http را امتحان می‌کند؛ یک بار ری‌استارت خودکار",

@@ -410,16 +410,19 @@ apply_install_ssl() {
     step "SSL · temporary self-signed for ${ip}"
   fi
 
+  info "SSL progress will print below (success or error)…"
   local result_json
+  # Progress lines go to stderr → /dev/tty; final JSON on stdout.
   result_json="$(
     cd "$SCRIPT_DIR" && \
+    PGCLOCK_SSL_INSTALL=1 \
     PGCLOCK_INSTALL_SSL_MODE="$mode" \
     PGCLOCK_INSTALL_SSL_DOMAIN="$domain" \
     PGCLOCK_INSTALL_SSL_EMAIL="$email" \
     PGCLOCK_INSTALL_SSL_IP="$ip" \
     PGCLOCK_INSTALL_WEB_PORT="${WEB_PORT}" \
     PYTHONPATH="$SCRIPT_DIR${PYTHONPATH:+:$PYTHONPATH}" \
-    "$py" - <<'PY'
+    "$py" - <<'PY' 2>/dev/tty
 import json, os, sys
 from app.services.ssl_certs import configure_for_install, verify_tls_material
 
@@ -435,8 +438,10 @@ if result.get("ok") and mode not in ("", "none", "off", "http", "3"):
     check = verify_tls_material()
     if not check.get("ok"):
         result = {"ok": False, "error": check.get("error") or "TLS material check failed"}
+        print(f"  [ssl] TLS verify FAILED · {result['error'][:300]}", file=sys.stderr, flush=True)
     else:
         result["tls_ok"] = True
+        print("  [ssl] TLS material verified (cert+key load OK)", file=sys.stderr, flush=True)
 print(json.dumps(result, ensure_ascii=False))
 sys.exit(0 if result.get("ok") else 1)
 PY
@@ -447,17 +452,19 @@ PY
     return 1
   fi
   if ! printf '%s' "$result_json" | python3 -c 'import json,sys; d=json.load(sys.stdin); raise SystemExit(0 if d.get("ok") else 1)' 2>/dev/null; then
-    err "SSL configuration failed:"
-    printf '%s\n' "$result_json" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("error") or d)' 2>/dev/null \
+    err "SSL certificate FAILED:"
+    printf '%s\n' "$result_json" | python3 -c 'import json,sys; d=json.load(sys.stdin); print("   ", (d.get("error") or d))' 2>/dev/null \
       || printf '%s\n' "$result_json"
+    warn "Fix DNS/port 80, or re-run install with SSL mode 3 (HTTP only) / mode 2 (temp IP)."
     return 1
   fi
 
-  local https_url
+  local https_url expires_at
   https_url="$(printf '%s' "$result_json" | python3 -c 'import json,sys; print((json.load(sys.stdin).get("public_https") or "").strip())' 2>/dev/null || true)"
+  expires_at="$(printf '%s' "$result_json" | python3 -c 'import json,sys; print((json.load(sys.stdin).get("expires_at") or "").strip())' 2>/dev/null || true)"
   if [[ -n "$https_url" ]]; then
     PUBLIC_BASE_URL="$https_url"
-    ok "HTTPS ready · ${https_url}"
+    ok "SSL certificate READY · ${https_url}${expires_at:+ · expires ${expires_at}}"
   else
     ok "SSL mode ${mode} applied"
   fi
@@ -465,6 +472,62 @@ PY
   chmod 644 data/certs/fullchain.pem 2>/dev/null || true
   chmod 600 data/certs/privkey.pem 2>/dev/null || true
   chmod 600 data/certs/meta.json 2>/dev/null || true
+  return 0
+}
+
+ensure_db_schema() {
+  # Run Alembic/init_db BEFORE systemd starts — uvicorn only binds after init_db.
+  # Doing it here surfaces DB errors during install instead of a silent dead panel.
+  step "Database schema"
+  local py="$PY"
+  if [[ ! -x "$py" ]]; then
+    py="${SCRIPT_DIR}/.venv/bin/python"
+  fi
+  if [[ ! -x "$py" ]]; then
+    err "Python venv missing — cannot migrate schema"
+    return 1
+  fi
+  info "Connecting to PostgreSQL and applying migrations (timeout 120s)…"
+  if ! (
+    cd "$SCRIPT_DIR" && \
+    PYTHONPATH="$SCRIPT_DIR${PYTHONPATH:+:$PYTHONPATH}" \
+    "$py" - <<'PY'
+import asyncio, sys
+
+# Clear settings BEFORE importing app.db.session (engine is built at import time).
+from app.config import get_settings
+
+get_settings.cache_clear()
+s = get_settings()
+url = (s.database_url or "").strip()
+safe = url.split("@", 1)[-1] if "@" in url else "(no url)"
+print(f"  [db] dialect target · {safe}", flush=True)
+if not url.startswith(("postgresql://", "postgresql+asyncpg://", "postgres://")):
+    print("  [db] FAILED · DATABASE_URL is not PostgreSQL", file=sys.stderr, flush=True)
+    raise SystemExit(1)
+
+from app.db.session import init_db
+
+async def main() -> None:
+    await asyncio.wait_for(init_db(), timeout=120)
+    print("  [db] schema OK", flush=True)
+
+try:
+    asyncio.run(main())
+except asyncio.TimeoutError:
+    print("  [db] FAILED · timed out after 120s — PostgreSQL unreachable or auth stuck", file=sys.stderr, flush=True)
+    raise SystemExit(1)
+except Exception as exc:
+    print(f"  [db] FAILED · {exc}", file=sys.stderr, flush=True)
+    raise SystemExit(1)
+PY
+  ); then
+    err "Database schema migration failed — panel would never open without this."
+    warn "Check: systemctl status postgresql — and DATABASE_URL in .env"
+    warn "journal tip: PGPASSWORD=… psql -h 127.0.0.1 -U pgclock -d pgclock -c 'SELECT 1'"
+    return 1
+  fi
+  ok "Database schema ready"
   return 0
 }
 
@@ -1044,6 +1107,8 @@ User=${service_user}
 WorkingDirectory=${SCRIPT_DIR}
 Environment=PATH=${SCRIPT_DIR}/.venv/bin
 Environment=PGCLOCKBOT_SERVICE_USER=${service_user}
+# Fail fast in journal if boot/init_db hangs (uvicorn binds only after lifespan).
+TimeoutStartSec=180
 ExecStart=${SCRIPT_DIR}/.venv/bin/python run.py
 Restart=always
 RestartSec=5
@@ -1162,6 +1227,9 @@ PY
     WEB_PORT="$(env_get WEB_PORT "${WEB_PORT}")"
     PUBLIC_BASE_URL="$(env_get PUBLIC_BASE_URL "${PUBLIC_BASE_URL}")"
   fi
+
+  # Migrate schema BEFORE systemd — otherwise uvicorn never binds while init_db hangs.
+  ensure_db_schema || return 1
 
   step "systemd service"
   svc_user="$(whoami)"
@@ -1374,6 +1442,12 @@ PY
 
   ensure_public_web_host
 
+  # Migrate before restart so the new process does not hang with no listener.
+  ensure_db_schema || {
+    err "Schema migration failed — not restarting a broken panel."
+    return 1
+  }
+
   # Ensure passwordless restart helper exists for in-panel SSL/updates
   if service_installed; then
     local svc_user
@@ -1385,6 +1459,7 @@ PY
   restart_service_if_any
   print_success "Update complete" \
     "Config:     .env kept (WEB_HOST forced public if it was loopback)" \
+    "Schema:     migrated before restart" \
     "Logs:       journalctl -u ${SERVICE_NAME} -f"
   return 0
 }
