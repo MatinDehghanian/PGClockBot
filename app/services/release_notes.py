@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "11.0.9": [
+        "نصب: حتی اگر /health هنوز جواب ندهد، Setup URL با ?gate= حتماً چاپ می‌شود (رفع رگرسیون v11.0.8)",
+        "نصب SSL: تأیید بارگذاری cert قبل از استارت؛ health هم https و هم http را امتحان می‌کند؛ یک بار ری‌استارت خودکار",
+        "بوت: اگر meta می‌گوید TLS روشن است ولی گواهی لود نشود، پنل با HTTP مخفی بالا نمی‌آید (علت ERR_CONNECTION_CLOSED)",
+        "بدون مایگریشن DB؛ ریستور: restore/pre-v11.0.9-v11.0.8-2026-09-29",
+    ],
     "11.0.8": [
         "نصب: انتخاب پورت پنل + سه حالت SSL (دامنه Let's Encrypt / گواهی موقت خودامضا برای IP / بدون گواهی)",
         "نصب: جایگذاری WEB_PORT و PUBLIC_BASE_URL و فعال‌سازی TLS قبل از استارت پنل؛ health با https در صورت نیاز",

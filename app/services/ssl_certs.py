@@ -680,6 +680,19 @@ def issue_or_renew(
             "key_path": str(LIVE_KEY),
             "needs_manual_enable": True,
         }
+    check = verify_tls_material()
+    if not check.get("ok"):
+        msg = str(check.get("error") or "گواهی قابل بارگذاری نیست")
+        meta = read_meta()
+        meta["last_error"] = msg
+        write_meta(meta)
+        return {
+            "ok": False,
+            "error": msg,
+            "domain": domain,
+            "cert_path": str(LIVE_CERT),
+            "key_path": str(LIVE_KEY),
+        }
     return {
         "ok": True,
         "domain": domain,
@@ -794,6 +807,13 @@ def issue_self_signed_ip(
             "error": str(en.get("error") or "فعال‌سازی HTTPS ناموفق"),
             "domain": host,
             "needs_manual_enable": True,
+        }
+    check = verify_tls_material()
+    if not check.get("ok"):
+        return {
+            "ok": False,
+            "error": str(check.get("error") or "گواهی قابل بارگذاری نیست"),
+            "domain": host,
         }
     _set_progress(
         pct=100,
@@ -1006,4 +1026,27 @@ def uvicorn_ssl_kwargs() -> dict[str, str] | None:
     cert, key = resolve_cert_paths()
     if not cert.is_file() or not key.is_file():
         return None
-    return {"ssl_certfile": str(cert), "ssl_keyfile": str(key)}
+    return {"ssl_certfile": str(cert.resolve()), "ssl_keyfile": str(key.resolve())}
+
+
+def verify_tls_material() -> dict[str, Any]:
+    """Confirm cert+key exist and can be loaded by the stdlib SSL stack (uvicorn)."""
+    import ssl as _ssl
+
+    if not cert_files_exist():
+        return {"ok": False, "error": "cert files missing (data/certs/fullchain.pem + privkey.pem)"}
+    cert, key = resolve_cert_paths()
+    try:
+        ctx = _ssl.SSLContext(_ssl.PROTOCOL_TLS_SERVER)
+        ctx.load_cert_chain(certfile=str(cert.resolve()), keyfile=str(key.resolve()))
+    except Exception as exc:
+        return {"ok": False, "error": f"SSL load failed: {exc}"[:800]}
+    meta = read_meta()
+    return {
+        "ok": True,
+        "cert_path": str(cert.resolve()),
+        "key_path": str(key.resolve()),
+        "ssl_enabled": bool(meta.get("ssl_enabled")),
+        "domain": normalize_domain(meta.get("domain") or meta.get("host") or ""),
+        "mode": meta.get("mode") or "",
+    }
