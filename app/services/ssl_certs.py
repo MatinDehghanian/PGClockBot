@@ -36,6 +36,9 @@ _DOMAIN_RE = re.compile(
     r"^(?=.{1,253}$)(?!-)[a-z0-9-]+(?:\.[a-z0-9-]+)+$",
     re.IGNORECASE,
 )
+_IPV4_RE = re.compile(
+    r"^(?:(?:25[0-5]|2[0-4]\d|[01]?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d?\d)$"
+)
 
 
 def ensure_dirs() -> None:
@@ -55,11 +58,24 @@ def normalize_domain(raw: str | None) -> str:
     return s
 
 
+def is_valid_ipv4(ip: str | None) -> bool:
+    return bool(_IPV4_RE.match((ip or "").strip()))
+
+
 def is_valid_domain(domain: str) -> bool:
     d = normalize_domain(domain)
     if not d or d in {"localhost", "127.0.0.1"}:
         return False
+    # Pure IPv4 is handled by the self-signed IP path, not Let's Encrypt domain flow.
+    if is_valid_ipv4(d):
+        return False
     return bool(_DOMAIN_RE.match(d))
+
+
+def is_valid_tls_host(host: str | None) -> bool:
+    """Host usable in PUBLIC_BASE_URL / cert SAN — FQDN or IPv4."""
+    h = normalize_domain(host)
+    return is_valid_domain(h) or is_valid_ipv4(h)
 
 
 def certbot_bin() -> str | None:
@@ -179,7 +195,10 @@ def public_panel_base_url() -> str:
 def public_https_url(domain: str | None = None) -> str:
     settings = get_settings()
     port = int(settings.web_port or 9000)
-    d = normalize_domain(domain or read_meta().get("domain") or "")
+    meta = read_meta()
+    d = normalize_domain(
+        domain or meta.get("domain") or meta.get("host") or meta.get("panel_domain") or ""
+    )
     if not d:
         return ""
     return f"https://{d}" if port == 443 else f"https://{d}:{port}"
@@ -277,8 +296,18 @@ def cert_status() -> dict[str, Any]:
     if has:
         expires_at, expired = _parse_expiry(cert_path)
     port = int(get_settings().web_port or 9000)
-    domain = normalize_domain(meta.get("domain") or meta.get("panel_domain") or "")
+    domain = normalize_domain(
+        meta.get("domain") or meta.get("host") or meta.get("panel_domain") or ""
+    )
     enabled = bool(meta.get("ssl_enabled")) and has
+    mode = (meta.get("mode") or "").strip().lower()
+    if not mode:
+        if meta.get("self_signed"):
+            mode = "self_signed_ip"
+        elif domain and enabled:
+            mode = "letsencrypt"
+        else:
+            mode = "none"
     return {
         "has_cert": has,
         "certbot": certbot_available(),
@@ -292,6 +321,8 @@ def cert_status() -> dict[str, Any]:
         "expires_at": expires_at or meta.get("expires_at"),
         "expired": bool(expired) if has else True,
         "ssl_enabled": enabled,
+        "self_signed": bool(meta.get("self_signed")),
+        "mode": mode,
         "last_error": meta.get("last_error"),
         "public_https": public_https_url(domain) if domain else "",
         "web_port": port,
@@ -467,6 +498,7 @@ def _certbot_issue(domain: str, email: str, *, force: bool = False) -> tuple[boo
     if not bin_path:
         return False, "certbot پیدا نشد"
 
+    # ECDSA P-256 — lighter/faster than RSA-2048 for ACME + TLS handshake.
     base = [
         bin_path,
         "certonly",
@@ -478,6 +510,10 @@ def _certbot_issue(domain: str, email: str, *, force: bool = False) -> tuple[boo
         f"pgclock-{domain}",
         "-d",
         domain,
+        "--key-type",
+        "ecdsa",
+        "--elliptic-curve",
+        "secp256r1",
     ]
     if force:
         base.append("--force-renewal")
@@ -537,8 +573,10 @@ def issue_or_renew(
     domain: str,
     email: str,
     force: bool = False,
+    enable: bool = True,
+    restart: bool = True,
 ) -> dict[str, Any]:
-    """Issue/renew certificate, then enable HTTPS and restart the panel."""
+    """Issue/renew Let's Encrypt certificate, then optionally enable HTTPS."""
     ensure_dirs()
     domain = normalize_domain(domain)
     email = (email or "").strip()
@@ -595,6 +633,7 @@ def issue_or_renew(
     now = datetime.now(timezone.utc).isoformat()
     meta = {
         "domain": domain,
+        "host": domain,
         "panel_domain": domain,
         "miniapp_domain": domain,
         "email": email,
@@ -602,14 +641,28 @@ def issue_or_renew(
         "expires_at": expires_at,
         # Critical: do NOT flip HTTPS on here — that used to restart mid-HTTP and "crash" Safari
         "ssl_enabled": was_enabled,
+        "self_signed": False,
+        "mode": "letsencrypt",
         "last_error": None,
         "letsencrypt_live": live,
         "log_tail": (log or "")[-800:],
         "public_https": public_https_url(domain),
     }
     write_meta(meta)
+    if not enable:
+        _set_progress(pct=100, stage="done", message="گواهی آماده است", done=True, ok=True)
+        return {
+            "ok": True,
+            "domain": domain,
+            "expires_at": expires_at,
+            "cert_path": str(LIVE_CERT),
+            "key_path": str(LIVE_KEY),
+            "public_https": public_https_url(domain),
+            "auto_enabled": False,
+            "mode": "letsencrypt",
+        }
     _set_progress(pct=90, stage="enable", message="فعال‌سازی HTTPS…", done=False)
-    en = enable_https(restart=True)
+    en = enable_https(restart=restart)
     if not en.get("ok"):
         msg = (
             "گواهی آماده شد ولی فعال‌سازی HTTPS ناموفق بود — "
@@ -635,7 +688,185 @@ def issue_or_renew(
         "key_path": str(LIVE_KEY),
         "public_https": en.get("public_https"),
         "auto_enabled": True,
+        "mode": "letsencrypt",
     }
+
+
+def issue_self_signed_ip(
+    ip: str | None = None,
+    *,
+    days: int = 90,
+    enable: bool = True,
+    restart: bool = False,
+) -> dict[str, Any]:
+    """Issue a temporary ECDSA self-signed cert with IP SAN (no ACME)."""
+    ensure_dirs()
+    host = normalize_domain(ip or "")
+    if not is_valid_ipv4(host):
+        try:
+            from app.services.setup_wizard import detect_server_ip
+
+            host = normalize_domain(detect_server_ip() or "")
+        except Exception:
+            host = ""
+    if not is_valid_ipv4(host):
+        return {"ok": False, "error": "IP سرور تشخیص داده نشد — یک IPv4 معتبر بدهید"}
+
+    openssl = which("openssl")
+    if not openssl:
+        return {"ok": False, "error": "openssl پیدا نشد"}
+
+    _set_progress(pct=20, stage="self_signed", message="صدور گواهی موقت برای IP…", done=False)
+    # ECDSA P-256 — lighter/faster than RSA for self-signed install certs.
+    code, out = _run(
+        [
+            openssl,
+            "req",
+            "-x509",
+            "-newkey",
+            "ec",
+            "-pkeyopt",
+            "ec_paramgen_curve:prime256v1",
+            "-nodes",
+            "-keyout",
+            str(LIVE_KEY),
+            "-out",
+            str(LIVE_CERT),
+            "-days",
+            str(max(1, int(days))),
+            "-subj",
+            f"/CN={host}",
+            "-addext",
+            f"subjectAltName=IP:{host}",
+        ],
+        timeout=60,
+    )
+    if code != 0 or not cert_files_exist():
+        msg = (out or "openssl self-signed failed")[-1200:]
+        meta = read_meta()
+        meta.update({"last_error": msg, "domain": host, "host": host, "mode": "self_signed_ip"})
+        write_meta(meta)
+        _set_progress(pct=100, stage="error", message=msg[:200], done=True, ok=False)
+        return {"ok": False, "error": msg}
+
+    try:
+        os.chmod(LIVE_KEY, 0o600)
+        os.chmod(LIVE_CERT, 0o644)
+    except OSError:
+        pass
+
+    expires_at, _expired = _parse_expiry(LIVE_CERT)
+    now = datetime.now(timezone.utc).isoformat()
+    url = public_https_url(host)
+    meta = {
+        "domain": host,
+        "host": host,
+        "panel_domain": host,
+        "miniapp_domain": host,
+        "email": "",
+        "issued_at": now,
+        "expires_at": expires_at,
+        "ssl_enabled": False,
+        "self_signed": True,
+        "mode": "self_signed_ip",
+        "last_error": None,
+        "letsencrypt_live": "",
+        "public_https": url,
+    }
+    write_meta(meta)
+    if not enable:
+        _set_progress(pct=100, stage="done", message="گواهی موقت IP آماده است", done=True, ok=True)
+        return {
+            "ok": True,
+            "domain": host,
+            "expires_at": expires_at,
+            "cert_path": str(LIVE_CERT),
+            "key_path": str(LIVE_KEY),
+            "public_https": url,
+            "self_signed": True,
+            "mode": "self_signed_ip",
+            "auto_enabled": False,
+        }
+    en = enable_https(restart=restart)
+    if not en.get("ok"):
+        return {
+            "ok": False,
+            "error": str(en.get("error") or "فعال‌سازی HTTPS ناموفق"),
+            "domain": host,
+            "needs_manual_enable": True,
+        }
+    _set_progress(
+        pct=100,
+        stage="done",
+        message="گواهی موقت IP فعال شد",
+        done=True,
+        ok=True,
+        https_url=str(en.get("public_https") or url),
+    )
+    return {
+        "ok": True,
+        "domain": host,
+        "expires_at": expires_at,
+        "cert_path": str(LIVE_CERT),
+        "key_path": str(LIVE_KEY),
+        "public_https": en.get("public_https") or url,
+        "self_signed": True,
+        "mode": "self_signed_ip",
+        "auto_enabled": True,
+    }
+
+
+def configure_for_install(
+    *,
+    mode: str,
+    domain: str = "",
+    email: str = "",
+    ip: str = "",
+    web_port: int | str | None = None,
+) -> dict[str, Any]:
+    """Install-time SSL wiring: issue cert + set PUBLIC_BASE_URL (no panel restart)."""
+    mode_n = (mode or "none").strip().lower().replace("-", "_")
+    if mode_n in ("", "none", "off", "http", "3"):
+        ensure_dirs()
+        meta = read_meta()
+        meta.update(
+            {
+                "ssl_enabled": False,
+                "self_signed": False,
+                "mode": "none",
+                "last_error": None,
+            }
+        )
+        write_meta(meta)
+        return {"ok": True, "mode": "none", "ssl_enabled": False, "public_https": ""}
+
+    if web_port is not None:
+        try:
+            port_i = int(web_port)
+        except (TypeError, ValueError):
+            port_i = 9000
+        if 1 <= port_i <= 65535:
+            try:
+                from app.services.setup_wizard import update_env_keys
+
+                update_env_keys({"WEB_PORT": port_i})
+                get_settings.cache_clear()
+            except Exception as exc:
+                logger.warning("install WEB_PORT update failed: %s", exc)
+
+    if mode_n in ("ip", "self_signed", "self_signed_ip", "temp_ip", "2"):
+        return issue_self_signed_ip(ip or None, enable=True, restart=False)
+
+    if mode_n in ("domain", "letsencrypt", "le", "1"):
+        return issue_or_renew(
+            domain=domain,
+            email=email,
+            force=False,
+            enable=True,
+            restart=False,
+        )
+
+    return {"ok": False, "error": f"حالت SSL نامعتبر: {mode}"}
 
 
 def enable_https(*, restart: bool = True) -> dict[str, Any]:
@@ -643,9 +874,13 @@ def enable_https(*, restart: bool = True) -> dict[str, Any]:
     if not cert_files_exist():
         return {"ok": False, "error": "ابتدا گواهی را دریافت کنید"}
     meta = read_meta()
-    domain = normalize_domain(meta.get("domain") or "")
+    domain = normalize_domain(
+        meta.get("domain") or meta.get("host") or meta.get("panel_domain") or ""
+    )
     if not domain:
-        return {"ok": False, "error": "دامنه گواهی مشخص نیست"}
+        return {"ok": False, "error": "دامنه/میزبان گواهی مشخص نیست"}
+    if not is_valid_tls_host(domain):
+        return {"ok": False, "error": "میزبان گواهی نامعتبر است"}
     url = public_https_url(domain)
     try:
         from app.services.setup_wizard import update_env_keys
@@ -655,8 +890,12 @@ def enable_https(*, restart: bool = True) -> dict[str, Any]:
     except Exception as exc:
         logger.warning("PUBLIC_BASE_URL update failed: %s", exc)
     meta["ssl_enabled"] = True
+    meta["domain"] = domain
+    meta["host"] = domain
     meta["public_https"] = url
     meta["last_error"] = None
+    if not meta.get("mode"):
+        meta["mode"] = "self_signed_ip" if meta.get("self_signed") else "letsencrypt"
     write_meta(meta)
     if restart:
         _set_progress(
@@ -678,7 +917,7 @@ def enable_https(*, restart: bool = True) -> dict[str, Any]:
                     "error": (
                         "HTTPS در تنظیمات فعال شد ولی ری‌استارت خودکار ممکن نشد. "
                         "روی سرور اجرا کنید: sudo systemctl restart pgclockbot "
-                        "سپس با آدرس HTTPS دامنه وارد شوید."
+                        "سپس با آدرس HTTPS وارد شوید."
                     ),
                     "public_https": url,
                     "needs_manual_restart": True,
@@ -690,6 +929,16 @@ def enable_https(*, restart: bool = True) -> dict[str, Any]:
                 "public_https": url,
                 "needs_manual_restart": True,
             }
+    else:
+        _set_progress(
+            pct=100,
+            stage="done",
+            message="HTTPS فعال شد",
+            done=True,
+            ok=True,
+            restarting=False,
+            https_url=url,
+        )
     return {"ok": True, "public_https": url}
 
 

@@ -1372,6 +1372,14 @@ def create_api_app(lifespan=None) -> FastAPI:
         )
 
     # -------- Setup wizard --------
+    def _setup_https_ready() -> bool:
+        try:
+            from app.services.ssl_certs import https_is_active
+
+            return bool(https_is_active())
+        except Exception:
+            return False
+
     async def _setup_page(
         request: Request,
         *,
@@ -1415,6 +1423,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "flash_ok": ok or request.query_params.get("ok"),
                 "panel_url": wizard_panel_url_hint(values.get("WEB_PORT", "9000")),
                 "finish_login_url": setup_finish_login_url(),
+                "https_ready": _setup_https_ready(),
                 "bot_username": (values.get("BOT_USERNAME") or "").lstrip("@"),
                 "pg_audit": pg_audit,
             },
@@ -1595,7 +1604,8 @@ def create_api_app(lifespan=None) -> FastAPI:
 
         schedule_panel_restart(delay_sec=2.5, reason="setup wizard finished")
         # Prefer an explicit next from the wizard page (matches the displayed
-        # panel URL). Always coerce to http — SSL is not ready on first entry.
+        # panel URL). Coerce to http only when TLS is not live yet; install-time
+        # SSL already serves HTTPS so we must not downgrade the login URL.
         next_url = ""
         try:
             form = await request.form()

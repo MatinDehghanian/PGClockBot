@@ -648,12 +648,36 @@ def default_http_panel_url(*, web_port: int | str | None = None) -> str:
 
 
 def setup_finish_login_url() -> str:
-    """Login URL after wizard — always HTTP+IP until HTTPS is live."""
+    """Login URL after wizard — HTTPS when TLS is already live, else HTTP+IP."""
+    try:
+        from app.services.ssl_certs import https_is_active, public_panel_base_url
+
+        if https_is_active():
+            base = (public_panel_base_url() or "").strip().rstrip("/")
+            if base.lower().startswith("https://"):
+                return base + "/login?restarting=1"
+    except Exception:
+        pass
     return default_http_panel_url().rstrip("/") + "/login?restarting=1"
 
 
 def force_http_login_url(url: str) -> str:
-    """Normalize a wizard finish target to http://…/login (no https)."""
+    """Normalize wizard finish target to a login URL.
+
+    When HTTPS is already active (install-time SSL), keep/use https.
+    Otherwise coerce to http so we never send the operator to a dead HTTPS
+    PUBLIC_BASE_URL before a certificate exists.
+    """
+    try:
+        from app.services.ssl_certs import https_is_active
+
+        tls_live = bool(https_is_active())
+    except Exception:
+        tls_live = False
+
+    if tls_live:
+        return setup_finish_login_url()
+
     raw = (url or "").strip()
     if not raw:
         return setup_finish_login_url()
@@ -684,7 +708,16 @@ def panel_url_hint(public_base: str = "", web_port: str = "9000") -> str:
 
 
 def wizard_panel_url_hint(web_port: str = "9000") -> str:
-    """Panel URL shown during setup — always HTTP+IP (cert/HTTPS not ready yet)."""
+    """Panel URL shown during setup — HTTPS when TLS is live, else HTTP+IP."""
+    try:
+        from app.services.ssl_certs import https_is_active, public_panel_base_url
+
+        if https_is_active():
+            base = (public_panel_base_url() or "").strip().rstrip("/")
+            if base.lower().startswith("https://"):
+                return base + "/"
+    except Exception:
+        pass
     return default_http_panel_url(web_port=web_port).rstrip("/") + "/"
 
 
