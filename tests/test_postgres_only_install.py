@@ -15,6 +15,11 @@ def test_pgclock_install_requires_postgresql_scaffold():
     assert "sqlite+aiosqlite:///{Path.cwd()" not in src
     assert 'or f"sqlite+aiosqlite:///' not in src
     assert "SQLite for zero-config labs" not in src
+    # v11.0.12: install postgresql-common before server (pg_lsclusters).
+    assert "postgresql-common" in src
+    assert "pg_lsclusters" in src
+    setup = (ROOT / "scripts" / "setup_postgres.sh").read_text(encoding="utf-8")
+    assert "_cluster_from_etc" in setup
 
 
 def test_setup_postgres_emits_url_file():

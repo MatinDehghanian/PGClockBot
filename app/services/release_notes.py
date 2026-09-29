@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "11.0.12": [
+        "نصب apt: اول postgresql-common نصب می‌شود تا خطای pg_lsclusters: not found در debconf نیاید",
+        "PATH کامل برای postinst؛ اگر pg_lsclusters نبود از /etc/postgresql به‌عنوان fallback",
+        "بدون مایگریشن DB؛ ریستور: restore/pre-v11.0.12-v11.0.11-2026-09-29",
+    ],
     "11.0.11": [
         "نصب Postgres: دیگر هرگز DATABASE_URL سوکت (/var/run/postgresql) نوشته نمی‌شود — علت Errno 2 و باز نشدن پنل",
         "اگر TCP scram گیر کند → trust روی localhost با URL روی 127.0.0.1:5432 (asyncpg همیشه TCP)",

@@ -53,6 +53,22 @@ _as_postgres() {
 }
 
 # Resolve the cluster that is actually serving (prefer online on 5432).
+# Falls back to /etc/postgresql/<ver>/<name> when pg_lsclusters is missing
+# (seen during broken apt ordering on Ubuntu 24+/26).
+_cluster_from_etc() {
+  # prints: "<ver> <name>"
+  local d
+  d="$(ls -1d /etc/postgresql/*/main 2>/dev/null | sort -V | tail -n1 || true)"
+  if [[ -z "$d" ]]; then
+    d="$(ls -1d /etc/postgresql/*/* 2>/dev/null | sort -V | tail -n1 || true)"
+  fi
+  [[ -n "$d" ]] || return 0
+  local ver name
+  name="$(basename "$d")"
+  ver="$(basename "$(dirname "$d")")"
+  printf '%s %s\n' "$ver" "$name"
+}
+
 _cluster_ver() {
   if command -v pg_lsclusters >/dev/null 2>&1; then
     local line
@@ -63,8 +79,12 @@ _cluster_ver() {
     if [[ -z "$line" ]]; then
       line="$(pg_lsclusters --no-header 2>/dev/null | awk 'NR==1{print; exit}')"
     fi
-    awk '{print $1}' <<<"$line"
+    if [[ -n "$line" ]]; then
+      awk '{print $1}' <<<"$line"
+      return 0
+    fi
   fi
+  awk '{print $1}' <<<"$(_cluster_from_etc)"
 }
 
 _cluster_name() {
@@ -77,8 +97,12 @@ _cluster_name() {
     if [[ -z "$line" ]]; then
       line="$(pg_lsclusters --no-header 2>/dev/null | awk 'NR==1{print; exit}')"
     fi
-    awk '{print $2}' <<<"$line"
+    if [[ -n "$line" ]]; then
+      awk '{print $2}' <<<"$line"
+      return 0
+    fi
   fi
+  awk '{print $2}' <<<"$(_cluster_from_etc)"
 }
 
 _pg_socket_ready() {
