@@ -61,11 +61,16 @@ class OwnerChromeSourceTests(unittest.TestCase):
 class SetupPostgresQuoteTests(unittest.TestCase):
     def test_no_raw_password_interpolation(self):
         sh = (ROOT / "scripts/setup_postgres.sh").read_text(encoding="utf-8")
+        # Passwords must go through format(%L); never raw PASSWORD '${DB_PASS}'.
         self.assertNotIn("PASSWORD '${DB_PASS}'", sh)
         self.assertNotIn('PASSWORD "${DB_PASS}"', sh)
         self.assertIn("%I", sh)
         self.assertIn("%L", sh)
-        self.assertIn("-v", sh)
+        # Hex-only secrets + DO/EXECUTE (psql -v db_pass= is forbidden — it broke VPS TCP auth).
+        self.assertIn("0-9a-fA-F", sh)
+        self.assertIn("EXECUTE format(", sh)
+        self.assertNotIn("-v db_pass=", sh)
+        self.assertIn("-v", sh)  # ON_ERROR_STOP still OK
 
 
 class SetWebPasswordNoPlaintextTests(unittest.TestCase):

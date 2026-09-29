@@ -224,10 +224,13 @@ async def shop_payment_method_breakdown(
         scope = Order.reseller_id.is_(None)
     else:
         scope = Order.reseller_id == int(reseller_id)
+    # Label + group_by(same label) — required for PostgreSQL GROUP BY rules
+    # (SQLite is looser and hid this). Do not repeat coalesce() in group_by.
+    method_col = func.coalesce(Order.payment_method, "—").label("pay_method")
     rows = (
         await session.execute(
             select(
-                func.coalesce(Order.payment_method, "—"),
+                method_col,
                 func.count(),
                 func.coalesce(func.sum(Order.amount), 0),
             )
@@ -236,7 +239,7 @@ async def shop_payment_method_breakdown(
                 Order.created_at >= since,
                 scope,
             )
-            .group_by(func.coalesce(Order.payment_method, "—"))
+            .group_by(method_col)
             .order_by(func.count().desc())
         )
     ).all()
