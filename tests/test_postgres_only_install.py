@@ -46,7 +46,7 @@ def test_setup_postgres_emits_url_file():
     assert 'password_encryption = "md5"' not in src
     assert "_enable_trust_fallback" in src
     assert 'mode=scram' in src or "mode=${mode}" in src
-    # v11.0.13: pin ALL admin/TCP/restart ops to one resolved cluster+port.
+    # v11.1.0: pin ALL admin/TCP/restart ops to one resolved cluster+port.
     assert "_resolve_target_cluster" in src
     assert "CLUSTER_SPEC" in src
     assert "--cluster" in src
