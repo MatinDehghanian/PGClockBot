@@ -19,7 +19,7 @@ set -euo pipefail
 DB_NAME="${1:-pgclock}"
 DB_USER="${2:-pgclock}"
 DB_PASS="${3:-}"
-AUTH_MODE="scram" # scram | trust (set after verify)
+AUTH_MODE="scram" # scram | trust (set after verify). Never "socket" — app needs TCP.
 
 if [[ -z "$DB_PASS" ]]; then
   if command -v openssl >/dev/null 2>&1; then
@@ -327,11 +327,14 @@ _verify_tcp_password() {
     return 0
   fi
 
+  # Socket-only success is NOT enough for the app: asyncpg with
+  # ?host=/var/run/postgresql fails on many VPS images (Errno 2). Always prefer
+  # a TCP DATABASE_URL (127.0.0.1). If password TCP is broken, fall through to trust.
   if _try_socket_password 2>"$err"; then
-    rm -f "$err"
-    echo "Unix-socket password auth OK (using host=/var/run/postgresql in URL)." >&2
-    AUTH_MODE="socket"
-    return 0
+    echo "Unix-socket password auth OK — but the panel needs TCP; enabling localhost trust…" >&2
+  else
+    echo "WARNING: socket password auth also failed." >&2
+    cat "$err" >&2 || true
   fi
 
   _enable_trust_fallback
@@ -339,6 +342,18 @@ _verify_tcp_password() {
     rm -f "$err"
     echo "Localhost trust auth OK for ${DB_USER} (PG not exposed remotely)." >&2
     AUTH_MODE="trust"
+    return 0
+  fi
+
+  # Last attempt: scram over TCP again after trust HBA rewrite + password stamp.
+  _write_hba scram
+  _set_role_password_and_db
+  _restart_postgres
+  sleep 1
+  if _try_tcp 2>"$err"; then
+    rm -f "$err"
+    echo "TCP password auth OK on final retry." >&2
+    AUTH_MODE="scram"
     return 0
   fi
 
@@ -369,19 +384,8 @@ print(urllib.parse.quote(os.environ["DB_PASS"], safe=""))
 PY
 )"
 
-case "$AUTH_MODE" in
-  socket)
-    # Prefer Debian/Ubuntu default socket dir; password still required (local scram).
-    DATABASE_URL="postgresql+asyncpg://${DB_USER}:${DB_PASS_ENC}@/${DB_NAME}?host=/var/run/postgresql"
-    ;;
-  trust)
-    # Password kept in URL so flipping HBA back to scram later still works.
-    DATABASE_URL="postgresql+asyncpg://${DB_USER}:${DB_PASS_ENC}@127.0.0.1:5432/${DB_NAME}"
-    ;;
-  *)
-    DATABASE_URL="postgresql+asyncpg://${DB_USER}:${DB_PASS_ENC}@127.0.0.1:5432/${DB_NAME}"
-    ;;
-esac
+# Always TCP. Never emit Unix-socket URLs — asyncpg hits Errno 2 on common VPS layouts.
+DATABASE_URL="postgresql+asyncpg://${DB_USER}:${DB_PASS_ENC}@127.0.0.1:5432/${DB_NAME}"
 
 if [[ -n "${PGCLOCK_EMIT_URL_FILE:-}" ]]; then
   umask 077

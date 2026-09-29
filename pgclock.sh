@@ -475,6 +475,46 @@ PY
   return 0
 }
 
+rewrite_socket_database_url() {
+  # asyncpg + ?host=/var/run/postgresql → Errno 2 on common Ubuntu/Hetzner layouts.
+  # Rewrite to TCP 127.0.0.1 so the panel can actually connect.
+  [[ -f .env ]] || return 0
+  python3 - <<'PY'
+import re
+from pathlib import Path
+from urllib.parse import parse_qsl, quote, unquote, urlencode, urlparse, urlunparse
+
+path = Path(".env")
+text = path.read_text(encoding="utf-8")
+m = re.search(r"^DATABASE_URL=(.*)$", text, flags=re.M)
+if not m:
+    raise SystemExit(0)
+raw = m.group(1).strip().strip('"').strip("'")
+u = urlparse(raw)
+qs = dict(parse_qsl(u.query, keep_blank_values=True))
+host_q = (qs.get("host") or "").strip()
+is_socket = host_q.startswith("/") or (not u.hostname and host_q.startswith("/"))
+if not is_socket:
+    raise SystemExit(0)
+password = unquote(u.password) if u.password is not None else ""
+user = unquote(u.username or "pgclock")
+db = (u.path or "/pgclock").lstrip("/") or "pgclock"
+qs.pop("host", None)
+query = urlencode(qs)
+auth = quote(user, safe="")
+if password != "":
+    auth += ":" + quote(password, safe="")
+scheme = u.scheme or "postgresql+asyncpg"
+netloc = f"{auth}@127.0.0.1:5432"
+new = urlunparse((scheme, netloc, "/" + db, "", query, ""))
+escaped = new.replace("\\", "\\\\").replace('"', '\\"')
+line = f'DATABASE_URL="{escaped}"'
+text2 = re.sub(r"^DATABASE_URL=.*$", line, text, count=1, flags=re.M)
+path.write_text(text2, encoding="utf-8")
+print(new.split("@", 1)[-1])
+PY
+}
+
 ensure_db_schema() {
   # Run Alembic/init_db BEFORE systemd starts — uvicorn only binds after init_db.
   # Doing it here surfaces DB errors during install instead of a silent dead panel.
@@ -487,6 +527,14 @@ ensure_db_schema() {
     err "Python venv missing — cannot migrate schema"
     return 1
   fi
+
+  local rewritten
+  rewritten="$(rewrite_socket_database_url || true)"
+  if [[ -n "$rewritten" ]]; then
+    warn "Rewrote socket DATABASE_URL → TCP ${rewritten} (asyncpg cannot use /var/run/postgresql)"
+    export PGCLOCK_DATABASE_URL="$(env_get DATABASE_URL "")"
+  fi
+
   info "Connecting to PostgreSQL and applying migrations (timeout 120s)…"
   if ! (
     cd "$SCRIPT_DIR" && \
@@ -504,6 +552,14 @@ safe = url.split("@", 1)[-1] if "@" in url else "(no url)"
 print(f"  [db] dialect target · {safe}", flush=True)
 if not url.startswith(("postgresql://", "postgresql+asyncpg://", "postgres://")):
     print("  [db] FAILED · DATABASE_URL is not PostgreSQL", file=sys.stderr, flush=True)
+    raise SystemExit(1)
+if "host=/var/run/postgresql" in url or ("@/" in url and "?host=/" in url):
+    print(
+        "  [db] FAILED · Unix-socket DATABASE_URL is not supported by the panel "
+        "(use 127.0.0.1:5432)",
+        file=sys.stderr,
+        flush=True,
+    )
     raise SystemExit(1)
 
 from app.db.session import init_db
