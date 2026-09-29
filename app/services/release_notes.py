@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "11.0.3": [
+        "نصب Postgres: اجبار listen_addresses=localhost + قوانین scram روی loopback (رفع TCP auth)",
+        "اگر DATABASE_URL قبلی وصل نشود، نقش/پسورد دوباره ساخته و داخل .env همگام می‌شود",
+        "خطای psql واقعی در لاگ نصب چاپ می‌شود",
+        "بدون مایگریشن DB؛ ریستور: restore/pre-v11.0.3-v11.0.2-2026-09-29",
+    ],
     "11.0.2": [
         "نصب: تأیید اتصال TCP/پسورد Postgres قبل از نوشتن DATABASE_URL (رفع کرش پنل / ERR_EMPTY_RESPONSE)",
         "نصب: انتظار برای /health قبل از SUCCESS؛ راهنمای فایروال ابری پورت ۹۰۰۰",
