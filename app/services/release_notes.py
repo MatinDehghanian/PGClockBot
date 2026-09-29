@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "11.0.11": [
+        "نصب Postgres: دیگر هرگز DATABASE_URL سوکت (/var/run/postgresql) نوشته نمی‌شود — علت Errno 2 و باز نشدن پنل",
+        "اگر TCP scram گیر کند → trust روی localhost با URL روی 127.0.0.1:5432 (asyncpg همیشه TCP)",
+        "نصب: اگر .env قدیمی سوکت داشته باشد قبل از مایگریشن به TCP بازنویسی می‌شود",
+        "بدون مایگریشن DB؛ ریستور: restore/pre-v11.0.11-v11.0.10-2026-09-29",
+    ],
     "11.0.10": [
         "ریشه باز نشدن پنل بعد از Postgres: uvicorn تا پایان init_db پورت را باز نمی‌کرد — تایم‌اوت ۱۵s اتصال + ۱۲۰s init و خطای واضح در journal",
         "نصب/آپدیت: مایگریشن schema قبل از استارت سرویس؛ اگر DB خراب باشد نصب همان‌جا می‌ایستد (دیگر پنل silent-dead نیست)",

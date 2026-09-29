@@ -42,6 +42,13 @@ def test_setup_postgres_emits_url_file():
     assert "_enable_trust_fallback" in src
     assert 'mode=scram' in src or "mode=${mode}" in src
     assert "_cluster_ver" in src
+    # v11.0.11: never emit Unix-socket DATABASE_URL (asyncpg Errno 2 on VPS).
+    assert 'DATABASE_URL="postgresql+asyncpg://${DB_USER}:${DB_PASS_ENC}@/${DB_NAME}?host=' not in src
+    assert 'AUTH_MODE="socket"' not in src
+    assert "Never emit Unix-socket URLs" in src
+    assert "@127.0.0.1:5432/${DB_NAME}" in src
+    sh = (ROOT / "pgclock.sh").read_text(encoding="utf-8")
+    assert "rewrite_socket_database_url" in sh
 
 
 def test_install_waits_for_panel_health():
