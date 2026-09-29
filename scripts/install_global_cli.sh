@@ -29,32 +29,36 @@ install -d -m 755 "${LIB}"
 printf '%s\n' "${ROOT}" > "${LIB}/install_root"
 chmod 644 "${LIB}/install_root"
 
-# Install a stable wrapper that always reads the marker (not a symlink to the repo,
-# so PATH works even if the operator is outside the project tree).
-install -m 755 /dev/stdin "${BIN}" <<EOF
+# Write wrapper to a real temp file first — `install /dev/stdin` fails on some
+# distros/sudo pipes with "No such file or directory".
+tmp_bin="$(mktemp)"
+cat > "${tmp_bin}" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 MARKER="/usr/local/lib/pgclockbot/install_root"
-ROOT="\${PGCLOCK_HOME:-}"
-if [[ -z "\${ROOT}" && -f "\${MARKER}" ]]; then
-  ROOT="\$(tr -d '\\r' < "\${MARKER}" | head -n1)"
+ROOT="${PGCLOCK_HOME:-}"
+if [[ -z "${ROOT}" && -f "${MARKER}" ]]; then
+  ROOT="$(tr -d '\r' < "${MARKER}" | head -n1)"
 fi
-if [[ -z "\${ROOT}" || ! -d "\${ROOT}" ]]; then
-  echo "pgclock: install root not found (marker \${MARKER})." >&2
+if [[ -z "${ROOT}" || ! -d "${ROOT}" ]]; then
+  echo "pgclock: install root not found (marker ${MARKER})." >&2
   exit 1
 fi
-PY="\${ROOT}/.venv/bin/python"
-if [[ ! -x "\${PY}" ]]; then
-  PY="\$(command -v python3 || true)"
+PY="${ROOT}/.venv/bin/python"
+if [[ ! -x "${PY}" ]]; then
+  PY="$(command -v python3 || true)"
 fi
-if [[ -z "\${PY}" ]]; then
+if [[ -z "${PY}" ]]; then
   echo "pgclock: python not found" >&2
   exit 1
 fi
-export PGCLOCK_HOME="\${ROOT}"
-cd "\${ROOT}"
-exec "\${PY}" -m app.cli "\$@"
+export PGCLOCK_HOME="${ROOT}"
+cd "${ROOT}"
+exec "${PY}" -m app.cli "$@"
 EOF
+chmod 755 "${tmp_bin}"
+install -m 755 "${tmp_bin}" "${BIN}"
+rm -f "${tmp_bin}"
 
 # Also keep a copy of the repo wrapper for reference / non-root use
 install -m 755 "${WRAPPER_SRC}" "${LIB}/pgclock-wrapper"

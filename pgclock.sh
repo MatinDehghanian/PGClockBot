@@ -708,6 +708,26 @@ cmd_install() {
     ok "Panel started (pid $!) · log: /tmp/pgclock-panel.log"
   fi
 
+  step "Panel health"
+  local health_ok=0
+  local hi health_body
+  for hi in $(seq 1 40); do
+    health_body="$(curl -sS --max-time 2 "http://127.0.0.1:${WEB_PORT}/health" 2>/dev/null || true)"
+    if [[ "$health_body" == *'"ok"'* ]] || [[ "$health_body" == *'ok'* && "$health_body" == *'true'* ]]; then
+      health_ok=1
+      break
+    fi
+    sleep 1
+  done
+  if [[ "$health_ok" -eq 1 ]]; then
+    ok "Panel health OK on :${WEB_PORT}"
+  else
+    err "Panel did not answer /health on 127.0.0.1:${WEB_PORT}"
+    warn "Check logs: journalctl -u ${SERVICE_NAME} -n 80 --no-pager"
+    warn "DB URL / Postgres: grep DATABASE_URL .env && systemctl status postgresql --no-pager"
+    # Still continue so operator gets the setup URL once the crash is fixed.
+  fi
+
   step "Firewall"
   if command -v ufw >/dev/null 2>&1; then
     sudo_wrap ufw allow "${WEB_PORT}/tcp" >/dev/null 2>&1 || true
@@ -715,6 +735,7 @@ cmd_install() {
   else
     info "UFW not installed — open port ${WEB_PORT} manually if needed"
   fi
+  info "Cloud firewall (Hetzner/AWS/…): also allow inbound TCP ${WEB_PORT} in the provider panel"
 
   local ip setup_url
   ip="$(detect_server_ip)"
@@ -728,10 +749,17 @@ cmd_install() {
   fi
 
   if [[ "$fresh" -eq 1 ]] || [[ ! -f data/setup_complete.flag ]]; then
-    if [[ -n "$setup_url" ]]; then
+    if [[ "$health_ok" -ne 1 ]]; then
+      print_success "Install finished — panel not healthy yet" --setup-only \
+        "سرویس بالا نیامد؛ اول لاگ را ببینید:" \
+        "journalctl -u ${SERVICE_NAME} -n 80 --no-pager" \
+        "بعد از سبز شدن /health دوباره: bash pgclock.sh status"
+    elif [[ -n "$setup_url" ]]; then
       print_success "Install complete" --setup-only \
         "لینک یک‌بارمصرف (اعتبار ۱۵ دقیقه):" \
-        "${setup_url}"
+        "${setup_url}" \
+        "اگر از بیرون ERR_EMPTY_RESPONSE دیدید: فایروال ابری پورت ${WEB_PORT} را باز کنید" \
+        "تست روی خود سرور: curl -sS http://127.0.0.1:${WEB_PORT}/health"
     else
       print_success "Install complete" --setup-only \
         "لینک یک‌بارمصرف آماده نیست — bash pgclock.sh status"

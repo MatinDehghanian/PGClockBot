@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "11.0.2": [
+        "نصب: تأیید اتصال TCP/پسورد Postgres قبل از نوشتن DATABASE_URL (رفع کرش پنل / ERR_EMPTY_RESPONSE)",
+        "نصب: انتظار برای /health قبل از SUCCESS؛ راهنمای فایروال ابری پورت ۹۰۰۰",
+        "پسورد DB فقط hex + URL-encode؛ رفع install: No such file در CLI سراسری",
+        "بدون مایگریشن DB؛ ریستور: restore/pre-v11.0.2-v11.0.1-2026-09-29",
+    ],
     "11.0.1": [
         "سخت‌سازی تگ رنگی نمایندگان: همان گیت live-parent که لیست /resellers دارد (بدون مسیر ضعیف‌تر)",
         "صفحه پلن‌ها: خطای سهمیه پاسارگارد دیگر ۵۰۰ نمی‌دهد؛ اسنپ‌شات UI degrade می‌شود",

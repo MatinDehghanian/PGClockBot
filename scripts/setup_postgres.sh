@@ -14,7 +14,12 @@ DB_USER="${2:-pgclock}"
 DB_PASS="${3:-}"
 
 if [[ -z "$DB_PASS" ]]; then
-  DB_PASS="$(openssl rand -base64 24 | tr -d '/+=' | head -c 24)"
+  # Hex-only charset: safe in URLs without encoding surprises (@ : / # …).
+  if command -v openssl >/dev/null 2>&1; then
+    DB_PASS="$(openssl rand -hex 16)"
+  else
+    DB_PASS="$(head -c 32 /dev/urandom | xxd -p | tr -d '\n' | head -c 32)"
+  fi
 fi
 
 if ! command -v psql >/dev/null 2>&1; then
@@ -29,14 +34,23 @@ if [[ ! "$DB_NAME" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || [[ ! "$DB_USER" =~ ^[A-Za-z
 fi
 
 # Ensure the cluster is accepting connections (fresh apt install may need a moment).
+# Prefer TCP probe — works as root without `sudo -u postgres` pitfalls.
+_pg_ready() {
+  if command -v pg_isready >/dev/null 2>&1; then
+    pg_isready -h 127.0.0.1 -q 2>/dev/null && return 0
+    sudo -u postgres pg_isready -q 2>/dev/null && return 0
+  fi
+  return 1
+}
+
 if command -v pg_isready >/dev/null 2>&1; then
-  for _ in $(seq 1 30); do
-    if sudo -u postgres pg_isready -q 2>/dev/null; then
+  for _ in $(seq 1 45); do
+    if _pg_ready; then
       break
     fi
     sleep 1
   done
-  if ! sudo -u postgres pg_isready -q 2>/dev/null; then
+  if ! _pg_ready; then
     echo "ERROR: PostgreSQL is not ready (pg_isready failed)." >&2
     exit 1
   fi
@@ -63,7 +77,40 @@ SELECT format('GRANT ALL ON SCHEMA public TO %I', :'db_user')\gexec
 SELECT format('ALTER DATABASE %I OWNER TO %I', :'db_name', :'db_user')\gexec
 SQL
 
-DATABASE_URL="postgresql+asyncpg://${DB_USER}:${DB_PASS}@127.0.0.1:5432/${DB_NAME}"
+# Percent-encode password for DATABASE_URL (defense in depth even with hex passwords).
+DB_PASS_ENC="$(
+  DB_PASS="$DB_PASS" python3 - <<'PY'
+import os, urllib.parse
+print(urllib.parse.quote(os.environ["DB_PASS"], safe=""))
+PY
+)"
+DATABASE_URL="postgresql+asyncpg://${DB_USER}:${DB_PASS_ENC}@127.0.0.1:5432/${DB_NAME}"
+
+# Verify the app can authenticate over TCP with password (not just peer/socket).
+# Fresh clusters sometimes lack a working host scram rule — fail loud here.
+if ! PGPASSWORD="$DB_PASS" psql -h 127.0.0.1 -U "$DB_USER" -d "$DB_NAME" -v ON_ERROR_STOP=1 -c 'SELECT 1' >/dev/null 2>&1; then
+  echo "WARNING: TCP password auth to 127.0.0.1 failed — checking pg_hba.conf…" >&2
+  # Best-effort: ensure scram for local TCP loopback (common Ubuntu default already has this).
+  HBA="$(sudo -u postgres psql -tAc "SHOW hba_file" 2>/dev/null | tr -d '[:space:]' || true)"
+  if [[ -n "$HBA" && -f "$HBA" ]]; then
+    if ! grep -Eq "^[[:space:]]*host[[:space:]]+all[[:space:]]+all[[:space:]]+127\.0\.0\.1/32[[:space:]]+(scram-sha-256|md5)" "$HBA"; then
+      echo "host all all 127.0.0.1/32 scram-sha-256" >> "$HBA"
+      echo "host all all ::1/128 scram-sha-256" >> "$HBA"
+      if command -v pg_ctlcluster >/dev/null 2>&1; then
+        ver="$(pg_lsclusters -h 2>/dev/null | awk 'NR==1{print $1}')"
+        name="$(pg_lsclusters -h 2>/dev/null | awk 'NR==1{print $2}')"
+        if [[ -n "$ver" && -n "$name" ]]; then
+          pg_ctlcluster "$ver" "$name" reload 2>/dev/null || true
+        fi
+      fi
+      sudo -u postgres psql -c "SELECT pg_reload_conf()" >/dev/null 2>&1 || true
+    fi
+  fi
+  if ! PGPASSWORD="$DB_PASS" psql -h 127.0.0.1 -U "$DB_USER" -d "$DB_NAME" -v ON_ERROR_STOP=1 -c 'SELECT 1' >/dev/null 2>&1; then
+    echo "ERROR: Cannot connect as ${DB_USER} via TCP (127.0.0.1). Check pg_hba.conf and postgresql listen_addresses." >&2
+    exit 1
+  fi
+fi
 
 if [[ -n "${PGCLOCK_EMIT_URL_FILE:-}" ]]; then
   umask 077
