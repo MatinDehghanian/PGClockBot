@@ -71,6 +71,9 @@ class SetupPostgresQuoteTests(unittest.TestCase):
         self.assertIn("EXECUTE format(", sh)
         self.assertNotIn("-v db_pass=", sh)
         self.assertIn("-v", sh)  # ON_ERROR_STOP still OK
+        # Must not leave md5 hashes while HBA prefers scram (v11.0.4 VPS failure).
+        self.assertNotIn("password_encryption = 'md5'", sh)
+        self.assertIn("local   all             postgres", sh)
 
 
 class SetWebPasswordNoPlaintextTests(unittest.TestCase):

@@ -36,6 +36,12 @@ def test_setup_postgres_emits_url_file():
     assert "PASSWORD '${DB_PASS}'" not in src
     assert "-v db_pass=" not in src
     assert ":'db_pass'" not in src
+    # v11.0.5: never store md5 verifiers under scram-first HBA; trust is last resort.
+    assert 'password_encryption = \'md5\'' not in src
+    assert 'password_encryption = "md5"' not in src
+    assert "_enable_trust_fallback" in src
+    assert 'mode=scram' in src or "mode=${mode}" in src
+    assert "_cluster_ver" in src
 
 
 def test_install_waits_for_panel_health():

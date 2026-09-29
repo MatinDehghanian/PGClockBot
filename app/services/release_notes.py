@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "11.0.5": [
+        "نصب Postgres: حذف fallback md5 که با HBAی scram-first پسورد را خراب می‌کرد (علت اصلی password authentication failed روی VPS)",
+        "فقط SCRAM؛ ریستارت کلاستر آنلاین درست؛ اگر لازم شد trust فقط برای localhost نقش pgclock",
+        "بازیابی نصب‌های نیمه‌کاره که rolpassword=md5 مانده بود",
+        "بدون مایگریشن DB؛ ریستور: restore/pre-v11.0.5-v11.0.4-2026-09-29",
+    ],
     "11.0.4": [
         "نصب Postgres: پسورد نقش با DO/EXECUTE و فقط hex (بدون psql -v) — رفع قطعی password authentication failed",
         "fallback md5 اگر scram روی TCP جواب ندهد؛ تأیید اتصال قبل از نوشتن DATABASE_URL",
