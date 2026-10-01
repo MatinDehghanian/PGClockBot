@@ -236,20 +236,18 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             allowed = await descendant_shop_profile_ids(session, staff)
             rows = [pair for pair in rows if int(pair[1].id) in allowed]
         from app.services.color_tags import (
-            FILTER_NONE,
             color_tag_meta,
             color_tags_for_ui,
+            effective_color_tag,
             normalize_color_filter,
         )
 
         color_filter = normalize_color_filter(request.query_params.get("color"))
-        if color_filter == FILTER_NONE:
-            rows = [pair for pair in rows if not getattr(pair[0], "color_tag", None)]
-        elif color_filter:
+        if color_filter:
             rows = [
                 pair
                 for pair in rows
-                if (getattr(pair[0], "color_tag", None) or "") == color_filter
+                if effective_color_tag(pair[0]) == color_filter
             ]
 
         search_q = ""
@@ -448,6 +446,10 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         share_pg = bool(form.get("share_pg_panel_url"))
         pg_role_raw = str(form.get("pg_role_id") or "").strip()
         pg_role_id = int(pg_role_raw) if pg_role_raw.isdigit() else None
+        from app.services.color_tags import apply_color_tag
+
+        # Whitelist-only; form omission / junk → green (مطمئن).
+        apply_color_tag(user, str(form.get("color_tag") or ""))
         panel_url = await get_reseller_panel_base_url(session)
         try:
             creds = await provision_reseller(
@@ -750,9 +752,9 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         await session.commit()
         referer = str(request.headers.get("referer") or "")
         if is_explicit_owner_staff(staff) and "/edit" in referer:
-            return _redirect_reseller_edit(user_id, ok="تگ رنگی ذخیره شد")
+            return _redirect_reseller_edit(user_id, ok="تگ ریسک ذخیره شد")
         return RedirectResponse(
-            f"/resellers?ok={_q('تگ رنگی ذخیره شد')}",
+            f"/resellers?ok={_q('تگ ریسک ذخیره شد')}",
             status_code=303,
         )
     @app.post("/resellers/{user_id}/edit")

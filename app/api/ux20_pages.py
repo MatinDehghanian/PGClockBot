@@ -107,16 +107,16 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
         except ShopScopeError:
             return RedirectResponse("/home", status_code=303)
         user.staff_note = (note or "").strip()[:2000] or None
+        # Manual risk checkbox removed — staff risk level lives on color_tag.
+        # Keep automatic risk_flags refresh; strip stale "manual" markers.
         flags = [f for f in parse_risk_flags(user.risk_flags) if f != "manual"]
-        if (risk_manual or "").strip() in {"1", "on", "true", "yes"}:
-            flags.append("manual")
         user.risk_flags = serialize_risk_flags(flags)
         await refresh_user_risk(session, user)
         await session.commit()
         # Users UI is list + edit modal — there is no GET /users/{id}
         from app.api.user_pages import _redirect_user
 
-        return _redirect_user(user_id, ok="یادداشت و ریسک ذخیره شد")
+        return _redirect_user(user_id, ok="یادداشت ذخیره شد")
 
     @app.post("/users/{user_id}/color-tag")
     async def users_color_tag(
@@ -142,7 +142,7 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
         await session.commit()
         from app.api.user_pages import _redirect_user
 
-        return _redirect_user(user_id, ok="تگ رنگی ذخیره شد")
+        return _redirect_user(user_id, ok="تگ ریسک ذخیره شد")
 
     @app.post("/plans/gift-codes")
     async def gift_codes_create(

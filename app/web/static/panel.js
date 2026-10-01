@@ -3837,3 +3837,63 @@ const root = document.getElementById('upd-root');
     boot();
   }
 })();
+
+
+/* Risk-color tag picker — reliable radio selection inside fragment modals
+   (WebKit previously dropped zero-size radios so saves looked like no-ops). */
+(function () {
+  function syncPicker(picker) {
+    if (!picker) return;
+    picker.querySelectorAll('.color-tag-option').forEach(function (opt) {
+      var input = opt.querySelector('input[type="radio"]');
+      opt.classList.toggle('is-selected', !!(input && input.checked));
+    });
+  }
+  function bindPicker(picker) {
+    if (!picker || picker.dataset.boundColorTag === '1') return;
+    picker.dataset.boundColorTag = '1';
+    picker.querySelectorAll('.color-tag-option').forEach(function (opt) {
+      opt.addEventListener('click', function () {
+        var input = opt.querySelector('input[type="radio"]');
+        if (!input) return;
+        input.checked = true;
+        syncPicker(picker);
+      });
+    });
+    picker.addEventListener('change', function (e) {
+      if (e.target && e.target.matches('input[type="radio"]')) syncPicker(picker);
+    });
+    syncPicker(picker);
+  }
+  function bindAll(root) {
+    var scope = root && root.querySelectorAll ? root : document;
+    scope.querySelectorAll('[data-color-tag-picker]').forEach(bindPicker);
+  }
+  function bootPickers() {
+    bindAll(document);
+    document.addEventListener('panel:dom-ready', function (e) {
+      bindAll((e && e.detail && e.detail.root) || document);
+    });
+    try {
+      var mo = new MutationObserver(function (mutations) {
+        for (var i = 0; i < mutations.length; i++) {
+          var nodes = mutations[i].addedNodes || [];
+          for (var j = 0; j < nodes.length; j++) {
+            var node = nodes[j];
+            if (!node || node.nodeType !== 1) continue;
+            if (node.matches && node.matches('[data-color-tag-picker]')) bindPicker(node);
+            if (node.querySelectorAll) {
+              node.querySelectorAll('[data-color-tag-picker]').forEach(bindPicker);
+            }
+          }
+        }
+      });
+      mo.observe(document.documentElement, { childList: true, subtree: true });
+    } catch (e) {}
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bootPickers);
+  } else {
+    bootPickers();
+  }
+})();

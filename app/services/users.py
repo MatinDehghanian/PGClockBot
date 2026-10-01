@@ -391,6 +391,13 @@ async def get_or_create_user(
 
     if user:
         changed = False
+        from app.services.color_tags import DEFAULT_COLOR_TAG, normalize_color_tag
+
+        # Every user must have a risk-color tag; backfill legacy NULL / invalid.
+        normalized_tag = normalize_color_tag(getattr(user, "color_tag", None))
+        if (getattr(user, "color_tag", None) or "") != normalized_tag:
+            user.color_tag = normalized_tag or DEFAULT_COLOR_TAG
+            changed = True
         if username and user.username != username:
             user.username = username
             changed = True
@@ -445,6 +452,8 @@ async def get_or_create_user(
     if reseller_owner_id and not is_admin:
         assign_reseller = reseller_owner_id
 
+    from app.services.color_tags import DEFAULT_COLOR_TAG
+
     user = BotUser(
         telegram_id=telegram_id,
         username=username,
@@ -453,6 +462,7 @@ async def get_or_create_user(
         referral_code=_referral_code(),
         referred_by_id=referred_by_id,
         reseller_id=assign_reseller,
+        color_tag=DEFAULT_COLOR_TAG,
     )
     session.add(user)
     try:

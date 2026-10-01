@@ -136,12 +136,19 @@ async def render_home(
             tip=ui.get("btn_menu_home") or "⌨️ منوی اصلی",
         )
         if mini:
-            await message.answer("📱", reply_markup=mini)
+            try:
+                await message.answer("📱", reply_markup=mini)
+            except Exception:
+                pass
         return
 
     await message.answer(text, reply_markup=reply_kb)
     if mini:
-        await message.answer("📱", reply_markup=mini)
+        # Never let Mini App keyboard failure break /start (HTTPS-only WebApp).
+        try:
+            await message.answer("📱", reply_markup=mini)
+        except Exception:
+            pass
     # seed_reply_kb kept for API compat — reply kb already attached to welcome
     _ = seed_reply_kb
 

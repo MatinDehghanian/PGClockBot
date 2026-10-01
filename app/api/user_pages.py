@@ -113,6 +113,7 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
         raw_tid = str(form.get("telegram_id") or "").strip()
         username = str(form.get("username") or "").strip() or None
         full_name = str(form.get("full_name") or "").strip() or None
+        color_tag = str(form.get("color_tag") or "").strip() or None
         try:
             telegram_id = int(raw_tid)
         except (TypeError, ValueError):
@@ -127,6 +128,7 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
                 # Owner → None (platform shop); reseller → forced own scope id.
                 reseller_id=None if is_explicit_owner_staff(staff) else int(scope),
                 staff=staff,
+                color_tag=color_tag,
             )
         except ValueError as e:
             return _redirect_list_form(form, err=str(e), uid=None)
@@ -206,7 +208,7 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
         can_pg_create = bool(pg_acts.get("create"))
         can_pg_update = bool(pg_acts.get("update"))
         can_pg_delete = bool(pg_acts.get("delete"))
-        from app.services.color_tags import color_tags_for_ui
+        from app.services.color_tags import color_tag_meta, color_tags_for_ui
 
         ctx = {
             "staff": staff,
@@ -225,6 +227,7 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
             "can_pg_update": can_pg_update,
             "can_pg_delete": can_pg_delete,
             "color_tags": color_tags_for_ui(),
+            "color_tag_meta": color_tag_meta,
         }
         if as_fragment:
             return render(request, "_user_edit_body.html", ctx)

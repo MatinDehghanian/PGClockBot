@@ -10,7 +10,8 @@
         <span dir="ltr" class="mono">{{ user.telegram_id }}</span>
         {% if user.username %}<span>@{{ user.username }}</span>{% endif %}
         {% if user.is_blocked %}<span class="badge blocked">مسدود</span>{% else %}<span class="badge active">فعال</span>{% endif %}
-        {% if user.risk_flags %}<span class="badge warn">ریسک</span>{% endif %}
+        {% set tag = color_tag_meta(user.color_tag) if color_tag_meta is defined else none %}
+        {% if tag %}<span class="badge badge-risk-tag" style="--tag-color: {{ tag.hex }}">{{ tag.title_fa }}</span>{% endif %}
       </p>
     </div>
     <div class="user-edit-wallet-pill" dir="ltr">
@@ -21,29 +22,32 @@
 </section>
 
 {% set manage_user = can_manage_users if can_manage_users is defined else false %}
+<section class="edit-section">
+  <header class="edit-section-head">
+    <h3>تگ ریسک</h3>
+    <p class="muted">چهار سطح ثابت — دیفالت «مطمئن». فقط کارکنان می‌بینند.</p>
+  </header>
+  <form method="post" action="/users/{{ user.id }}/color-tag" class="form-stack" data-color-tag-form>
+    {% set selected_color = (user.color_tag or 'green') %}
+    {% include "_color_tag_picker.html" %}
+    <div class="actions">
+      <button class="btn" type="submit">ذخیره تگ ریسک</button>
+    </div>
+  </form>
+</section>
+
 {% if manage_user %}
 <section class="edit-section">
   <header class="edit-section-head">
-    <h3>یادداشت داخلی و ریسک</h3>
-    <p class="muted">فقط ادمین می‌بیند — برای پشتیبانی و جلوگیری از سوءاستفاده</p>
+    <h3>یادداشت داخلی</h3>
+    <p class="muted">فقط ادمین می‌بیند — برای پشتیبانی</p>
   </header>
-  {% set flags = (user.risk_flags or '') %}
-  {% if flags %}
-  <p class="badge warn">ریسک: {{ flags }}</p>
-  {% endif %}
   <form method="post" action="/users/{{ user.id }}/staff-note" class="form-stack">
     <label class="form-field">یادداشت داخلی
       <textarea name="note" rows="3" placeholder="مثلاً دیر کرد، کارت فلان…">{{ user.staff_note or '' }}</textarea>
     </label>
-    <label class="ui-switch-row">
-      <span class="ui-switch-copy"><strong>پرچم دستی ریسک</strong><small>برای کاربران مشکوک</small></span>
-      <span class="ui-switch">
-        <input type="checkbox" name="risk_manual" value="1"{% if 'manual' in (flags or '').split(',') %} checked{% endif %} />
-        <span class="ui-switch-track" aria-hidden="true"></span>
-      </span>
-    </label>
     <div class="actions">
-      <button class="btn" type="submit">ذخیره</button>
+      <button class="btn" type="submit">ذخیره یادداشت</button>
     </div>
   </form>
 </section>
@@ -96,20 +100,6 @@
 </section>
 
 {% endif %}
-
-<section class="edit-section">
-  <header class="edit-section-head">
-    <h3>تگ رنگی</h3>
-    <p class="muted">دایره کنار نام در لیست — فقط برای اسکن سریع کارکنان</p>
-  </header>
-  <form method="post" action="/users/{{ user.id }}/color-tag" class="form-stack">
-    {% set selected_color = user.color_tag or '' %}
-    {% include "_color_tag_picker.html" %}
-    <div class="actions">
-      <button class="btn" type="submit">ذخیره تگ</button>
-    </div>
-  </form>
-</section>
 
 {% if can_pg_create %}
 <section class="edit-section">
