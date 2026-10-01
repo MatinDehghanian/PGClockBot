@@ -52,23 +52,39 @@
       var action = form.getAttribute('action') || form.action || window.location.href;
       var method = (form.getAttribute('method') || form.method || 'post').toLowerCase();
       if (method !== 'get') method = 'post';
-      var values = {};
-      collectFormFields(form).forEach(function (pair) {
-        values[pair[0]] = pair[1];
-      });
+      /* Preserve repeated keys (bulk `ids=1&ids=2&…`). A plain object would
+         keep only the last value and silently delete a single row. */
+      var pairs = collectFormFields(form).slice();
+      var overrideKeys = {};
       Object.keys(overrides).forEach(function (k) {
         if (overrides[k] == null) return;
-        values[k] = String(overrides[k]);
+        overrideKeys[k] = true;
       });
+      if (Object.keys(overrideKeys).length) {
+        pairs = pairs.filter(function (pair) { return !overrideKeys[pair[0]]; });
+        Object.keys(overrideKeys).forEach(function (k) {
+          var raw = overrides[k];
+          if (Array.isArray(raw)) {
+            raw.forEach(function (v) {
+              pairs.push([k, v == null ? '' : String(v)]);
+            });
+          } else {
+            pairs.push([k, String(raw)]);
+          }
+        });
+      }
       var tok = csrfToken();
-      if (tok) values.csrf_token = tok;
+      if (tok) {
+        pairs = pairs.filter(function (pair) { return pair[0] !== 'csrf_token'; });
+        pairs.push(['csrf_token', tok]);
+      }
 
       /* v10.1.16 used a display:none <form>.submit() — on mobile WebKit that
          STILL dropped fields (same class of bug as the kebab menu). Build the
          body as an explicit string and POST via fetch so reason cannot vanish. */
       var body = new URLSearchParams();
-      Object.keys(values).forEach(function (name) {
-        body.append(name, values[name] == null ? '' : String(values[name]));
+      pairs.forEach(function (pair) {
+        body.append(pair[0], pair[1] == null ? '' : String(pair[1]));
       });
 
       function fallbackFormSubmit() {
@@ -78,11 +94,11 @@
         /* Must NOT use display:none — WebKit may omit fields on submit. */
         tmp.setAttribute('aria-hidden', 'true');
         tmp.style.cssText = 'position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0;overflow:hidden;';
-        Object.keys(values).forEach(function (name) {
+        pairs.forEach(function (pair) {
           var input = document.createElement('input');
           input.type = 'hidden';
-          input.name = name;
-          input.value = values[name] == null ? '' : String(values[name]);
+          input.name = pair[0];
+          input.value = pair[1] == null ? '' : String(pair[1]);
           tmp.appendChild(input);
         });
         document.body.appendChild(tmp);
@@ -3835,5 +3851,65 @@ const root = document.getElementById('upd-root');
     document.addEventListener('DOMContentLoaded', boot);
   } else {
     boot();
+  }
+})();
+
+
+/* Risk-color tag picker — reliable radio selection inside fragment modals
+   (WebKit previously dropped zero-size radios so saves looked like no-ops). */
+(function () {
+  function syncPicker(picker) {
+    if (!picker) return;
+    picker.querySelectorAll('.color-tag-option').forEach(function (opt) {
+      var input = opt.querySelector('input[type="radio"]');
+      opt.classList.toggle('is-selected', !!(input && input.checked));
+    });
+  }
+  function bindPicker(picker) {
+    if (!picker || picker.dataset.boundColorTag === '1') return;
+    picker.dataset.boundColorTag = '1';
+    picker.querySelectorAll('.color-tag-option').forEach(function (opt) {
+      opt.addEventListener('click', function () {
+        var input = opt.querySelector('input[type="radio"]');
+        if (!input) return;
+        input.checked = true;
+        syncPicker(picker);
+      });
+    });
+    picker.addEventListener('change', function (e) {
+      if (e.target && e.target.matches('input[type="radio"]')) syncPicker(picker);
+    });
+    syncPicker(picker);
+  }
+  function bindAll(root) {
+    var scope = root && root.querySelectorAll ? root : document;
+    scope.querySelectorAll('[data-color-tag-picker]').forEach(bindPicker);
+  }
+  function bootPickers() {
+    bindAll(document);
+    document.addEventListener('panel:dom-ready', function (e) {
+      bindAll((e && e.detail && e.detail.root) || document);
+    });
+    try {
+      var mo = new MutationObserver(function (mutations) {
+        for (var i = 0; i < mutations.length; i++) {
+          var nodes = mutations[i].addedNodes || [];
+          for (var j = 0; j < nodes.length; j++) {
+            var node = nodes[j];
+            if (!node || node.nodeType !== 1) continue;
+            if (node.matches && node.matches('[data-color-tag-picker]')) bindPicker(node);
+            if (node.querySelectorAll) {
+              node.querySelectorAll('[data-color-tag-picker]').forEach(bindPicker);
+            }
+          }
+        }
+      });
+      mo.observe(document.documentElement, { childList: true, subtree: true });
+    } catch (e) {}
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bootPickers);
+  } else {
+    bootPickers();
   }
 })();

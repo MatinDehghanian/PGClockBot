@@ -184,18 +184,35 @@ class Settings(BaseSettings):
     def normalize_pg_url(cls, value: str) -> str:
         return normalize_pg_base_url(value) or value
 
+    def _miniapp_https_base(self) -> str:
+        """Canonical HTTPS origin for Telegram WebApp buttons.
+
+        Prefer the live panel HTTPS URL (cert meta) when TLS is on — same source
+        as ``public_panel_base_url``. Fall back to ``PUBLIC_BASE_URL`` only when
+        it is already ``https://…``. Never return ``http://`` (Telegram rejects it).
+        """
+        try:
+            from app.services.ssl_certs import https_is_active, public_panel_base_url
+
+            if https_is_active():
+                live = (public_panel_base_url() or "").strip().rstrip("/")
+                if live.startswith("https://"):
+                    return live
+        except Exception:
+            pass
+        configured = (self.public_base_url or "").strip().rstrip("/")
+        if configured.startswith("https://"):
+            return configured
+        return ""
+
     @property
     def miniapp_enabled(self) -> bool:
-        try:
-            from app.services.ssl_certs import https_is_active
-
-            return https_is_active() and bool(self.public_base_url.strip())
-        except Exception:
-            return bool(self.public_base_url.strip())
+        """True only when a real HTTPS Mini App origin is available."""
+        return bool(self._miniapp_https_base())
 
     @property
     def miniapp_url(self) -> str:
-        base = self.public_base_url.rstrip("/")
+        base = self._miniapp_https_base()
         return f"{base}/miniapp/" if base else ""
 
     def miniapp_deep_url(self, view: str = "") -> str:

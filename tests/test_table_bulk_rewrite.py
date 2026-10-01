@@ -80,11 +80,13 @@ class BulkUiContractTests(unittest.TestCase):
 
     def test_panel_js_uses_panel_confirm_and_eligible(self):
         js = (ROOT / "app/web/static/panel.js").read_text(encoding="utf-8")
-        bulk = js.split("Table bulk row selection")[1]
+        # Scope to the bulk IIFE only — later page scripts may use window.confirm.
+        bulk = js.split("Table bulk row selection")[1].split("Capsule numeric steppers")[0]
         self.assertIn("panelConfirm", bulk)
         self.assertIn("eligibleIds", bulk)
         self.assertIn("data-bulk-ops", bulk)
         self.assertIn("cleanReturnTo", bulk)
+        self.assertIn("panelSubmitFormPost", bulk)
         self.assertNotIn("showConfirmModal", bulk)
         self.assertNotIn("window.confirm", bulk)
 

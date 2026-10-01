@@ -122,7 +122,9 @@ class RoleAndReasonUiTests(unittest.TestCase):
         self.assertNotIn('name="days"', body)
         self.assertNotIn('name="data_limit_gb"', body)
         self.assertIn("افزایش", body)
-        self.assertIn('name="extra_days"', body)
+        # Extend form uses num_stepper macro (renders name="extra_days" at runtime).
+        self.assertIn("num_stepper('extra_days'", body)
+        self.assertIn("num_stepper('extra_gb'", body)
         # Redesigned mobile-friendly service list
         self.assertIn("svc-list", body)
         self.assertIn("svc-item", body)
