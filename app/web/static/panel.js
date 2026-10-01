@@ -52,23 +52,39 @@
       var action = form.getAttribute('action') || form.action || window.location.href;
       var method = (form.getAttribute('method') || form.method || 'post').toLowerCase();
       if (method !== 'get') method = 'post';
-      var values = {};
-      collectFormFields(form).forEach(function (pair) {
-        values[pair[0]] = pair[1];
-      });
+      /* Preserve repeated keys (bulk `ids=1&ids=2&…`). A plain object would
+         keep only the last value and silently delete a single row. */
+      var pairs = collectFormFields(form).slice();
+      var overrideKeys = {};
       Object.keys(overrides).forEach(function (k) {
         if (overrides[k] == null) return;
-        values[k] = String(overrides[k]);
+        overrideKeys[k] = true;
       });
+      if (Object.keys(overrideKeys).length) {
+        pairs = pairs.filter(function (pair) { return !overrideKeys[pair[0]]; });
+        Object.keys(overrideKeys).forEach(function (k) {
+          var raw = overrides[k];
+          if (Array.isArray(raw)) {
+            raw.forEach(function (v) {
+              pairs.push([k, v == null ? '' : String(v)]);
+            });
+          } else {
+            pairs.push([k, String(raw)]);
+          }
+        });
+      }
       var tok = csrfToken();
-      if (tok) values.csrf_token = tok;
+      if (tok) {
+        pairs = pairs.filter(function (pair) { return pair[0] !== 'csrf_token'; });
+        pairs.push(['csrf_token', tok]);
+      }
 
       /* v10.1.16 used a display:none <form>.submit() — on mobile WebKit that
          STILL dropped fields (same class of bug as the kebab menu). Build the
          body as an explicit string and POST via fetch so reason cannot vanish. */
       var body = new URLSearchParams();
-      Object.keys(values).forEach(function (name) {
-        body.append(name, values[name] == null ? '' : String(values[name]));
+      pairs.forEach(function (pair) {
+        body.append(pair[0], pair[1] == null ? '' : String(pair[1]));
       });
 
       function fallbackFormSubmit() {
@@ -78,11 +94,11 @@
         /* Must NOT use display:none — WebKit may omit fields on submit. */
         tmp.setAttribute('aria-hidden', 'true');
         tmp.style.cssText = 'position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0;overflow:hidden;';
-        Object.keys(values).forEach(function (name) {
+        pairs.forEach(function (pair) {
           var input = document.createElement('input');
           input.type = 'hidden';
-          input.name = name;
-          input.value = values[name] == null ? '' : String(values[name]);
+          input.name = pair[0];
+          input.value = pair[1] == null ? '' : String(pair[1]);
           tmp.appendChild(input);
         });
         document.body.appendChild(tmp);
