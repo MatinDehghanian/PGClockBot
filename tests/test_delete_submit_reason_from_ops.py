@@ -69,7 +69,8 @@ class DeleteSubmitStaticTests(unittest.TestCase):
         body = _fn_src(js, "submitFormPost")
         self.assertIn("URLSearchParams", body)
         self.assertIn("window.fetch(action", body)
-        self.assertIn("body.append(name", body)
+        self.assertIn("body.append(pair[0]", body)
+        self.assertIn("Preserve repeated keys", body)
         self.assertIn("Must NOT use display:none", body)
 
     def test_confirm_success_uses_submit_form_post_not_native(self):
@@ -198,6 +199,71 @@ class DeleteSubmitRuntimeProof(unittest.TestCase):
               && out.confirm_reason === 'درخواست خود کاربر'
               && out.csrf === 'tok-edit'
               && out.url.indexOf('/users/9/delete') >= 0;
+            process.stdout.write(JSON.stringify(out));
+            """
+        ).replace("__COLLECT__", collect).replace("__SUBMIT__", submit)
+        payload = _run_node(script)
+        self.assertTrue(payload.get("ok"), payload)
+
+    def test_bulk_delete_posts_all_ids_with_shared_reason(self):
+        """Bulk bars append many ``ids`` fields; submitFormPost must keep them all."""
+        js_src = JS.read_text(encoding="utf-8")
+        collect = _fn_src(js_src, "collectFormFields")
+        submit = _fn_src(js_src, "submitFormPost")
+        script = textwrap.dedent(
+            """
+            const { JSDOM } = require('jsdom');
+            const dom = new JSDOM(`<!doctype html><html><body>
+              <meta name="csrf-token" content="tok-bulk" />
+              <form id="bulk" method="post" action="/users/bulk-action">
+                <input type="hidden" name="action" value="delete" />
+                <input type="hidden" name="return_to" value="/users" />
+                <input type="hidden" name="ids" value="11" />
+                <input type="hidden" name="ids" value="22" />
+                <input type="hidden" name="ids" value="33" />
+              </form>
+            </body></html>`, { url: 'https://example.test/users' });
+            const { window } = dom;
+            const { document } = window;
+            function csrfToken(){ return 'tok-bulk'; }
+            __COLLECT__
+            __SUBMIT__
+            window.__posted = null;
+            window.fetch = function(url, init){
+              const body = init.body;
+              window.__posted = {
+                url: String(url),
+                method: init.method,
+                ids: body.getAll('ids'),
+                reason: body.get('reason') || '',
+                confirm_reason: body.get('confirm_reason') || '',
+                action: body.get('action') || '',
+                csrf: body.get('csrf_token') || '',
+              };
+              return Promise.resolve({ url: 'https://example.test/users?ok=1', ok: true });
+            };
+            window.location.assign = function(){};
+            submitFormPost(document.getElementById('bulk'), {
+              reason: 'حذف گروهی تست',
+              confirm_reason: 'حذف گروهی تست',
+            });
+            const p = window.__posted;
+            const out = {
+              ids: p && p.ids,
+              reason: p && p.reason,
+              confirm_reason: p && p.confirm_reason,
+              action: p && p.action,
+              csrf: p && p.csrf,
+              url: p && p.url,
+            };
+            out.ok = Array.isArray(out.ids)
+              && out.ids.length === 3
+              && out.ids.join(',') === '11,22,33'
+              && out.reason === 'حذف گروهی تست'
+              && out.confirm_reason === 'حذف گروهی تست'
+              && out.action === 'delete'
+              && out.csrf === 'tok-bulk'
+              && out.url.indexOf('/users/bulk-action') >= 0;
             process.stdout.write(JSON.stringify(out));
             """
         ).replace("__COLLECT__", collect).replace("__SUBMIT__", submit)
