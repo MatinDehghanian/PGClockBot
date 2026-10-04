@@ -23,6 +23,16 @@ class LoginAtmosphereTests(unittest.TestCase):
         self.assertIn(".auth-form--card", css)
         self.assertIn("auth-autofill-mark", css)
 
+    def test_setup_matches_login_atmosphere(self):
+        html = (ROOT / "app/web/templates/setup.html").read_text(encoding="utf-8")
+        css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
+        self.assertIn("auth-wrap--atmo", html)
+        self.assertIn("auth-atmosphere", html)
+        self.assertIn("auth-panel--stage", html)
+        self.assertIn("auth-form--card", html)
+        self.assertNotIn('class="auth-wrap"', html)
+        self.assertIn("auth-panel:not(.auth-panel--stage)", css)
+
     def test_autofill_auto_submit_script(self):
         html = (ROOT / "app/web/templates/login.html").read_text(encoding="utf-8")
         self.assertIn("autoSubmitAutofill", html)
