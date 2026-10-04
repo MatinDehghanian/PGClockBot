@@ -2213,24 +2213,33 @@ def payment_review(payment_id: int, ui: dict | None = None) -> InlineKeyboardMar
     )
 
 
-def reseller_app_review(app_id: int, ui: dict | None = None) -> InlineKeyboardMarkup:
-    """Message-scoped approve/reject (notifications). No nav chrome."""
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                _ikb(
-                    "🟢✅ تأیید",
-                    callback_data=f"adm:resapp:ok:{app_id}",
-                    style=_style(ui, "confirm", fallback="success"),
-                ),
-                _ikb(
-                    "🔴❌ رد",
-                    callback_data=f"adm:resapp:no:{app_id}",
-                    style=_style(ui, "reject", fallback="danger"),
-                ),
-            ],
-        ]
+def reseller_app_review(
+    app_id: int,
+    ui: dict | None = None,
+    *,
+    allow_approve: bool = True,
+) -> InlineKeyboardMarkup:
+    """Message-scoped approve/reject (notifications). No nav chrome.
+
+    ``allow_approve=False`` for unpaid (pending_payment) apps — reject only.
+    """
+    row: list[InlineKeyboardButton] = []
+    if allow_approve:
+        row.append(
+            _ikb(
+                "🟢✅ تأیید",
+                callback_data=f"adm:resapp:ok:{app_id}",
+                style=_style(ui, "confirm", fallback="success"),
+            )
+        )
+    row.append(
+        _ikb(
+            "🔴❌ رد",
+            callback_data=f"adm:resapp:no:{app_id}",
+            style=_style(ui, "reject", fallback="danger"),
+        )
     )
+    return InlineKeyboardMarkup(inline_keyboard=[row])
 
 
 def reseller_home(profile=None, ui: dict | None = None) -> InlineKeyboardMarkup:

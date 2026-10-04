@@ -59,11 +59,14 @@ async def bulk_reseller_app_action(
     ok = fail = 0
     for aid in ids:
         app = await get_application(session, aid)
-        if not app or app.status != "awaiting_approval":
+        if not app:
             fail += 1
             continue
         try:
             if action == "approve":
+                if app.status != "awaiting_approval":
+                    fail += 1
+                    continue
                 await approve_application(
                     session,
                     app,
@@ -71,6 +74,9 @@ async def bulk_reseller_app_action(
                     panel_base_url=await get_reseller_panel_base_url(session),
                 )
             elif action == "reject":
+                if app.status not in {"awaiting_approval", "pending_payment"}:
+                    fail += 1
+                    continue
                 await reject_application(session, app, reviewer_tg=0)
             else:
                 fail += 1

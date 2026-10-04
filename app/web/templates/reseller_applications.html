@@ -26,7 +26,7 @@
     </thead>
     <tbody>
     {% for a in apps %}
-      <tr data-bulk-ops="{% if a.status == 'awaiting_approval' %}approve,reject{% endif %}">
+      <tr data-bulk-ops="{% if a.status == 'awaiting_approval' %}approve,reject{% elif a.status == 'pending_payment' %}reject{% endif %}">
         {{ table_select_cell(a.id) }}
         <td class="mono">{{ a.id }}</td>
         <td>
@@ -40,6 +40,7 @@
           {% elif a.status == 'pending_payment' %}<span class="badge pending">منتظر پرداخت</span>
           {% elif a.status == 'approved' %}<span class="badge approved">تأیید شده</span>
           {% elif a.status == 'rejected' %}<span class="badge rejected">رد شده</span>
+          {% elif a.status == 'cancelled' %}<span class="badge">لغو شده</span>
           {% else %}<span class="badge">{{ a.status }}</span>{% endif %}
         </td>
         <td class="col-actions">
@@ -47,6 +48,10 @@
           {% call row_actions() %}
           <form method="post" action="/resellers/applications/{{ a.id }}/approve" data-confirm="این درخواست نمایندگی تأیید شود؟" data-confirm-title="تأیید درخواست" data-confirm-label="تأیید"><button class="btn btn-sm" type="submit">تأیید</button></form>
           <form method="post" action="/resellers/applications/{{ a.id }}/reject" data-confirm="این درخواست رد شود؟" data-confirm-title="رد درخواست" data-confirm-danger="1" data-confirm-label="رد"><button class="btn btn-ghost btn-sm" type="submit">رد</button></form>
+          {% endcall %}
+          {% elif a.status == 'pending_payment' %}
+          {% call row_actions() %}
+          <form method="post" action="/resellers/applications/{{ a.id }}/reject" data-confirm="درخواست منتظر پرداخت رد/لغو شود؟ کاربر می‌تواند دوباره درخواست بدهد." data-confirm-title="رد درخواست" data-confirm-danger="1" data-confirm-label="رد"><button class="btn btn-ghost btn-sm" type="submit">رد / لغو</button></form>
           {% endcall %}
           {% else %}
           <span class="muted">—</span>
