@@ -43,7 +43,8 @@ def _plan_line(p: Plan) -> str:
         link = "⚠️ بدون اتصال پاسارگارد"
     return (
         f"{flag} <b>#{p.id} {html.escape(p.name)}</b>\n"
-        f"💰 {format_toman(p.price, get_settings().currency)} · {link}"
+        + (f"📁 {html.escape(p.category)}\n" if p.category else "")
+        + f"💰 {format_toman(p.price, get_settings().currency)} · {link}"
     )
 
 
@@ -134,6 +135,7 @@ async def _plan_detail_text(p: Plan) -> str:
         f"قیمت: {format_toman(p.price, get_settings().currency)}\n"
         f"مدت: {p.duration_days} روز\n"
         f"حجم: {gb}\n"
+        f"دسته‌بندی: {html.escape(p.category or 'بدون دسته‌بندی')}\n"
         f"وضعیت: {'فعال' if p.is_active else 'خاموش'}\n"
         f"اتصال پاسارگارد: {link}"
     )
@@ -145,6 +147,7 @@ def _plan_detail_keyboard(p: Plan, ui: dict | None = None) -> InlineKeyboardMark
     kind_id = "shop_kind_trial" if getattr(p, "is_trial", False) else "shop_kind_fixed"
     st = kb._style(ui, kind_id, fallback="primary")
     rows = [
+        [kb._ikb("📁 دسته‌بندی", callback_data=f"adm:plan:edit:category:{pid}", style=st)],
         [kb._ikb("✏️ نام", callback_data=f"adm:plan:edit:name:{pid}", style=st)],
         [kb._ikb("✏️ قیمت", callback_data=f"adm:plan:edit:price:{pid}", style=st)],
         [kb._ikb("✏️ مدت (روز)", callback_data=f"adm:plan:edit:days:{pid}", style=st)],
@@ -153,6 +156,7 @@ def _plan_detail_keyboard(p: Plan, ui: dict | None = None) -> InlineKeyboardMark
         [kb._ikb("✏️ ترتیب نمایش", callback_data=f"adm:plan:edit:sort:{pid}", style=st)],
         [kb._ikb("✏️ پیشوند نام", callback_data=f"adm:plan:edit:prefix:{pid}", style=st)],
         [kb._ikb("✏️ پسوند نام", callback_data=f"adm:plan:edit:suffix:{pid}", style=st)],
+        [kb._ikb("✏️ الگوی نام", callback_data=f"adm:plan:edit:pattern:{pid}", style=st)],
         [
             kb._ikb(
                 "🎨 رنگ دکمه",
@@ -778,10 +782,12 @@ async def adm_plan_edit_ask(
         await callback.answer("نامعتبر", show_alert=True)
         return
     field, pid_raw = parts[3], parts[4]
-    if field not in {"name", "price", "days", "gb", "desc", "sort", "prefix", "suffix"}:
+    if field not in {"name", "price", "days", "gb", "desc", "sort", "prefix", "suffix", "pattern", "category"}:
         await callback.answer("نامعتبر", show_alert=True)
         return
     prompts = {
+        "category": "نام دسته‌بندی (— = بدون دسته‌بندی):",
+        "pattern": "الگوی نام سرویس (— = پیش‌فرض):\n{prefix} {random} {suffix} {id} {plan_volume} {plan_unit} {username}",
         "name": "نام جدید پلن:",
         "price": "قیمت (تومان):",
         "days": "مدت (روز):",
@@ -821,9 +827,17 @@ async def adm_plan_edit_save(
     if not plan or not field:
         await state.clear()
         return
+    if field in {"category", "pattern"} and plan.owner_reseller_id is not None:
+        await state.clear()
+        await message.answer("یافت نشد", reply_markup=await _plans_flow_reply_kb(state))
+        return
     text = (message.text or "").strip()
     try:
-        if field == "name":
+        if field == "category":
+            from app.services.plan_categories import normalize_plan_category
+
+            plan.category = normalize_plan_category(None if text == "—" else text)
+        elif field == "name":
             if not text:
                 await message.answer("نام خالی نیست.")
                 return
@@ -843,6 +857,8 @@ async def adm_plan_edit_save(
             plan.pg_username_prefix = text[:64] or None
         elif field == "suffix":
             plan.pg_username_suffix = text[:64] or None
+        elif field == "pattern":
+            plan.pg_username_pattern = None if text == "—" else (text[:255] or None)
     except ValueError:
         await message.answer("عدد معتبر بفرستید.", reply_markup=kb.cancel_reply())
         return

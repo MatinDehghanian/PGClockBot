@@ -1273,7 +1273,7 @@ SETTING_GROUPS = {
             "pg_username_pattern",
             "الگوی نام",
             "text",
-            "متغیرها: {prefix} {random} {suffix} {id} — پیش‌فرض: {prefix}_{random}{suffix}",
+            "متغیرها: {prefix} {random} {suffix} {id} {plan_volume} {plan_unit} {username} — پیش‌فرض: {prefix}_{random}{suffix}",
         ),
     ],
     "کانال اجباری": [

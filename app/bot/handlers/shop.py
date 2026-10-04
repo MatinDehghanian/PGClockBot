@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import html
+
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -9,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
 from app.bot.tg_utils import safe_edit_text
+from app.services.plan_categories import category_names, plan_category
 from app.config import get_settings
 from app.db.models import BotUser, Order, PaymentMethod, UserService
 from app.services.redact import user_safe_error
@@ -288,13 +291,52 @@ async def shop_kind_fixed(
     if callback.message:
         await safe_edit_text(
             callback.message,
-            format_message("💎 پلن ثابت", "یکی از پلن‌ها را انتخاب کنید:"),
+            format_message("💎 پلن ثابت", "دسته‌بندی را انتخاب کنید:" if category_names(fixed_plans) else "یکی از پلن‌ها را انتخاب کنید:"),
             reply_markup=kb.plans_keyboard(
                 fixed_plans,
                 ui,
                 back_callback="shop:list",
                 kind="fixed",
             ),
+        )
+
+
+@router.callback_query(F.data.regexp(r"^shop:category:(fixed|trial|wholesale):\d+$"))
+async def shop_category(
+    callback: CallbackQuery, session: AsyncSession, db_user: BotUser
+):
+    if await _answer_shop_maintenance(callback, session):
+        return
+    kind, representative = callback.data.split(":")[-2:]
+    ui, fixed_on, trial_on, _custom, wholesale_on, _all, fixed, trial = await _shop_kind_flags(session, db_user)
+    enabled = {"fixed": fixed_on, "trial": trial_on, "wholesale": wholesale_on}
+    if not enabled[kind]:
+        await callback.answer("پلن در دسترس نیست.", show_alert=True)
+        return
+    plans = trial if kind == "trial" else fixed
+    category = None
+    if int(representative):
+        anchor = next((p for p in plans if p.id == int(representative)), None)
+        if anchor is None or plan_category(anchor) is None:
+            await callback.answer("دسته‌بندی در دسترس نیست.", show_alert=True)
+            return
+        category = plan_category(anchor)
+    selected = [p for p in plans if plan_category(p) == category]
+    if not selected:
+        await callback.answer("دسته‌بندی در دسترس نیست.", show_alert=True)
+        return
+    await callback.answer()
+    back = f"shop:kind:{kind}"
+    markup = (
+        kb.wholesale_plans_keyboard(selected, ui, back_callback=back, show_categories=False)
+        if kind == "wholesale"
+        else kb.plans_keyboard(selected, ui, kind=kind, back_callback=back, show_categories=False)
+    )
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            format_message("📁 " + html.escape(category or "بدون دسته‌بندی"), "یکی از پلن‌ها را انتخاب کنید:"),
+            reply_markup=markup,
         )
 
 
@@ -314,7 +356,7 @@ async def shop_kind_trial(
     if callback.message:
         await safe_edit_text(
             callback.message,
-            format_message("🎁 پلن تست", "پلن تست را انتخاب کنید:"),
+            format_message("🎁 پلن تست", "دسته‌بندی را انتخاب کنید:" if category_names(trial_plans) else "پلن تست را انتخاب کنید:"),
             reply_markup=kb.plans_keyboard(
                 trial_plans,
                 ui,
@@ -722,7 +764,7 @@ async def wholesale_start(callback: CallbackQuery, session: AsyncSession, state:
     await callback.answer()
     text = format_message(
         "📦 فروش عمده",
-        wholesale_description(ui) + "\n\nابتدا نوع سرویس (پلن) را انتخاب کنید:",
+        wholesale_description(ui) + ("\n\nدسته‌بندی را انتخاب کنید:" if category_names(plans) else "\n\nابتدا نوع سرویس (پلن) را انتخاب کنید:"),
     )
     if callback.message:
         await safe_edit_text(

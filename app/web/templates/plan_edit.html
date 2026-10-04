@@ -33,6 +33,11 @@
       </label>
     </div>
 
+    {% set category_value = plan.category %}
+    {% include "_plan_category_field.html" %}
+    <datalist id="plan-category-options">
+      {% for category in plan_categories %}<option value="{{ category }}"></option>{% endfor %}
+    </datalist>
     <label class="form-field">توضیح کوتاه
       <input name="description" value="{{ plan.description or '' }}" placeholder="نمایش در بات" />
     </label>
@@ -124,20 +129,28 @@
       const prefix = ((root.querySelector('[data-naming-prefix]') || {}).value || '').trim() || gPrefix || 'clk';
       const suffix = ((root.querySelector('[data-naming-suffix]') || {}).value || '').trim() || gSuffix || '';
       const pattern = ((root.querySelector('[data-naming-pattern]') || {}).value || '').trim() || gPattern || '{prefix}_{random}{suffix}';
+      const form = root.closest('form');
+      const volumeInput = form && form.querySelector('[name="data_limit_gb"]');
+      const rawVolume = volumeInput ? volumeInput.value.trim() : '30';
+      const volume = rawVolume && Number(rawVolume) > 0 ? String(Number(rawVolume)) : 'unlimited';
       let out;
       try {
         out = pattern
           .replaceAll('{prefix}', prefix)
           .replaceAll('{suffix}', suffix)
           .replaceAll('{random}', rnd())
-          .replaceAll('{id}', '42');
+          .replaceAll('{id}', '42')
+          .replaceAll('{plan_volume}', volume)
+          .replaceAll('{plan_unit}', 'GB')
+          .replaceAll('{username}', 'ali_user');
       } catch (e) {
         out = prefix + '_' + rnd() + suffix;
       }
       sample.textContent = out;
     }
-    root.addEventListener('input', render);
-    root.addEventListener('change', render);
+    const form = root.closest('form') || root;
+    form.addEventListener('input', render);
+    form.addEventListener('change', render);
     render();
   })();
 })();

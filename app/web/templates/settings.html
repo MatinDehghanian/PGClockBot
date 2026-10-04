@@ -153,7 +153,10 @@
         .replaceAll('{prefix}', prefix)
         .replaceAll('{suffix}', suffix)
         .replaceAll('{random}', rnd())
-        .replaceAll('{id}', '42');
+        .replaceAll('{id}', '42')
+        .replaceAll('{plan_volume}', '30')
+        .replaceAll('{plan_unit}', 'GB')
+        .replaceAll('{username}', 'ali_user');
     } catch (e) {
       out = prefix + '_' + rnd() + suffix;
     }

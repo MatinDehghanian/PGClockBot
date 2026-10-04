@@ -133,10 +133,13 @@ def _random_username(
     pattern: str | None = None,
     *,
     user_id: str | int | None = None,
+    username: str | None = None,
+    plan_volume: str = "unlimited",
+    plan_unit: str = "GB",
 ) -> str:
     """Build a PG username from prefix/suffix or an optional pattern.
 
-    Pattern placeholders: ``{prefix}``, ``{random}`` (8 alnum), ``{suffix}``, ``{id}``.
+    Pattern placeholders come from the shared naming-domain catalog.
     """
     random_part = _random_alnum(8)
     id_part = "" if user_id is None else str(user_id)
@@ -152,6 +155,9 @@ def _random_username(
             random=random_part,
             suffix=suffix,
             id=id_part,
+            username=(username or "").strip().lstrip("@") or id_part,
+            plan_volume=plan_volume,
+            plan_unit=plan_unit,
             html=False,
         ).strip()
         if built and "{" not in built:
@@ -225,6 +231,7 @@ async def generate_pg_username(
     plan_suffix: str | None = None,
     plan_pattern: str | None = None,
     reseller_id: int | None = None,
+    user: BotUser | None = None,
 ) -> str:
     """Generate a Pasarguard username using plan overrides when set, else globals."""
     from app.services.users import get_all_settings
@@ -238,11 +245,18 @@ async def generate_pg_username(
         plan_suffix=plan_suffix,
         plan_pattern=plan_pattern,
     )
+    # Delivery already loads the buyer; other callers only need a lookup when
+    # their pattern requests the Telegram username.
+    if user is None and user_id is not None and "{username}" in pattern:
+        user = await session.get(BotUser, user_id)
+    volume = getattr(plan, "data_limit_gb", None)
     return _random_username(
         prefix=prefix,
         suffix=suffix,
         pattern=pattern,
         user_id=user_id,
+        username=getattr(user, "username", None) or str(getattr(user, "telegram_id", None) or user_id or ""),
+        plan_volume=f"{volume:g}" if volume is not None and volume > 0 else "unlimited",
     )
 
 
@@ -1723,6 +1737,7 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
                 user_id=order.user_id,
                 plan=plan,
                 reseller_id=order.reseller_id,
+                user=order.user,
             )
             note = f"PGClockBot order #{order.id}"
             if qty > 1:

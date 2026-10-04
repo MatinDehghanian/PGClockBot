@@ -12,6 +12,10 @@
   </div>
 </div>
 
+<datalist id="plan-category-options">
+  {% for category in plan_categories %}<option value="{{ category }}"></option>{% endfor %}
+</datalist>
+
 {# flash_ok / flash_err rendered once in base.html #}
 {% if pg_error %}<div class="flash warn">پاسارگارد: {{ pg_error }} — پلن‌ها را می‌توانید ذخیره کنید ولی تحویل نیاز به اتصال دارد.</div>{% endif %}
 {% from "_pg_limit_cards.html" import pg_snapshot_limit_board %}
@@ -23,6 +27,18 @@
 
 <div class="card card-flush">
   <h2>پلن‌های کاربران</h2>
+  <form method="get" action="/plans" class="form-row">
+    <label class="form-field">دسته‌بندی پلن‌ها
+      <select name="category">
+        <option value="">همه دسته‌ها</option>
+        <option value="uncategorized" {% if selected_category == 'uncategorized' %}selected{% endif %}>بدون دسته‌بندی</option>
+        {% for category in plan_categories %}
+        <option value="name:{{ category }}" {% if selected_category == 'name:' ~ category %}selected{% endif %}>{{ category }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="submit" class="btn btn-ghost">نمایش</button>
+  </form>
   {{ table_bulk_bar('/plans/bulk-action', [
     {'key': 'toggle', 'label': 'روشن/خاموش', 'confirm': 'وضعیت {n} پلن تغییر کند؟', 'confirm_title': 'تغییر وضعیت گروهی', 'confirm_label': 'اعمال'},
     {'key': 'delete', 'label': 'حذف', 'class': 'btn-danger', 'confirm': '{n} پلن حذف شوند؟', 'confirm_title': 'حذف گروهی', 'confirm_label': 'حذف', 'danger': true},
@@ -36,7 +52,7 @@
     {% for p in plans %}
       <tr data-bulk-ops="toggle,delete">
         {{ table_select_cell(p.id) }}
-        <td>{{ p.name }}</td>
+        <td>{{ p.name }}{% if p.category %}<br><small class="muted">📁 {{ p.category }}</small>{% endif %}</td>
         <td class="mono">{{ "{:,}".format(p.price).replace(",", "٬") }}</td>
         <td class="col-hide-sm">{{ p.duration_days }} روز</td>
         <td>{% if p.data_limit_gb is not none %}{{ p.data_limit_gb | gb }}{% else %}نامحدود{% endif %}</td>
@@ -360,6 +376,8 @@
             <small class="muted">خالی = نامحدود{% if pg_limit_snapshot and pg_limit_snapshot.restricted and pg_limit_snapshot.per_user_data_max %} — سقف زنده: {{ pg_limit_snapshot.per_user_data_max | bytes }}{% endif %}</small>
           </label>
         </div>
+        {% set category_value = '' %}
+        {% include "_plan_category_field.html" %}
         <label class="form-field">توضیح کوتاه
           <input name="description" placeholder="نمایش در بات" />
         </label>
@@ -1083,21 +1101,29 @@
     const prefix = ((root.querySelector('[data-naming-prefix]') || {}).value || '').trim() || gPrefix || 'clk';
     const suffix = ((root.querySelector('[data-naming-suffix]') || {}).value || '').trim() || gSuffix || '';
     const pattern = ((root.querySelector('[data-naming-pattern]') || {}).value || '').trim() || gPattern || '{prefix}_{random}{suffix}';
+    const form = root.closest('form');
+    const volumeInput = form && form.querySelector('[name="data_limit_gb"]');
+    const rawVolume = volumeInput ? volumeInput.value.trim() : '30';
+    const volume = rawVolume && Number(rawVolume) > 0 ? String(Number(rawVolume)) : 'unlimited';
     let out;
     try {
       out = pattern
         .replaceAll('{prefix}', prefix)
         .replaceAll('{suffix}', suffix)
         .replaceAll('{random}', rnd())
-        .replaceAll('{id}', '42');
+        .replaceAll('{id}', '42')
+        .replaceAll('{plan_volume}', volume)
+        .replaceAll('{plan_unit}', 'GB')
+        .replaceAll('{username}', 'ali_user');
     } catch (e) {
       out = prefix + '_' + rnd() + suffix;
     }
     sample.textContent = out;
   }
   document.querySelectorAll('[data-plan-naming]').forEach((root) => {
-    root.addEventListener('input', () => renderNaming(root));
-    root.addEventListener('change', () => renderNaming(root));
+    const form = root.closest('form') || root;
+    form.addEventListener('input', () => renderNaming(root));
+    form.addEventListener('change', () => renderNaming(root));
     renderNaming(root);
   });
 
