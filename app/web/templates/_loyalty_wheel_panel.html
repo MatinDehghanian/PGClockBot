@@ -36,22 +36,45 @@
       </div>
 
       <h3 class="loyalty-editor-title">ترتیب زیرمنوی باشگاه</h3>
-      <p class="muted">ترتیب دکمه‌های زیرمنوی باشگاه در ربات (نه دکمه اصلی باشگاه).</p>
+      <p class="muted">ترتیب و نمایش دکمه‌های زیرمنوی باشگاه در ربات. حذف از لیست = مخفی در ربات. چرخ شانس وقتی سوئیچ بالا خاموش باشد هم در ربات نشان داده نمی‌شود.</p>
       <input type="hidden" name="loyalty_submenu_order" id="loyalty_submenu_order" value="{{ loyalty_submenu_order }}" />
-      <ul class="dnd-list" id="loyalty-submenu-list" data-zone="active">
-        {% for key in loyalty_submenu_order.split(',') if key %}
-        <li class="dnd-item" data-key="{{ key }}">
-          <div class="meta">
-            <strong>{{ submenu_labels.get(key, key) }}</strong>
-            <div class="muted">{{ key }}</div>
-          </div>
-          <div class="dnd-actions">
-            <button type="button" class="icon-btn icon-move btn-up" title="بالا" aria-label="بالا"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 10l4-4 4 4"/></svg></button>
-            <button type="button" class="icon-btn icon-move btn-down" title="پایین" aria-label="پایین"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg></button>
-          </div>
-        </li>
-        {% endfor %}
-      </ul>
+      <div class="dnd-cols">
+        <div class="card dnd-card">
+          <h4>فعال در زیرمنو</h4>
+          <ul class="dnd-list" id="loyalty-submenu-list" data-zone="active">
+            {% for key in loyalty_submenu_active %}
+            <li class="dnd-item" data-key="{{ key }}">
+              <div class="meta">
+                <strong>{{ submenu_labels.get(key, key) }}</strong>
+                <div class="muted">{{ key }}</div>
+              </div>
+              <div class="dnd-actions">
+                <button type="button" class="icon-btn icon-move btn-up" title="بالا" aria-label="بالا"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 10l4-4 4 4"/></svg></button>
+                <button type="button" class="icon-btn icon-move btn-down" title="پایین" aria-label="پایین"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg></button>
+                <button type="button" class="icon-btn icon-remove btn-remove" title="حذف" aria-label="حذف"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+              </div>
+            </li>
+            {% endfor %}
+          </ul>
+        </div>
+        <div class="card dnd-card">
+          <h4>مخفی / مخزن</h4>
+          <ul class="dnd-list" id="loyalty-submenu-pool" data-zone="pool">
+            {% for key in loyalty_submenu_pool %}
+            <li class="dnd-item" data-key="{{ key }}">
+              <div class="meta">
+                <strong>{{ submenu_labels.get(key, key) }}</strong>
+                <div class="muted">{{ key }}</div>
+              </div>
+              <div class="dnd-actions">
+                <button type="button" class="icon-btn icon-add btn-add" title="افزودن" aria-label="افزودن"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg></button>
+              </div>
+            </li>
+            {% endfor %}
+            <li class="pool-empty" id="loyalty-submenu-pool-empty" {% if loyalty_submenu_pool %}style="display:none"{% endif %}>همه دکمه‌ها در زیرمنو هستند</li>
+          </ul>
+        </div>
+      </div>
       <div class="actions"><button class="btn" type="submit">ذخیره تنظیمات چرخ</button></div>
     </form>
   </div>
@@ -166,23 +189,55 @@
 <script>
 (function () {
   const list = document.getElementById('loyalty-submenu-list');
+  const pool = document.getElementById('loyalty-submenu-pool');
   const input = document.getElementById('loyalty_submenu_order');
-  if (!list || !input) return;
+  const empty = document.getElementById('loyalty-submenu-pool-empty');
+  if (!list || !pool || !input) return;
   function sync() {
     input.value = [...list.querySelectorAll('.dnd-item')].map((el) => el.dataset.key).join(',');
+    if (empty) empty.style.display = pool.querySelector('.dnd-item') ? 'none' : '';
   }
-  list.addEventListener('click', function (e) {
+  function setActiveActions(li) {
+    li.querySelectorAll('.dnd-actions').forEach((n) => n.remove());
+    const actions = document.createElement('div');
+    actions.className = 'dnd-actions';
+    actions.innerHTML =
+      '<button type="button" class="icon-btn icon-move btn-up" title="بالا" aria-label="بالا"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 10l4-4 4 4"/></svg></button>' +
+      '<button type="button" class="icon-btn icon-move btn-down" title="پایین" aria-label="پایین"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg></button>' +
+      '<button type="button" class="icon-btn icon-remove btn-remove" title="حذف" aria-label="حذف"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>';
+    li.appendChild(actions);
+  }
+  function setPoolActions(li) {
+    li.querySelectorAll('.dnd-actions').forEach((n) => n.remove());
+    const actions = document.createElement('div');
+    actions.className = 'dnd-actions';
+    actions.innerHTML =
+      '<button type="button" class="icon-btn icon-add btn-add" title="افزودن" aria-label="افزودن"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg></button>';
+    li.appendChild(actions);
+  }
+  function onClick(e) {
     const btn = e.target.closest('button');
     if (!btn) return;
     const li = btn.closest('.dnd-item');
     if (!li) return;
-    if (btn.classList.contains('btn-up') && li.previousElementSibling) {
+    if (btn.classList.contains('btn-up') && li.parentElement === list && li.previousElementSibling) {
       list.insertBefore(li, li.previousElementSibling);
       sync();
-    } else if (btn.classList.contains('btn-down') && li.nextElementSibling) {
+    } else if (btn.classList.contains('btn-down') && li.parentElement === list && li.nextElementSibling) {
       list.insertBefore(li.nextElementSibling, li);
       sync();
+    } else if (btn.classList.contains('btn-remove') && li.parentElement === list) {
+      setPoolActions(li);
+      pool.insertBefore(li, empty);
+      sync();
+    } else if (btn.classList.contains('btn-add') && li.parentElement === pool) {
+      setActiveActions(li);
+      list.appendChild(li);
+      sync();
     }
-  });
+  }
+  list.addEventListener('click', onClick);
+  pool.addEventListener('click', onClick);
+  sync();
 })();
 </script>

@@ -145,7 +145,9 @@ def _reply_user_entries(
         elif key == "support":
             entries.append((REPLY_ACTION_SUPPORT, _t(ui, "btn_support")))
         elif key == "loyalty":
-            entries.append((REPLY_ACTION_LOYALTY, _t(ui, "btn_loyalty")))
+            # Feature toggle wins over menu_order presence.
+            if on(_t(ui, "loyalty_enabled")):
+                entries.append((REPLY_ACTION_LOYALTY, _t(ui, "btn_loyalty")))
         elif key == "reseller_apply" and role == Role.USER.value and not show_reseller_creds:
             entries.append((REPLY_ACTION_RESELLER_APPLY, _t(ui, "btn_reseller_apply")))
         elif key == "miniapp":
@@ -421,6 +423,7 @@ def _loyalty_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]]:
 
     Secondary actions (share link, redeem, pagination, my-discounts) stay inline.
     Order from loyalty_submenu_order CSV; club button position uses main menu_order.
+    Wheel is omitted when ``lucky_wheel_enabled`` is off (toggle beats CSV).
     """
     catalog = {
         REPLY_ACTION_LOY_REFERRAL: _t(ui, "btn_referral") or "👥 دعوت دوستان",
@@ -431,8 +434,13 @@ def _loyalty_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]]:
     }
     from app.services.lucky_wheel import parse_submenu_order
 
-    order = parse_submenu_order(_t(ui, "loyalty_submenu_order"))
-    return [(key, catalog[key]) for key in order if key in catalog]
+    order = parse_submenu_order(_t(ui, "loyalty_submenu_order"), fill_missing=False)
+    wheel_on = on(_t(ui, "lucky_wheel_enabled"))
+    return [
+        (key, catalog[key])
+        for key in order
+        if key in catalog and (key != REPLY_ACTION_LOY_WHEEL or wheel_on)
+    ]
 
 
 def _admin_loyalty_submenu_entries(ui: dict | None = None, *, include_tiers: bool = True) -> list[tuple[str, str]]:

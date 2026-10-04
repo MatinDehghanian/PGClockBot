@@ -75,10 +75,23 @@ def _reward_in_scope(reward: LoyaltyReward, scope: int | None) -> bool:
     return reward.reseller_id is not None and int(reward.reseller_id) == int(scope)
 
 
+def _submenu_pool_context(order_csv: str) -> dict[str, object]:
+    active = [p.strip() for p in str(order_csv or "").split(",") if p.strip()]
+    # Keep only known keys, preserve order
+    active = [k for k in active if k in DEFAULT_SUBMENU_ORDER]
+    seen = set(active)
+    pool = [k for k in DEFAULT_SUBMENU_ORDER if k not in seen]
+    return {
+        "loyalty_submenu_order": ",".join(active) if active else ",".join(DEFAULT_SUBMENU_ORDER),
+        "loyalty_submenu_active": active or list(DEFAULT_SUBMENU_ORDER),
+        "loyalty_submenu_pool": pool if active else [],
+    }
+
+
 def _empty_wheel_context() -> dict:
     """Safe defaults when wheel tables/settings cannot be loaded."""
     order = ",".join(DEFAULT_SUBMENU_ORDER)
-    return {
+    ctx = {
         "wheel_metrics": {
             "wheel_enabled": False,
             "active_prizes": 0,
@@ -90,11 +103,12 @@ def _empty_wheel_context() -> dict:
         "lucky_wheel_daily_limit": 3,
         "lucky_wheel_cooldown_seconds": 0,
         "lucky_wheel_free_spins_daily": 0,
-        "loyalty_submenu_order": order,
         "wheel_prizes": [],
         "wheel_spins": [],
         "wheel_prize_type_labels": WHEEL_PRIZE_TYPE_LABELS,
     }
+    ctx.update(_submenu_pool_context(order))
+    return ctx
 
 
 async def _wheel_panel_context(
@@ -131,18 +145,19 @@ async def _wheel_panel_context(
             }
             for s in spin_rows
         ]
-        return {
+        ctx = {
             "wheel_metrics": metrics,
             "lucky_wheel_enabled": "1" if cfg["enabled"] else "0",
             "lucky_wheel_spin_cost_points": int(cfg["spin_cost"]),
             "lucky_wheel_daily_limit": int(cfg["daily_limit"]),
             "lucky_wheel_cooldown_seconds": int(cfg["cooldown_seconds"]),
             "lucky_wheel_free_spins_daily": int(cfg["free_spins_daily"]),
-            "loyalty_submenu_order": ",".join(cfg["submenu_order"]),
             "wheel_prizes": prizes,
             "wheel_spins": spins,
             "wheel_prize_type_labels": WHEEL_PRIZE_TYPE_LABELS,
         }
+        ctx.update(_submenu_pool_context(",".join(cfg["submenu_order"])))
+        return ctx
     except Exception:
         logging.getLogger(__name__).exception(
             "loyalty wheel context failed (migration pending?)"
@@ -405,6 +420,7 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
         reward_type: str = Form(...),
         reward_value: int = Form(...),
         points_cost: int = Form(...),
+        sort_order: int = Form(100),
         min_purchase_toman: int = Form(0),
         max_discount_toman: str = Form(""),
         expires_days: str = Form(""),
@@ -438,7 +454,7 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
                 points_cost=int(points_cost),
                 enabled=True,
                 archived=False,
-                sort_order=100,
+                sort_order=int(sort_order),
                 reseller_id=scope,
                 min_purchase_toman=max(0, int(min_purchase_toman or 0))
                 if reward_type == "discount_percent"
@@ -459,6 +475,7 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
         description: str = Form(""),
         reward_value: int = Form(...),
         points_cost: int = Form(...),
+        sort_order: int = Form(100),
         enabled: str = Form("0"),
         max_redemptions_global: str = Form(""),
         max_redemptions_per_user: str = Form(""),
@@ -481,6 +498,7 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
         if reward.reward_type == "discount_percent":
             reward.reward_value = min(100, reward.reward_value)
         reward.points_cost = max(1, int(points_cost))
+        reward.sort_order = int(sort_order)
         reward.enabled = str(enabled) in {"1", "on", "true", "yes"}
         g = str(max_redemptions_global or "").strip()
         u = str(max_redemptions_per_user or "").strip()
@@ -595,7 +613,8 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
         daily = clamp_int(lucky_wheel_daily_limit, lo=0, hi=100, default=3)
         cool = clamp_int(lucky_wheel_cooldown_seconds, lo=0, hi=86_400, default=0)
         free_d = clamp_int(lucky_wheel_free_spins_daily, lo=0, hi=50, default=0)
-        order = ",".join(parse_submenu_order(loyalty_submenu_order))
+        # Respect intentional omissions from the DnD list (no forced re-inject).
+        order = ",".join(parse_submenu_order(loyalty_submenu_order, fill_missing=False))
         await set_setting(session, SETTING_WHEEL_ENABLED, enabled, reseller_id=scope)
         await set_setting(session, SETTING_SPIN_COST, str(cost), reseller_id=scope)
         await set_setting(session, SETTING_DAILY_LIMIT, str(daily), reseller_id=scope)

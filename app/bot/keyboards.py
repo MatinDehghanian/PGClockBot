@@ -235,6 +235,8 @@ def main_menu(
                 )
             )
         elif key in {"loyalty", "referral"}:
+            if not on(_t(ui, "loyalty_enabled")):
+                continue
             lk = "btn_loyalty" if key == "loyalty" else "btn_referral"
             buttons.append(
                 _ikb(

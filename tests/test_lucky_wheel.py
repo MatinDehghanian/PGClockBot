@@ -273,6 +273,8 @@ class LuckyWheelMenuTests(unittest.TestCase):
 
         ui = {
             "menu_order": "shop,loyalty",
+            "loyalty_enabled": "1",
+            "lucky_wheel_enabled": "1",
             "btn_loyalty": "باشگاه",
             "btn_loy_wheel": "🎡 چرخ شانس",
             "btn_menu_home": "🏠 منوی اصلی",
