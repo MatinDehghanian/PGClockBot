@@ -19,11 +19,20 @@ class ReleaseNotesTests(unittest.TestCase):
     def test_upgrade_shows_all_versions_in_range(self):
         from app.services.release_notes import changelog_for_update_page
 
-        cl = changelog_for_update_page(local="1.7.43", remote="1.7.45")
+        remote_notes = {
+            "0.1.2": ["پچ ۲"],
+            "0.1.1": ["پچ ۱"],
+            "0.1.0": ["پایه"],
+        }
+        cl = changelog_for_update_page(
+            local="0.1.0",
+            remote="0.1.2",
+            remote_notes=remote_notes,
+        )
         self.assertTrue(cl["has_notes"])
         versions = [b["version"] for b in cl["blocks"]]
-        self.assertEqual(versions, ["1.7.45", "1.7.44"])
-        self.assertIn("از 1.7.43 تا 1.7.45", cl["title"])
+        self.assertEqual(versions, ["0.1.2", "0.1.1"])
+        self.assertIn("از 0.1.0 تا 0.1.2", cl["title"])
 
     def test_upgrade_example_3_0_1_to_3_0_4(self):
         from app.services.release_notes import changelog_for_update_page
@@ -64,23 +73,8 @@ class ReleaseNotesTests(unittest.TestCase):
 
         src = Path("app/services/release_notes.py").read_text(encoding="utf-8")
         parsed = parse_release_notes_source(src)
-        self.assertIn("1.9.0", parsed)
-        self.assertTrue(parsed["1.9.0"])
-        self.assertIn("1.8.6", parsed)
-        self.assertTrue(parsed["1.8.6"])
-        self.assertIn("1.8.5", parsed)
-        self.assertTrue(parsed["1.8.5"])
-        self.assertIn("3.1.8", parsed)
-        self.assertIn("3.1.7", parsed)
-        self.assertIn("3.1.6", parsed)
-        self.assertIn("3.1.5", parsed)
-        self.assertIn("3.1.4", parsed)
-        self.assertIn("3.1.3", parsed)
-        self.assertIn("3.1.2", parsed)
-        self.assertIn("3.1.1", parsed)
-        self.assertIn("3.1.0", parsed)
-        self.assertIn("3.0.5", parsed)
-        self.assertIn("3.0.4", parsed)
+        self.assertEqual(list(parsed.keys()), ["0.1.0"])
+        self.assertTrue(parsed["0.1.0"])
 
     def test_unknown_local_falls_back_to_newest(self):
         from app.services.release_notes import changelog_for_update_page, RELEASE_NOTES_FA
@@ -109,43 +103,8 @@ class ReleaseNotesTests(unittest.TestCase):
 
         src = Path("app/services/release_notes.py").read_text(encoding="utf-8")
         parsed = parse_release_notes_source(src)
-        self.assertIn("3.3.2", parsed)
-        self.assertIn("3.3.1", parsed)
-        self.assertIn("3.3.0", parsed)
-        self.assertIn("3.2.20", parsed)
-        self.assertIn("3.2.19", parsed)
-        self.assertIn("3.2.18", parsed)
-        self.assertIn("3.2.17", parsed)
-        self.assertIn("3.2.16", parsed)
-        self.assertIn("3.2.15", parsed)
-        self.assertIn("3.2.14", parsed)
-        self.assertIn("3.2.13", parsed)
-        self.assertIn("3.2.12", parsed)
-        self.assertIn("3.2.11", parsed)
-        self.assertIn("3.2.10", parsed)
-        self.assertIn("3.2.9", parsed)
-        self.assertIn("3.2.8", parsed)
-        self.assertIn("3.2.7", parsed)
-        self.assertIn("3.2.6", parsed)
-        self.assertIn("3.2.5", parsed)
-        self.assertNotIn("3.2.4", parsed)
-        self.assertIn("3.2.3", parsed)
-        self.assertIn("3.2.2", parsed)
-        self.assertIn("3.2.1", parsed)
-        self.assertIn("3.2.0", parsed)
-        self.assertIn("3.1.13", parsed)
-        self.assertIn("3.1.12", parsed)
-        self.assertIn("3.1.8", parsed)
-        self.assertIn("3.1.7", parsed)
-        self.assertIn("3.1.6", parsed)
-        self.assertIn("3.1.5", parsed)
-        self.assertIn("3.1.4", parsed)
-        self.assertIn("3.1.3", parsed)
-        self.assertIn("3.1.2", parsed)
-        self.assertIn("3.1.1", parsed)
-        self.assertIn("3.1.0", parsed)
-        self.assertIn("3.0.5", parsed)
-        self.assertIn("3.0.4", parsed)
+        self.assertEqual(set(parsed), {"0.1.0"})
+        self.assertTrue(any("MIT" in n or "۰٫۱٫۰" in n for n in parsed["0.1.0"]))
 
     def test_home_no_manual_refresh(self):
         src = Path("app/web/templates/home.html").read_text(encoding="utf-8")

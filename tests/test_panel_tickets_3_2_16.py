@@ -15,10 +15,10 @@ class VersionNotesTests(unittest.TestCase):
         from app.services.release_notes import RELEASE_NOTES_FA
         from app.version import __version__
 
-        self.assertGreaterEqual(tuple(int(x) for x in __version__.split(".")), (3, 2, 16))
-        self.assertIn("3.2.16", RELEASE_NOTES_FA)
-        blob = " ".join(RELEASE_NOTES_FA["3.2.16"])
-        self.assertIn("تیکت", blob)
+        self.assertGreaterEqual(tuple(int(x) for x in __version__.split(".")[:3]), (0, 1, 0))
+        self.assertIn("0.1.0", RELEASE_NOTES_FA)
+        blob = " ".join(RELEASE_NOTES_FA["0.1.0"])
+        self.assertIn("۰٫۱٫۰", blob)
 
 
 class ModelTests(unittest.TestCase):

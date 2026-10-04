@@ -126,7 +126,7 @@ class SourceGuardTests(unittest.TestCase):
         from app.version import __version__
         from app.services.updates import is_same_or_newer
 
-        self.assertTrue(is_same_or_newer(__version__, "4.10.9"))
+        self.assertTrue(is_same_or_newer(__version__, "0.1.0"))
         self.assertEqual(Path("VERSION").read_text(encoding="utf-8").strip(), __version__)
 
 

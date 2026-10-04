@@ -177,9 +177,8 @@ class UsersOpsUiTests(unittest.TestCase):
     def test_version_at_least_package(self):
         from app.version import __version__
 
-        # Package landed in 8.2.11; follow-up quick-ops may bump further.
         parts = [int(x) for x in __version__.split(".")[:3]]
-        self.assertGreaterEqual(parts, [8, 2, 11])
+        self.assertGreaterEqual(parts, [0, 1, 0])
         self.assertEqual(
             (ROOT / "VERSION").read_text(encoding="utf-8").strip(), __version__
         )

@@ -15,34 +15,12 @@ class VersionThreeConsistencyTests(unittest.TestCase):
         from app.version import __version__
         from app.services.updates import is_same_or_newer
 
-        self.assertTrue(is_same_or_newer(__version__, "4.10.9"))
+        self.assertTrue(is_same_or_newer(__version__, "0.1.0"))
         self.assertEqual(Path("VERSION").read_text(encoding="utf-8").strip(), __version__)
-        notes = Path("app/services/release_notes.py").read_text(encoding="utf-8")
-        first = notes.split("RELEASE_NOTES_FA", 1)[1]
-        self.assertNotIn('"3.2.4"', first)
-        self.assertLess(first.find('"3.3.2"'), first.find('"3.3.1"'))
-        self.assertLess(first.find('"3.3.1"'), first.find('"3.3.0"'))
-        self.assertLess(first.find('"3.3.0"'), first.find('"3.2.20"'))
-        self.assertLess(first.find('"3.2.20"'), first.find('"3.2.19"'))
-        self.assertLess(first.find('"3.2.19"'), first.find('"3.2.18"'))
-        self.assertLess(first.find('"3.2.18"'), first.find('"3.2.17"'))
-        self.assertLess(first.find('"3.2.17"'), first.find('"3.2.16"'))
-        self.assertLess(first.find('"3.2.16"'), first.find('"3.2.15"'))
-        self.assertLess(first.find('"3.2.15"'), first.find('"3.2.14"'))
-        self.assertLess(first.find('"3.2.14"'), first.find('"3.2.13"'))
-        self.assertLess(first.find('"3.2.13"'), first.find('"3.2.12"'))
-        self.assertLess(first.find('"3.2.12"'), first.find('"3.2.11"'))
-        self.assertLess(first.find('"3.2.11"'), first.find('"3.2.10"'))
-        self.assertLess(first.find('"3.2.10"'), first.find('"3.2.9"'))
-        self.assertLess(first.find('"3.2.9"'), first.find('"3.2.8"'))
-        self.assertLess(first.find('"3.2.8"'), first.find('"3.2.7"'))
-        self.assertLess(first.find('"3.2.7"'), first.find('"3.2.6"'))
-        self.assertLess(first.find('"3.2.6"'), first.find('"3.2.5"'))
-        self.assertLess(first.find('"3.2.5"'), first.find('"3.2.3"'))
-        self.assertLess(first.find('"3.2.3"'), first.find('"3.0.5"'))
-        self.assertLess(first.find('"3.0.5"'), first.find('"3.0.4"'))
-        self.assertLess(first.find('"3.0.4"'), first.find('"3.0.3"'))
-        self.assertLess(first.find('"3.0.3"'), first.find('"3.0.2"'))
+        from app.services.release_notes import RELEASE_NOTES_FA
+
+        self.assertEqual(list(RELEASE_NOTES_FA.keys()), ["0.1.0"])
+        self.assertEqual(__version__, "0.1.0")
 
 
 class WalletDebitGuardTests(unittest.IsolatedAsyncioTestCase):

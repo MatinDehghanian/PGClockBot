@@ -14,10 +14,10 @@ class VersionTests(unittest.TestCase):
         from app.version import __version__
 
         self.assertGreaterEqual(
-            tuple(int(x) for x in __version__.split(".")), (4, 3, 1)
+            tuple(int(x) for x in __version__.split(".")[:3]), (0, 1, 0)
         )
         notes = (ROOT / "app/services/release_notes.py").read_text(encoding="utf-8")
-        self.assertIn('"4.3.1"', notes)
+        self.assertIn('"0.1.0"', notes)
 
 
 class BotResellerServicesTests(unittest.TestCase):
