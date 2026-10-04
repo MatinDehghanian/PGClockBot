@@ -32,6 +32,8 @@
 
 ## 🚀 نصب سریع
 
+🚨 منابع پیشنهادی : ۲ گیگ رم و ۲ هسته سی پی یو
+
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockBot/main/get.sh)
 ```
@@ -41,5 +43,7 @@ Ubuntu 22.04+ · بعد از نصب: `http://SERVER_IP:9000/`
 ---
 
 ## 📄 لایسنس
+
+هر گونه کپی برداری بدون ذکر نام و فروش غیر مجاز است
 
 [MIT](LICENSE) © Mrclocks
