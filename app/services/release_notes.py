@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.1.6": [
+        "ایموجی پریمیوم در متن پیام‌های تنظیم‌شده ربات حفظ می‌شود (entities)",
+        "دکمه‌ها: ایموجی پریمیوم با icon_custom_emoji_id روی کیبورد reply/inline",
+        "بکاپ: رفع pg_dump not found — PATH سرویس systemd + postgresql-client در Update",
+    ],
     "0.1.5": [
         "امنیت: تکمیل ایزوله کیف — حذف نماینده دیگر تخفیف/شارژ فروشگاه را پلتفرمی نمی‌کند",
         "مایگریشن 0030: اعتبار ساختگی قدیمی clawback و شارژ واقعی فروشگاه به کیف همان فروشگاه",
