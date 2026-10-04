@@ -449,18 +449,13 @@ async def check_force_join_all(
     return missing, unverified
 
 
-def force_join_block_message(
+def force_join_block_outbound(
     missing: list[str],
     unverified: list[str] | None = None,
     *,
     custom: str | None = None,
-) -> str:
-    """User-facing Persian copy when required membership is not confirmed.
-
-    Channels belong on inline buttons — default copy does **not** dump a bullet
-    list. If *custom* (``force_join_msg``) contains ``{channels}``, that placeholder
-    is replaced with the bullet list; otherwise the custom text is shown as-is.
-    """
+) -> tuple[str, dict]:
+    """User-facing force-join copy + send kwargs (entities when packed)."""
     blocked = list(missing or [])
     for ch in unverified or []:
         if ch not in blocked:
@@ -468,13 +463,13 @@ def force_join_block_message(
     listed = "\n".join(f"• {c}" for c in blocked)
     custom_text = (custom or "").strip()
     if custom_text:
-        from app.services.message_variables import DOMAIN_FORCE_JOIN, render_message_template
+        from app.services.message_variables import DOMAIN_FORCE_JOIN
+        from app.services.rich_text import outbound_setting_text
 
-        return render_message_template(
-            custom_text,
+        return outbound_setting_text(
+            custom,
             domain=DOMAIN_FORCE_JOIN,
             channels=listed or "—",
-            html=True,
         )
 
     only_unverified = bool(unverified) and not missing
@@ -482,12 +477,27 @@ def force_join_block_message(
         return (
             "الان نمی‌توان عضویت شما را تأیید کرد.\n"
             "ربات باید ادمین کانال باشد و شناسه/لینک کانال درست ذخیره شده باشد.\n"
-            "بعد از رفع، از دکمه «عضو شدم» استفاده کنید."
+            "بعد از رفع، از دکمه «عضو شدم» استفاده کنید.",
+            {},
         )
     return (
         "برای ورود به ربات ابتدا از دکمه‌های زیر عضو کانال شوید، "
-        "سپس «عضو شدم» را بزنید."
+        "سپس «عضو شدم» را بزنید.",
+        {},
     )
+
+
+def force_join_block_message(
+    missing: list[str],
+    unverified: list[str] | None = None,
+    *,
+    custom: str | None = None,
+) -> str:
+    """Plain-text helper — prefer ``force_join_block_outbound`` for sends."""
+    text, _kwargs = force_join_block_outbound(
+        missing, unverified, custom=custom
+    )
+    return text
 
 
 def _callback_data(event: TelegramObject) -> str | None:
@@ -663,7 +673,7 @@ class ForceJoinMiddleware(BaseMiddleware):
         )
         if missing or unverified:
             msg = _reply_message(event)
-            text = force_join_block_message(
+            text, fj_kw = force_join_block_outbound(
                 missing, unverified, custom=ui.get("force_join_msg")
             )
             markup = kb.force_join_inline_keyboard(
@@ -671,7 +681,7 @@ class ForceJoinMiddleware(BaseMiddleware):
             )
             if msg:
                 try:
-                    await msg.answer(text, reply_markup=markup)
+                    await msg.answer(text, reply_markup=markup, **fj_kw)
                 except Exception:
                     pass
             cq = event.callback_query if isinstance(event, Update) else (

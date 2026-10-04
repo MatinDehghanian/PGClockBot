@@ -115,7 +115,7 @@ class MessageVariablesRenderTests(unittest.TestCase):
 
     def test_force_join_uses_safe_renderer(self):
         src = (ROOT / "app/bot/middlewares.py").read_text(encoding="utf-8")
-        self.assertIn("render_message_template", src)
+        self.assertIn("outbound_setting_text", src)
         self.assertNotIn(".format(channels=", src)
         msg = force_join_block_message(
             ["@a"], custom="عضو شوید:\n{channels}"

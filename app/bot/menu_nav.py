@@ -292,6 +292,7 @@ async def show_nav_keyboard(
     profile=None,
     order_id: int | None = None,
     as_user: bool = False,
+    **send_kw,
 ) -> dict:
     """Show the reply keyboard for ``level`` and update nav stack."""
     ui = await get_all_settings(session)
@@ -414,7 +415,7 @@ async def show_nav_keyboard(
             as_user=as_user,
             ui=ui,
         )
-    await message.answer(text, reply_markup=markup)
+    await message.answer(text, reply_markup=markup, **send_kw)
     return ui
 
 

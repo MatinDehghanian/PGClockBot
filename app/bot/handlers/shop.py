@@ -60,22 +60,29 @@ async def shop_under_maintenance(session: AsyncSession, ui: dict | None = None) 
     if ui is None:
         ui = await get_all_settings(session)
     if on(ui.get("shop_maintenance_enabled")):
+        from app.services.rich_text import rich_plain_text
+
+        raw = ui.get("shop_maintenance_text")
         return (
-            (ui.get("shop_maintenance_text") or "").strip()
-            or "فروشگاه موقتاً در حال به‌روزرسانی است.\nتمدید و پشتیبانی فعال است."
+            raw
+            if rich_plain_text(raw).strip()
+            else "فروشگاه موقتاً در حال به‌روزرسانی است.\nتمدید و پشتیبانی فعال است."
         )
     return None
 
 
 async def _answer_shop_maintenance(callback: CallbackQuery, session: AsyncSession, ui: dict | None = None) -> bool:
     """If maintenance is on, answer the callback and return True (caller should return)."""
+    from app.services.rich_text import outbound_setting_text, rich_plain_text
+
     msg = await shop_under_maintenance(session, ui)
     if not msg:
         return False
-    await callback.answer(msg[:180], show_alert=True)
+    await callback.answer(rich_plain_text(msg)[:180], show_alert=True)
     if callback.message:
         try:
-            await callback.message.answer(format_message("🛠 فروشگاه", msg))
+            text, send_kw = outbound_setting_text(msg, title="🛠 فروشگاه")
+            await callback.message.answer(text, **send_kw)
         except Exception:
             pass
     return True
@@ -232,14 +239,18 @@ async def shop_list(callback: CallbackQuery, session: AsyncSession, db_user: Bot
     )
     await _record_shop_funnel(session, db_user, "shop_open", ui=ui)
     if not any((fixed_on, trial_on, custom_on, wholesale_on)):
-        text = format_message(
-            "🛒 فروشگاه",
+        from app.services.rich_text import outbound_setting_text
+
+        text, send_kw = outbound_setting_text(
             ui.get("shop_empty_text")
             or "در حال حاضر پلنی برای فروش فعال نیست.",
+            title="🛒 فروشگاه",
         )
         if callback.message:
-            await safe_edit_text(callback.message, text, reply_markup=None)
-            await callback.message.answer(text, reply_markup=kb.persistent_reply_keyboard(ui))
+            await safe_edit_text(callback.message, text, reply_markup=None, **send_kw)
+            await callback.message.answer(
+                text, reply_markup=kb.persistent_reply_keyboard(ui), **send_kw
+            )
         return
     if callback.message:
         await safe_edit_text(
@@ -1420,14 +1431,22 @@ async def _await_order_receipt(
     body: str,
     reply_markup=None,
     state: FSMContext | None = None,
+    send_kw: dict | None = None,
 ):
     """Show pay instructions and switch reply KB off payment methods (cancel while waiting)."""
     ui = await get_all_settings(session)
     if callback.message:
+        if send_kw is None:
+            text = format_message(title, body)
+            kw: dict = {}
+        else:
+            text = body
+            kw = dict(send_kw)
         await safe_edit_text(
             callback.message,
-            format_message(title, body),
+            text,
             reply_markup=reply_markup,
+            **kw,
         )
         await callback.message.answer(
             "پس از واریز، عکس رسید را در همین گفتگو بفرستید.\n"
@@ -1500,28 +1519,42 @@ async def pay_card_cb(
         return
     await callback.answer()
     amount = format_toman(order.amount, get_settings().currency)
-    try:
-        body = render_message_template(
-            ui["card_pay_text"],
-            domain=DOMAIN_PAYMENT,
-            amount=amount,
-            card=card.get("number") or "—",
-            holder=card.get("holder") or "—",
-            shop_title=ui.get("shop_title") or "",
-            payment_id=payment.id,
-        )
-    except Exception:
-        body = f"مبلغ {amount} را کارت به کارت کنید و رسید بفرستید."
-    body += f"\n\n(پرداخت #{payment.id})"
+    from app.services.rich_text import outbound_setting_text, rich_plain_text
+
+    append = f"\n\n(پرداخت #{payment.id})"
     if on(ui.get("pay_card_auto_enabled")):
         from app.services.payment_settlement import create_card_auto_awaiting
 
         await create_card_auto_awaiting(session, payment)
-        hint = (ui.get("card_auto_hint_text") or "").strip()
+        hint = rich_plain_text(ui.get("card_auto_hint_text")).strip()
         if hint:
-            body += f"\n\n{hint}"
+            append += f"\n\n{hint}"
+    try:
+        text, send_kw = outbound_setting_text(
+            ui.get("card_pay_text") or "",
+            title="💳 کارت به کارت",
+            domain=DOMAIN_PAYMENT,
+            append=append,
+            amount=amount,
+            card=card.get("number") or "—",
+            holder=card.get("holder") or "—",
+            shop_title=rich_plain_text(ui.get("shop_title")) or "",
+            payment_id=payment.id,
+        )
+    except Exception:
+        text = format_message(
+            "💳 کارت به کارت",
+            f"مبلغ {amount} را کارت به کارت کنید و رسید بفرستید.{append}",
+        )
+        send_kw = {}
     await _await_order_receipt(
-        callback, session, db_user, title="💳 کارت به کارت", body=body, state=state
+        callback,
+        session,
+        db_user,
+        title="💳 کارت به کارت",
+        body=text,
+        state=state,
+        send_kw=send_kw,
     )
 
 
@@ -1592,19 +1625,27 @@ async def pay_gateway_cb(
             )
         except Exception:
             pass
+    from app.services.rich_text import outbound_setting_text, rich_plain_text
+
+    append = f"\n\n(پرداخت #{payment.id})"
     try:
-        body = render_message_template(
+        text, send_kw = outbound_setting_text(
             ui.get("gateway_pay_text") or "",
+            title=f"🌐 {name}",
             domain=DOMAIN_PAYMENT,
+            append=append,
             amount=amount,
             order_id=order.id,
             gateway_name=name,
-            shop_title=ui.get("shop_title") or "",
+            shop_title=rich_plain_text(ui.get("shop_title")) or "",
             payment_id=payment.id,
         )
     except Exception:
-        body = f"مبلغ {amount} را از طریق {name} پرداخت کنید و رسید بفرستید."
-    body += f"\n\n(پرداخت #{payment.id})"
+        text = format_message(
+            f"🌐 {name}",
+            f"مبلغ {amount} را از طریق {name} پرداخت کنید و رسید بفرستید.{append}",
+        )
+        send_kw = {}
     rows: list[list[InlineKeyboardButton]] = []
     if link.startswith("http://") or link.startswith("https://"):
         rows.append([InlineKeyboardButton(text=f"🌐 ورود به {name}", url=link)])
@@ -1613,9 +1654,10 @@ async def pay_gateway_cb(
         session,
         db_user,
         title=f"🌐 {name}",
-        body=body,
+        body=text,
         reply_markup=InlineKeyboardMarkup(inline_keyboard=rows) if rows else None,
         state=state,
+        send_kw=send_kw,
     )
 
 
@@ -1673,26 +1715,36 @@ async def pay_crypto_cb(
     amount = format_toman(order.amount, get_settings().currency)
     asset = wallet.get("asset") or "USDT"
     network = wallet.get("network") or "—"
+    from app.services.rich_text import outbound_setting_text, rich_plain_text
+
+    append = f"\n\n(پرداخت #{payment.id})"
     try:
-        body = render_message_template(
+        text, send_kw = outbound_setting_text(
             ui.get("crypto_pay_text") or "",
+            title="💎 رمزارز",
             domain=DOMAIN_PAYMENT,
+            append=append,
             amount=amount,
             asset=asset,
             network=network,
             address=address,
-            shop_title=ui.get("shop_title") or "",
+            shop_title=rich_plain_text(ui.get("shop_title")) or "",
             payment_id=payment.id,
         )
     except Exception:
-        body = (
-            f"مبلغ {amount}\n"
-            f"{asset} ({network})\n"
-            f"<code>{address}</code>\n\nرسید را بفرستید."
+        text = format_message(
+            "💎 رمزارز",
+            f"مبلغ {amount}\n{asset} ({network})\n<code>{address}</code>\n\nرسید را بفرستید.{append}",
         )
-    body += f"\n\n(پرداخت #{payment.id})"
+        send_kw = {}
     await _await_order_receipt(
-        callback, session, db_user, title="💎 رمزارز", body=body, state=state
+        callback,
+        session,
+        db_user,
+        title="💎 رمزارز",
+        body=text,
+        state=state,
+        send_kw=send_kw,
     )
 
 

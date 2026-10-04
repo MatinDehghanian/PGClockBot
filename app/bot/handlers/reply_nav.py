@@ -250,18 +250,22 @@ async def open_shop_list(
     )
     maint = await shop_under_maintenance(session, ui)
     if maint:
-        await message.answer(format_message("🛠 فروشگاه", maint))
+        from app.services.rich_text import outbound_setting_text
+
+        text, send_kw = outbound_setting_text(maint, title="🛠 فروشگاه")
+        await message.answer(text, **send_kw)
         return
     await _record_shop_funnel(session, db_user, "shop_open", ui=ui)
     if not any((fixed_on, trial_on, custom_on, wholesale_on)):
         from app.bot.menu_nav import build_main_reply_keyboard
+        from app.services.rich_text import outbound_setting_text
 
-        text = format_message(
-            "🛒 فروشگاه",
+        text, send_kw = outbound_setting_text(
             ui.get("shop_empty_text") or "در حال حاضر پلنی برای فروش فعال نیست.",
+            title="🛒 فروشگاه",
         )
         main_kb, _, _ = await build_main_reply_keyboard(session, db_user)
-        await message.answer(text, reply_markup=main_kb)
+        await message.answer(text, reply_markup=main_kb, **send_kw)
         return
     await state.set_state(None)
     await state.update_data(_shop_custom=custom_on, _shop_wholesale=wholesale_on)
@@ -301,11 +305,13 @@ async def open_services_list(message: Message, session: AsyncSession, db_user: B
     services = list(result.scalars().all())
     main_kb, _, _ = await build_main_reply_keyboard(session, db_user)
     if not services:
-        await message.answer(
+        from app.services.rich_text import outbound_setting_text
+
+        text, send_kw = outbound_setting_text(
             ui.get("empty_services_text")
-            or "هنوز سرویسی ندارید.\nاز بخش «خرید سرویس» شروع کنید.",
-            reply_markup=main_kb,
+            or "هنوز سرویسی ندارید.\nاز بخش «خرید سرویس» شروع کنید."
         )
+        await message.answer(text, reply_markup=main_kb, **send_kw)
         return
     await message.answer("📦 <b>سرویس‌های شما</b>", reply_markup=main_kb)
     await message.answer("یکی را انتخاب کنید:", reply_markup=kb.services_keyboard(services, ui))
@@ -413,20 +419,24 @@ async def open_support_home(
         support_chat_url,
     )
 
+    from app.services.rich_text import outbound_setting_text
+
     ui = await get_all_settings(session)
     contacts = active_support_contacts(parse_support_contacts(ui.get("support_contacts")))
+    text, send_kw = outbound_setting_text(
+        ui.get("support_text")
+        or "از کیبورد پایین تیکت جدید بسازید یا تیکت‌های قبلی را ببینید.",
+        title="🎧 پشتیبانی",
+    )
     await nav.show_nav_keyboard(
         message,
         session,
         db_user,
         nav.NAV_SUPPORT,
-        text=format_message(
-            "🎧 پشتیبانی",
-            ui.get("support_text")
-            or "از کیبورد پایین تیکت جدید بسازید یا تیکت‌های قبلی را ببینید.",
-        ),
+        text=text,
         state=state,
         push=push,
+        **send_kw,
     )
     if contacts:
         rows: list[list[InlineKeyboardButton]] = []

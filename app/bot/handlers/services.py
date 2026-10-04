@@ -38,11 +38,17 @@ async def svc_list(
     services = list(result.scalars().all())
     if not services:
         if callback.message:
+            from app.services.rich_text import outbound_setting_text
+
+            text, send_kw = outbound_setting_text(
+                ui.get("empty_services_text")
+                or "هنوز سرویسی ندارید.\nاز بخش «خرید سرویس» شروع کنید."
+            )
             await safe_edit_text(
                 callback.message,
-                ui.get("empty_services_text")
-                or "هنوز سرویسی ندارید.\nاز بخش «خرید سرویس» شروع کنید.",
+                text,
                 reply_markup=kb.back_home(ui),
+                **send_kw,
             )
         return
     if callback.message:

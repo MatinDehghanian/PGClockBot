@@ -292,37 +292,39 @@ async def _topup_instructions(
     card: dict | None = None,
     gateway: dict | None = None,
     wallet: dict | None = None,
-) -> tuple[str, InlineKeyboardMarkup]:
+) -> tuple[str, InlineKeyboardMarkup, dict]:
     from app.services.payment_destinations import (
         enabled_cards,
         enabled_crypto_wallets,
         enabled_gateways,
     )
+    from app.services.rich_text import outbound_setting_text, rich_plain_text
 
     if ui is None:
         ui = await get_all_settings(session)
     amount = format_toman(payment.amount, get_settings().currency)
     rows: list[list[InlineKeyboardButton]] = []
+    shop_title = rich_plain_text(ui.get("shop_title")) or ""
+    append = f"\n\nسپس عکس رسید را بفرستید.\n(پرداخت #{payment.id})"
+    raw = ""
+    title = ""
+    fallback = ""
+    kwargs: dict = {
+        "amount": amount,
+        "shop_title": shop_title,
+        "payment_id": payment.id,
+    }
     if method == PaymentMethod.CARD.value:
         card = card or (enabled_cards(ui)[0] if enabled_cards(ui) else None)
         card_num = (card or {}).get("number") or ui.get("card_number") or "—"
         holder = (card or {}).get("holder") or ui.get("card_holder") or "—"
-        try:
-            body = render_message_template(
-                ui["card_pay_text"],
-                domain=DOMAIN_PAYMENT,
-                amount=amount,
-                card=card_num,
-                holder=holder,
-                shop_title=ui.get("shop_title") or "",
-                payment_id=payment.id,
-            )
-        except Exception:
-            body = (
-                f"مبلغ {amount} را کارت به کارت کنید:\n"
-                f"<code>{card_num}</code>\n{holder}"
-            )
+        raw = ui.get("card_pay_text") or ""
         title = "💳 کارت به کارت"
+        kwargs.update(card=card_num, holder=holder)
+        fallback = (
+            f"مبلغ {amount} را کارت به کارت کنید:\n"
+            f"<code>{card_num}</code>\n{holder}"
+        )
     elif method == PaymentMethod.GATEWAY.value:
         gateway = gateway or (enabled_gateways(ui)[0] if enabled_gateways(ui) else None)
         name = (gateway or {}).get("name") or ui.get("gateway_name") or "درگاه"
@@ -339,43 +341,34 @@ async def _topup_instructions(
                 )
             except Exception:
                 pass
-        try:
-            body = render_message_template(
-                ui.get("gateway_pay_text") or "",
-                domain=DOMAIN_PAYMENT,
-                amount=amount,
-                order_id=0,
-                gateway_name=name,
-                shop_title=ui.get("shop_title") or "",
-                payment_id=payment.id,
-            )
-        except Exception:
-            body = f"مبلغ {amount} را از طریق {name} پرداخت کنید."
+        raw = ui.get("gateway_pay_text") or ""
+        title = f"🌐 {name}"
+        kwargs.update(order_id=0, gateway_name=name)
+        fallback = f"مبلغ {amount} را از طریق {name} پرداخت کنید."
         if link.startswith("http://") or link.startswith("https://"):
             rows.append([InlineKeyboardButton(text=f"ورود به {name}", url=link)])
-        title = f"🌐 {name}"
     else:
         wallet = wallet or (enabled_crypto_wallets(ui)[0] if enabled_crypto_wallets(ui) else None)
         address = ((wallet or {}).get("address") or ui.get("crypto_address") or "").strip() or "—"
         asset = (wallet or {}).get("asset") or ui.get("crypto_asset") or "USDT"
         network = (wallet or {}).get("network") or ui.get("crypto_network") or "—"
-        try:
-            body = render_message_template(
-                ui.get("crypto_pay_text") or "",
-                domain=DOMAIN_PAYMENT,
-                amount=amount,
-                asset=asset,
-                network=network,
-                address=address,
-                shop_title=ui.get("shop_title") or "",
-                payment_id=payment.id,
-            )
-        except Exception:
-            body = f"{asset}: <code>{address}</code>\nمبلغ تقریبی {amount}"
+        raw = ui.get("crypto_pay_text") or ""
         title = "💎 رمزارز"
-    body += f"\n\nسپس عکس رسید را بفرستید.\n(پرداخت #{payment.id})"
+        kwargs.update(asset=asset, network=network, address=address)
+        fallback = f"{asset}: <code>{address}</code>\nمبلغ تقریبی {amount}"
+    try:
+        text, send_kw = outbound_setting_text(
+            raw,
+            title=title,
+            domain=DOMAIN_PAYMENT,
+            append=append,
+            **kwargs,
+        )
+    except Exception:
+        text = format_message(title, fallback + append)
+        send_kw = {}
     rows.append([InlineKeyboardButton(text=ui.get("btn_back") or "بازگشت", callback_data="wallet:home")])
-    return format_message(title, body), InlineKeyboardMarkup(inline_keyboard=rows)
+    return text, InlineKeyboardMarkup(inline_keyboard=rows), send_kw
 
 
 @router.callback_query(
@@ -510,17 +503,19 @@ async def wtop_choose_method(
             await callback.answer(user_safe_error(e), show_alert=True)
             return
     await callback.answer()
-    text, markup = await _topup_instructions(
+    from app.services.rich_text import rich_plain_text
+
+    text, markup, send_kw = await _topup_instructions(
         session, payment, method, ui=ui, card=card, gateway=gateway, wallet=wallet
     )
     if key == "card" and on(ui.get("pay_card_auto_enabled")):
-        hint = (ui.get("card_auto_hint_text") or "").strip()
+        hint = rich_plain_text(ui.get("card_auto_hint_text")).strip()
         if hint:
             text = text + f"\n\n{hint}"
     await state.set_state(WalletStates.waiting_receipt)
     await state.update_data(payment_id=payment.id, topup_amount=None)
     if callback.message:
-        await safe_edit_text(callback.message, text, reply_markup=markup)
+        await safe_edit_text(callback.message, text, reply_markup=markup, **send_kw)
         await callback.message.answer(
             "عکس رسید را بفرستید یا انصراف بزنید:",
             reply_markup=kb.cancel_reply(ui),

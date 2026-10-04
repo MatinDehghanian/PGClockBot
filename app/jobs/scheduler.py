@@ -485,7 +485,9 @@ async def run_admin_daily_report(bot: Bot) -> None:
             ):
                 last = (await get_setting(session, "admin_daily_report_last", "")) or ""
                 if last != day_key:
-                    text = await build_daily_report(
+                    from app.services.daily_report import build_daily_report_outbound
+
+                    text, report_kw = await build_daily_report_outbound(
                         session,
                         reseller_id=None,
                         actor=ACTOR_OWNER,
@@ -500,7 +502,11 @@ async def run_admin_daily_report(bot: Bot) -> None:
                     )
                     for aid in get_settings().admin_ids or []:
                         try:
-                            await bot.send_message(int(aid), text, parse_mode="HTML")
+                            await bot.send_message(
+                                int(aid),
+                                text,
+                                **{"parse_mode": "HTML", **report_kw},
+                            )
                         except Exception:
                             logger.debug(
                                 "daily report send failed admin=%s", aid, exc_info=True
@@ -566,15 +572,20 @@ async def run_admin_daily_report(bot: Bot) -> None:
                 if on(ui.get("admin_daily_report_enabled")) and (
                     ui.get("admin_daily_report_last") or ""
                 ).strip() != day_key:
+                    from app.services.daily_report import build_daily_report_outbound
+                    from app.services.rich_text import rich_plain_text
+
                     admin_name = (
-                        ui.get("shop_title") or profile.bot_username or "فروشگاه"
+                        rich_plain_text(ui.get("shop_title"))
+                        or profile.bot_username
+                        or "فروشگاه"
                     ).strip()
-                    text = await build_daily_report(
+                    text, report_kw = await build_daily_report_outbound(
                         session,
                         reseller_id=rid,
                         actor=ACTOR_SHOP,
                         admin_name=admin_name,
-                        template=(ui.get("admin_daily_report_template") or "").strip()
+                        template=ui.get("admin_daily_report_template")
                         or DEFAULT_REPORT_TEMPLATE,
                         metrics_raw=ui.get("admin_daily_report_metrics"),
                     )
@@ -588,7 +599,9 @@ async def run_admin_daily_report(bot: Bot) -> None:
                             ):
                                 try:
                                     await shop_bot.send_message(
-                                        int(chat_id), text, parse_mode="HTML"
+                                        int(chat_id),
+                                        text,
+                                        **{"parse_mode": "HTML", **report_kw},
                                     )
                                 except Exception:
                                     logger.debug(
