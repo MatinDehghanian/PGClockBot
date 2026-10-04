@@ -63,13 +63,22 @@ class ModalScrollLockTests(unittest.TestCase):
         self.assertIn("Prefer the inner scroll shell", js)
         self.assertIn("isModalInteriorScroller", js)
 
-    def test_modal_radius_clip_split_from_transform(self):
-        """Outer panel animates; inner scroll owns radius chrome (no square corners)."""
+    def test_modal_radius_clip_on_panel_opacity_motion(self):
+        """Panel owns opaque chrome + radius clip; open motion is opacity-only."""
         css = CSS.read_text(encoding="utf-8")
         self.assertIn('.ui-modal-panel[data-scroll-shell="1"]', css)
         shell = css.split('.ui-modal-panel[data-scroll-shell="1"] {', 1)[1].split("}", 1)[0]
-        self.assertIn("overflow: visible;", shell)
-        self.assertIn("background: transparent;", shell)
+        self.assertIn("overflow: hidden;", shell)
+        self.assertIn("background: var(--bg-card);", shell)
+        self.assertNotIn("overflow: visible;", shell)
+        self.assertNotIn("background: transparent;", shell)
+        # Open/close must not transform the clipping box (WebKit corner sliver).
+        in_kf = css.split("@keyframes ui-modal-in {", 1)[1].split("}", 1)[0]
+        out_kf = css.split("@keyframes ui-modal-out {", 1)[1].split("}", 1)[0]
+        self.assertIn("opacity:", in_kf)
+        self.assertIn("opacity:", out_kf)
+        self.assertNotIn("transform:", in_kf)
+        self.assertNotIn("transform:", out_kf)
         self.assertIn(
             '.ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll {',
             css,
@@ -77,9 +86,7 @@ class ModalScrollLockTests(unittest.TestCase):
         scroll_chrome = css.split(
             '.ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll {', 1
         )[1].split("}", 1)[0]
-        self.assertIn("border-radius: var(--radius);", scroll_chrome)
-        self.assertIn("background: var(--bg-card);", scroll_chrome)
-        self.assertIn("isolation: isolate;", scroll_chrome)
+        self.assertIn("background: transparent;", scroll_chrome)
         # Equal vertical air: flex column + gap + symmetric padding
         self.assertIn("display: flex;", scroll_chrome)
         self.assertIn("flex-direction: column;", scroll_chrome)
@@ -87,7 +94,7 @@ class ModalScrollLockTests(unittest.TestCase):
         self.assertIn("padding: var(--space-3);", scroll_chrome)
         js = JS.read_text(encoding="utf-8")
         self.assertIn('panel.dataset.scrollShell = \'1\'', js)
-        self.assertIn("square corners", js)
+        self.assertIn("corner clip", js)
 
 
 class ModalLayoutPolishTests(unittest.TestCase):
