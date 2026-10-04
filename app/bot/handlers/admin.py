@@ -3545,12 +3545,14 @@ async def adm_resapp_list(callback: CallbackQuery, session: AsyncSession, db_use
         await callback.answer("ادمین نیستید", show_alert=True)
         return
     from app.db.models import ResellerApplicationStatus
-    from app.services.resellers import list_applications
+    from app.services.resellers import list_open_applications, release_stale_pending_payment_apps
 
     await callback.answer()
-    apps = await list_applications(
-        session, status=ResellerApplicationStatus.AWAITING_APPROVAL.value, limit=20
-    )
+    # Heal orphan pending_payment rows (order already cancelled) so the list matches reality.
+    released = await release_stale_pending_payment_apps(session)
+    if released:
+        await session.commit()
+    apps = await list_open_applications(session, limit=20)
     if not apps:
         if callback.message:
             await callback.message.edit_text(
@@ -3558,16 +3560,25 @@ async def adm_resapp_list(callback: CallbackQuery, session: AsyncSession, db_use
                 reply_markup=None,
             )
         return
+    status_fa = {
+        ResellerApplicationStatus.PENDING_PAYMENT.value: "💳 پرداخت",
+        ResellerApplicationStatus.AWAITING_APPROVAL.value: "✅ تأیید",
+    }
     rows = []
     for a in apps:
         u = a.user
         plan = a.plan
-        label = f"#{a.id} {(u.full_name or str(u.telegram_id)) if u else '?'} — {(plan.name if plan else '?')}"
+        st = status_fa.get(a.status, a.status)
+        label = (
+            f"#{a.id} [{st}] "
+            f"{(u.full_name or str(u.telegram_id)) if u else '?'} — "
+            f"{(plan.name if plan else '?')}"
+        )
         rows.append([InlineKeyboardButton(text=label[:60], callback_data=f"adm:resapp:view:{a.id}")])
     rows.append([InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:resellers")])
     if callback.message:
         await callback.message.edit_text(
-            "📋 درخواست‌های منتظر تأیید:",
+            "📋 درخواست‌های باز (پرداخت / تأیید):",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
         )
 
@@ -3596,16 +3607,29 @@ async def adm_resapp_view(callback: CallbackQuery, session: AsyncSession, db_use
         if plan
         else "—"
     )
+    from app.db.models import ResellerApplicationStatus
+
+    status_fa = {
+        ResellerApplicationStatus.PENDING_PAYMENT.value: "منتظر پرداخت",
+        ResellerApplicationStatus.AWAITING_APPROVAL.value: "منتظر تأیید",
+        ResellerApplicationStatus.APPROVED.value: "تأیید شده",
+        ResellerApplicationStatus.REJECTED.value: "رد شده",
+        ResellerApplicationStatus.CANCELLED.value: "لغو شده",
+    }
     text = (
         f"🤝 درخواست #{app.id}\n"
-        f"وضعیت: <b>{app.status}</b>\n"
+        f"وضعیت: <b>{status_fa.get(app.status, app.status)}</b>\n"
         f"کاربر: {u.full_name or u.username or u.telegram_id if u else '—'}\n"
         f"تلگرام: <code>{u.telegram_id if u else '—'}</code>\n"
         f"نوع: <b>{mode_label}</b>\n\n"
         f"{detail}"
     )
     if callback.message:
-        await callback.message.edit_text(text, reply_markup=kb.reseller_app_review(app.id))
+        pending_pay = app.status == ResellerApplicationStatus.PENDING_PAYMENT.value
+        await callback.message.edit_text(
+            text,
+            reply_markup=kb.reseller_app_review(app.id, allow_approve=not pending_pay),
+        )
 
 
 @router.callback_query(F.data.startswith("adm:resapp:ok:"))

@@ -1489,6 +1489,11 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         session: AsyncSession = Depends(get_db),
     ):
         _require_rep_mgmt(staff)
+        from app.services.resellers import release_stale_pending_payment_apps
+
+        released = await release_stale_pending_payment_apps(session)
+        if released:
+            await session.commit()
         apps = await list_applications(session)
         return render(
             request,

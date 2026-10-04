@@ -555,6 +555,83 @@ async def make_reseller(
     return profile
 
 
+_OPEN_APPLICATION_STATUSES = frozenset(
+    {
+        ResellerApplicationStatus.PENDING_PAYMENT.value,
+        ResellerApplicationStatus.AWAITING_APPROVAL.value,
+    }
+)
+
+# Order statuses that mean the linked reseller-app checkout is dead.
+_DEAD_ORDER_STATUSES = frozenset(
+    {
+        OrderStatus.CANCELLED.value,
+        OrderStatus.REJECTED.value,
+    }
+)
+
+
+async def release_stale_pending_payment_apps(
+    session: AsyncSession, *, user_id: int | None = None
+) -> int:
+    """Cancel ``pending_payment`` apps whose linked order is already dead.
+
+    Heals the stuck state where checkout failed/cancelled but the application
+    row still blocked «یک درخواست باز دارید».
+    """
+    q = select(ResellerApplication).where(
+        ResellerApplication.status == ResellerApplicationStatus.PENDING_PAYMENT.value
+    )
+    if user_id is not None:
+        q = q.where(ResellerApplication.user_id == int(user_id))
+    apps = list((await session.execute(q)).scalars().all())
+    released = 0
+    for app in apps:
+        order = None
+        if app.order_id:
+            order = await session.get(Order, int(app.order_id))
+        if order is None or (order.status or "") in _DEAD_ORDER_STATUSES:
+            app.status = ResellerApplicationStatus.CANCELLED.value
+            if not (app.admin_note or "").strip():
+                app.admin_note = "auto-cancelled: linked order missing or closed"
+            released += 1
+    if released:
+        await session.flush()
+    return released
+
+
+async def cancel_application_for_order(
+    session: AsyncSession,
+    order: Order,
+    *,
+    reason: str | None = None,
+    commit: bool = False,
+) -> ResellerApplication | None:
+    """If order is a reseller apply checkout, close its ``pending_payment`` app."""
+    note = (order.note or "").strip()
+    if not note.startswith("reseller_app:"):
+        return None
+    try:
+        app_id = int(note.split(":", 1)[1])
+    except ValueError:
+        return None
+    app = await session.get(ResellerApplication, app_id)
+    if not app:
+        return None
+    if app.status != ResellerApplicationStatus.PENDING_PAYMENT.value:
+        return None
+    app.status = ResellerApplicationStatus.CANCELLED.value
+    note_txt = (reason or "").strip() or "linked order cancelled"
+    if not (app.admin_note or "").strip():
+        app.admin_note = note_txt
+    if commit:
+        await session.commit()
+        await session.refresh(app)
+    else:
+        await session.flush()
+    return app
+
+
 async def create_application(
     session: AsyncSession,
     *,
@@ -575,15 +652,13 @@ async def create_application(
         except BillingError as e:
             raise ValueError(e.message) from e
 
+    # Clear orphan pending_payment rows (order cancelled/rejected) before the lock check.
+    await release_stale_pending_payment_apps(session, user_id=int(user.id))
+
     existing = await session.execute(
         select(ResellerApplication).where(
             ResellerApplication.user_id == user.id,
-            ResellerApplication.status.in_(
-                [
-                    ResellerApplicationStatus.PENDING_PAYMENT.value,
-                    ResellerApplicationStatus.AWAITING_APPROVAL.value,
-                ]
-            ),
+            ResellerApplication.status.in_(list(_OPEN_APPLICATION_STATUSES)),
         )
     )
     if existing.scalar_one_or_none():
@@ -635,7 +710,11 @@ async def get_application(session: AsyncSession, app_id: int) -> ResellerApplica
 
 
 async def list_applications(
-    session: AsyncSession, *, status: str | None = None, limit: int = 100
+    session: AsyncSession,
+    *,
+    status: str | None = None,
+    statuses: list[str] | tuple[str, ...] | None = None,
+    limit: int = 100,
 ) -> list[ResellerApplication]:
     q = (
         select(ResellerApplication)
@@ -646,10 +725,23 @@ async def list_applications(
         .order_by(ResellerApplication.id.desc())
         .limit(limit)
     )
-    if status:
+    if statuses:
+        q = q.where(ResellerApplication.status.in_(list(statuses)))
+    elif status:
         q = q.where(ResellerApplication.status == status)
     result = await session.execute(q)
     return list(result.scalars().all())
+
+
+async def list_open_applications(
+    session: AsyncSession, *, limit: int = 100
+) -> list[ResellerApplication]:
+    """Apps that block a new apply: awaiting payment or awaiting admin review."""
+    return await list_applications(
+        session,
+        statuses=list(_OPEN_APPLICATION_STATUSES),
+        limit=limit,
+    )
 
 
 async def mark_application_paid(session: AsyncSession, order: Order) -> ResellerApplication | None:
@@ -1570,11 +1662,32 @@ async def reject_application(
     reviewer_tg: int | None,
     admin_note: str | None = None,
 ) -> None:
-    if app.status in {
-        ResellerApplicationStatus.APPROVED.value,
-        ResellerApplicationStatus.REJECTED.value,
-    }:
+    if app.status not in _OPEN_APPLICATION_STATUSES:
         raise ValueError("وضعیت درخواست قابل تغییر نیست")
+    # Close unpaid checkout so it cannot be paid after reject.
+    if (
+        app.status == ResellerApplicationStatus.PENDING_PAYMENT.value
+        and app.order_id
+    ):
+        order = await session.get(Order, int(app.order_id))
+        if order and (order.status or "") not in _DEAD_ORDER_STATUSES:
+            from sqlalchemy import update
+
+            await session.execute(
+                update(Order)
+                .where(
+                    Order.id == int(order.id),
+                    Order.status.in_(
+                        (
+                            OrderStatus.PENDING.value,
+                            OrderStatus.AWAITING_RECEIPT.value,
+                            OrderStatus.AWAITING_APPROVAL.value,
+                        )
+                    ),
+                )
+                .values(status=OrderStatus.CANCELLED.value)
+                .execution_options(synchronize_session=False)
+            )
     app.status = ResellerApplicationStatus.REJECTED.value
     app.reviewed_by = reviewer_tg
     if admin_note:

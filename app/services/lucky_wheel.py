@@ -117,16 +117,25 @@ def clamp_int(value: Any, *, lo: int, hi: int, default: int) -> int:
     return max(lo, min(hi, n))
 
 
-def parse_submenu_order(raw: str | None) -> list[str]:
+def parse_submenu_order(raw: str | None, *, fill_missing: bool = True) -> list[str]:
+    """Parse loyalty submenu CSV.
+
+    ``fill_missing=True`` (default): append any missing catalog keys — used for
+    legacy callers. ``fill_missing=False``: keep only listed keys so the panel
+    can hide items (empty/invalid CSV falls back to the full default order).
+    """
     allowed = set(DEFAULT_SUBMENU_ORDER)
     parts = [p.strip() for p in str(raw or "").split(",") if p.strip()]
     out: list[str] = []
     for p in parts:
         if p in allowed and p not in out:
             out.append(p)
-    for p in DEFAULT_SUBMENU_ORDER:
-        if p not in out:
-            out.append(p)
+    if not out:
+        return list(DEFAULT_SUBMENU_ORDER)
+    if fill_missing:
+        for p in DEFAULT_SUBMENU_ORDER:
+            if p not in out:
+                out.append(p)
     return out
 
 
@@ -172,7 +181,8 @@ async def get_wheel_settings(
                 SETTING_SUBMENU_ORDER,
                 ",".join(DEFAULT_SUBMENU_ORDER),
                 reseller_id=reseller_id,
-            )
+            ),
+            fill_missing=False,
         ),
     }
 

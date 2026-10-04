@@ -1194,6 +1194,16 @@ async def cancel_stale_pending_orders(
                 await _release_discount_code(session, order.discount_code)
         # Always attempt trial release (create_order never sets note="trial:…").
         await _release_trial_claim_for_order(session, order)
+        # Unblock reseller apply if this was an unpaid agency checkout.
+        if (order.note or "").startswith("reseller_app:"):
+            from app.services.resellers import cancel_application_for_order
+
+            await cancel_application_for_order(
+                session,
+                order,
+                reason="auto-cancelled stale pending order",
+                commit=False,
+            )
         cancelled += 1
 
     if cancelled:
@@ -1516,6 +1526,12 @@ async def cancel_order(session: AsyncSession, order: Order, *, note: str = "") -
         else:
             await _release_discount_code(session, order.discount_code)
     await _release_trial_claim_for_order(session, order)
+    if (order.note or "").startswith("reseller_app:"):
+        from app.services.resellers import cancel_application_for_order
+
+        await cancel_application_for_order(
+            session, order, reason=reject_note, commit=False
+        )
     await session.commit()
     await session.refresh(order)
     return order
@@ -1555,6 +1571,12 @@ async def reject_order(session: AsyncSession, order: Order, *, note: str = "") -
     await session.refresh(order)
     await _release_order_discount(session, order)
     await _release_trial_claim_for_order(session, order)
+    if (order.note or "").startswith("reseller_app:"):
+        from app.services.resellers import cancel_application_for_order
+
+        await cancel_application_for_order(
+            session, order, reason=reject_note, commit=False
+        )
     await session.commit()
     await session.refresh(order)
     return order

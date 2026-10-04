@@ -17,6 +17,9 @@
         </label>
         <label class="form-field">مقدار<input name="reward_value" type="number" min="1" required dir="ltr" /></label>
         <label class="form-field">هزینه (امتیاز)<input name="points_cost" type="number" min="1" required dir="ltr" /></label>
+        <label class="form-field">ترتیب نمایش<input name="sort_order" type="number" value="100" dir="ltr" />
+          <small class="muted">عدد کمتر = بالاتر در لیست ربات</small>
+        </label>
       </div>
       <p class="muted">فقط برای تخفیف درصدی:</p>
       <div class="form-row">
@@ -49,6 +52,7 @@
       <div class="form-row">
         <label class="form-field">مقدار<input name="reward_value" type="number" min="1" value="{{ reward.reward_value }}" dir="ltr" /></label>
         <label class="form-field">هزینه<input name="points_cost" type="number" min="1" value="{{ reward.points_cost }}" dir="ltr" /></label>
+        <label class="form-field">ترتیب نمایش<input name="sort_order" type="number" value="{{ reward.sort_order }}" dir="ltr" /></label>
         <label class="form-field">سقف کل<input name="max_redemptions_global" type="number" min="0" value="{{ reward.max_redemptions_global if reward.max_redemptions_global is not none else '' }}" placeholder="نامحدود" dir="ltr" /></label>
         <label class="form-field">سقف هر کاربر<input name="max_redemptions_per_user" type="number" min="0" value="{{ reward.max_redemptions_per_user if reward.max_redemptions_per_user is not none else '' }}" placeholder="نامحدود" dir="ltr" /></label>
       </div>
