@@ -1291,7 +1291,9 @@ def create_api_app(lifespan=None) -> FastAPI:
         get_db=get_db,
     )
     from app.api.bulk_pages import register_bulk_pages
+    from app.api.plan_catalog_extras import register_plan_catalog_extras
 
+    register_plan_catalog_extras(app, require_perm=require_perm, get_db=get_db)
     register_bulk_pages(
         app,
         require_admin=require_admin,
@@ -2506,6 +2508,29 @@ def create_api_app(lifespan=None) -> FastAPI:
             logging.getLogger(__name__).exception("gift codes load failed on /plans")
             gift_codes = []
 
+        plan_categories: list = []
+        plan_category_map: dict = {}
+        service_addon_packs: list = []
+        try:
+            from app.services.plan_categories import (
+                category_map_for_plans,
+                list_categories,
+            )
+            from app.services.service_addons import list_packs
+
+            if is_platform_admin(staff) or rid:
+                plan_categories = await list_categories(session, staff)
+                plan_category_map = await category_map_for_plans(
+                    session, staff, sale_plans
+                )
+                service_addon_packs = await list_packs(session, staff)
+        except Exception:
+            import logging
+
+            logging.getLogger(__name__).exception(
+                "plan categories/addons load failed on /plans"
+            )
+
         return render(
             request,
             "plans.html",
@@ -2526,12 +2551,18 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "feature_perms": feature_perms,
                 "pg_roles": pg_roles,
                 "gift_codes": gift_codes,
+                "plan_categories": plan_categories,
+                "plan_category_map": plan_category_map,
+                "service_addon_packs": service_addon_packs,
                 "pg_limit_snapshot": limit_snapshot,
                 "pg_limit_cards": limit_snapshot_cards(limit_snapshot),
                 "plan_limit_issues": plan_limit_issues,
                 "trial_limit_issue": trial_limit_issue,
                 "custom_limit_issue": custom_limit_msg,
                 "open_gifts": request.query_params.get("gifts") in {"1", "true", "yes"},
+                "open_categories": request.query_params.get("categories")
+                in {"1", "true", "yes"},
+                "open_addons": request.query_params.get("addons") in {"1", "true", "yes"},
                 "flash_err": request.query_params.get("err"),
                 "flash_ok": request.query_params.get("ok"),
                 "plan_style_options": __import__(
@@ -2640,9 +2671,16 @@ def create_api_app(lifespan=None) -> FastAPI:
 
         from app.services.orders import parse_naming_form
         from app.services.button_styles import parse_plan_button_style_form
+        from app.services.plan_categories import resolve_category_for_plan_write
 
         uname_prefix, uname_suffix, uname_pattern = parse_naming_form(form)
         button_style = parse_plan_button_style_form(form)
+        try:
+            category_id = await resolve_category_for_plan_write(
+                session, staff, form.get("category_id")
+            )
+        except (ShopScopeError, ValueError) as e:
+            return RedirectResponse(f"/plans?err={quote(str(e))}", status_code=303)
 
         session.add(
             Plan(
@@ -2656,6 +2694,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 pg_username_suffix=uname_suffix,
                 pg_username_pattern=uname_pattern,
                 button_style=button_style,
+                category_id=category_id,
                 owner_reseller_id=owner_id,
                 description=description or None,
                 is_active=True,
@@ -2979,7 +3018,17 @@ def create_api_app(lifespan=None) -> FastAPI:
             values = {}
         else:
             values = await get_all_settings(session, reseller_id=rid)
-        ctx = await _plans_context(session, request, staff, {"plan": plan, "values": values})
+        from app.services.plan_categories import list_categories
+
+        cats = []
+        if is_platform_admin(staff) or rid:
+            cats = await list_categories(session, staff, active_only=False)
+        ctx = await _plans_context(
+            session,
+            request,
+            staff,
+            {"plan": plan, "values": values, "plan_categories": cats},
+        )
         from app.services.button_styles import PLAN_BUTTON_STYLE_OPTIONS
 
         ctx["plan_style_options"] = PLAN_BUTTON_STYLE_OPTIONS
@@ -3066,12 +3115,23 @@ def create_api_app(lifespan=None) -> FastAPI:
         plan.pg_group_ids = group_csv
         from app.services.orders import parse_naming_form
         from app.services.button_styles import parse_plan_button_style_form
+        from app.services.plan_categories import resolve_category_for_plan_write
+        from app.services.shop_scope import ShopScopeError
 
         uname_prefix, uname_suffix, uname_pattern = parse_naming_form(form)
         plan.pg_username_prefix = uname_prefix
         plan.pg_username_suffix = uname_suffix
         plan.pg_username_pattern = uname_pattern
         plan.button_style = parse_plan_button_style_form(form)
+        try:
+            plan.category_id = await resolve_category_for_plan_write(
+                session, staff, form.get("category_id")
+            )
+        except (ShopScopeError, ValueError) as e:
+            return RedirectResponse(
+                f"/plans/{plan_id}/edit?err={quote(str(e))}",
+                status_code=303,
+            )
         await session.commit()
         return RedirectResponse(
             f"/plans?ok={quote('پلن به‌روزرسانی شد')}",

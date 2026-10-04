@@ -37,6 +37,15 @@
       <input name="description" value="{{ plan.description or '' }}" placeholder="نمایش در بات" />
     </label>
 
+    <label class="form-field">دسته‌بندی
+      <select name="category_id">
+        <option value="">— بدون دسته —</option>
+        {% for c in plan_categories or [] %}
+        <option value="{{ c.id }}" {% if plan.category_id == c.id %}selected{% endif %}>{{ c.name }}{% if not c.is_active %} (خاموش){% endif %}</option>
+        {% endfor %}
+      </select>
+    </label>
+
     <label class="form-field">ترتیب نمایش
       <input name="sort_order" type="number" value="{{ plan.sort_order }}" />
     </label>

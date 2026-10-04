@@ -259,6 +259,180 @@ async def svc_renew_pay(
         )
 
 
+@router.callback_query(F.data.startswith("svc:addon:"))
+async def svc_addon(
+    callback: CallbackQuery, session: AsyncSession, db_user: BotUser
+):
+    """List shop-scoped volume/duration packs for an owned service."""
+    from app.services.service_addons import amount_label, kind_label, list_shop_packs
+
+    ui = await get_all_settings(session)
+    parts = (callback.data or "").split(":")
+    # svc:addon:{svc_id} or svc:addon:{svc_id}:{kind}
+    if len(parts) < 3:
+        await callback.answer("نامعتبر", show_alert=True)
+        return
+    svc_id = int(parts[2])
+    kind_filter = parts[3] if len(parts) > 3 else None
+    svc = await session.get(UserService, svc_id)
+    if not svc or svc.bot_user_id != db_user.id:
+        await callback.answer("یافت نشد", show_alert=True)
+        return
+    if (svc.remark or "").strip() == "linked":
+        await callback.answer(
+            "سرویس متصل‌شده فقط مشاهده است؛ خرید افزونه ممکن نیست",
+            show_alert=True,
+        )
+        return
+    packs = await list_shop_packs(session, active_only=True, kind=kind_filter)
+    if not packs:
+        await callback.answer("بسته‌ای برای خرید فعال نیست", show_alert=True)
+        return
+    await callback.answer()
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=(
+                    f"{'📦' if p.kind == 'volume' else '⏱'} {p.name} "
+                    f"(+{amount_label(p)}) — {format_toman(p.price, get_settings().currency)}"
+                ),
+                callback_data=f"svc:addonpay:{svc_id}:{p.id}",
+            )
+        ]
+        for p in packs
+    ]
+    if kind_filter is None:
+        has_vol = any(p.kind == "volume" for p in packs)
+        has_dur = any(p.kind == "duration" for p in packs)
+        filter_row = []
+        if has_vol:
+            filter_row.append(
+                InlineKeyboardButton(
+                    text="فقط حجم", callback_data=f"svc:addon:{svc_id}:volume"
+                )
+            )
+        if has_dur:
+            filter_row.append(
+                InlineKeyboardButton(
+                    text="فقط زمان", callback_data=f"svc:addon:{svc_id}:duration"
+                )
+            )
+        if filter_row:
+            rows.insert(0, filter_row)
+    else:
+        rows.insert(
+            0,
+            [
+                InlineKeyboardButton(
+                    text="همه بسته‌ها", callback_data=f"svc:addon:{svc_id}"
+                )
+            ],
+        )
+    title = "افزونه سرویس"
+    if kind_filter:
+        title = f"افزونه {kind_label(kind_filter)}"
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            format_message(
+                f"➕ {title}",
+                "بسته را انتخاب کنید؛ پس از پرداخت به همین سرویس اضافه می‌شود.\n"
+                "<i>بازگشت از کیبورد پایین</i>",
+            ),
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+        )
+
+
+@router.callback_query(F.data.startswith("svc:addonpay:"))
+async def svc_addon_pay(
+    callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext
+):
+    ui = await get_all_settings(session)
+    parts = (callback.data or "").split(":")
+    if len(parts) < 4:
+        await callback.answer("نامعتبر", show_alert=True)
+        return
+    svc_id = int(parts[2])
+    pack_id = int(parts[3])
+    svc = await session.get(UserService, svc_id)
+    from app.db.models import ServiceAddonPack
+    from app.services.service_addons import (
+        amount_label,
+        create_addon_order,
+        kind_label,
+        pack_matches_shop,
+    )
+    from app.services.users import current_shop_reseller_id
+
+    pack = await session.get(ServiceAddonPack, pack_id)
+    if not svc or not pack or svc.bot_user_id != db_user.id:
+        await callback.answer("نامعتبر", show_alert=True)
+        return
+    if not pack_matches_shop(pack, current_shop_reseller_id()):
+        await callback.answer("این بسته در این فروشگاه نیست", show_alert=True)
+        return
+    if pack.price > 0 and not kb.any_checkout_method_enabled(ui):
+        await callback.answer("هیچ روش پرداختی فعال نیست", show_alert=True)
+        return
+    try:
+        order = await create_addon_order(
+            session, user_id=db_user.id, service=svc, pack=pack
+        )
+    except Exception as e:
+        await callback.answer(str(e), show_alert=True)
+        return
+    await callback.answer()
+
+    if order.amount <= 0:
+        from app.services.orders import mark_order_free_paid, revert_failed_free_delivery
+        from app.services.service_addons import apply_service_addon
+
+        await mark_order_free_paid(session, order, db_user.id)
+        try:
+            order = await apply_service_addon(session, order)
+        except Exception as e:
+            try:
+                await revert_failed_free_delivery(session, order)
+            except Exception:
+                pass
+            if callback.message:
+                await safe_edit_text(callback.message, f"❌ {e}", reply_markup=None)
+            return
+        if callback.message:
+            await safe_edit_text(
+                callback.message,
+                format_message(
+                    "✅ افزونه رایگان",
+                    f"سفارش #{order.id}\n{kind_label(pack.kind)}: +{amount_label(pack)}",
+                ),
+                reply_markup=None,
+            )
+        return
+
+    text = format_message(
+        f"➕ افزونه — سفارش #{order.id}",
+        f"{pack.name}\n"
+        f"{kind_label(pack.kind)}: +{amount_label(pack)}\n"
+        f"مبلغ: <b>{format_toman(order.amount, get_settings().currency)}</b>\n"
+        "روش پرداخت را از کیبورد پایین انتخاب کنید:",
+    )
+    if callback.message:
+        from app.bot.menu_nav import present_order_pay
+
+        try:
+            await safe_edit_text(callback.message, text, reply_markup=None)
+        except Exception:
+            await callback.message.answer(text)
+        await present_order_pay(
+            callback.message,
+            session,
+            db_user,
+            order.id,
+            state=state,
+            text="💳 روش پرداخت را از کیبورد پایین انتخاب کنید:",
+        )
+
+
 @router.callback_query(F.data.startswith("svc:delask:"))
 async def svc_delete_ask(
     callback: CallbackQuery, session: AsyncSession, db_user: BotUser

@@ -951,6 +951,7 @@ def plans_keyboard(
     wholesale_enabled: bool = False,
     back_callback: str = "shop:list",
     kind: str | None = None,
+    category_names: dict[int, str] | None = None,
 ) -> InlineKeyboardMarkup:
     """Plan name rows — per-plan color override, else plan-kind catalog color."""
     from app.services.button_styles import plan_kind_style_id
@@ -960,16 +961,23 @@ def plans_keyboard(
     kind_style = _style(
         ui, plan_kind_style_id(fallback_kind) or "shop_kind_fixed", fallback="primary"
     )
-    rows = [
-        [
-            _ikb(
-                f"{'🎁' if p.is_trial else '💎'} {p.name} — {p.price:,} ت".replace(",", "٬"),
-                callback_data=f"shop:plan:{p.id}",
-                style=_plan_row_style(ui, p, kind=kind or fallback_kind),
-            )
-        ]
-        for p in plans
-    ]
+    cat_names = category_names or {}
+    rows = []
+    for p in plans:
+        cat = ""
+        if p.category_id and int(p.category_id) in cat_names:
+            cat = f"[{cat_names[int(p.category_id)]}] "
+        rows.append(
+            [
+                _ikb(
+                    f"{'🎁' if p.is_trial else '💎'} {cat}{p.name} — {p.price:,} ت".replace(
+                        ",", "٬"
+                    ),
+                    callback_data=f"shop:plan:{p.id}",
+                    style=_plan_row_style(ui, p, kind=kind or fallback_kind),
+                )
+            ]
+        )
     if not rows:
         rows = [
             [
@@ -1295,6 +1303,7 @@ def services_keyboard(services: list, ui: dict | None = None) -> InlineKeyboardM
 
 REPLY_ACTION_SVC_LINK = "svc_link"
 REPLY_ACTION_SVC_RENEW = "svc_renew"
+REPLY_ACTION_SVC_ADDON = "svc_addon"
 REPLY_ACTION_SVC_REFRESH = "svc_refresh"
 REPLY_ACTION_SVC_DELETE = "svc_delete"
 

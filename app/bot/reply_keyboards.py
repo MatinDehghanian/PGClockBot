@@ -23,6 +23,7 @@ REPLY_ACTION_SHOP_CUSTOM = "shop_custom"
 REPLY_ACTION_SHOP_WHOLESALE = "shop_wholesale"
 REPLY_ACTION_SVC_LINK = "svc_link"
 REPLY_ACTION_SVC_RENEW = "svc_renew"
+REPLY_ACTION_SVC_ADDON = "svc_addon"
 REPLY_ACTION_SVC_REFRESH = "svc_refresh"
 REPLY_ACTION_SVC_DELETE = "svc_delete"
 REPLY_ACTION_REV_OK = "rev_ok"
@@ -1054,6 +1055,7 @@ def _service_action_entries(ui: dict | None = None) -> list[tuple[str, str]]:
     return [
         (REPLY_ACTION_SVC_LINK, _t(ui, "btn_sub_link")),
         (REPLY_ACTION_SVC_RENEW, _t(ui, "btn_renew")),
+        (REPLY_ACTION_SVC_ADDON, _t(ui, "btn_svc_addon") or "➕ حجم / زمان"),
         (REPLY_ACTION_SVC_REFRESH, "♻️ رفرش وضعیت"),
         (REPLY_ACTION_SVC_DELETE, "🗑 حذف سرویس"),
     ]

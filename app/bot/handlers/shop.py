@@ -285,6 +285,10 @@ async def shop_kind_fixed(
     if not fixed_on:
         await callback.answer("پلن ثابت فعال نیست.", show_alert=True)
         return
+    from app.services.plan_categories import list_shop_categories
+
+    cats = await list_shop_categories(session, active_only=True)
+    cat_names = {int(c.id): c.name for c in cats}
     if callback.message:
         await safe_edit_text(
             callback.message,
@@ -294,6 +298,7 @@ async def shop_kind_fixed(
                 ui,
                 back_callback="shop:list",
                 kind="fixed",
+                category_names=cat_names,
             ),
         )
 

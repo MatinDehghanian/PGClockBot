@@ -165,6 +165,46 @@ def _migrate_sqlite_legacy(sync_conn) -> None:
         sync_conn.execute(sql_text("ALTER TABLE plans ADD COLUMN pg_username_suffix VARCHAR(64)"))
     if "pg_username_pattern" not in cols:
         sync_conn.execute(sql_text("ALTER TABLE plans ADD COLUMN pg_username_pattern VARCHAR(255)"))
+    if "category_id" not in cols:
+        sync_conn.execute(sql_text("ALTER TABLE plans ADD COLUMN category_id INTEGER"))
+
+    if not insp.has_table("plan_categories"):
+        sync_conn.execute(
+            sql_text(
+                """
+                CREATE TABLE plan_categories (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name VARCHAR(128) NOT NULL,
+                    description VARCHAR(255),
+                    owner_reseller_id INTEGER,
+                    is_active BOOLEAN DEFAULT 1 NOT NULL,
+                    sort_order INTEGER DEFAULT 0 NOT NULL,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    FOREIGN KEY(owner_reseller_id) REFERENCES bot_users (id)
+                )
+                """
+            )
+        )
+    if not insp.has_table("service_addon_packs"):
+        sync_conn.execute(
+            sql_text(
+                """
+                CREATE TABLE service_addon_packs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name VARCHAR(128) NOT NULL,
+                    description VARCHAR(255),
+                    kind VARCHAR(16) NOT NULL,
+                    amount FLOAT NOT NULL,
+                    price INTEGER NOT NULL,
+                    owner_reseller_id INTEGER,
+                    is_active BOOLEAN DEFAULT 1 NOT NULL,
+                    sort_order INTEGER DEFAULT 0 NOT NULL,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    FOREIGN KEY(owner_reseller_id) REFERENCES bot_users (id)
+                )
+                """
+            )
+        )
 
     if insp.has_table("reseller_profiles"):
         rcols = {c["name"] for c in insp.get_columns("reseller_profiles")}

@@ -304,6 +304,43 @@ async def send_delivery_to_user(
     shop_rid = getattr(order, "reseller_id", None) if order is not None else None
     ui = await get_all_settings(session, reseller_id=shop_rid)
     reply_kb = await _buyer_reply_markup(session, payment, order)
+    if order and order.note and str(order.note).startswith("svc_addon:"):
+        from app.db.models import ServiceAddonPack
+        from app.services.service_addons import (
+            amount_label,
+            kind_label,
+            parse_addon_note,
+        )
+
+        parsed = parse_addon_note(order.note)
+        pack_name = "افزونه"
+        detail = ""
+        if parsed:
+            pack = await session.get(ServiceAddonPack, parsed[0])
+            if pack:
+                pack_name = pack.name
+                detail = f"{kind_label(pack.kind)}: +{amount_label(pack)}"
+        text = format_message(
+            "✅ افزونه اعمال شد",
+            "\n".join(
+                [
+                    f"سفارش #{order.id}",
+                    f"بسته: {pack_name}",
+                    detail,
+                    "به سرویس قبلی شما اضافه شد.",
+                ]
+            ).strip(),
+        )
+        try:
+            await bot.send_message(
+                chat_id, text, reply_markup=reply_kb, parse_mode="HTML"
+            )
+        except Exception:
+            try:
+                await bot.send_message(chat_id, text, parse_mode="HTML")
+            except Exception:
+                pass
+        return text
     if order and order.note and str(order.note).startswith("reseller_app:"):
         from app.db.models import BotUser, ResellerApplicationStatus
         from app.services.formatting import format_user_label

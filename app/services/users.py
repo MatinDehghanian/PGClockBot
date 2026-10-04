@@ -765,6 +765,7 @@ DEFAULT_SETTINGS = {
     "btn_pay_discount": "🏷 کد تخفیف",
     "btn_cancel": "❌ انصراف",
     "btn_renew": "🔄 تمدید",
+    "btn_svc_addon": "➕ حجم / زمان",
     "btn_sub_link": "🔗 لینک و QR",
     "show_guide": "0",
     "show_faq": "0",
@@ -977,6 +978,7 @@ SETTING_GROUPS = {
         ("btn_back", "دکمه بازگشت", "text", "زیر پیام‌های انتخابی (اینلاین)"),
         ("btn_cancel", "انصراف", "text", ""),
         ("btn_renew", "تمدید", "text", ""),
+        ("btn_svc_addon", "حجم / زمان", "text", "خرید افزونه روی سرویس فعلی"),
         ("btn_sub_link", "لینک و QR", "text", ""),
     ],
     "نمایش منو": [
