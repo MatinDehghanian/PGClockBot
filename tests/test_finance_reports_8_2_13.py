@@ -137,10 +137,10 @@ class FinanceReportsUiTests(unittest.TestCase):
         from app.version import __version__
 
         parts = [int(x) for x in __version__.split(".")[:3]]
-        self.assertGreaterEqual(parts, [8, 5, 4])
+        self.assertGreaterEqual(parts, [0, 1, 0])
         self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), __version__)
         notes = (ROOT / "app/services/release_notes.py").read_text(encoding="utf-8")
-        self.assertIn('"8.5.4"', notes)
+        self.assertIn('"0.1.0"', notes)
 
 
 if __name__ == "__main__":

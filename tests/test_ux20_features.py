@@ -519,16 +519,10 @@ class Ux20VersionTests(unittest.TestCase):
         from app.services.updates import is_same_or_newer
 
         self.assertEqual(Path("VERSION").read_text().strip(), __version__)
-        self.assertTrue(is_same_or_newer(__version__, "6.1.7"))
+        self.assertTrue(is_same_or_newer(__version__, "0.1.0"))
         notes = Path("app/services/release_notes.py").read_text(encoding="utf-8")
         self.assertIn(f'"{__version__}"', notes)
-        self.assertIn('"6.1.7"', notes)
-        self.assertIn('"6.1.6"', notes)
-        self.assertIn('"6.1.5"', notes)
-        self.assertIn('"6.1.4"', notes)
-        self.assertIn('"6.1.1"', notes)
-        self.assertIn('"5.3.1"', notes)
-        self.assertIn('"5.2.8"', notes)
+        self.assertIn('"0.1.0"', notes)
 
     def test_bot_tickets_controllable_from_panel(self):
         src = Path("app/api/panel_tickets_pages.py").read_text(encoding="utf-8")

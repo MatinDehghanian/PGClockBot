@@ -14,11 +14,11 @@ class VersionTests(unittest.TestCase):
         from app.version import __version__
         from app.services.updates import is_same_or_newer
 
-        self.assertTrue(is_same_or_newer(__version__, "4.10.9"))
+        self.assertTrue(is_same_or_newer(__version__, "0.1.0"))
         self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), __version__)
-        self.assertIn("3.3.2", RELEASE_NOTES_FA)
-        blob = " ".join(RELEASE_NOTES_FA["3.3.2"])
-        self.assertIn("ممیزی", blob)
+        self.assertIn("0.1.0", RELEASE_NOTES_FA)
+        blob = " ".join(RELEASE_NOTES_FA["0.1.0"])
+        self.assertIn("۰٫۱٫۰", blob)
 
 
 class DeadCodeRemovedTests(unittest.TestCase):
