@@ -305,9 +305,11 @@ async def send_delivery_to_user(
     ui = await get_all_settings(session, reseller_id=shop_rid)
     reply_kb = await _buyer_reply_markup(session, payment, order)
     if order and order.note and str(order.note).startswith("svc_addon:"):
+        import html as html_mod
+
         from app.db.models import ServiceAddonPack
         from app.services.service_addons import (
-            amount_label,
+            format_amount_label,
             kind_label,
             parse_addon_note,
         )
@@ -316,17 +318,25 @@ async def send_delivery_to_user(
         pack_name = "افزونه"
         detail = ""
         if parsed:
-            pack = await session.get(ServiceAddonPack, parsed[0])
+            pack_id, _svc_id, snap_kind, snap_amount = parsed
+            pack = await session.get(ServiceAddonPack, pack_id)
             if pack:
                 pack_name = pack.name
-                detail = f"{kind_label(pack.kind)}: +{amount_label(pack)}"
+            use_kind = snap_kind or (pack.kind if pack else None)
+            use_amount = (
+                snap_amount
+                if snap_amount is not None
+                else (float(pack.amount) if pack else None)
+            )
+            if use_kind and use_amount is not None:
+                detail = f"{kind_label(use_kind)}: +{format_amount_label(use_kind, use_amount)}"
         text = format_message(
             "✅ افزونه اعمال شد",
             "\n".join(
                 [
                     f"سفارش #{order.id}",
-                    f"بسته: {pack_name}",
-                    detail,
+                    f"بسته: {html_mod.escape(pack_name)}",
+                    html_mod.escape(detail) if detail else "",
                     "به سرویس قبلی شما اضافه شد.",
                 ]
             ).strip(),

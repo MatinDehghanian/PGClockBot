@@ -160,13 +160,18 @@ async def delete_category(
     cat = await get_owned_category(session, category_id, staff)
     if not cat:
         raise ShopScopeError("دسته‌بندی یافت نشد")
-    # Detach plans in this shop only (FK also SET NULL, but be explicit).
-    await session.execute(
+    # Detach plans in this shop only (defense-in-depth on owner_reseller_id).
+    detach = (
         update(Plan)
         .where(Plan.category_id == int(category_id))
         .values(category_id=None)
         .execution_options(synchronize_session=False)
     )
+    if cat.owner_reseller_id is None:
+        detach = detach.where(Plan.owner_reseller_id.is_(None))
+    else:
+        detach = detach.where(Plan.owner_reseller_id == int(cat.owner_reseller_id))
+    await session.execute(detach)
     await session.delete(cat)
     await session.commit()
 
@@ -175,8 +180,14 @@ async def resolve_category_for_plan_write(
     session: AsyncSession,
     staff: dict | None,
     category_id_raw: str | int | None,
+    *,
+    allow_inactive_id: int | None = None,
 ) -> int | None:
-    """Parse optional category id; must belong to the same shop as the plan."""
+    """Parse optional category id; must belong to the same shop as the plan.
+
+    ``allow_inactive_id`` lets plan edit keep the currently assigned inactive
+    category without forcing a clear/reassign.
+    """
     if category_id_raw is None:
         return None
     raw = str(category_id_raw).strip()
@@ -190,6 +201,8 @@ async def resolve_category_for_plan_write(
     if not cat:
         raise ShopScopeError("دسته‌بندی در این فروشگاه یافت نشد")
     if not cat.is_active:
+        if allow_inactive_id is not None and int(cat.id) == int(allow_inactive_id):
+            return int(cat.id)
         raise ValueError("این دسته‌بندی غیرفعال است")
     return int(cat.id)
 

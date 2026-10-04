@@ -53,6 +53,37 @@ def is_addon_order_note(note: str | None) -> bool:
     return (note or "").strip().startswith("svc_addon:")
 
 
+async def fulfill_paid_order(session: AsyncSession, order: Order) -> Order:
+    """Route a PAID order to renew / addon / reseller_app / new-mint delivery.
+
+    Callers that previously used ``deliver_order`` for PAID recovery must use
+    this helper — addon/renew orders already have ``service_id`` set and
+    ``deliver_order`` would falsely seal them as delivered.
+    """
+    note = _order_note(order)
+    if note.startswith("reseller_app:"):
+        from app.services.resellers import mark_application_paid
+
+        await mark_application_paid(session, order)
+        order.status = OrderStatus.DELIVERED.value
+        await session.commit()
+        await session.refresh(order)
+        return order
+    if note.startswith("renew:"):
+        if not (order.service_id and order.plan_id):
+            raise ValueError("سفارش تمدید ناقص است")
+        service = await session.get(UserService, order.service_id)
+        plan = await session.get(Plan, order.plan_id)
+        if not service or not plan:
+            raise ValueError("سرویس یا پلن تمدید یافت نشد")
+        return await apply_renewal(session, order, service, plan)
+    if is_addon_order_note(note):
+        from app.services.service_addons import apply_service_addon
+
+        return await apply_service_addon(session, order)
+    return await deliver_order(session, order)
+
+
 async def _maybe_pay_referral_bonus(session: AsyncSession, order: Order) -> None:
     """Credit referrer wallet once after invitee's first successful purchase delivery.
 
@@ -872,28 +903,8 @@ def wallet_purchase_reason(order: Order) -> str:
 
 async def _resume_paid_wallet_order(session: AsyncSession, order: Order, user) -> Order:
     """Continue delivery for an already-PAID wallet order (crash recovery)."""
-    note = _order_note(order)
-    if note.startswith("reseller_app:"):
-        from app.services.resellers import mark_application_paid
-
-        await mark_application_paid(session, order)
-        order.status = OrderStatus.DELIVERED.value
-        await session.commit()
-        await session.refresh(order)
-        return order
-    if note.startswith("renew:"):
-        if not (order.service_id and order.plan_id):
-            raise ValueError("سفارش تمدید ناقص است")
-        service = await session.get(UserService, order.service_id)
-        plan = await session.get(Plan, order.plan_id)
-        if not service or not plan:
-            raise ValueError("سرویس یا پلن تمدید یافت نشد")
-        return await apply_renewal(session, order, service, plan)
-    if is_addon_order_note(note):
-        from app.services.service_addons import apply_service_addon
-
-        return await apply_service_addon(session, order)
-    return await deliver_order(session, order)
+    _ = user
+    return await fulfill_paid_order(session, order)
 
 
 async def pay_with_wallet(session: AsyncSession, order: Order, user) -> Order:
@@ -1425,29 +1436,7 @@ async def approve_payment(session: AsyncSession, payment: Payment, reviewer_tg: 
         raise ValueError("این سفارش قابل تأیید نیست")
     await session.commit()
     await session.refresh(order)
-    # Reseller application fee — no VPN delivery; move application to review queue.
-    if order.note and order.note.startswith("reseller_app:"):
-        from app.services.resellers import mark_application_paid
-
-        await mark_application_paid(session, order)
-        order.status = OrderStatus.DELIVERED.value
-        await session.commit()
-        await session.refresh(order)
-        return order
-    # Renewal orders extend existing service instead of creating a new panel user.
-    if order.note and order.note.startswith("renew:"):
-        if not (order.service_id and order.plan_id):
-            raise ValueError("سفارش تمدید ناقص است")
-        service = await session.get(UserService, order.service_id)
-        plan = await session.get(Plan, order.plan_id)
-        if not service or not plan:
-            raise ValueError("سرویس یا پلن تمدید یافت نشد")
-        return await apply_renewal(session, order, service, plan)
-    if is_addon_order_note(order.note):
-        from app.services.service_addons import apply_service_addon
-
-        return await apply_service_addon(session, order)
-    return await deliver_order(session, order)
+    return await fulfill_paid_order(session, order)
 
 
 async def reject_payment(session: AsyncSession, payment: Payment, reviewer_tg: int, note: str = "") -> None:

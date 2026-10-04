@@ -35,7 +35,8 @@ from app.db.session import SessionLocal
 from app.services.orders import (
     approve_payment,
     cancel_order,
-    deliver_order,
+    fulfill_paid_order,
+    is_mutation_order_note,
     manual_fulfill_unpaid_order,
     reject_order,
     reject_payment,
@@ -3125,7 +3126,10 @@ def create_api_app(lifespan=None) -> FastAPI:
         plan.button_style = parse_plan_button_style_form(form)
         try:
             plan.category_id = await resolve_category_for_plan_write(
-                session, staff, form.get("category_id")
+                session,
+                staff,
+                form.get("category_id"),
+                allow_inactive_id=plan.category_id,
             )
         except (ShopScopeError, ValueError) as e:
             return RedirectResponse(
@@ -3200,10 +3204,11 @@ def create_api_app(lifespan=None) -> FastAPI:
                 return _redirect_msg("/finance?tab=orders", err=e.message)
         if order.status == OrderStatus.DELIVERED.value:
             return _redirect_msg("/finance?tab=orders", ok="قبلاً تحویل شده")
-        # Already provisioned (status may have been tampered) — never re-deliver/notify
+        # Already provisioned (status may have been tampered) — never re-deliver/notify.
+        # Mutation orders (renew / reseller_app / svc_addon) keep service_id as the
+        # target to mutate — do not treat them as already-minted deliveries.
         note = (order.note or "").strip()
-        is_renew_or_app = note.startswith("renew:") or note.startswith("reseller_app:")
-        if order.service_id and not is_renew_or_app:
+        if order.service_id and not is_mutation_order_note(note):
             if order.status != OrderStatus.DELIVERED.value:
                 order.status = OrderStatus.DELIVERED.value
                 await session.commit()
@@ -3230,13 +3235,15 @@ def create_api_app(lifespan=None) -> FastAPI:
                 await _notify_order_user(session, payment, delivered or order)
             elif order.status == OrderStatus.PAID.value:
                 had_service = bool(order.service_id)
-                delivered = await deliver_order(session, order)
-                if payment and not had_service:
+                was_mutation = is_mutation_order_note(note)
+                delivered = await fulfill_paid_order(session, order)
+                if payment and (was_mutation or not had_service):
                     await _notify_order_user(session, payment, delivered)
             elif payment and payment.status == PaymentStatus.APPROVED.value and order.status != OrderStatus.DELIVERED.value:
                 had_service = bool(order.service_id)
-                delivered = await deliver_order(session, order)
-                if not had_service:
+                was_mutation = is_mutation_order_note(note)
+                delivered = await fulfill_paid_order(session, order)
+                if was_mutation or not had_service:
                     await _notify_order_user(session, payment, delivered)
             elif order.status in {
                 OrderStatus.PENDING.value,

@@ -25,12 +25,50 @@ KIND_VOLUME = "volume"
 KIND_DURATION = "duration"
 VALID_KINDS = frozenset({KIND_VOLUME, KIND_DURATION})
 
-# note: svc_addon:{pack_id}:{service_id}
-_NOTE_RE = re.compile(r"^svc_addon:(\d+):(\d+)$")
+# note: svc_addon:{pack_id}:{service_id}[:{kind}:{amount}]
+# kind/amount snapshot freezes entitlement at order time (price is on order.amount).
+_NOTE_RE = re.compile(
+    r"^svc_addon:(\d+):(\d+)(?::(volume|duration):([0-9]+(?:\.[0-9]+)?))?$"
+)
 
 MAX_VOLUME_GB = 10_000.0
 MAX_DURATION_DAYS = 3650
 MAX_PRICE = 2_000_000_000
+
+
+def format_addon_note(
+    pack_id: int,
+    service_id: int,
+    *,
+    kind: str,
+    amount: float,
+) -> str:
+    """Server-written order note with snapshotted kind/amount."""
+    k = (kind or "").strip().lower()
+    if k not in VALID_KINDS:
+        raise ValueError("نوع بسته نامعتبر است")
+    amt = float(amount)
+    if k == KIND_DURATION:
+        amt_s = str(int(amt))
+    else:
+        amt_s = f"{amt:g}"
+    return f"svc_addon:{int(pack_id)}:{int(service_id)}:{k}:{amt_s}"
+
+
+def parse_addon_note(
+    note: str | None,
+) -> tuple[int, int, str | None, float | None] | None:
+    """Return (pack_id, service_id, kind|None, amount|None). Legacy notes omit snapshot."""
+    m = _NOTE_RE.match((note or "").strip())
+    if not m:
+        return None
+    pack_id = int(m.group(1))
+    service_id = int(m.group(2))
+    kind = m.group(3)
+    amt_raw = m.group(4)
+    if kind and amt_raw is not None:
+        return pack_id, service_id, kind, float(amt_raw)
+    return pack_id, service_id, None, None
 
 
 def apply_pack_owner_filter(query, staff: dict | None):
@@ -65,13 +103,6 @@ def pack_matches_shop(pack: ServiceAddonPack | None, shop_rid: int | None) -> bo
     return pack.owner_reseller_id is None
 
 
-def parse_addon_note(note: str | None) -> tuple[int, int] | None:
-    m = _NOTE_RE.match((note or "").strip())
-    if not m:
-        return None
-    return int(m.group(1)), int(m.group(2))
-
-
 def is_addon_order(order: Order | None) -> bool:
     return bool(order and parse_addon_note(order.note))
 
@@ -80,14 +111,18 @@ def kind_label(kind: str) -> str:
     return "حجم" if kind == KIND_VOLUME else "زمان"
 
 
-def amount_label(pack: ServiceAddonPack) -> str:
-    if pack.kind == KIND_VOLUME:
-        amt = float(pack.amount)
+def format_amount_label(kind: str, amount: float) -> str:
+    if kind == KIND_VOLUME:
+        amt = float(amount)
         if amt == int(amt):
             return f"{int(amt)} گیگ"
         return f"{amt:g} گیگ"
-    days = int(float(pack.amount))
+    days = int(float(amount))
     return f"{days} روز"
+
+
+def amount_label(pack: ServiceAddonPack) -> str:
+    return format_amount_label(pack.kind, float(pack.amount))
 
 
 async def list_packs(
@@ -299,12 +334,25 @@ async def create_addon_order(
         # Platform bot must not sell addons onto shop-owned customer rows.
         raise ValueError("سرویس این فروشگاه نیست")
 
+    # Fail closed on known-unlimited quotas (synced cache) so buyers are not charged
+    # for an entitlement that cannot be applied.
+    if service.quota_synced_at is not None:
+        if pack.kind == KIND_VOLUME and int(service.quota_data_limit_bytes or 0) <= 0:
+            raise ValueError("این سرویس حجم نامحدود دارد — بسته حجم قابل خرید نیست")
+        if pack.kind == KIND_DURATION and service.quota_expire_at is None:
+            raise ValueError("این سرویس زمان نامحدود دارد — بسته زمان قابل خرید نیست")
+
     order = Order(
         user_id=user_id,
         plan_id=None,
         amount=int(pack.price),
         status=OrderStatus.PENDING.value,
-        note=f"svc_addon:{int(pack.id)}:{int(service.id)}",
+        note=format_addon_note(
+            int(pack.id),
+            int(service.id),
+            kind=pack.kind,
+            amount=float(pack.amount),
+        ),
         service_id=int(service.id),
         reseller_id=shop_rid,
     )
@@ -370,7 +418,21 @@ async def apply_service_addon(
         elif pack.owner_reseller_id is not None:
             raise ValueError("بسته متعلق به این فروشگاه نیست")
 
-        await _apply_pack_to_service(session, service, pack, order_reseller_id=order.reseller_id)
+        # Prefer snapshotted kind/amount from the order note; fall back to live pack
+        # only for legacy notes written before snapshotting.
+        snap_kind, snap_amount = parsed[2], parsed[3]
+        apply_kind = snap_kind or pack.kind
+        apply_amount = float(snap_amount) if snap_amount is not None else float(pack.amount)
+        if apply_kind not in VALID_KINDS:
+            raise ValueError("نوع بسته نامعتبر است")
+
+        await _apply_pack_to_service(
+            session,
+            service,
+            kind=apply_kind,
+            amount=apply_amount,
+            order_reseller_id=order.reseller_id,
+        )
 
         with session.no_autoflush:
             done = await session.execute(
@@ -398,11 +460,15 @@ async def apply_service_addon(
 async def _apply_pack_to_service(
     session: AsyncSession,
     service: UserService,
-    pack: ServiceAddonPack,
     *,
+    kind: str,
+    amount: float,
     order_reseller_id: int | None,
 ) -> None:
-    """Additive PG mutate — never falls back across shop PG credentials."""
+    """Additive PG mutate — never falls back across shop PG credentials.
+
+    Unlimited volume/time services are rejected (not converted to limited).
+    """
     from app.services.bot_user_admin import sync_service_quota_cache
     from app.services.pasarguard import get_pg, get_pg_for_reseller
 
@@ -426,8 +492,8 @@ async def _apply_pack_to_service(
     expire_ts = None
     data_limit_bytes = None
 
-    if pack.kind == KIND_VOLUME:
-        add_bytes = int(float(pack.amount) * (1024**3))
+    if kind == KIND_VOLUME:
+        add_bytes = int(float(amount) * (1024**3))
         if add_bytes <= 0:
             raise ValueError("حجم نامعتبر است")
         try:
@@ -435,24 +501,21 @@ async def _apply_pack_to_service(
         except (TypeError, ValueError):
             current = 0
         if current <= 0:
-            # Unlimited → start from purchased extra only
-            data_limit_bytes = add_bytes
-        else:
-            data_limit_bytes = current + add_bytes
+            raise ValueError("این سرویس حجم نامحدود دارد — بسته حجم قابل اعمال نیست")
+        data_limit_bytes = current + add_bytes
         payload["data_limit"] = data_limit_bytes
-    elif pack.kind == KIND_DURATION:
+    elif kind == KIND_DURATION:
         import time
         from app.services.formatting import parse_expire
 
-        days = int(float(pack.amount))
+        days = int(float(amount))
         if days <= 0:
             raise ValueError("مدت نامعتبر است")
         now = int(time.time())
         cur = parse_expire(info.get("expire") or info.get("expire_date"))
-        if cur is not None:
-            base = max(now, int(cur.timestamp()))
-        else:
-            base = now
+        if cur is None:
+            raise ValueError("این سرویس زمان نامحدود دارد — بسته زمان قابل اعمال نیست")
+        base = max(now, int(cur.timestamp()))
         expire_ts = base + days * 86400
         payload["expire"] = expire_ts
     else:

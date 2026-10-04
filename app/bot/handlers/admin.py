@@ -19,8 +19,16 @@ from app.services.formatting import (
     format_toman,
     order_status_fa,
 )
+<<<<<<< HEAD
 from app.services.orders import approve_payment, deliver_order, reject_payment
 from app.services.redact import user_safe_error
+=======
+from app.services.orders import (
+    approve_payment,
+    fulfill_paid_order,
+    reject_payment,
+)
+>>>>>>> 1f7b098 (fix: harden plan addons + clarify additive category labels)
 from app.services.pasarguard import get_pg
 from app.services.tickets import get_ticket, list_open_tickets, reply_ticket
 from app.services.updates import local_version
@@ -572,7 +580,7 @@ async def _approve_order_bot(session: AsyncSession, order: Order, bot) -> str:
     elif order.status == OrderStatus.PAID.value or (
         pay and pay.status == PaymentStatus.APPROVED.value and order.status != OrderStatus.DELIVERED.value
     ):
-        delivered = await deliver_order(session, order)
+        delivered = await fulfill_paid_order(session, order)
         if pay:
             try:
                 from app.services.delivery import send_delivery_to_user

@@ -14,12 +14,18 @@ from app.services.service_addons import (
     KIND_DURATION,
     KIND_VOLUME,
     amount_label,
+    format_addon_note,
+    format_amount_label,
     is_addon_order,
     pack_belongs_to_staff,
     pack_matches_shop,
     parse_addon_note,
 )
-from app.services.orders import is_addon_order_note, is_mutation_order_note
+from app.services.orders import (
+    fulfill_paid_order,
+    is_addon_order_note,
+    is_mutation_order_note,
+)
 
 
 def _staff(*, role: str, bot_user_id: int | None = None) -> dict:
@@ -91,20 +97,35 @@ class ServiceAddonScopeTests(unittest.TestCase):
         self.assertFalse(pack_matches_shop(shop, None))
         self.assertFalse(pack_matches_shop(shop, 9))
 
-    def test_note_parse_and_labels(self):
-        self.assertEqual(parse_addon_note("svc_addon:12:34"), (12, 34))
+    def test_note_parse_snapshot_and_legacy(self):
+        self.assertEqual(
+            parse_addon_note("svc_addon:12:34:volume:10"),
+            (12, 34, "volume", 10.0),
+        )
+        self.assertEqual(
+            parse_addon_note("svc_addon:12:34:duration:7"),
+            (12, 34, "duration", 7.0),
+        )
+        # Legacy notes without snapshot still parse
+        self.assertEqual(parse_addon_note("svc_addon:12:34"), (12, 34, None, None))
         self.assertIsNone(parse_addon_note("renew:1"))
-        self.assertTrue(is_addon_order_note("svc_addon:1:2"))
-        self.assertTrue(is_mutation_order_note("svc_addon:1:2"))
+        note = format_addon_note(3, 9, kind=KIND_VOLUME, amount=2.5)
+        self.assertEqual(parse_addon_note(note), (3, 9, "volume", 2.5))
+        self.assertTrue(is_addon_order_note("svc_addon:1:2:volume:1"))
+        self.assertTrue(is_mutation_order_note("svc_addon:1:2:duration:7"))
         self.assertTrue(is_mutation_order_note("renew:9"))
         self.assertFalse(is_mutation_order_note("wholesale:2"))
         pack = ServiceAddonPack(
             id=1, name="x", kind=KIND_VOLUME, amount=10, price=1, is_active=True
         )
         self.assertIn("گیگ", amount_label(pack))
+        self.assertIn("روز", format_amount_label(KIND_DURATION, 7))
         order = MagicMock()
-        order.note = "svc_addon:1:2"
+        order.note = "svc_addon:1:2:volume:10"
         self.assertTrue(is_addon_order(order))
+
+    def test_fulfill_paid_order_exported(self):
+        self.assertTrue(callable(fulfill_paid_order))
 
 
 class WiringTests(unittest.TestCase):
@@ -114,14 +135,23 @@ class WiringTests(unittest.TestCase):
         plans = Path("app/web/templates/plans.html").read_text(encoding="utf-8")
         self.assertIn("modal-plan-categories", plans)
         self.assertIn("modal-service-addons", plans)
-        self.assertIn("دسته‌بندی پلن", plans)
+        self.assertIn("برچسب دسته", plans)
         self.assertIn("بسته حجم/زمان", plans)
         self.assertIn('name="category_id"', plans)
+        # Existing plan kinds (ثابت/…) must remain; labels are additive
+        self.assertIn("USER_KINDS", plans)
+        self.assertIn("{value: 'fixed', label: 'ثابت'}", plans)
+        self.assertIn("data-category-edit", plans)
+        self.assertIn("data-addon-edit", plans)
+        self.assertIn("service-addon-kind", plans)
         extras = Path("app/api/plan_catalog_extras.py").read_text(encoding="utf-8")
         self.assertIn('/plans/categories', extras)
         self.assertIn('/plans/addons', extras)
+        self.assertIn("/edit", extras)
         app = Path("app/api/app.py").read_text(encoding="utf-8")
         self.assertIn("register_plan_catalog_extras", app)
+        self.assertIn("is_mutation_order_note", app)
+        self.assertIn("fulfill_paid_order", app)
         models = Path("app/db/models.py").read_text(encoding="utf-8")
         self.assertIn("class PlanCategory", models)
         self.assertIn("class ServiceAddonPack", models)
@@ -133,6 +163,9 @@ class WiringTests(unittest.TestCase):
         svc = Path("app/bot/handlers/services.py").read_text(encoding="utf-8")
         self.assertIn("svc:addon:", svc)
         self.assertIn("create_addon_order", svc)
+        addons = Path("app/services/service_addons.py").read_text(encoding="utf-8")
+        self.assertIn("format_addon_note", addons)
+        self.assertIn("حجم نامحدود", addons)
 
 
 class PlanModelFieldTests(unittest.TestCase):

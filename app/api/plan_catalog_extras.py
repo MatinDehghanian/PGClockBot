@@ -42,7 +42,7 @@ def register_plan_catalog_extras(app, *, require_perm, get_db):
                 f"/plans?categories=1&err={quote(str(e))}", status_code=303
             )
         return RedirectResponse(
-            f"/plans?categories=1&ok={quote('دسته‌بندی ذخیره شد')}",
+            f"/plans?categories=1&ok={quote('برچسب دسته ذخیره شد')}",
             status_code=303,
         )
 
@@ -57,7 +57,7 @@ def register_plan_catalog_extras(app, *, require_perm, get_db):
         cat = await get_owned_category(session, category_id, staff)
         if not cat:
             return RedirectResponse(
-                f"/plans?categories=1&err={quote('دسته‌بندی یافت نشد')}",
+                f"/plans?categories=1&err={quote('برچسب دسته یافت نشد')}",
                 status_code=303,
             )
         cat.is_active = not cat.is_active
@@ -79,7 +79,7 @@ def register_plan_catalog_extras(app, *, require_perm, get_db):
                 f"/plans?categories=1&err={quote(str(e))}", status_code=303
             )
         return RedirectResponse(
-            f"/plans?categories=1&ok={quote('دسته‌بندی حذف شد')}",
+            f"/plans?categories=1&ok={quote('برچسب دسته حذف شد')}",
             status_code=303,
         )
 
@@ -108,7 +108,7 @@ def register_plan_catalog_extras(app, *, require_perm, get_db):
                 f"/plans?categories=1&err={quote(str(e))}", status_code=303
             )
         return RedirectResponse(
-            f"/plans?categories=1&ok={quote('دسته‌بندی به‌روزرسانی شد')}",
+            f"/plans?categories=1&ok={quote('برچسب دسته به‌روزرسانی شد')}",
             status_code=303,
         )
 
