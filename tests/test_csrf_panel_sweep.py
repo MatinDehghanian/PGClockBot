@@ -39,6 +39,8 @@ def test_release_notes_mention_csrf_sweep():
     notes = (ROOT / "app/services/release_notes.py").read_text(encoding="utf-8")
     assert '"10.1.5"' in notes
     assert "CSRF" in notes
+    from app.version import __version__
+
     ver = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
     # Version keeps moving; CSRF sweep notes must remain in the ledger.
-    assert ver.split(".")[0] == "10"
+    assert ver == __version__

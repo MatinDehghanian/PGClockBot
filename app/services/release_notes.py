@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.1.0": [
+        "ریلیز عمومی اولیه — نسخه ۰٫۱٫۰",
+        "لایسنس MIT",
+    ],
     "11.1.1": [
         "رفع خطای /start ربات وقتی مینی‌اپ بدون HTTPS بود (دیگر بعد از منو پیام خطا نمی‌آید)",
         "مینی‌اپ دیفالت از لینک HTTPS پنل (گواهی/دامنه زنده) می‌آید؛ دیگر به PUBLIC_BASE_URLی HTTP گیر نمی‌کند",
