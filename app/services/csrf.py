@@ -54,7 +54,17 @@ def csrf_tokens_match(cookie_token: str, submitted: str) -> bool:
 
 
 async def extract_csrf_from_request(request: Request) -> str:
-    """Best-effort CSRF from header, JSON body, or already-parsed / buffered form."""
+    """Best-effort CSRF from header, JSON body, or form field.
+
+    FastAPI registers ``@app.middleware("http")`` as Starlette
+    ``BaseHTTPMiddleware``, which builds a *new* Request for the endpoint.
+    Calling ``request.form()`` alone consumes the body via ``stream()`` and
+    downstream sees an empty body — settings "ذخیره شد" with no write, and
+    ``Form(...)`` routes (e.g. POST /plans) return 422 missing fields.
+
+    ``BaseHTTPMiddleware`` only replays the body when ``request.body()`` was
+    called first. Always buffer with ``body()`` before parsing form/json here.
+    """
     header = (request.headers.get(CSRF_HEADER) or "").strip()
     if header:
         return header
@@ -63,6 +73,11 @@ async def extract_csrf_from_request(request: Request) -> str:
         # Panel fetch() updates send JSON; accept csrf_token in the body so a
         # missed X-CSRF-Token header (or a race before panel.js wraps fetch)
         # cannot silently block /update/start.
+        try:
+            # body() enables BaseHTTPMiddleware replay; json() also reads body.
+            await request.body()
+        except Exception:
+            pass
         try:
             body = await request.json()
         except Exception:
@@ -73,6 +88,12 @@ async def extract_csrf_from_request(request: Request) -> str:
                 return str(raw).strip()
         return ""
     if "application/x-www-form-urlencoded" in ctype or "multipart/form-data" in ctype:
+        try:
+            # Critical: body() before form() so the ASGI stream is replayed to
+            # the endpoint Request (see Starlette _CachedRequest).
+            await request.body()
+        except Exception:
+            pass
         try:
             form = await request.form()
             raw = form.get(CSRF_FORM_FIELD)
