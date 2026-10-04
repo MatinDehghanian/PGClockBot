@@ -118,7 +118,6 @@ class Plan(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(128))
-    category: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     price: Mapped[int] = mapped_column(Integer)  # toman
     duration_days: Mapped[int] = mapped_column(Integer, default=30)

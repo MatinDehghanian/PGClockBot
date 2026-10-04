@@ -943,36 +943,6 @@ def admin_plan_kind_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def plan_categories_keyboard(
-    plans: list[Plan],
-    ui: dict | None = None,
-    *,
-    kind: str = "fixed",
-    back_callback: str = "shop:list",
-) -> InlineKeyboardMarkup | None:
-    from app.services.plan_categories import category_groups
-    from app.services.button_styles import plan_kind_style_id
-
-    groups = category_groups(plans)
-    if not any(name is not None for name, _ in groups):
-        return None
-    style = _style(ui, plan_kind_style_id(kind) or "shop_kind_fixed", fallback="primary")
-    rows = [
-        [_ikb(
-            f"📁 {name or 'بدون دسته‌بندی'}",
-            callback_data=f"shop:category:{kind}:{items[0].id if name is not None else 0}",
-            style=style,
-        )]
-        for name, items in groups
-    ]
-    if back_callback:
-        rows.append([_ikb(
-            _t(ui, "btn_back"), callback_data=back_callback,
-            style=_style(ui, "back"), ui=ui, label_key="btn_back",
-        )])
-    return InlineKeyboardMarkup(inline_keyboard=rows)
-
-
 def plans_keyboard(
     plans: list[Plan],
     ui: dict | None = None,
@@ -981,17 +951,12 @@ def plans_keyboard(
     wholesale_enabled: bool = False,
     back_callback: str = "shop:list",
     kind: str | None = None,
-    show_categories: bool = True,
 ) -> InlineKeyboardMarkup:
     """Plan name rows — per-plan color override, else plan-kind catalog color."""
     from app.services.button_styles import plan_kind_style_id
 
     _ = custom_enabled, wholesale_enabled  # call-site compat
     fallback_kind = kind or "fixed"
-    if show_categories:
-        categories = plan_categories_keyboard(plans, ui, kind=fallback_kind, back_callback=back_callback)
-        if categories is not None:
-            return categories
     kind_style = _style(
         ui, plan_kind_style_id(fallback_kind) or "shop_kind_fixed", fallback="primary"
     )
@@ -1035,13 +1000,8 @@ def wholesale_plans_keyboard(
     ui: dict | None = None,
     *,
     back_callback: str = "shop:kind:wholesale",
-    show_categories: bool = True,
 ) -> InlineKeyboardMarkup:
     """Wholesale plan names — per-plan color override, else wholesale kind."""
-    if show_categories:
-        categories = plan_categories_keyboard(plans, ui, kind="wholesale", back_callback=back_callback)
-        if categories is not None:
-            return categories
     rows = [
         [
             _ikb(

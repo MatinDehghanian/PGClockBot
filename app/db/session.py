@@ -155,8 +155,6 @@ def _migrate_sqlite_legacy(sync_conn) -> None:
     if not insp.has_table("plans"):
         return
     cols = {c["name"] for c in insp.get_columns("plans")}
-    if "category" not in cols:
-        sync_conn.execute(sql_text("ALTER TABLE plans ADD COLUMN category VARCHAR(128)"))
     if "pg_group_ids" not in cols:
         sync_conn.execute(sql_text("ALTER TABLE plans ADD COLUMN pg_group_ids VARCHAR(255)"))
     if "owner_reseller_id" not in cols:

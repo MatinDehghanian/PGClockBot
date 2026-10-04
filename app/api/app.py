@@ -2344,14 +2344,6 @@ def create_api_app(lifespan=None) -> FastAPI:
         plans = await list_catalog_plans(session, staff, include_trial=True)
         trial = next((p for p in plans if p.is_trial), None)
         sale_plans = [p for p in plans if not p.is_trial]
-        from app.services.plan_categories import category_names, plan_category
-
-        plan_categories = category_names(sale_plans)
-        selected_category = request.query_params.get("category", "")
-        if selected_category == "uncategorized":
-            sale_plans = [p for p in sale_plans if plan_category(p) is None]
-        elif selected_category.startswith("name:"):
-            sale_plans = [p for p in sale_plans if plan_category(p) == selected_category[5:]]
         templates, groups, pg_error = await load_pg_plan_options(staff, session=session)
         rid = catalog_owner_id(staff)
         # Non-admin without shop id must never load platform (admin) settings.
@@ -2434,8 +2426,6 @@ def create_api_app(lifespan=None) -> FastAPI:
             {
                 "staff": staff,
                 "plans": sale_plans,
-                "plan_categories": plan_categories,
-                "selected_category": selected_category,
                 "trial": trial,
                 "trial_group_ids": trial_group_ids,
                 "custom_group_ids": custom_group_ids,
@@ -2562,7 +2552,6 @@ def create_api_app(lifespan=None) -> FastAPI:
                         status_code=303,
                     )
 
-        from app.services.plan_categories import normalize_plan_category
         from app.services.orders import parse_naming_form
         from app.services.button_styles import parse_plan_button_style_form
 
@@ -2572,7 +2561,6 @@ def create_api_app(lifespan=None) -> FastAPI:
         session.add(
             Plan(
                 name=name.strip(),
-                category=normalize_plan_category(form.get("category")),
                 price=price,
                 duration_days=duration_days,
                 data_limit_gb=gb,
@@ -2908,10 +2896,6 @@ def create_api_app(lifespan=None) -> FastAPI:
         ctx = await _plans_context(session, request, staff, {"plan": plan, "values": values})
         from app.services.button_styles import PLAN_BUTTON_STYLE_OPTIONS
 
-        from app.services.plan_categories import category_names
-        from app.services.plans_catalog import list_catalog_plans
-
-        ctx["plan_categories"] = category_names(await list_catalog_plans(session, staff, include_trial=False))
         ctx["plan_style_options"] = PLAN_BUTTON_STYLE_OPTIONS
         return render(request, "plan_edit.html", ctx)
 
@@ -2986,9 +2970,6 @@ def create_api_app(lifespan=None) -> FastAPI:
                 )
             group_csv = ",".join(str(i) for i in ids)
 
-        from app.services.plan_categories import normalize_plan_category
-
-        plan.category = normalize_plan_category(form.get("category"))
         plan.name = name.strip()
         plan.price = price
         plan.duration_days = duration_days

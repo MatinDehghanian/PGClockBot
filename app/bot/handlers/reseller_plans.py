@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import html
-
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -30,7 +28,6 @@ class ResellerPlanStates(StatesGroup):
     days = State()
     gb = State()
     mode = State()
-    category = State()
 
 
 async def _actor(
@@ -95,7 +92,6 @@ def _plan_item_kb(plan: Plan) -> InlineKeyboardMarkup:
     """Plan actions only (no list-back chrome — use reply Back)."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [kb._ikb("📁 دسته‌بندی", callback_data=f"res:plan:category:{plan.id}")],
             [
                 InlineKeyboardButton(
                     text="خاموش" if plan.is_active else "روشن",
@@ -124,8 +120,7 @@ def _plan_text(plan: Plan) -> str:
         else (f"گروه {plan.pg_group_ids}" if plan.pg_group_ids else "—")
     )
     return (
-        f"💎 <b>{html.escape(plan.name)}</b>\n"
-        f"دسته‌بندی: {html.escape(plan.category or 'بدون دسته‌بندی')}\n"
+        f"💎 <b>{plan.name}</b>\n"
         f"قیمت: {plan.price:,} تومان\n"
         f"مدت: {plan.duration_days} روز · حجم: {gb}\n"
         f"پاسارگارد: {src}\n"
@@ -203,63 +198,6 @@ async def res_plan_view(callback: CallbackQuery, session: AsyncSession, db_user:
     await callback.answer()
     if callback.message:
         await safe_edit_text(callback.message, _plan_text(plan), reply_markup=_plan_item_kb(plan))
-
-
-@router.callback_query(F.data.startswith("res:plan:category:"))
-async def res_plan_category_ask(
-    callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext,
-    is_reseller_bot: bool = False, reseller_owner_id: int | None = None,
-):
-    owner_id, profile = await _actor(
-        session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
-    )
-    if not owner_id or not profile or not has_bot_perm(profile, "plans"):
-        await callback.answer("دسترسی ندارید", show_alert=True)
-        return
-    plan = await session.get(Plan, int(callback.data.split(":")[-1]))
-    if not plan or plan.owner_reseller_id != owner_id or plan.is_trial:
-        await callback.answer("یافت نشد", show_alert=True)
-        return
-    await state.set_state(ResellerPlanStates.category)
-    await state.update_data(res_category_plan_id=plan.id)
-    await callback.answer()
-    if callback.message:
-        await callback.message.answer("نام دسته‌بندی (— = بدون دسته‌بندی):", reply_markup=kb.cancel_reply())
-
-
-@router.message(ResellerPlanStates.category)
-async def res_plan_category_save(
-    message: Message, session: AsyncSession, db_user: BotUser, state: FSMContext,
-    is_reseller_bot: bool = False, reseller_owner_id: int | None = None,
-):
-    from app.services.plan_categories import normalize_plan_category
-
-    owner_id, profile = await _actor(
-        session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
-    )
-    if not owner_id or not profile or not has_bot_perm(profile, "plans"):
-        await state.clear()
-        await message.answer("دسترسی ندارید")
-        return
-    if kb.is_cancel_text(message.text):
-        await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.reseller_plans_reply_keyboard())
-        return
-    data = await state.get_data()
-    plan = await session.get(Plan, int(data.get("res_category_plan_id") or 0))
-    if not plan or plan.owner_reseller_id != owner_id or plan.is_trial:
-        await state.clear()
-        await message.answer("یافت نشد", reply_markup=kb.reseller_plans_reply_keyboard())
-        return
-    text = (message.text or "").strip()
-    if not text:
-        await message.answer("نام دسته‌بندی را بفرستید یا برای حذف آن — بفرستید.")
-        return
-    plan.category = normalize_plan_category(None if text == "—" else text)
-    await session.commit()
-    await state.set_state(None)
-    await message.answer("ذخیره شد ✅", reply_markup=kb.reseller_plans_reply_keyboard())
-    await message.answer(_plan_text(plan), reply_markup=_plan_item_kb(plan))
 
 
 @router.callback_query(F.data.startswith("res:plan:tog:"))

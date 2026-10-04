@@ -33,11 +33,6 @@
       </label>
     </div>
 
-    {% set category_value = plan.category %}
-    {% include "_plan_category_field.html" %}
-    <datalist id="plan-category-options">
-      {% for category in plan_categories %}<option value="{{ category }}"></option>{% endfor %}
-    </datalist>
     <label class="form-field">توضیح کوتاه
       <input name="description" value="{{ plan.description or '' }}" placeholder="نمایش در بات" />
     </label>

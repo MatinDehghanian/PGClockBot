@@ -497,7 +497,6 @@ async def clone_plan(session: AsyncSession, plan_id: int, *, owner_reseller_id: 
     copy = Plan(
         name=f"{src.name} (کپی)",
         description=src.description,
-        category=src.category,
         price=int(src.price or 0),
         duration_days=int(src.duration_days or 30),
         data_limit_gb=src.data_limit_gb,
@@ -894,7 +893,6 @@ async def export_shop_bundle(
         plans.append(
             {
                 "name": p.name,
-                "category": p.category,
                 "description": p.description,
                 "price": p.price,
                 "duration_days": p.duration_days,
@@ -1035,8 +1033,6 @@ async def import_shop_bundle(
     if clean:
         await set_settings_bulk(session, clean, reseller_id=reseller_id)
     plans_in = payload.get("plans") or []
-    from app.services.plan_categories import normalize_plan_category
-
     created = 0
     if replace_plans and isinstance(plans_in, list):
         q = select(Plan)
@@ -1066,7 +1062,6 @@ async def import_shop_bundle(
             session.add(
                 Plan(
                     name=name[:128],
-                    category=normalize_plan_category(raw.get("category")),
                     description=(str(raw.get("description") or "")[:2000] or None),
                     price=int(raw.get("price") or 0),
                     duration_days=int(raw.get("duration_days") or 30),
