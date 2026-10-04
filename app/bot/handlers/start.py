@@ -775,9 +775,26 @@ async def _link_subscription(
     reseller_owner_id: int | None = None,
 ):
     from app.services.formatting import format_message
+    from app.services.pasarguard import get_pg_for_reseller
 
     ui = await get_all_settings(session)
-    pg = get_pg()
+    # Shop bots must resolve subscription via the shop's PG credentials —
+    # never the platform owner token (avoids cross-tenant link/read).
+    if is_reseller_bot and reseller_owner_id:
+        try:
+            pg = await get_pg_for_reseller(session, int(reseller_owner_id))
+        except Exception:
+            await message.answer("اتصال به پنل فروشگاه ممکن نیست.")
+            await render_home(
+                message,
+                session,
+                db_user,
+                is_reseller_bot=is_reseller_bot,
+                reseller_owner_id=reseller_owner_id,
+            )
+            return
+    else:
+        pg = get_pg()
     try:
         info = await pg.subscription_info(token)
     except Exception:

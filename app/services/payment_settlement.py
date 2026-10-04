@@ -89,15 +89,20 @@ def idem_key_card_auto(payment_id: int) -> str:
 async def resolve_payment_shop_owner_id(
     session: AsyncSession, payment: Payment
 ) -> int | None:
-    """Tenant of a payment: order.reseller_id, else payer.reseller_id, else platform (None)."""
+    """Tenant of a payment for settlement keys / HMAC.
+
+    Order payments use ``order.reseller_id``. Wallet top-ups use the shop
+    captured at creation (``payment.wallet_shop_id``) — never sticky
+    ``user.reseller_id``, which let a shop webhook mint platform balance.
+    """
+    if payment.is_wallet_topup:
+        wid = getattr(payment, "wallet_shop_id", None)
+        return int(wid) if wid else None
     if payment.order_id:
         order = await session.get(Order, int(payment.order_id))
         if order and order.reseller_id:
             return int(order.reseller_id)
         return None
-    user = await session.get(BotUser, int(payment.user_id))
-    if user and user.reseller_id:
-        return int(user.reseller_id)
     return None
 
 
@@ -809,6 +814,14 @@ async def complete_psp_return(
         callback_params=callback_params,
     )
     if not verified.ok:
+        # Soft cancel (Status=NOK / user backed out) must NOT burn the settlement.
+        # Anyone can hit the public return URL with Status=NOK and otherwise
+        # permanently FAIL a pending checkout before the real payer finishes.
+        cb_status = str(
+            callback_params.get("Status") or callback_params.get("status") or ""
+        ).strip().upper()
+        if cb_status and cb_status != "OK":
+            raise ValueError(verified.message or "پرداخت توسط کاربر تکمیل نشد")
         settlement.status = SettlementStatus.FAILED.value
         settlement.error_message = (verified.message or "verify failed")[:500]
         await session.commit()

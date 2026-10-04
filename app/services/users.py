@@ -1659,6 +1659,7 @@ async def delete_bot_user(
         PointsTransaction,
         ReferralEvent,
         RewardRedemption,
+        ShopWallet,
         TermsAcceptance,
     )
 
@@ -1706,6 +1707,21 @@ async def delete_bot_user(
         .where(LuckyWheelUserState.reseller_id == user_id)
         .values(reseller_id=None)
     )
+    await session.execute(
+        update(LoyaltyDiscountEntitlement)
+        .where(LoyaltyDiscountEntitlement.reseller_id == user_id)
+        .values(reseller_id=None)
+    )
+    await session.execute(
+        update(WalletTransaction)
+        .where(WalletTransaction.reseller_id == user_id)
+        .values(reseller_id=None)
+    )
+    await session.execute(
+        update(Payment).where(Payment.wallet_shop_id == user_id).values(wallet_shop_id=None)
+    )
+    await session.execute(delete(ShopWallet).where(ShopWallet.user_id == user_id))
+    await session.execute(delete(ShopWallet).where(ShopWallet.reseller_id == user_id))
 
     await session.execute(
         delete(LoyaltyDiscountEntitlement).where(LoyaltyDiscountEntitlement.user_id == user_id)

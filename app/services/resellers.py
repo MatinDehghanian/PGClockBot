@@ -176,9 +176,26 @@ async def reseller_can_review_payment(
 
     shop_rid = current_shop_reseller_id()
 
-    # Global wallet must never be mintable by a tenant reviewer.
+    # Platform top-ups: only platform admin on main bot.
+    # Shop-scoped top-ups (wallet_shop_id set): shop staff with payments perm.
     if payment.is_wallet_topup:
-        return reviewer.role == Role.ADMIN.value and shop_rid is None
+        topup_shop = (
+            int(payment.wallet_shop_id)
+            if getattr(payment, "wallet_shop_id", None)
+            else None
+        )
+        if topup_shop is None:
+            return reviewer.role == Role.ADMIN.value and shop_rid is None
+        owner_id = await resolve_reseller_owner_id(
+            session,
+            reviewer,
+            is_reseller_bot=shop_rid is not None,
+            reseller_owner_id=shop_rid,
+        )
+        if not owner_id or int(owner_id) != int(topup_shop):
+            return False
+        profile = await get_reseller_profile(session, owner_id)
+        return has_bot_perm(profile, "payments")
 
     order = None
     if payment.order_id:

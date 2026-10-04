@@ -5,10 +5,18 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.db.models import BotUser, Payment, PaymentMethod, PaymentStatus, WalletTransaction
+from app.db.models import (
+    BotUser,
+    Payment,
+    PaymentMethod,
+    PaymentStatus,
+    ShopWallet,
+    WalletTransaction,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +37,19 @@ class ActivityLine:
     reason: str
     created_at: datetime | None
     sort_id: int
+
+
+def normalize_shop_id(shop_id: int | None) -> int | None:
+    """Canonical shop scope: None = platform purse; positive int = shop purse."""
+    if shop_id is None:
+        return None
+    try:
+        sid = int(shop_id)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("شناسه فروشگاه نامعتبر است") from exc
+    if sid <= 0:
+        raise ValueError("شناسه فروشگاه نامعتبر است")
+    return sid
 
 
 def _payment_activity_reason(payment: Payment) -> str:
@@ -58,43 +79,158 @@ def _payment_activity_reason(payment: Payment) -> str:
     return f"خرید سفارش #{oid} ({method})"
 
 
+async def get_wallet_balance(
+    session: AsyncSession,
+    user: BotUser | int,
+    *,
+    shop_id: int | None = None,
+) -> int:
+    """Return balance for platform purse (shop_id=None) or a shop purse."""
+    sid = normalize_shop_id(shop_id)
+    uid = int(user.id if isinstance(user, BotUser) else user)
+    if sid is None:
+        if isinstance(user, BotUser):
+            return int(user.wallet_balance or 0)
+        row = await session.get(BotUser, uid)
+        return int(row.wallet_balance or 0) if row else 0
+    bal = (
+        await session.execute(
+            select(ShopWallet.balance).where(
+                ShopWallet.user_id == uid,
+                ShopWallet.reseller_id == sid,
+            )
+        )
+    ).scalar_one_or_none()
+    return int(bal or 0)
+
+
+async def wallet_balance_for_context(
+    session: AsyncSession,
+    user: BotUser,
+    *,
+    shop_id: int | None = None,
+) -> int:
+    """Balance visible in the current bot context (shop or platform)."""
+    if shop_id is None:
+        from app.services.users import current_shop_reseller_id
+
+        shop_id = current_shop_reseller_id()
+    return await get_wallet_balance(session, user, shop_id=shop_id)
+
+
+async def _get_or_create_shop_wallet(
+    session: AsyncSession, *, user_id: int, reseller_id: int
+) -> ShopWallet:
+    """Return shop wallet row, creating a zero-balance row if needed (race-safe)."""
+    row = (
+        await session.execute(
+            select(ShopWallet).where(
+                ShopWallet.user_id == int(user_id),
+                ShopWallet.reseller_id == int(reseller_id),
+            )
+        )
+    ).scalar_one_or_none()
+    if row is not None:
+        return row
+    try:
+        async with session.begin_nested():
+            session.add(
+                ShopWallet(
+                    user_id=int(user_id),
+                    reseller_id=int(reseller_id),
+                    balance=0,
+                )
+            )
+            await session.flush()
+    except IntegrityError:
+        pass
+    row = (
+        await session.execute(
+            select(ShopWallet).where(
+                ShopWallet.user_id == int(user_id),
+                ShopWallet.reseller_id == int(reseller_id),
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise ValueError("ساخت کیف فروشگاه ناموفق بود")
+    return row
+
+
 async def credit_wallet(
     session: AsyncSession,
     user: BotUser,
     amount: int,
     reason: str,
     *,
+    shop_id: int | None = None,
     commit: bool = True,
 ) -> BotUser:
+    """Credit platform purse (shop_id=None) or an isolated shop purse.
+
+    Shop-sourced money must pass ``shop_id=<reseller owner id>`` so it cannot
+    be spent on platform / other-shop orders.
+    """
     if amount <= 0:
         raise ValueError("amount must be positive")
-    with session.no_autoflush:
-        result = await session.execute(
-            update(BotUser)
-            .where(BotUser.id == user.id)
-            .values(wallet_balance=BotUser.wallet_balance + int(amount))
-            .execution_options(synchronize_session=False)
+    sid = normalize_shop_id(shop_id)
+    uid = int(user.id)
+
+    if sid is None:
+        with session.no_autoflush:
+            result = await session.execute(
+                update(BotUser)
+                .where(BotUser.id == uid)
+                .values(wallet_balance=BotUser.wallet_balance + int(amount))
+                .execution_options(synchronize_session=False)
+            )
+        if result.rowcount != 1:
+            raise ValueError("کاربر یافت نشد")
+        await session.refresh(user)
+        balance_after = int(user.wallet_balance or 0)
+    else:
+        row = await _get_or_create_shop_wallet(
+            session, user_id=uid, reseller_id=sid
         )
-    if result.rowcount != 1:
-        raise ValueError("کاربر یافت نشد")
-    await session.refresh(user)
+        with session.no_autoflush:
+            result = await session.execute(
+                update(ShopWallet)
+                .where(
+                    ShopWallet.id == int(row.id),
+                    ShopWallet.user_id == uid,
+                    ShopWallet.reseller_id == sid,
+                )
+                .values(balance=ShopWallet.balance + int(amount))
+                .execution_options(synchronize_session=False)
+            )
+        if result.rowcount != 1:
+            raise ValueError("کیف فروشگاه یافت نشد")
+        await session.refresh(row)
+        balance_after = int(row.balance or 0)
+
     session.add(
         WalletTransaction(
-            user_id=user.id,
-            amount=amount,
-            balance_after=user.wallet_balance,
+            user_id=uid,
+            amount=int(amount),
+            balance_after=balance_after,
             reason=reason,
+            reseller_id=sid,
         )
     )
-    # PAYG: auto-unsuspend only when this credit ≥ 2× warning threshold
-    try:
-        from app.services.billing_suspend import maybe_restore_after_wallet_credit
 
-        await maybe_restore_after_wallet_credit(
-            session, int(user.id), int(amount), commit=False
-        )
-    except Exception:
-        logger.exception("PAYG restore-after-wallet-credit failed user=%s", user.id)
+    # PAYG auto-unsuspend only for platform / owner purse credits.
+    if sid is None:
+        try:
+            from app.services.billing_suspend import maybe_restore_after_wallet_credit
+
+            await maybe_restore_after_wallet_credit(
+                session, uid, int(amount), commit=False
+            )
+        except Exception:
+            logger.exception(
+                "PAYG restore-after-wallet-credit failed user=%s", uid
+            )
+
     if commit:
         await session.commit()
         await session.refresh(user)
@@ -109,29 +245,61 @@ async def debit_wallet(
     amount: int,
     reason: str,
     *,
+    shop_id: int | None = None,
     commit: bool = True,
 ) -> BotUser:
+    """Debit platform purse or the matching shop purse. Fail-closed on shortfall."""
     if amount <= 0:
         raise ValueError("amount must be positive")
-    with session.no_autoflush:
-        result = await session.execute(
-            update(BotUser)
-            .where(
-                BotUser.id == user.id,
-                BotUser.wallet_balance >= int(amount),
+    sid = normalize_shop_id(shop_id)
+    uid = int(user.id)
+
+    if sid is None:
+        with session.no_autoflush:
+            result = await session.execute(
+                update(BotUser)
+                .where(
+                    BotUser.id == uid,
+                    BotUser.wallet_balance >= int(amount),
+                )
+                .values(wallet_balance=BotUser.wallet_balance - int(amount))
+                .execution_options(synchronize_session=False)
             )
-            .values(wallet_balance=BotUser.wallet_balance - int(amount))
-            .execution_options(synchronize_session=False)
-        )
-    if result.rowcount != 1:
-        raise ValueError("موجودی کافی نیست")
-    await session.refresh(user)
+        if result.rowcount != 1:
+            raise ValueError("موجودی کافی نیست")
+        await session.refresh(user)
+        balance_after = int(user.wallet_balance or 0)
+    else:
+        with session.no_autoflush:
+            result = await session.execute(
+                update(ShopWallet)
+                .where(
+                    ShopWallet.user_id == uid,
+                    ShopWallet.reseller_id == sid,
+                    ShopWallet.balance >= int(amount),
+                )
+                .values(balance=ShopWallet.balance - int(amount))
+                .execution_options(synchronize_session=False)
+            )
+        if result.rowcount != 1:
+            raise ValueError("موجودی کافی نیست")
+        bal = (
+            await session.execute(
+                select(ShopWallet.balance).where(
+                    ShopWallet.user_id == uid,
+                    ShopWallet.reseller_id == sid,
+                )
+            )
+        ).scalar_one_or_none()
+        balance_after = int(bal or 0)
+
     session.add(
         WalletTransaction(
-            user_id=user.id,
-            amount=-amount,
-            balance_after=user.wallet_balance,
+            user_id=uid,
+            amount=-int(amount),
+            balance_after=balance_after,
             reason=reason,
+            reseller_id=sid,
         )
     )
     if commit:
@@ -142,24 +310,43 @@ async def debit_wallet(
     return user
 
 
-async def list_transactions(session: AsyncSession, user_id: int, limit: int = 20):
+async def list_transactions(
+    session: AsyncSession,
+    user_id: int,
+    limit: int = 20,
+    *,
+    shop_id: int | None = None,
+):
+    """Ledger rows for one purse (platform or a specific shop)."""
+    sid = normalize_shop_id(shop_id)
+    q = select(WalletTransaction).where(WalletTransaction.user_id == int(user_id))
+    if sid is None:
+        q = q.where(WalletTransaction.reseller_id.is_(None))
+    else:
+        q = q.where(WalletTransaction.reseller_id == sid)
     result = await session.execute(
-        select(WalletTransaction)
-        .where(WalletTransaction.user_id == user_id)
-        .order_by(WalletTransaction.id.desc())
-        .limit(limit)
+        q.order_by(WalletTransaction.id.desc()).limit(limit)
     )
     return list(result.scalars().all())
 
 
-async def list_activity(session: AsyncSession, user_id: int, limit: int = 20) -> list[ActivityLine]:
-    """Wallet ledger plus approved non-wallet purchases (card/gateway/crypto/stars).
+async def list_activity(
+    session: AsyncSession,
+    user_id: int,
+    limit: int = 20,
+    *,
+    shop_id: int | None = None,
+) -> list[ActivityLine]:
+    """Wallet ledger plus approved non-wallet purchases for the same shop scope."""
+    from app.db.models import Order
 
-    Wallet checkouts already create a WalletTransaction debit — those payments are
-    not duplicated here. Wholesale and other card/crypto buys previously never
-    appeared in «تراکنش‌ها»; they are included via Payment rows.
-    """
-    wtxs = await list_transactions(session, user_id, limit=limit)
+    if shop_id is None:
+        from app.services.users import current_shop_reseller_id
+
+        shop_id = current_shop_reseller_id()
+    sid = normalize_shop_id(shop_id)
+
+    wtxs = await list_transactions(session, user_id, limit=limit, shop_id=sid)
     lines: list[ActivityLine] = [
         ActivityLine(
             amount=int(t.amount),
@@ -169,7 +356,7 @@ async def list_activity(session: AsyncSession, user_id: int, limit: int = 20) ->
         )
         for t in wtxs
     ]
-    result = await session.execute(
+    pay_q = (
         select(Payment)
         .where(
             Payment.user_id == user_id,
@@ -181,6 +368,16 @@ async def list_activity(session: AsyncSession, user_id: int, limit: int = 20) ->
         .order_by(Payment.id.desc())
         .limit(limit)
     )
+    # Scope non-wallet purchases to the same shop the wallet UI is showing.
+    if sid is None:
+        pay_q = pay_q.outerjoin(Order, Order.id == Payment.order_id).where(
+            (Payment.order_id.is_(None)) | (Order.reseller_id.is_(None))
+        )
+    else:
+        pay_q = pay_q.join(Order, Order.id == Payment.order_id).where(
+            Order.reseller_id == sid
+        )
+    result = await session.execute(pay_q)
     for p in result.scalars().all():
         lines.append(
             ActivityLine(
@@ -190,6 +387,7 @@ async def list_activity(session: AsyncSession, user_id: int, limit: int = 20) ->
                 sort_id=int(p.id) * 2 + 1,
             )
         )
+
     def _sort_key(x: ActivityLine):
         ts = x.created_at
         if ts is None:
@@ -197,7 +395,7 @@ async def list_activity(session: AsyncSession, user_id: int, limit: int = 20) ->
         try:
             epoch = ts.timestamp()
         except Exception:
-            epoch = 0.0
+            epoch = 0
         return (1, epoch, x.sort_id)
 
     lines.sort(key=_sort_key, reverse=True)

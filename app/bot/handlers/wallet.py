@@ -169,6 +169,9 @@ async def wallet_gift_code(
 async def wallet_home(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     await callback.answer()
     ui = await get_all_settings(session)
+    from app.services.wallet import wallet_balance_for_context
+
+    bal = await wallet_balance_for_context(session, db_user)
     text = format_message(
         "👛 کیف پول",
         "\n".join(
@@ -176,7 +179,7 @@ async def wallet_home(callback: CallbackQuery, session: AsyncSession, db_user: B
                 kv_line(
                     "💵",
                     "موجودی",
-                    f"<b>{format_toman(db_user.wallet_balance, get_settings().currency)}</b>",
+                    f"<b>{format_toman(bal, get_settings().currency)}</b>",
                 ),
             ]
         ),

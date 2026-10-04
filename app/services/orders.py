@@ -38,21 +38,32 @@ logger = logging.getLogger(__name__)
 async def _maybe_pay_referral_bonus(session: AsyncSession, order: Order) -> None:
     """Credit referrer wallet once after invitee's first successful purchase delivery.
 
-    Reads ``referral_bonus`` from shop settings (panel payment tab). Skips renewals,
-    reseller application fees, and zero/invalid bonus. Idempotent via wallet reason.
+    Reads ``referral_bonus`` from the same shop scope as the order. Credits the
+    matching purse (shop wallet or platform) so shop bonuses cannot mint
+    spendable platform balance. Skips renewals, reseller fees, trials, and
+    zero-amount orders. Idempotent via wallet reason.
     """
     note = (order.note or "").strip()
     if note.startswith("renew:") or note.startswith("reseller_app:"):
+        return
+    if int(order.amount or 0) <= 0:
         return
     buyer = order.user
     if buyer is None:
         buyer = await session.get(BotUser, order.user_id)
     if not buyer or not buyer.referred_by_id:
         return
+    if order.plan_id:
+        from app.db.models import Plan
+
+        plan = await session.get(Plan, int(order.plan_id))
+        if plan is not None and bool(getattr(plan, "is_trial", False)):
+            return
     from app.services.users import get_setting
 
+    shop_id = int(order.reseller_id) if order.reseller_id else None
     raw = await get_setting(
-        session, "referral_bonus", "0", reseller_id=order.reseller_id
+        session, "referral_bonus", "0", reseller_id=shop_id
     )
     try:
         bonus = int(str(raw or "0").replace(",", "").strip() or "0")
@@ -77,7 +88,9 @@ async def _maybe_pay_referral_bonus(session: AsyncSession, order: Order) -> None
     if not referrer:
         return
     try:
-        await credit_wallet(session, referrer, bonus, reason)
+        await credit_wallet(
+            session, referrer, bonus, reason, shop_id=shop_id
+        )
     except IntegrityError:
         # Unique (user_id, reason) — concurrent first-delivery race
         pass
@@ -898,12 +911,14 @@ async def pay_with_wallet(session: AsyncSession, order: Order, user) -> Order:
     try:
         # Single DB transaction for claim + debit + payment row (commit=False debit).
         # Prevents: wallet drained / order PAID / no payment row after a mid-flow crash.
+        shop_id = int(order.reseller_id) if order.reseller_id else None
         if order.amount > 0:
             await debit_wallet(
                 session,
                 user,
                 order.amount,
                 wallet_purchase_reason(order),
+                shop_id=shop_id,
                 commit=False,
             )
             debited = True
@@ -913,6 +928,7 @@ async def pay_with_wallet(session: AsyncSession, order: Order, user) -> Order:
             amount=order.amount,
             method=PaymentMethod.WALLET.value,
             status=PaymentStatus.APPROVED.value,
+            wallet_shop_id=shop_id,
         )
         session.add(payment)
         await session.commit()
@@ -922,7 +938,14 @@ async def pay_with_wallet(session: AsyncSession, order: Order, user) -> Order:
     except Exception:
         # Only refund when we actually debited — never mint balance on debit failure.
         if debited and order.amount > 0:
-            await credit_wallet(session, user, order.amount, f"برگشت خرید ناموفق #{order.id}")
+            shop_id = int(order.reseller_id) if order.reseller_id else None
+            await credit_wallet(
+                session,
+                user,
+                order.amount,
+                f"برگشت خرید ناموفق #{order.id}",
+                shop_id=shop_id,
+            )
         order.status = OrderStatus.PENDING.value
         if payment is not None:
             payment.status = PaymentStatus.REJECTED.value
@@ -1275,8 +1298,17 @@ async def approve_payment(session: AsyncSession, payment: Payment, reviewer_tg: 
                 "کاربر پرداخت‌کننده برای شارژ کیف پول یافت نشد — تأیید لغو شد"
             )
         try:
+            topup_shop = (
+                int(payment.wallet_shop_id)
+                if getattr(payment, "wallet_shop_id", None)
+                else None
+            )
             await credit_wallet(
-                session, user, payment.amount, f"شارژ کیف پول #{payment.id}"
+                session,
+                user,
+                payment.amount,
+                f"شارژ کیف پول #{payment.id}",
+                shop_id=topup_shop,
             )
         except Exception:
             payment.status = PaymentStatus.PENDING.value
@@ -1779,18 +1811,27 @@ async def create_wallet_topup(
     amount: int,
     *,
     method: str = PaymentMethod.CARD.value,
+    wallet_shop_id: int | None = None,
 ) -> Payment:
     if amount < 1000:
         raise ValueError("حداقل مبلغ شارژ ۱۰۰۰ است")
     # Soft ceiling to prevent absurd pending top-ups / receipt spam
     if amount > 500_000_000:
         raise ValueError("مبلغ شارژ بیش از حد مجاز است")
+    from app.services.users import current_shop_reseller_id
+
+    # Capture bot context at creation — settlement must not re-infer from
+    # sticky user.reseller_id (that minted platform balance via shop keys).
+    if wallet_shop_id is None:
+        wallet_shop_id = current_shop_reseller_id()
+    shop_id = int(wallet_shop_id) if wallet_shop_id else None
     payment = Payment(
         user_id=user_id,
         amount=amount,
         method=method,
         status=PaymentStatus.PENDING.value,
         is_wallet_topup=True,
+        wallet_shop_id=shop_id,
     )
     session.add(payment)
     await session.commit()

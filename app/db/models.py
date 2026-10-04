@@ -186,6 +186,12 @@ class Payment(Base):
     reviewed_by: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
     review_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     is_wallet_topup: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Shop scope for wallet top-ups (None = platform / main-bot purse).
+    # Set at top-up creation from the bot context — never inferred from sticky
+    # user.reseller_id at settlement time (that allowed cross-tenant minting).
+    wallet_shop_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("bot_users.id"), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     order: Mapped[Optional["Order"]] = relationship(back_populates="payments")
@@ -656,7 +662,33 @@ class WalletTransaction(Base):
     amount: Mapped[int] = mapped_column(Integer)
     balance_after: Mapped[int] = mapped_column(Integer)
     reason: Mapped[str] = mapped_column(String(255))
+    # None = platform / main-bot purse; set = per-shop wallet ledger row.
+    reseller_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("bot_users.id"), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ShopWallet(Base):
+    """Per-shop customer purse — isolated from platform ``BotUser.wallet_balance``.
+
+    Credits minted inside a reseller shop (gift codes, loyalty, referral, top-up)
+    land here and can only be spent on that shop's orders. PAYG / main-bot money
+    stays on ``BotUser.wallet_balance``.
+    """
+
+    __tablename__ = "shop_wallets"
+    __table_args__ = (
+        UniqueConstraint("user_id", "reseller_id", name="uq_shop_wallets_user_reseller"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"), index=True)
+    reseller_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"), index=True)
+    balance: Mapped[int] = mapped_column(Integer, default=0)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
 
 class PgStaffAccess(Base):
@@ -908,6 +940,10 @@ class LoyaltyDiscountEntitlement(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"), index=True)
+    # Shop that issued the discount (None = platform). Must match order.reseller_id.
+    reseller_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("bot_users.id"), nullable=True, index=True
+    )
     # Nullable when issued by lucky wheel (no reward redemption row).
     redemption_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("reward_redemptions.id"), nullable=True, index=True

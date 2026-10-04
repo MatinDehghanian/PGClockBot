@@ -146,6 +146,12 @@ async def svc_renew(callback: CallbackQuery, session: AsyncSession, db_user: Bot
     if not svc or svc.bot_user_id != db_user.id:
         await callback.answer("یافت نشد", show_alert=True)
         return
+    if (svc.remark or "").strip() == "linked":
+        await callback.answer(
+            "سرویس متصل‌شده فقط مشاهده است؛ تمدید از این مسیر ممکن نیست",
+            show_alert=True,
+        )
+        return
     plans = await list_active_plans(session, include_trial=False)
     if not plans:
         await callback.answer("پلنی نیست", show_alert=True)
@@ -178,6 +184,12 @@ async def svc_renew_pay(
     plan = await get_plan(session, int(plan_id))
     if not svc or not plan or svc.bot_user_id != db_user.id:
         await callback.answer("نامعتبر", show_alert=True)
+        return
+    if (svc.remark or "").strip() == "linked":
+        await callback.answer(
+            "سرویس متصل‌شده فقط مشاهده است؛ تمدید از این مسیر ممکن نیست",
+            show_alert=True,
+        )
         return
     if plan.price > 0 and not kb.any_checkout_method_enabled(ui):
         await callback.answer("هیچ روش پرداختی فعال نیست", show_alert=True)
@@ -298,12 +310,18 @@ async def svc_delete(
         return
     from app.services.bot_user_admin import admin_delete_service
 
+    # Linked subscription shares are read-only attachments — never delete the
+    # underlying PasarGuard user (could belong to an admin / another customer).
+    delete_pg = (svc.remark or "").strip() != "linked"
     try:
-        await admin_delete_service(session, svc, delete_pg=True)
+        await admin_delete_service(session, svc, delete_pg=delete_pg)
     except Exception as e:
         await callback.answer(str(e)[:160], show_alert=True)
         return
-    await callback.answer("سرویس حذف شد", show_alert=True)
+    await callback.answer(
+        "اتصال حذف شد" if not delete_pg else "سرویس حذف شد",
+        show_alert=True,
+    )
     ui = await get_all_settings(session)
     if state is not None:
         from app.bot import menu_nav as nav

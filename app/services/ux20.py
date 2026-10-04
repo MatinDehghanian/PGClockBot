@@ -558,18 +558,27 @@ async def redeem_charge_code(
     )
     if claim.rowcount != 1:
         raise ValueError("کد قابل استفاده نیست")
-    # Atomic SQL increment + ledger row (never ORM overwrite under concurrency)
+    # Shop codes credit the isolated shop purse; platform codes credit main purse.
     await credit_wallet(
         session,
         user,
         amount,
         f"کد هدیه {row.code}",
+        shop_id=code_rid,
         commit=False,
     )
     await session.flush()
     await session.refresh(row)
     await session.refresh(user)
-    return row, int(user.wallet_balance)
+    from app.services.wallet import get_wallet_balance
+
+    balance = await get_wallet_balance(session, user, shop_id=code_rid)
+    return row, int(balance)
+
+
+# Soft ceilings — blocks absurd minting while keeping normal gift flows usable.
+MAX_CHARGE_CODE_AMOUNT = 50_000_000
+MAX_CHARGE_CODE_USES = 1000
 
 
 async def create_charge_code(
@@ -584,6 +593,14 @@ async def create_charge_code(
     amount = int(amount)
     if amount <= 0:
         raise ValueError("مبلغ باید بزرگ‌تر از صفر باشد")
+    if amount > MAX_CHARGE_CODE_AMOUNT:
+        raise ValueError(f"سقف مبلغ کد هدیه {MAX_CHARGE_CODE_AMOUNT:,} تومان است")
+    if max_uses is not None:
+        max_uses = int(max_uses)
+        if max_uses <= 0:
+            raise ValueError("تعداد استفاده باید بزرگ‌تر از صفر باشد")
+        if max_uses > MAX_CHARGE_CODE_USES:
+            raise ValueError(f"سقف تعداد استفاده {MAX_CHARGE_CODE_USES} است")
     raw = normalize_charge_code(code) if code else generate_charge_code()
     if not raw:
         raise ValueError("کد نامعتبر است")
