@@ -97,7 +97,8 @@
       <h2 class="setup-title">۳ · پاسارگارد و وب</h2>
       <label>آدرس پاسارگارد (PG_BASE_URL)
         
-        <input name="pg_base_url" value="{{ values.PG_BASE_URL or '' }}" required dir="ltr" placeholder="https://panel.example.com" />
+        <input name="pg_base_url" value="{{ values.PG_BASE_URL or '' }}" required dir="ltr" placeholder="https://panel.example.com:8443/base" />
+        <small class="muted">با پورت و path وارد کنید — مثال: <code dir="ltr">https://panel.example.com:8443/base</code></small>
         <small class="muted">ریشه API — نه مسیر داشبورد (<code dir="ltr">/MrClock</code>)</small>
       </label>
       <label>نام کاربری پاسارگارد
