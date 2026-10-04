@@ -975,20 +975,29 @@ def build_qr_caption(
     data_limit: float | int | None = None,
     expire: Any = None,
     username: str | None = None,
-) -> str:
+) -> tuple[str, dict]:
     """
     Full QR caption: custom template (optional) + link + volume + expire.
     Telegram caption limit is 1024 chars.
+
+    Returns ``(caption, send_kw)`` — ``send_kw`` carries entities when the
+    custom caption was packed with premium emoji.
     """
+    from app.services.rich_text import outbound_setting_text, rich_plain_text
+
     ui = ui or {}
-    custom = (ui.get("qr_caption") or "").strip()
-    if custom:
+    custom_raw = ui.get("qr_caption")
+    custom_plain = rich_plain_text(custom_raw).strip()
+    custom_text = ""
+    custom_kw: dict = {}
+    if custom_plain:
         try:
-            custom = render_message_template(
-                custom, domain=DOMAIN_QR, url=sub_url
+            custom_text, custom_kw = outbound_setting_text(
+                custom_raw, domain=DOMAIN_QR, url=sub_url
             )
         except Exception:
-            pass
+            custom_text = custom_plain
+            custom_kw = {}
 
     used = None
     limit = data_limit
@@ -1003,9 +1012,10 @@ def build_qr_caption(
         if not uname:
             uname = info.get("username")
 
+    rich = bool(custom_kw.get("entities"))
     lines: list[str] = []
-    if custom:
-        lines.append(custom)
+    if custom_text:
+        lines.append(custom_text)
     else:
         lines.append("📱 <b>QR اشتراک</b>")
         lines.append("<i>با دوربین اسکن کنید یا در کلاینت Import کنید</i>")
@@ -1014,16 +1024,20 @@ def build_qr_caption(
     if uname:
         from app.services.formatting import copyable
 
-        lines.append(f"👤 {copyable(uname)}")
+        lines.append(f"👤 {uname}" if rich else f"👤 {copyable(uname)}")
     if used is not None or limit is not None:
         vol = (
             format_bytes_ratio(used, limit, joiner=" از ")
             if used is not None
             else format_bytes(limit)
         )
-        lines.append(f"📦 حجم: <b>{vol}</b>")
+        lines.append(f"📦 حجم: {vol}" if rich else f"📦 حجم: <b>{vol}</b>")
     if exp is not None or info is not None:
-        lines.append(f"⏱ زمان: <b>{format_expire(exp)}</b>")
+        lines.append(
+            f"⏱ زمان: {format_expire(exp)}"
+            if rich
+            else f"⏱ زمان: <b>{format_expire(exp)}</b>"
+        )
     # Honor panel toggle «نمایش لینک در کپشن QR» (same as delivery text path)
     from app.services.formatting import copyable
     from app.services.users import on as _on
@@ -1031,9 +1045,15 @@ def build_qr_caption(
     if _on(ui.get("show_sub_link_in_text", "1")):
         lines.append("")
         lines.append("🔗 لینک اشتراک:")
-        lines.append(copyable(sub_url))
-    caption = "\n".join(lines).strip()
-    return caption[:1024]
+        lines.append(sub_url if rich else copyable(sub_url))
+    caption = "\n".join(lines).strip()[:1024]
+    if rich and custom_text and caption.startswith(custom_text):
+        # Entities already cover the custom prefix; trailing lines are plain.
+        return caption, custom_kw
+    if rich and custom_kw.get("entities") and not caption.startswith(custom_text or ""):
+        # Should not happen; drop entities rather than mis-offset.
+        return caption, {}
+    return caption, custom_kw if rich else {}
 
 
 # —— Account moderation notices (block / role / revoke / delete) ——

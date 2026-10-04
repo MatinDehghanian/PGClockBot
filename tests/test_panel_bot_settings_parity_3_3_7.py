@@ -16,12 +16,12 @@ from app.services.users import (
 
 class QrCaptionLinkToggleTests(unittest.TestCase):
     def test_link_included_by_default(self):
-        cap = build_qr_caption(sub_url="https://ex.com/s/1", ui={})
+        cap, _kw = build_qr_caption(sub_url="https://ex.com/s/1", ui={})
         self.assertIn("https://ex.com/s/1", cap)
         self.assertIn("لینک اشتراک", cap)
 
     def test_link_hidden_when_toggle_off(self):
-        cap = build_qr_caption(
+        cap, _kw = build_qr_caption(
             sub_url="https://ex.com/s/1",
             ui={"show_sub_link_in_text": "0"},
         )
@@ -29,7 +29,7 @@ class QrCaptionLinkToggleTests(unittest.TestCase):
         self.assertNotIn("لینک اشتراک", cap)
 
     def test_custom_caption_still_works_without_auto_link(self):
-        cap = build_qr_caption(
+        cap, _kw = build_qr_caption(
             sub_url="https://ex.com/s/1",
             ui={"qr_caption": "کد من", "show_sub_link_in_text": "0"},
         )

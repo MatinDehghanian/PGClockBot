@@ -3319,6 +3319,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 body = ui.get("payment_reject_text") or body
             except Exception:
                 pass
+        # Packed reject text keeps premium emoji via notify_payer unpack.
         await notify_payer(
             session,
             payment.user_id,

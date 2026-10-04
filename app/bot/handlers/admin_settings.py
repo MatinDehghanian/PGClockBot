@@ -774,6 +774,11 @@ async def settings_edit_ask(
     hint = "عدد بفرستید." if kind == "number" else "متن جدید را بفرستید.\nبرای انصراف: انصراف"
     if key == "force_join_channel":
         hint = "هر خط یک کانال (@channel یا آیدی).\nعضویت همه الزامی ذخیره می‌شود.\nبرای انصراف: انصراف"
+    else:
+        from app.services.rich_text import is_message_rich_key
+
+        if is_message_rich_key(key):
+            hint += "\n<i>ایموجی پریمیوم در متن پیام حفظ می‌شود (نه روی دکمه‌ها).</i>"
     if callback.message:
         await callback.message.answer(
             f"<b>{label}</b>\nفعلی:\n<code>{_preview(cur)}</code>\n\n{hint}",
@@ -815,10 +820,9 @@ async def settings_edit_save(
         from app.services.users import normalize_force_join_channel_value
 
         text = normalize_force_join_channel_value(text)
-    from app.services.rich_text import TERMS_RICH_KEYS, pack_rich_text, rich_plain_text
+    from app.services.rich_text import pack_setting_from_message
 
-    if key in TERMS_RICH_KEYS:
-        text = pack_rich_text(message.text or "", message.entities)
+    text = pack_setting_from_message(key, message)
     await set_setting(session, key, text)
     await state.clear()
     jump = "adm:st:hub"
