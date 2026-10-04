@@ -1544,6 +1544,7 @@ async def delete_bot_user(
         PanelTicket,
         PanelTicketMessage,
         Payment,
+        PaymentStatus,
         Plan,
         ResellerApplication,
         ResellerBillingRate,
@@ -1707,15 +1708,29 @@ async def delete_bot_user(
         .where(LuckyWheelUserState.reseller_id == user_id)
         .values(reseller_id=None)
     )
+    # N1: never NULL-out shop-issued discounts / pending shop top-ups — that
+    # would promote them to platform scope. Delete entitlements; reject pending
+    # top-ups; only then clear wallet_shop_id for FK cleanup on historical rows.
     await session.execute(
-        update(LoyaltyDiscountEntitlement)
-        .where(LoyaltyDiscountEntitlement.reseller_id == user_id)
-        .values(reseller_id=None)
+        delete(LoyaltyDiscountEntitlement).where(
+            LoyaltyDiscountEntitlement.reseller_id == user_id
+        )
     )
     await session.execute(
         update(WalletTransaction)
         .where(WalletTransaction.reseller_id == user_id)
         .values(reseller_id=None)
+    )
+    await session.execute(
+        update(Payment)
+        .where(
+            Payment.wallet_shop_id == user_id,
+            Payment.status == PaymentStatus.PENDING.value,
+        )
+        .values(
+            status=PaymentStatus.REJECTED.value,
+            review_note="shop deleted",
+        )
     )
     await session.execute(
         update(Payment).where(Payment.wallet_shop_id == user_id).values(wallet_shop_id=None)

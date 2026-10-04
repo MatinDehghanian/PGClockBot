@@ -525,6 +525,11 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
         if not on(ui.get("pay_wallet_enabled")):
             raise HTTPException(403, "پرداخت با کیف پول غیرفعال است")
         svc = _owned_service_or_404(await session.get(UserService, service_id), user)
+        if (svc.remark or "").strip() == "linked":
+            raise HTTPException(
+                400,
+                "سرویس متصل‌شده فقط مشاهده است؛ تمدید از این مسیر ممکن نیست",
+            )
         plan = await get_catalog_plan(session, plan_id)
         if (
             not plan

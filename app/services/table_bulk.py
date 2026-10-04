@@ -325,6 +325,12 @@ async def bulk_order_action(
         try:
             if action == "approve":
                 if payment and payment.status == PaymentStatus.PENDING.value:
+                    # Mirror single-order approve: pending receipt needs payments perm.
+                    if staff.get("role") != "admin":
+                        perms = staff.get("permissions") or []
+                        if "payments" not in perms:
+                            fail += 1
+                            continue
                     await approve_payment(session, payment, reviewer_tg=0)
                 elif order.status == OrderStatus.PAID.value:
                     await deliver_order(session, order)

@@ -432,6 +432,9 @@ class ShopWalletIsolationTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("سرویس متصل‌شده فقط مشاهده است", svc)
         start = (ROOT / "app/bot/handlers/start.py").read_text(encoding="utf-8")
         self.assertIn("get_pg_for_reseller", start)
+        mini = (ROOT / "app/api/miniapp_pages.py").read_text(encoding="utf-8")
+        renew = mini.split("async def mini_renew", 1)[1].split("return _no_store", 1)[0]
+        self.assertIn('== "linked"', renew)
 
     async def test_httpx_token_log_suppressed(self):
         main = (ROOT / "app/main.py").read_text(encoding="utf-8")
