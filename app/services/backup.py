@@ -100,7 +100,30 @@ def current_db_engine() -> str:
 
 
 def _which(cmd: str) -> str | None:
-    return shutil.which(cmd)
+    """Resolve a CLI tool even when systemd PATH is only ``.venv/bin``."""
+    found = shutil.which(cmd)
+    if found:
+        return found
+    for path in (Path(f"/usr/bin/{cmd}"), Path(f"/usr/local/bin/{cmd}"), Path(f"/bin/{cmd}")):
+        try:
+            if path.is_file() and os.access(path, os.X_OK):
+                return str(path)
+        except OSError:
+            continue
+    try:
+        versioned = sorted(
+            Path("/usr/lib/postgresql").glob(f"*/bin/{cmd}"),
+            reverse=True,
+        )
+    except OSError:
+        versioned = []
+    for path in versioned:
+        try:
+            if path.is_file() and os.access(path, os.X_OK):
+                return str(path)
+        except OSError:
+            continue
+    return None
 
 
 def _dump_postgres(dest: Path) -> dict[str, Any]:

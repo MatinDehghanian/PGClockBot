@@ -753,6 +753,14 @@ async def settings_edit_ask(
     hint = "متن جدید را بفرستید.\nبرای انصراف: انصراف"
     if key == "force_join_channel":
         hint = "هر خط یک کانال (@channel یا آیدی).\nعضویت همه الزامی ذخیره می‌شود.\nبرای انصراف: انصراف"
+    else:
+        from app.services.rich_text import is_button_label_key
+
+        if is_button_label_key(key):
+            hint += (
+                "\n<i>ایموجی پریمیوم به‌عنوان آیکن دکمه "
+                "(icon_custom_emoji_id) ذخیره می‌شود.</i>"
+            )
     if callback.message:
         await callback.message.answer(
             f"<b>{meta[1]}</b>\nفعلی:\n<code>{_preview(cur)}</code>\n\n{hint}",
@@ -783,10 +791,9 @@ async def settings_edit_save(message: Message, state: FSMContext, session: Async
         from app.services.users import normalize_force_join_channel_value
 
         text = normalize_force_join_channel_value(text)
-    from app.services.rich_text import TERMS_RICH_KEYS, pack_rich_text, rich_plain_text
+    from app.services.rich_text import pack_setting_from_message
 
-    if key in TERMS_RICH_KEYS:
-        text = pack_rich_text(message.text or "", message.entities)
+    text = pack_setting_from_message(key, message)
     await set_setting(session, key, text, reseller_id=profile.user_id)
     await state.clear()
     await message.answer(

@@ -2,6 +2,9 @@
 
 Web edits store plain/HTML strings. Bot edits may pack text+entities as JSON so
 custom emoji survive round-trip when re-sent with entities= (no HTML parse_mode).
+
+Button labels (``btn_*``) also pack custom-emoji entities so keyboards can set
+Bot API ``icon_custom_emoji_id`` (premium icon before the button text).
 """
 
 from __future__ import annotations
@@ -109,6 +112,123 @@ def content_fingerprint(raw: str | None) -> str:
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
+def utf16_len(s: str) -> int:
+    """Telegram entity offsets are UTF-16 code units."""
+    return len((s or "").encode("utf-16-le")) // 2
+
+
+def _utf16_slice(text: str, start: int, end: int) -> str:
+    """Slice ``text`` by UTF-16 code-unit offsets (Telegram entity space)."""
+    if not text or start >= end:
+        return ""
+    buf = (text or "").encode("utf-16-le")
+    return buf[start * 2 : end * 2].decode("utf-16-le", errors="ignore")
+
+
+def _entity_type_str(e: MessageEntity) -> str:
+    typ = e.type
+    return typ.value if hasattr(typ, "value") else str(typ)
+
+
+def first_custom_emoji_id(entities: Sequence[MessageEntity] | None) -> str | None:
+    for e in entities or []:
+        if _entity_type_str(e) == "custom_emoji" and e.custom_emoji_id:
+            return str(e.custom_emoji_id)
+    return None
+
+
+def strip_custom_emoji_spans(
+    text: str, entities: Sequence[MessageEntity] | None
+) -> str:
+    """Remove custom-emoji glyphs so the icon is not duplicated in button text."""
+    body = text or ""
+    spans = [
+        (int(e.offset), int(e.offset) + int(e.length))
+        for e in entities or []
+        if _entity_type_str(e) == "custom_emoji" and int(e.length) > 0
+    ]
+    if not spans:
+        return body
+    spans.sort()
+    parts: list[str] = []
+    cursor = 0
+    total = utf16_len(body)
+    for start, end in spans:
+        start = max(0, min(start, total))
+        end = max(start, min(end, total))
+        if start > cursor:
+            parts.append(_utf16_slice(body, cursor, start))
+        cursor = max(cursor, end)
+    if cursor < total:
+        parts.append(_utf16_slice(body, cursor, total))
+    # Collapse leftover double spaces from removed leading icons.
+    return " ".join("".join(parts).split())
+
+
+def is_button_label_key(key: str | None) -> bool:
+    """Editable keyboard label settings (not btn_style_* color overrides)."""
+    k = str(key or "")
+    return k.startswith("btn_") and not k.startswith("btn_style_")
+
+
+# Reply-action → btn_* setting key (icons look up via the same labels).
+_ACTION_TO_BTN_KEY: dict[str, str] = {
+    "home": "btn_menu_home",
+    "referral": "btn_referral",
+    "loy_referral": "btn_referral",
+    "topup_card": "btn_pay_card",
+    "topup_gateway": "btn_pay_gateway",
+    "topup_psp": "btn_pay_psp",
+    "topup_crypto": "btn_pay_crypto",
+    "svc_renew": "btn_renew",
+    "svc_link": "btn_sub_link",
+}
+
+
+def btn_setting_key_for_action(action: str | None) -> str | None:
+    a = (action or "").strip()
+    if not a:
+        return None
+    return _ACTION_TO_BTN_KEY.get(a) or f"btn_{a}"
+
+
+def button_icon_custom_emoji_id(raw: str | None) -> str | None:
+    """First packed custom_emoji id for Bot API icon_custom_emoji_id."""
+    _, ents = unpack_rich_text(raw)
+    return first_custom_emoji_id(ents)
+
+
+def button_display_text(raw: str | None) -> str:
+    """Plain button label: unpack + strip custom-emoji glyphs used as the icon."""
+    text, ents = unpack_rich_text(raw)
+    if ents and first_custom_emoji_id(ents):
+        text = strip_custom_emoji_spans(text, ents)
+    return text or ""
+
+
+def button_icon_from_ui(ui: dict | None, *, label_key: str | None = None, action: str | None = None) -> str | None:
+    if not ui:
+        return None
+    key = label_key or btn_setting_key_for_action(action)
+    if not key:
+        return None
+    return button_icon_custom_emoji_id(ui.get(key))
+
+
+def pack_setting_from_message(key: str, message: Any) -> str:
+    """Pack bot-edited setting; preserve custom emoji for terms + button labels."""
+    text = getattr(message, "text", None) or ""
+    entities = getattr(message, "entities", None)
+    if key in TERMS_RICH_KEYS or is_button_label_key(key):
+        # Only pack when there is at least one custom_emoji (button icons / premium).
+        if key in TERMS_RICH_KEYS:
+            return pack_rich_text(text, entities)
+        if first_custom_emoji_id(entities):
+            return pack_rich_text(text, entities)
+        return (text or "").strip()
+    return (text or "").strip()
+
+
 # Setting keys that preserve premium emoji when edited from Telegram.
 TERMS_RICH_KEYS = frozenset(
     {
@@ -122,10 +242,18 @@ TERMS_RICH_KEYS = frozenset(
 )
 
 
+def _iter_rich_web_keys(values: dict) -> list[str]:
+    keys = set(TERMS_RICH_KEYS)
+    for k in values:
+        if is_button_label_key(k):
+            keys.add(k)
+    return sorted(keys)
+
+
 def prepare_settings_values_for_web(values: dict) -> dict:
     """Unpack rich keys to plain text for web textareas."""
     out = dict(values)
-    for key in TERMS_RICH_KEYS:
+    for key in _iter_rich_web_keys(out):
         if key in out:
             out[key] = rich_plain_text(out.get(key))
     return out
@@ -133,7 +261,11 @@ def prepare_settings_values_for_web(values: dict) -> dict:
 
 def merge_rich_settings_on_save(existing: dict, payload: dict) -> dict:
     """Keep packed entities when web save did not change visible text."""
-    for key in TERMS_RICH_KEYS:
+    keys = set(TERMS_RICH_KEYS)
+    for k in list(payload.keys()) + list(existing.keys()):
+        if is_button_label_key(k):
+            keys.add(k)
+    for key in keys:
         if key not in payload:
             continue
         new_plain = payload.get(key) or ""

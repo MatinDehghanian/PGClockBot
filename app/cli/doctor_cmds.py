@@ -90,10 +90,15 @@ def cmd_doctor(ctx: CliContext) -> int:
         else:
             warn("alembic_version empty — run: pgclock migrate")
         if info_eng.is_postgresql:
-            if shutil.which("pg_dump") and shutil.which("pg_restore"):
+            from app.services.backup import _which as _which_pg
+
+            if _which_pg("pg_dump") and _which_pg("pg_restore"):
                 ok("pg_dump / pg_restore available")
             else:
-                warn("postgresql-client missing (pg_dump/pg_restore) — backups will fail")
+                warn(
+                    "postgresql-client missing (pg_dump/pg_restore) — "
+                    "backups will fail; fix: sudo apt install postgresql-client"
+                )
     except Exception as e:
         fail(f"database check failed: {e}")
 
