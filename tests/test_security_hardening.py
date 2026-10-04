@@ -81,10 +81,18 @@ class RenewTenancyTests(unittest.IsolatedAsyncioTestCase):
 
 
 class ReceiptAutoApproveTests(unittest.TestCase):
-    def test_wallet_topup_blocked_in_code(self):
+    def test_wallet_topup_scoped_auto_approve_guard(self):
+        """Top-ups may auto-approve only when purse scope matches settings shop.
+
+        After shop-wallet isolation, blanket blocking is unnecessary; the
+        cross-scope guard must remain so a shop setting cannot approve a
+        platform top-up (or the reverse).
+        """
         src = Path("app/services/receipts.py").read_text(encoding="utf-8")
         self.assertIn("is_wallet_topup", src)
-        self.assertIn("Never auto-approve wallet top-ups", src)
+        self.assertIn("wallet_shop_id", src)
+        self.assertIn("Cross-scope would re-open minting", src)
+        self.assertIn("if topup_shop != shop_rid:", src)
 
 
 class ForceJoinMiddlewareTests(unittest.TestCase):

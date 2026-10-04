@@ -391,6 +391,8 @@ async def res_user_view(
         load_services_by_user_ids,
     )
 
+    from app.services.wallet import get_wallet_balance
+
     by = await load_services_by_user_ids(session, [int(user.id)])
     ops = build_user_ops_row(user, by.get(int(user.id), []))
     flags = bot_user_alert_flags(ops)
@@ -405,11 +407,12 @@ async def res_user_view(
             bits.append(f"حجم {ops.volume_text}")
         if bits:
             alert_line = "\n🔔 " + " · ".join(bits)
+    shop_bal = await get_wallet_balance(session, user, shop_id=owner_id)
     text = (
         f"{flags} <b>{display}</b>\n\n"
         f"آیدی: {copyable(user.telegram_id)}\n"
         f"یوزرنیم: {copyable('@' + user.username) if user.username else '—'}\n"
-        f"کیف پول: {format_toman(user.wallet_balance, get_settings().currency)}\n"
+        f"کیف پول فروشگاه: {format_toman(shop_bal, get_settings().currency)}\n"
         f"سرویس‌ها: {ops.service_count}\n"
         f"مسدود: {blocked}"
         f"{alert_line}\n\n"
@@ -523,6 +526,9 @@ async def res_user_quick_renew(
     )
     if not owner_id or not profile:
         await callback.answer("فقط نمایندگان", show_alert=True)
+        return
+    if not has_bot_perm(profile, "dashboard"):
+        await callback.answer("دسترسی ندارید", show_alert=True)
         return
     try:
         uid = int((callback.data or "").rsplit(":", 1)[-1])

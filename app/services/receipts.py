@@ -30,9 +30,12 @@ async def process_receipt(
     - if auto_approve_payments=1 → approve, deliver (+QR), return None (already sent)
     - else → notify admins; return status text for the user
     """
-    # Auto-approve flag is shop-scoped when the payment belongs to a reseller order.
+    # Auto-approve flag is shop-scoped for the payment's tenant.
     shop_rid = None
-    if payment.order_id and not payment.is_wallet_topup:
+    if payment.is_wallet_topup:
+        wid = getattr(payment, "wallet_shop_id", None)
+        shop_rid = int(wid) if wid else None
+    elif payment.order_id:
         from app.db.models import Order
 
         ord_row = await session.get(Order, payment.order_id)
@@ -46,10 +49,16 @@ async def process_receipt(
             reseller_id=shop_rid,
         )
     )
-    # Never auto-approve wallet top-ups — shared global wallet would let a
-    # reseller mint balance usable on other shops / main bot.
+    # Top-ups may auto-approve only inside their own purse scope (shop→shop
+    # wallet, platform→platform). Cross-scope would re-open minting.
     if auto and payment.is_wallet_topup:
-        auto = False
+        topup_shop = (
+            int(payment.wallet_shop_id)
+            if getattr(payment, "wallet_shop_id", None)
+            else None
+        )
+        if topup_shop != shop_rid:
+            auto = False
     if auto:
         try:
             order = await approve_payment(session, payment, reviewer_tg=0)

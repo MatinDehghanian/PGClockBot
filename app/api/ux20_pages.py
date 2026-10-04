@@ -161,6 +161,9 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
         ):
             return RedirectResponse("/home", status_code=303)
         rid = None if is_platform_admin(staff) else shop_owner_id(staff)
+        # Non-owner staff without a shop scope must never mint platform gift codes.
+        if not is_platform_admin(staff) and rid is None:
+            return RedirectResponse("/home", status_code=303)
         try:
             row = await create_charge_code(
                 session,

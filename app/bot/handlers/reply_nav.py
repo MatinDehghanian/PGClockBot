@@ -321,7 +321,9 @@ async def open_wallet_home(
 ) -> None:
     from app.config import get_settings
     from app.services.formatting import format_toman, kv_line
+    from app.services.wallet import wallet_balance_for_context
 
+    bal = await wallet_balance_for_context(session, db_user)
     text = format_message(
         "👛 کیف پول",
         "\n".join(
@@ -329,7 +331,7 @@ async def open_wallet_home(
                 kv_line(
                     "💵",
                     "موجودی",
-                    f"<b>{format_toman(db_user.wallet_balance, get_settings().currency)}</b>",
+                    f"<b>{format_toman(bal, get_settings().currency)}</b>",
                 ),
                 "",
                 "از کیبورد پایین شارژ یا تراکنش‌ها را انتخاب کنید.",

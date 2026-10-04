@@ -1,6 +1,6 @@
 """Shared admin ops for Telegram bot users (web panel + bot handlers).
 
-Money uses shop ``BotUser.wallet_balance`` via ``credit_wallet``.
+Money uses ``credit_wallet`` (platform purse by default; pass shop_id for shop purse).
 VPN quota/links are live from PasarGuard through ``UserService.pg_user_id``.
 """
 
@@ -459,8 +459,9 @@ async def admin_credit_user_wallet(
     *,
     actor: str,
     note: str | None = None,
+    shop_id: int | None = None,
 ) -> BotUser:
-    """Increase shop wallet (admin). Positive amounts only."""
+    """Increase platform or shop wallet (admin). Positive amounts only."""
     amt = int(amount)
     if amt <= 0:
         raise ValueError("مبلغ شارژ باید مثبت باشد")
@@ -469,7 +470,7 @@ async def admin_credit_user_wallet(
     reason = f"شارژ ادمین ({(actor or 'admin')[:64]})"
     if note:
         reason = f"{reason}: {note.strip()[:120]}"
-    return await credit_wallet(session, user, amt, reason)
+    return await credit_wallet(session, user, amt, reason, shop_id=shop_id)
 
 
 async def list_wallet_txs(

@@ -1144,7 +1144,15 @@ async def redeem_reward(
             wallet_reason = f"loyalty_reward:{reward.id}:{key}"
             from app.services.wallet import credit_wallet
 
-            await credit_wallet(session, user, rval, wallet_reason, commit=False)
+            # Shop rewards credit the shop purse; platform rewards → main purse.
+            await credit_wallet(
+                session,
+                user,
+                rval,
+                wallet_reason,
+                shop_id=int(reward_rid) if reward_rid is not None else None,
+                commit=False,
+            )
         reward.redemption_count = int(reward.redemption_count or 0) + 1
         meta: dict[str, Any] = {"reward_name": reward.name}
         red = RewardRedemption(
@@ -1218,6 +1226,7 @@ async def issue_discount_entitlement(
     expires_days: int | None = None,
     redemption_id: int | None = None,
     wheel_spin_id: int | None = None,
+    reseller_id: int | None = None,
 ) -> LoyaltyDiscountEntitlement:
     """Issue a personal one-time discount (reward redeem or lucky wheel)."""
     pct = int(percent)
@@ -1229,6 +1238,7 @@ async def issue_discount_entitlement(
         expires_at = datetime.now(timezone.utc) + timedelta(days=int(expires_days))
     ent = LoyaltyDiscountEntitlement(
         user_id=int(user.id),
+        reseller_id=int(reseller_id) if reseller_id is not None else None,
         redemption_id=int(redemption_id) if redemption_id is not None else None,
         wheel_spin_id=int(wheel_spin_id) if wheel_spin_id is not None else None,
         code=code,
@@ -1263,6 +1273,7 @@ async def _create_discount_entitlement(
         if reward.expires_days is not None
         else None,
         redemption_id=int(redemption.id),
+        reseller_id=int(reward.reseller_id) if reward.reseller_id is not None else None,
     )
 
 
@@ -1335,6 +1346,11 @@ async def reserve_loyalty_discount(
         ).scalar_one_or_none()
     if not ent or int(ent.user_id) != int(user_id):
         raise ValueError("کد تخفیف نامعتبر است")
+    # Shop discounts must not apply to platform (or other-shop) orders.
+    ent_rid = int(ent.reseller_id) if getattr(ent, "reseller_id", None) else None
+    order_rid = int(order.reseller_id) if order.reseller_id else None
+    if ent_rid != order_rid:
+        raise ValueError("این تخفیف برای این فروشگاه نیست")
     if ent.status == "reserved" and ent.reserved_order_id == int(order.id):
         return int(ent.discount_amount or 0), ent.code
     if ent.status != "available":

@@ -654,6 +654,7 @@ async def spin(
                 user,
                 pval,
                 f"lucky_wheel:{spin_row.id}:{key}",
+                shop_id=int(scope) if scope is not None else None,
                 commit=False,
             )
         elif ptype in ("traffic_gb", "time_days") and service is not None:
@@ -671,6 +672,7 @@ async def spin(
                 if prize.expires_days is not None
                 else None,
                 wheel_spin_id=int(spin_row.id),
+                reseller_id=int(scope) if scope is not None else None,
             )
             discount_code = ent.code
             spin_row.discount_code = ent.code

@@ -26,6 +26,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger("pgclock")
 
+# httpx logs full request URLs at INFO — bot tokens in api.telegram.org/bot{token}/…
+# must never land in journald.
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+
 
 async def seed_demo_plan() -> None:
     async with SessionLocal() as session:
