@@ -35,7 +35,12 @@ REMOVED_MENU_KEYS = frozenset({"guide", "faq", "restart", "help", "referral"})
 
 def _t(ui: dict | None, key: str) -> str:
     if ui and key in ui and ui[key]:
-        return ui[key]
+        raw = ui[key]
+        from app.services.rich_text import button_display_text, is_button_label_key
+
+        if is_button_label_key(key):
+            return button_display_text(raw)
+        return raw
     return DEFAULT_SETTINGS.get(key, key)
 
 
@@ -154,6 +159,8 @@ def main_menu(
                     _t(ui, "btn_shop"),
                     callback_data="shop:list",
                     style=_style(ui, "shop", fallback="primary"),
+                    ui=ui,
+                    label_key="btn_shop",
                 )
             )
         elif key == "services" and has_services:
@@ -162,6 +169,8 @@ def main_menu(
                     _t(ui, "btn_services"),
                     callback_data="svc:list",
                     style=_style(ui, "services", fallback="primary"),
+                    ui=ui,
+                    label_key="btn_services",
                 )
             )
         elif key == "wallet":
@@ -170,6 +179,8 @@ def main_menu(
                     _t(ui, "btn_wallet"),
                     callback_data="wallet:home",
                     style=_style(ui, "wallet", fallback="primary"),
+                    ui=ui,
+                    label_key="btn_wallet",
                 )
             )
         elif key == "support":
@@ -180,47 +191,75 @@ def main_menu(
                 url = support_chat_url(contacts[0].get("telegram") or "")
                 if url:
                     buttons.append(
-                        InlineKeyboardButton(text=_t(ui, "btn_support"), url=url)
+                        _ikb(
+                            _t(ui, "btn_support"),
+                            url=url,
+                            ui=ui,
+                            label_key="btn_support",
+                        )
                     )
                 else:
                     buttons.append(
-                        InlineKeyboardButton(
-                            text=_t(ui, "btn_support"), callback_data="support:home"
+                        _ikb(
+                            _t(ui, "btn_support"),
+                            callback_data="support:home",
+                            ui=ui,
+                            label_key="btn_support",
                         )
                     )
             else:
                 buttons.append(
-                    InlineKeyboardButton(
-                        text=_t(ui, "btn_support"), callback_data="support:home"
+                    _ikb(
+                        _t(ui, "btn_support"),
+                        callback_data="support:home",
+                        ui=ui,
+                        label_key="btn_support",
                     )
                 )
         elif key == "guide":
             buttons.append(
-                InlineKeyboardButton(text=_t(ui, "btn_guide"), callback_data="help:guide")
+                _ikb(
+                    _t(ui, "btn_guide"),
+                    callback_data="help:guide",
+                    ui=ui,
+                    label_key="btn_guide",
+                )
             )
         elif key == "faq":
             buttons.append(
-                InlineKeyboardButton(text=_t(ui, "btn_faq"), callback_data="help:faq")
+                _ikb(
+                    _t(ui, "btn_faq"),
+                    callback_data="help:faq",
+                    ui=ui,
+                    label_key="btn_faq",
+                )
             )
         elif key in {"loyalty", "referral"}:
+            lk = "btn_loyalty" if key == "loyalty" else "btn_referral"
             buttons.append(
-                InlineKeyboardButton(
-                    text=_t(ui, "btn_loyalty") if key == "loyalty" else _t(ui, "btn_referral"),
+                _ikb(
+                    _t(ui, lk),
                     callback_data="loy:home",
+                    ui=ui,
+                    label_key=lk,
                 )
             )
         elif key == "reseller_apply" and role == Role.USER.value and not show_reseller_creds:
             buttons.append(
-                InlineKeyboardButton(
-                    text=_t(ui, "btn_reseller_apply"),
+                _ikb(
+                    _t(ui, "btn_reseller_apply"),
                     callback_data="resapply:home",
+                    ui=ui,
+                    label_key="btn_reseller_apply",
                 )
             )
         elif key == "miniapp" and settings.miniapp_enabled:
             buttons.append(
-                InlineKeyboardButton(
-                    text=_t(ui, "btn_miniapp"),
+                _ikb(
+                    _t(ui, "btn_miniapp"),
                     web_app=WebAppInfo(url=settings.miniapp_url),
+                    ui=ui,
+                    label_key="btn_miniapp",
                 )
             )
 
@@ -229,19 +268,31 @@ def main_menu(
     if role == Role.RESELLER.value:
         # Full shop panel — only on the dedicated reseller bot
         full_width.append(
-            InlineKeyboardButton(text=_t(ui, "btn_reseller"), callback_data="res:home")
+            _ikb(
+                _t(ui, "btn_reseller"),
+                callback_data="res:home",
+                ui=ui,
+                label_key="btn_reseller",
+            )
         )
     elif show_reseller_creds:
         # Main bot: credentials / deep-link only — no panel ops here
         full_width.append(
-            InlineKeyboardButton(
-                text=_t(ui, "btn_reseller_creds"),
+            _ikb(
+                _t(ui, "btn_reseller_creds"),
                 callback_data="res:creds",
+                ui=ui,
+                label_key="btn_reseller_creds",
             )
         )
     if role == Role.ADMIN.value and as_user:
         full_width.append(
-            InlineKeyboardButton(text=_t(ui, "btn_admin"), callback_data="adm:home")
+            _ikb(
+                _t(ui, "btn_admin"),
+                callback_data="adm:home",
+                ui=ui,
+                label_key="btn_admin",
+            )
         )
     rows = layout_rows(buttons, ui, full_width=full_width)
     return InlineKeyboardMarkup(inline_keyboard=rows)
@@ -363,14 +414,24 @@ def _kb(
     action: str | None = None,
     style: object = _STYLE_AUTO,
     ui: dict | None = None,
+    label_key: str | None = None,
+    icon_custom_emoji_id: str | None = None,
 ) -> KeyboardButton:
     if style is _STYLE_AUTO:
         st = _reply_btn_style(action, text, ui=ui)
     else:
         st = style if style else None
+    icon = icon_custom_emoji_id
+    if icon is None and ui is not None:
+        from app.services.rich_text import button_icon_from_ui
+
+        icon = button_icon_from_ui(ui, label_key=label_key, action=action)
+    kwargs: dict = {"text": text}
     if st:
-        return KeyboardButton(text=text, style=str(st))
-    return KeyboardButton(text=text)
+        kwargs["style"] = str(st)
+    if icon:
+        kwargs["icon_custom_emoji_id"] = str(icon)
+    return KeyboardButton(**kwargs)
 
 
 def _ikb(
@@ -379,6 +440,9 @@ def _ikb(
     callback_data: str | None = None,
     url: str | None = None,
     style: str | None = None,
+    ui: dict | None = None,
+    label_key: str | None = None,
+    icon_custom_emoji_id: str | None = None,
     **extra,
 ) -> InlineKeyboardButton:
     kwargs: dict = {"text": text, **extra}
@@ -388,6 +452,13 @@ def _ikb(
         kwargs["url"] = url
     if style:
         kwargs["style"] = style
+    icon = icon_custom_emoji_id
+    if icon is None and ui is not None and (label_key or kwargs.get("icon_custom_emoji_id") is None):
+        from app.services.rich_text import button_icon_from_ui
+
+        icon = button_icon_from_ui(ui, label_key=label_key)
+    if icon and "icon_custom_emoji_id" not in kwargs:
+        kwargs["icon_custom_emoji_id"] = str(icon)
     return InlineKeyboardButton(**kwargs)
 
 
@@ -437,6 +508,8 @@ def plan_button_style_picker_keyboard(
                 _t(ui, "btn_back") or "⬅️ بازگشت",
                 callback_data=back_callback,
                 style=_style(ui, "back"),
+                ui=ui,
+                label_key="btn_back",
             )
         ]
     )
@@ -472,6 +545,8 @@ def item_button_style_picker_keyboard(
                 _t(ui, "btn_back") or "⬅️ بازگشت",
                 callback_data=back_callback,
                 style=_style(ui, "back"),
+                ui=ui,
+                label_key="btn_back",
             )
         ]
     )
@@ -687,6 +762,8 @@ def force_join_inline_keyboard(
                 _t(ui, "btn_force_join_check"),
                 callback_data="forcejoin:check",
                 style=_style(ui, "force_join_check", fallback="primary"),
+                ui=ui,
+                label_key="btn_force_join_check",
             )
         ]
     )
@@ -774,6 +851,8 @@ def shop_kind_keyboard(
                     label,
                     callback_data="shop:kind:wholesale",
                     style=_style(ui, "shop_kind_wholesale", fallback="primary"),
+                    ui=ui,
+                    label_key="btn_wholesale",
                 )
             ]
         )
@@ -853,6 +932,8 @@ def admin_plan_kind_keyboard(
                 _t(ui, "btn_wholesale") or "📦 فروش عمده",
                 callback_data="adm:plans:kind:users:wholesale",
                 style=_style(ui, "shop_kind_wholesale", fallback="primary"),
+                ui=ui,
+                label_key="btn_wholesale",
             )
         ],
         [back],
@@ -904,6 +985,8 @@ def plans_keyboard(
                     _t(ui, "btn_back"),
                     callback_data=back_callback,
                     style=_style(ui, "back"),
+                    ui=ui,
+                    label_key="btn_back",
                 )
             ]
         )
@@ -945,6 +1028,8 @@ def wholesale_plans_keyboard(
                     _t(ui, "btn_back"),
                     callback_data=back_callback,
                     style=_style(ui, "back"),
+                    ui=ui,
+                    label_key="btn_back",
                 )
             ]
         )
@@ -983,6 +1068,8 @@ def wholesale_qty_keyboard(
                 _t(ui, "btn_back"),
                 callback_data="shop:kind:wholesale",
                 style=_style(ui, "back"),
+                ui=ui,
+                label_key="btn_back",
             )
         ],
     ]
@@ -1096,6 +1183,8 @@ def pay_methods(order_id: int, ui: dict | None = None) -> InlineKeyboardMarkup:
                     _t(ui, "btn_pay_wallet"),
                     callback_data=f"pay:wallet:{order_id}",
                     style=_style(ui, "pay_wallet", fallback="success"),
+                    ui=ui,
+                    label_key="btn_pay_wallet",
                 )
             ]
         )
@@ -1106,6 +1195,8 @@ def pay_methods(order_id: int, ui: dict | None = None) -> InlineKeyboardMarkup:
                     _t(ui, "btn_pay_card"),
                     callback_data=f"pay:card:{order_id}",
                     style=_style(ui, "pay_card", fallback="primary"),
+                    ui=ui,
+                    label_key="btn_pay_card",
                 )
             ]
         )
@@ -1116,6 +1207,8 @@ def pay_methods(order_id: int, ui: dict | None = None) -> InlineKeyboardMarkup:
                     _t(ui, "btn_pay_gateway"),
                     callback_data=f"pay:gateway:{order_id}",
                     style=_style(ui, "pay_gateway", fallback="primary"),
+                    ui=ui,
+                    label_key="btn_pay_gateway",
                 )
             ]
         )
@@ -1126,6 +1219,8 @@ def pay_methods(order_id: int, ui: dict | None = None) -> InlineKeyboardMarkup:
                     _t(ui, "btn_pay_psp"),
                     callback_data=f"pay:psp:{order_id}",
                     style=_style(ui, "pay_psp", fallback="primary"),
+                    ui=ui,
+                    label_key="btn_pay_psp",
                 )
             ]
         )
@@ -1136,6 +1231,8 @@ def pay_methods(order_id: int, ui: dict | None = None) -> InlineKeyboardMarkup:
                     _t(ui, "btn_pay_crypto"),
                     callback_data=f"pay:crypto:{order_id}",
                     style=_style(ui, "pay_crypto", fallback="primary"),
+                    ui=ui,
+                    label_key="btn_pay_crypto",
                 )
             ]
         )
@@ -1146,6 +1243,8 @@ def pay_methods(order_id: int, ui: dict | None = None) -> InlineKeyboardMarkup:
                     _t(ui, "btn_pay_stars"),
                     callback_data=f"pay:stars:{order_id}",
                     style=_style(ui, "pay_stars", fallback="primary"),
+                    ui=ui,
+                    label_key="btn_pay_stars",
                 )
             ]
         )
@@ -1156,6 +1255,8 @@ def pay_methods(order_id: int, ui: dict | None = None) -> InlineKeyboardMarkup:
                     _t(ui, "btn_pay_discount"),
                     callback_data=f"pay:discount:{order_id}",
                     style=_style(ui, "pay_discount"),
+                    ui=ui,
+                    label_key="btn_pay_discount",
                 )
             ]
         )
@@ -1165,6 +1266,8 @@ def pay_methods(order_id: int, ui: dict | None = None) -> InlineKeyboardMarkup:
                 _t(ui, "btn_cancel"),
                 callback_data="menu:home",
                 style=_style(ui, "cancel", fallback="danger"),
+                ui=ui,
+                label_key="btn_cancel",
             )
         ]
     )

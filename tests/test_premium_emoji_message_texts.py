@@ -1,4 +1,4 @@
-"""Premium / custom emoji on message-body settings (not keyboard labels)."""
+"""Premium / custom emoji on message-body settings + button icons."""
 
 from __future__ import annotations
 
@@ -9,6 +9,8 @@ from aiogram.types import MessageEntity
 from app.services.rich_text import (
     MESSAGE_RICH_KEYS,
     TERMS_RICH_KEYS,
+    button_icon_custom_emoji_id,
+    is_button_label_key,
     is_message_rich_key,
     outbound_setting_text,
     pack_rich_text,
@@ -38,9 +40,12 @@ class MessageRichKeysTests(unittest.TestCase):
         self.assertTrue(required <= MESSAGE_RICH_KEYS)
         self.assertTrue(TERMS_RICH_KEYS <= MESSAGE_RICH_KEYS)
 
-    def test_button_labels_not_rich(self):
+    def test_button_labels_not_message_rich(self):
+        # btn_* are not MESSAGE_RICH_KEYS — they use icon_custom_emoji_id instead.
         self.assertFalse(is_message_rich_key("btn_buy"))
         self.assertFalse(is_message_rich_key("btn_menu_home"))
+        self.assertTrue(is_button_label_key("btn_buy"))
+        self.assertTrue(is_button_label_key("btn_menu_home"))
 
 
 class OutboundSettingTextTests(unittest.TestCase):
@@ -65,7 +70,7 @@ class OutboundSettingTextTests(unittest.TestCase):
         # Title prefix shifts entity offsets
         self.assertGreater(kw["entities"][0].offset, 2)
 
-    def test_pack_setting_from_message_only_rich_keys(self):
+    def test_pack_setting_from_message_message_and_button_keys(self):
         class Msg:
             text = "x😀"
             entities = [
@@ -78,9 +83,10 @@ class OutboundSettingTextTests(unittest.TestCase):
         plain, ents = unpack_rich_text(packed)
         self.assertEqual(plain, "x😀")
         self.assertTrue(ents)
-        plain_btn = pack_setting_from_message("btn_buy", Msg())
-        self.assertEqual(plain_btn, "x😀")
-        self.assertEqual(rich_plain_text(plain_btn), "x😀")
+        packed_btn = pack_setting_from_message("btn_buy", Msg())
+        self.assertTrue(packed_btn.startswith("\x1eRICH1:"))
+        self.assertEqual(rich_plain_text(packed_btn), "x😀")
+        self.assertEqual(button_icon_custom_emoji_id(packed_btn), "1")
 
 
 if __name__ == "__main__":

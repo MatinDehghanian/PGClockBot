@@ -843,6 +843,8 @@ ensure_apt_packages() {
     && command -v curl >/dev/null 2>&1 \
     && command -v git >/dev/null 2>&1 \
     && command -v psql >/dev/null 2>&1 \
+    && command -v pg_dump >/dev/null 2>&1 \
+    && command -v pg_restore >/dev/null 2>&1 \
     && command -v pg_lsclusters >/dev/null 2>&1; then
     ok "Prerequisites already installed (skip apt)"
     return 0
@@ -880,6 +882,15 @@ ensure_apt_packages() {
     err "psql still missing after apt — install postgresql-client manually"
     return 1
   fi
+  if ! command -v pg_dump >/dev/null 2>&1 || ! command -v pg_restore >/dev/null 2>&1; then
+    warn "pg_dump/pg_restore missing — installing postgresql-client"
+    sudo_wrap env PATH="$PATH" DEBIAN_FRONTEND=noninteractive \
+      apt-get install -y postgresql-client || true
+  fi
+  if ! command -v pg_dump >/dev/null 2>&1 || ! command -v pg_restore >/dev/null 2>&1; then
+    err "pg_dump/pg_restore still missing — install postgresql-client manually (backups will fail)"
+    return 1
+  fi
   if ! command -v pg_lsclusters >/dev/null 2>&1; then
     warn "pg_lsclusters still missing — installing postgresql-common again"
     sudo_wrap apt-get install -y --reinstall postgresql-common || true
@@ -890,6 +901,31 @@ ensure_apt_packages() {
     warn "Prerequisites installed but pg_lsclusters not in PATH — setup_postgres will use /etc/postgresql fallback"
     ok "Prerequisites ready"
   fi
+}
+
+# Lightweight: ensure backup tools exist (safe to call from Update on existing installs).
+ensure_pg_client_tools() {
+  export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH:-}"
+  if command -v pg_dump >/dev/null 2>&1 && command -v pg_restore >/dev/null 2>&1; then
+    ok "pg_dump/pg_restore available"
+    return 0
+  fi
+  if ! command -v apt-get >/dev/null 2>&1; then
+    warn "pg_dump missing and apt-get unavailable — backups will fail"
+    return 1
+  fi
+  info "Installing postgresql-client (required for backups)…"
+  export DEBIAN_FRONTEND=noninteractive
+  sudo_wrap apt-get update -y >/dev/null || true
+  if sudo_wrap env PATH="$PATH" DEBIAN_FRONTEND=noninteractive \
+    apt-get install -y postgresql-client; then
+    if command -v pg_dump >/dev/null 2>&1 && command -v pg_restore >/dev/null 2>&1; then
+      ok "postgresql-client installed (pg_dump=$(command -v pg_dump))"
+      return 0
+    fi
+  fi
+  warn "Could not install postgresql-client — run: sudo apt install postgresql-client"
+  return 1
 }
 
 # Start local PostgreSQL and ensure a DATABASE_URL for fresh installs.
@@ -1248,7 +1284,8 @@ Wants=postgresql.service
 Type=simple
 User=${service_user}
 WorkingDirectory=${SCRIPT_DIR}
-Environment=PATH=${SCRIPT_DIR}/.venv/bin
+# Include system bins so pg_dump/pg_restore (postgresql-client) are visible to the bot.
+Environment=PATH=${SCRIPT_DIR}/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 Environment=PGCLOCKBOT_SERVICE_USER=${service_user}
 # Fail fast in journal if boot/init_db hangs (uvicorn binds only after lifespan).
 TimeoutStartSec=180
@@ -1591,11 +1628,16 @@ PY
     return 1
   }
 
+  # Backup tools + systemd PATH (pg_dump must be visible to the service).
+  ensure_pg_client_tools || true
+
   # Ensure passwordless restart helper exists for in-panel SSL/updates
   if service_installed; then
     local svc_user
     svc_user="$(systemctl show -p User --value "$SERVICE_NAME" 2>/dev/null || whoami)"
     [[ -z "$svc_user" || "$svc_user" == "-" ]] && svc_user="$(whoami)"
+    # Rewrite unit so PATH includes /usr/bin (fixes "pg_dump not found" under systemd).
+    install_systemd "$svc_user" || true
     install_restart_helper "$svc_user" || true
   fi
 
@@ -1603,6 +1645,7 @@ PY
   print_success "Update complete" \
     "Config:     .env kept (WEB_HOST forced public if it was loopback)" \
     "Schema:     migrated before restart" \
+    "Backups:    postgresql-client / systemd PATH refreshed" \
     "Logs:       journalctl -u ${SERVICE_NAME} -f"
   return 0
 }
