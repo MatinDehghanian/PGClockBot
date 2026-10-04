@@ -3849,7 +3849,7 @@ form.settings-form > .actions.sticky-actions,
   touch-action: pan-y;
 }
 .settings-modal-panel[data-scroll-shell="1"] {
-  overflow: visible;
+  overflow: hidden;
 }
 .settings-modal-panel .ui-modal-scroll > .ui-modal-head,
 .settings-modal-panel > .ui-modal-head {
@@ -5712,7 +5712,7 @@ form.settings-form > .actions.sticky-actions,
   z-index: 1;
   width: min(560px, 100%);
   max-height: min(84vh, 900px);
-  /* Fallback clip before JS wraps .ui-modal-scroll (see [data-scroll-shell] below). */
+  /* Own the rounded frame — overflow + radius on this box (see keyframes below). */
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -5733,21 +5733,19 @@ form.settings-form > .actions.sticky-actions,
   text-size-adjust: 100%;
 }
 /*
-  Root cause of “broken / less-round” top corners on iOS/Android:
-  overflow:hidden + border-radius on the SAME box that runs a transform
-  animation fails to clip, so the panel paints square into the corner and
-  page chrome (brand/bot tint) peeks through as a warm sliver.
-
-  After panel.js wraps contents in .ui-modal-scroll, move the opaque chrome
-  + radius clip onto that inner box (never transformed on its own). The outer
-  panel keeps only motion + rounded box-shadow.
+  Corner sliver fix (brand/bot tint peeking at top corners):
+  WebKit/Android fail to clip overflow+border-radius on a box that also runs a
+  *transform* open animation. The previous workaround moved chrome onto
+  .ui-modal-scroll and left the outer panel transparent — some devices still
+  showed a warm square sliver. Open/close motion is opacity-only now, so the
+  outer panel can keep opaque chrome + overflow:hidden + radius reliably.
+  .ui-modal-scroll only owns scrolling (and equal vertical padding/gap).
 */
 .ui-modal-panel[data-scroll-shell="1"] {
-  overflow: visible;
+  overflow: hidden;
   padding: 0;
-  border: 0;
-  background: transparent;
-  /* radius retained so the outer shadow stays rounded */
+  border: 1px solid var(--border);
+  background: var(--bg-card);
   isolation: isolate;
 }
 .ui-modal-scroll {
@@ -5767,11 +5765,10 @@ form.settings-form > .actions.sticky-actions,
 }
 .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll {
   margin: 0;
-  border-radius: var(--radius);
-  border: 1px solid var(--border);
-  background: var(--bg-card);
-  isolation: isolate;
-  /* Own the rounded frame — content + scrollbar stay inside the curve. */
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  /* Parent panel clips the curve; this box only scrolls. */
   overflow-x: hidden;
   overflow-y: auto;
   /* Equal air above the title and below the last block */
@@ -5787,7 +5784,7 @@ form.settings-form > .actions.sticky-actions,
   overflow: hidden;
 }
 .ui-modal-panel-xl[data-scroll-shell="1"] {
-  overflow: visible;
+  overflow: hidden;
 }
 .edit-modal-body {
   display: flex;
@@ -6357,13 +6354,14 @@ td.byte-size {
   from { opacity: 1; }
   to { opacity: 0; }
 }
+/* Opacity-only — transform on this box broke border-radius clipping (corner sliver). */
 @keyframes ui-modal-in {
-  from { opacity: 0; transform: translateY(18px) scale(.96); }
-  to { opacity: 1; transform: none; }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 @keyframes ui-modal-out {
-  from { opacity: 1; transform: none; }
-  to { opacity: 0; transform: translateY(12px) scale(.97); }
+  from { opacity: 1; }
+  to { opacity: 0; }
 }
 .ui-modal.open.is-closing {
   pointer-events: none;
@@ -7163,10 +7161,10 @@ html[data-theme="light"] .ui-modal-panel {
   box-shadow: 0 12px 36px rgba(0, 0, 0, 0.14);
 }
 html[data-theme="light"] .ui-modal-panel[data-scroll-shell="1"] {
-  background: transparent;
+  background: var(--bg-card);
 }
 html[data-theme="light"] .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll {
-  background: var(--bg-card);
+  background: transparent;
 }
 html[data-theme="light"] .nav-label-home { color: var(--foreground); }
 /* Neutral select/hover for the border-only home box (no brand tint) */

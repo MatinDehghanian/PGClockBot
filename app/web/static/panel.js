@@ -1137,8 +1137,8 @@
         while (panel.firstChild) scroll.appendChild(panel.firstChild);
         panel.appendChild(scroll);
       }
-      /* Marks panel so CSS moves radius/chrome onto .ui-modal-scroll — keeps
-         overflow+radius off the transform-animated outer box (square corners). */
+      /* Marks panel so CSS can put padding/gap on .ui-modal-scroll while the
+         outer panel keeps opaque chrome + overflow:hidden corner clip. */
       panel.dataset.scrollShell = '1';
     }
 
