@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.1.1": [
+        "صفحه راه‌اندازی هم‌زبان با ورود — اتمسفر، یک کارت، بدون باکس تو در تو",
+        "README مرتب‌تر",
+        "ریستور: restore/pre-v0.1.1-v0.1.0-2026-10-04",
+    ],
     "0.1.0": [
         "ریلیز عمومی اولیه — نسخه ۰٫۱٫۰",
         "لایسنس MIT",

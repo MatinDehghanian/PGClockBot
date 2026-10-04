@@ -73,8 +73,9 @@ class ReleaseNotesTests(unittest.TestCase):
 
         src = Path("app/services/release_notes.py").read_text(encoding="utf-8")
         parsed = parse_release_notes_source(src)
-        self.assertEqual(list(parsed.keys()), ["0.1.0"])
-        self.assertTrue(parsed["0.1.0"])
+        self.assertEqual(list(parsed.keys())[0], "0.1.1")
+        self.assertIn("0.1.0", parsed)
+        self.assertTrue(parsed["0.1.1"])
 
     def test_unknown_local_falls_back_to_newest(self):
         from app.services.release_notes import changelog_for_update_page, RELEASE_NOTES_FA
@@ -103,8 +104,8 @@ class ReleaseNotesTests(unittest.TestCase):
 
         src = Path("app/services/release_notes.py").read_text(encoding="utf-8")
         parsed = parse_release_notes_source(src)
-        self.assertEqual(set(parsed), {"0.1.0"})
-        self.assertTrue(any("MIT" in n or "۰٫۱٫۰" in n for n in parsed["0.1.0"]))
+        self.assertEqual(set(parsed), {"0.1.1", "0.1.0"})
+        self.assertTrue(any("راه‌اندازی" in n or "۰٫۱٫۱" in n for n in parsed["0.1.1"]))
 
     def test_home_no_manual_refresh(self):
         src = Path("app/web/templates/home.html").read_text(encoding="utf-8")
