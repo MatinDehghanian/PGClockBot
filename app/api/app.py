@@ -4537,6 +4537,14 @@ def create_api_app(lifespan=None) -> FastAPI:
             payload = merge_rich_settings_on_save(existing, payload)
         if payload:
             await set_settings_bulk(session, payload)
+        elif known:
+            # Empty payload with expected keys usually means the request body was
+            # lost (e.g. CSRF middleware consumed the stream). Do not flash success.
+            return RedirectResponse(
+                f"/settings?tab={tab}&err="
+                + quote("ذخیره انجام نشد — صفحه را تازه کنید و دوباره تلاش کنید."),
+                status_code=303,
+            )
         next_url = safe_internal_next(request.query_params.get("next"), "")
         if next_url:
             sep = "&" if "?" in next_url else "?"
