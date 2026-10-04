@@ -1,8 +1,13 @@
 {% extends "base.html" %}
 {% block title %}راه‌اندازی اولیه{% endblock %}
 {% block auth %}
-<div class="auth-wrap">
-  <div class="auth-panel setup-panel">
+<div class="auth-wrap auth-wrap--atmo">
+  <div class="auth-atmosphere" aria-hidden="true">
+    <span class="auth-orb auth-orb-a"></span>
+    <span class="auth-orb auth-orb-b"></span>
+    <span class="auth-grid"></span>
+  </div>
+  <div class="auth-panel auth-panel--stage setup-panel">
     <div class="auth-brand">
       <span class="brand-logo" aria-hidden="true"><img src="/static/logo-64.png" alt="" /></span>
       <h1 dir="ltr">MrClockBot</h1>
@@ -21,7 +26,7 @@
     {% if flash_ok %}<div class="flash ok" id="flash-ok">{{ flash_ok }}</div>{% endif %}
     <div class="flash err" id="client-err" hidden></div>
 
-    <div class="setup-probe" id="setup-probe" hidden>
+    <div class="auth-form auth-form--card setup-probe" id="setup-probe" hidden>
       <h2 class="setup-title">بررسی سطح دسترسی</h2>
       <p class="muted setup-lead">نقش، مجوزها و سقف‌های حساب پاسارگارد در حال خواندن است.</p>
       <div class="setup-probe-bar" aria-hidden="true"><i id="setup-probe-fill"></i></div>
@@ -34,7 +39,7 @@
     </div>
 
     {# —— Step 0: Welcome —— #}
-    <div class="auth-form setup-step" data-step="0" hidden>
+    <div class="auth-form auth-form--card setup-step" data-step="0" hidden>
       <h2 class="setup-title">خوش آمدید</h2>
       <p class="muted setup-lead">
         چند مرحله کوتاه برای تنظیم مدیر، ربات و اتصال پاسارگارد.
@@ -44,7 +49,7 @@
     </div>
 
     {# —— Step 1: Admin —— #}
-    <form class="auth-form setup-step" data-step="1" method="post" action="/setup/admin" hidden novalidate>
+    <form class="auth-form auth-form--card setup-step" data-step="1" method="post" action="/setup/admin" hidden novalidate>
       <h2 class="setup-title">۱ · مدیر پنل</h2>
       <p class="muted setup-hint">
         حداقل ۱۲ کاراکتر، شامل حداقل دو رقم، دو حرف بزرگ، دو حرف کوچک و یک کاراکتر خاص.
@@ -68,7 +73,7 @@
     </form>
 
     {# —— Step 2: Bot —— #}
-    <form class="auth-form setup-step" data-step="2" method="post" action="/setup/bot" hidden novalidate>
+    <form class="auth-form auth-form--card setup-step" data-step="2" method="post" action="/setup/bot" hidden novalidate>
       <h2 class="setup-title">۲ · ربات تلگرام</h2>
       <label>توکن ربات (BOT_TOKEN)
         <input name="bot_token" value="" {{ 'required' if not has_bot_token else '' }} autocomplete="off" dir="ltr"
@@ -88,7 +93,7 @@
     </form>
 
     {# —— Step 3: Other —— #}
-    <form class="auth-form setup-step" data-step="3" method="post" action="/setup/other" hidden novalidate>
+    <form class="auth-form auth-form--card setup-step" data-step="3" method="post" action="/setup/other" hidden novalidate>
       <h2 class="setup-title">۳ · پاسارگارد و وب</h2>
       <label>آدرس پاسارگارد (PG_BASE_URL)
         
@@ -121,7 +126,7 @@
     </form>
 
     {# —— Step 4: Done —— #}
-    <div class="auth-form setup-step" data-step="4" hidden>
+    <div class="auth-form auth-form--card setup-step" data-step="4" hidden>
       <h2 class="setup-title">۴ · سطح دسترسی</h2>
       <p class="muted setup-lead">خلاصه نقش پاسارگارد برای این نصب — منوها از همین سطح زنده می‌آیند.</p>
       {% if pg_audit is defined and pg_audit and pg_audit.ok %}

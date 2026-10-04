@@ -2897,10 +2897,12 @@ html[data-theme="light"] .auth-form--card {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.12);
+  background: color-mix(in srgb, var(--foreground) 10%, transparent);
   border: 1px solid var(--border);
 }
-.setup-progress span.done { background: rgba(255, 255, 255, 0.35); }
+.setup-progress span.done {
+  background: color-mix(in srgb, var(--foreground) 32%, transparent);
+}
 .setup-progress span.current {
   background: var(--foreground);
   border-color: var(--foreground);
@@ -2913,12 +2915,11 @@ html[data-theme="light"] .auth-form--card {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  padding: var(--space-1) 0 var(--space-2);
 }
 .setup-probe-bar {
   height: 4px;
   border-radius: 99px;
-  background: rgba(255, 255, 255, 0.08);
+  background: color-mix(in srgb, var(--foreground) 8%, transparent);
   overflow: hidden;
 }
 .setup-probe-bar i {
