@@ -18,6 +18,7 @@ tests/test_bot_pg_action_matrix.py
 tests/test_bot_users_reseller_id_index.py
 tests/test_cancel_tickets_isolation_3_6_6.py
 tests/test_client_ip_spoofing.py
+tests/test_csrf_body_replay_form_posts.py
 tests/test_csrf_csp_doctor_remaining.py
 tests/test_final_admin_reseller_security_audit.py
 tests/test_final_audit_2_0_2.py

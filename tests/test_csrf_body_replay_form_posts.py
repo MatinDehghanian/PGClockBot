@@ -34,6 +34,44 @@ def _app_with_csrf_form_extract() -> FastAPI:
     async def plans_create(name: str = Form(...), price: int = Form(...)):
         return {"ok": True, "name": name, "price": price}
 
+    @app.post("/plans/{plan_id}/edit")
+    async def plans_edit(
+        plan_id: int,
+        request: Request,
+        name: str = Form(...),
+        price: int = Form(...),
+    ):
+        form = await request.form()
+        return {
+            "ok": True,
+            "plan_id": plan_id,
+            "name": name,
+            "price": price,
+            "description": form.get("description"),
+        }
+
+    @app.post("/users/{user_id}/edit")
+    async def users_edit(user_id: int, request: Request):
+        # Same pattern as app/api/user_pages.py — body via request.form() only.
+        form = await request.form()
+        return {
+            "ok": True,
+            "user_id": user_id,
+            "note": form.get("note"),
+            "color_tag": form.get("color_tag"),
+        }
+
+    @app.post("/resellers/plans")
+    async def reseller_plans_create(request: Request):
+        # Same pattern as reseller_pages — multipart/urlencoded form dict.
+        form = await request.form()
+        return {
+            "ok": True,
+            "name": form.get("name"),
+            "price": form.get("price"),
+            "plan_kind": form.get("plan_kind"),
+        }
+
     @app.post("/settings")
     async def settings_save(request: Request):
         form = await request.form()
@@ -111,6 +149,66 @@ class CsrfBodyReplayTests(unittest.TestCase):
         )
         self.assertEqual(res.status_code, 200, res.text)
         self.assertEqual(res.json()["name"], "hdr")
+
+    def test_plan_edit_form_deps_and_request_form(self):
+        client = TestClient(_app_with_csrf_form_extract())
+        res = client.post(
+            "/plans/7/edit",
+            data={
+                "name": "ویرایش‌شده",
+                "price": "200000",
+                "description": "توضیح",
+                CSRF_FORM_FIELD: "tok",
+            },
+        )
+        self.assertEqual(res.status_code, 200, res.text)
+        data = res.json()
+        self.assertEqual(data["plan_id"], 7)
+        self.assertEqual(data["name"], "ویرایش‌شده")
+        self.assertEqual(data["price"], 200000)
+        self.assertEqual(data["description"], "توضیح")
+
+    def test_user_edit_request_form_body(self):
+        client = TestClient(_app_with_csrf_form_extract())
+        res = client.post(
+            "/users/42/edit",
+            data={"note": "یادداشت", "color_tag": "green", CSRF_FORM_FIELD: "tok"},
+        )
+        self.assertEqual(res.status_code, 200, res.text)
+        data = res.json()
+        self.assertEqual(data["user_id"], 42)
+        self.assertEqual(data["note"], "یادداشت")
+        self.assertEqual(data["color_tag"], "green")
+
+    def test_reseller_plan_create_request_form_body(self):
+        client = TestClient(_app_with_csrf_form_extract())
+        res = client.post(
+            "/resellers/plans",
+            data={
+                "name": "نقره‌ای",
+                "price": "0",
+                "plan_kind": "subscription",
+                CSRF_FORM_FIELD: "tok",
+            },
+        )
+        self.assertEqual(res.status_code, 200, res.text)
+        data = res.json()
+        self.assertEqual(data["name"], "نقره‌ای")
+        self.assertEqual(data["price"], "0")
+        self.assertEqual(data["plan_kind"], "subscription")
+
+    def test_panel_save_routes_use_shared_csrf_guard(self):
+        """All panel mutations share csrf_origin_guard → extract_csrf_from_request."""
+        app_src = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
+        self.assertIn("extract_csrf_from_request", app_src)
+        self.assertIn("csrf_origin_guard", app_src)
+        # Representative save entrypoints stay form-backed (not JSON-only).
+        user_src = (ROOT / "app/api/user_pages.py").read_text(encoding="utf-8")
+        reseller_src = (ROOT / "app/api/reseller_pages.py").read_text(encoding="utf-8")
+        self.assertIn("await request.form()", user_src)
+        self.assertIn("await request.form()", reseller_src)
+        self.assertIn('name: str = Form(...)', app_src)
+        self.assertIn("@app.post(\"/plans/{plan_id}/edit\")", app_src)
 
 
 class CsrfExtractUnitTests(unittest.IsolatedAsyncioTestCase):
