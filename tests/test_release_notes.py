@@ -73,8 +73,10 @@ class ReleaseNotesTests(unittest.TestCase):
 
         src = Path("app/services/release_notes.py").read_text(encoding="utf-8")
         parsed = parse_release_notes_source(src)
-        self.assertEqual(list(parsed.keys())[0], "0.1.2")
+        self.assertEqual(list(parsed.keys())[0], "0.1.3")
         self.assertIn("0.1.0", parsed)
+        self.assertTrue(parsed["0.1.3"])
+        self.assertTrue(any("CSRF" in n or "ذخیره" in n or "SSL" in n for n in parsed["0.1.3"]))
         self.assertTrue(parsed["0.1.2"])
         self.assertTrue(parsed["0.1.1"])
 
@@ -105,7 +107,7 @@ class ReleaseNotesTests(unittest.TestCase):
 
         src = Path("app/services/release_notes.py").read_text(encoding="utf-8")
         parsed = parse_release_notes_source(src)
-        self.assertEqual(set(parsed), {"0.1.2", "0.1.1", "0.1.0"})
+        self.assertEqual(set(parsed), {"0.1.3", "0.1.2", "0.1.1", "0.1.0"})
         self.assertTrue(any("کیف پول" in n or "امنیت" in n for n in parsed["0.1.2"]))
         self.assertTrue(any("راه‌اندازی" in n or "۰٫۱٫۱" in n for n in parsed["0.1.1"]))
 

@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.1.3": [
+        "رفع ذخیره تنظیمات/پلن/کاربر/نماینده: CSRF دیگر بدنهٔ فرم را خالی نمی‌کند",
+        "SSL: تعویض دامنه تا موفقیت Let's Encrypt هویت گواهی فعال را عوض نمی‌کند",
+        "راهنمای PG_BASE_URL: ورود با پورت و path",
+    ],
     "0.1.2": [
         "امنیت: کیف پول هر فروشگاه جدا از کیف پلتفرم — جلوگیری از شارژ غیرمجاز موجودی مالک",
         "کد هدیه، باشگاه، دعوت و شارژ فروشگاه فقط در همان فروشگاه قابل خرج است",
