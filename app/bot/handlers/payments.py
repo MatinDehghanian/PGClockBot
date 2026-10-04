@@ -338,8 +338,13 @@ async def pay_reject(callback: CallbackQuery, session: AsyncSession, db_user: Bo
     user = await session.get(BotUser, payment.user_id)
     ui = await get_all_settings(session)
     if user:
+        from app.services.rich_text import outbound_setting_text
+
         reject_body = ui.get("payment_reject_text") or (
             "پرداخت شما رد شد. اگر اشتباهی رخ داده با پشتیبانی در تماس باشید."
+        )
+        text, send_kw = outbound_setting_text(
+            reject_body, title="❌ پرداخت رد شد"
         )
         try:
             from app.bot.menu_nav import buyer_main_reply_keyboard
@@ -347,9 +352,9 @@ async def pay_reject(callback: CallbackQuery, session: AsyncSession, db_user: Bo
             main_kb, _ = await buyer_main_reply_keyboard(session, user)
             await callback.bot.send_message(
                 user.telegram_id,
-                format_message("❌ پرداخت رد شد", reject_body),
+                text,
                 reply_markup=main_kb,
-                parse_mode="HTML",
+                **{"parse_mode": "HTML", **send_kw},
             )
         except Exception:
             pass

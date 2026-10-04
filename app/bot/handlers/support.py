@@ -35,16 +35,18 @@ def _active_contacts_from_ui(ui: dict) -> list[dict]:
 
 @router.callback_query(F.data == "support:home")
 async def support_home(callback: CallbackQuery, session: AsyncSession):
+    from app.services.rich_text import outbound_setting_text
+
     await callback.answer()
     ui = await get_all_settings(session)
     contacts = _active_contacts_from_ui(ui)
-    text = format_message(
-        "🎧 پشتیبانی",
+    text, send_kw = outbound_setting_text(
         ui.get("support_text")
         or "از کیبورد پایین تیکت جدید بسازید یا تیکت‌های قبلی را ببینید.",
+        title="🎧 پشتیبانی",
     )
     if callback.message:
-        await safe_edit_text(callback.message, text, reply_markup=None)
+        await safe_edit_text(callback.message, text, reply_markup=None, **send_kw)
         await callback.message.answer("پشتیبانی:", reply_markup=kb.support_reply_keyboard(ui))
         if contacts:
             rows: list[list[InlineKeyboardButton]] = []
@@ -62,14 +64,20 @@ async def support_home(callback: CallbackQuery, session: AsyncSession):
 
 @router.callback_query(F.data == "support:tickets")
 async def support_tickets_home(callback: CallbackQuery, session: AsyncSession):
+    from app.services.rich_text import outbound_setting_text
+
     await callback.answer()
     ui = await get_all_settings(session)
-    text = ui.get("support_text") or "پیام خود را بنویسید؛ تیم پشتیبانی پاسخ می‌دهد."
+    text, send_kw = outbound_setting_text(
+        ui.get("support_text") or "پیام خود را بنویسید؛ تیم پشتیبانی پاسخ می‌دهد.",
+        title="🎧 پشتیبانی — تیکت",
+    )
     if callback.message:
         await safe_edit_text(
             callback.message,
-            format_message("🎧 پشتیبانی — تیکت", text),
+            text,
             reply_markup=None,
+            **send_kw,
         )
         await callback.message.answer(
             "تیکت:",

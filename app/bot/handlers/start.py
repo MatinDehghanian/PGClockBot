@@ -14,7 +14,7 @@ from app.db.models import BotUser, UserService
 from app.services.formatting import service_card
 from app.services.pasarguard import extract_sub_token, get_pg
 from app.services.users import get_all_settings, on
-from app.services.message_variables import DOMAIN_USER, render_message_template
+from app.services.message_variables import DOMAIN_USER
 
 router = Router(name="start")
 
@@ -54,11 +54,14 @@ async def render_home(
             reseller_owner_id=reseller_owner_id,
         )
 
+    from app.services.rich_text import outbound_setting_text, rich_plain_text
+
+    home_send_kw: dict = {}
     if effective_role == "admin":
         from app.bot.menu_nav import build_main_reply_keyboard
 
         text = format_message(
-            f"🛠 {ui.get('shop_title', 'کلاک')}",
+            f"🛠 {rich_plain_text(ui.get('shop_title', 'کلاک'))}",
             "پنل مدیریت فروشگاه\nاز کیبورد پایین گزینه را انتخاب کنید.",
         )
         reply_kb, ui, _ = await build_main_reply_keyboard(
@@ -78,7 +81,7 @@ async def render_home(
             reseller_owner_id=reseller_owner_id,
         )
         text = format_message(
-            f"🛠 {ui.get('shop_title', 'فروشگاه')}",
+            f"🛠 {rich_plain_text(ui.get('shop_title', 'فروشگاه'))}",
             "پنل مدیریت فروشگاه شما\nاز کیبورد پایین گزینه را انتخاب کنید.\n"
             "برای دیدن منوی مشتری: «پیش‌نمایش منوی کاربر».",
         )
@@ -87,10 +90,11 @@ async def render_home(
         show_creds = is_shop_owner_on_main_bot(db_user, is_reseller_bot=is_reseller_bot)
         has = await _has_services(session, db_user.id)
         welcome = ui.get("welcome_text", "")
-        title = ui.get("shop_title", "")
+        title = rich_plain_text(ui.get("shop_title", ""))
         try:
-            body = render_message_template(
+            text, home_send_kw = outbound_setting_text(
                 welcome,
+                title=f"✨ {title}" if title else "✨",
                 domain=DOMAIN_USER,
                 user_name=db_user.full_name or "دوست عزیز",
                 user_id=getattr(db_user, "telegram_id", "") or "",
@@ -98,8 +102,8 @@ async def render_home(
                 shop_title=title or "",
             )
         except Exception:
-            body = welcome
-        text = format_message(f"✨ {title}", body)
+            text = format_message(f"✨ {title}", rich_plain_text(welcome))
+            home_send_kw = {}
         reply_kb = kb.main_reply_keyboard(
             effective_role,
             has_services=has,
@@ -116,7 +120,7 @@ async def render_home(
 
         try:
             # Inline «بازگشت» — update the bubble text; reply kb is re-seeded below
-            await message.edit_text(text, reply_markup=None)
+            await message.edit_text(text, reply_markup=None, **home_send_kw)
         except TelegramBadRequest as e:
             if "message is not modified" not in str(e).lower():
                 if getattr(message, "photo", None):
@@ -124,7 +128,7 @@ async def render_home(
                         await message.delete()
                     except Exception:
                         pass
-                    await message.answer(text, reply_markup=reply_kb)
+                    await message.answer(text, reply_markup=reply_kb, **home_send_kw)
                     if mini:
                         await message.answer("📱", reply_markup=mini)
                     return
@@ -142,7 +146,7 @@ async def render_home(
                 pass
         return
 
-    await message.answer(text, reply_markup=reply_kb)
+    await message.answer(text, reply_markup=reply_kb, **home_send_kw)
     if mini:
         # Never let Mini App keyboard failure break /start (HTTPS-only WebApp).
         try:
@@ -214,7 +218,7 @@ async def cmd_start(
     from app.bot.middlewares import (
         check_force_join_all,
         clear_force_join_member_cache,
-        force_join_block_message,
+        force_join_block_outbound,
     )
     from app.services.reseller_access import effective_menu_role
 
@@ -231,13 +235,15 @@ async def cmd_start(
             message.bot, int(db_user.telegram_id), channels, entries=force_entries
         )
         if missing or unverified:
+            fj_text, fj_kw = force_join_block_outbound(
+                missing, unverified, custom=ui.get("force_join_msg")
+            )
             await message.answer(
-                force_join_block_message(
-                    missing, unverified, custom=ui.get("force_join_msg")
-                ),
+                fj_text,
                 reply_markup=kb.force_join_inline_keyboard(
                     ui.get("force_join_channel"), ui=ui, channels=channels
                 ),
+                **fj_kw,
             )
             return
     # Entry terms gate (after force-join, before welcome/menu)
@@ -528,7 +534,7 @@ async def cb_force_join_check(
     from app.bot.middlewares import (
         check_force_join_all,
         clear_force_join_member_cache,
-        force_join_block_message,
+        force_join_block_outbound,
     )
     from app.services.reseller_access import effective_menu_role
     from app.services.users import parse_force_join_channels, parse_force_join_entries
@@ -565,7 +571,7 @@ async def cb_force_join_check(
         callback.bot, int(db_user.telegram_id), channels, entries=force_entries
     )
     if missing or unverified:
-        text = force_join_block_message(
+        text, fj_kw = force_join_block_outbound(
             missing, unverified, custom=ui.get("force_join_msg")
         )
         markup = kb.force_join_inline_keyboard(
@@ -579,10 +585,10 @@ async def cb_force_join_check(
         await callback.answer(alert, show_alert=True)
         if callback.message:
             try:
-                await callback.message.edit_text(text, reply_markup=markup)
+                await callback.message.edit_text(text, reply_markup=markup, **fj_kw)
             except Exception:
                 try:
-                    await callback.message.answer(text, reply_markup=markup)
+                    await callback.message.answer(text, reply_markup=markup, **fj_kw)
                 except Exception:
                     pass
         return
@@ -693,19 +699,23 @@ async def cmd_help(
 ):
     """Telegram /help — guide_text from settings (no longer a keyboard button)."""
     from app.bot.menu_nav import build_main_reply_keyboard
-    from app.services.formatting import format_message
+    from app.services.rich_text import outbound_setting_text, rich_plain_text
 
     ui = await get_all_settings(session)
-    body = (ui.get("guide_text") or "").strip() or (
-        "متنی برای راهنما تنظیم نشده. از وب‌پنل → تنظیمات ربات → متن‌ها، فیلد «متن راهنما» را پر کنید."
-    )
+    raw = ui.get("guide_text")
+    if not rich_plain_text(raw).strip():
+        raw = (
+            "متنی برای راهنما تنظیم نشده. از وب‌پنل → تنظیمات ربات → متن‌ها، "
+            "فیلد «متن راهنما» را پر کنید."
+        )
+    text, send_kw = outbound_setting_text(raw, title="📘 راهنما")
     main_kb, _, _ = await build_main_reply_keyboard(
         session,
         db_user,
         is_reseller_bot=is_reseller_bot,
         reseller_owner_id=reseller_owner_id,
     )
-    await message.answer(format_message("📘 راهنما", body), reply_markup=main_kb)
+    await message.answer(text, reply_markup=main_kb, **send_kw)
 
 
 @router.message(F.text.func(kb.is_cancel_text))
@@ -738,30 +748,41 @@ async def orphan_cancel(
 
 @router.callback_query(F.data == "help:guide")
 async def help_guide(callback: CallbackQuery, session: AsyncSession):
-    from app.services.formatting import format_message
+    from app.services.rich_text import outbound_setting_text, rich_plain_text
 
     await callback.answer()
     ui = await get_all_settings(session)
-    body = (ui.get("guide_text") or "").strip() or "متنی برای راهنما تنظیم نشده. از وب‌پنل → تنظیمات ربات → متن‌ها، فیلد «متن راهنما» را پر کنید."
+    raw = ui.get("guide_text")
+    if not rich_plain_text(raw).strip():
+        raw = (
+            "متنی برای راهنما تنظیم نشده. از وب‌پنل → تنظیمات ربات → متن‌ها، "
+            "فیلد «متن راهنما» را پر کنید."
+        )
+    text, send_kw = outbound_setting_text(raw, title="📘 راهنما")
     if callback.message:
         await safe_edit_text(
             callback.message,
-            format_message("📘 راهنما", body),
+            text,
             reply_markup=kb.back_home(ui),
+            **send_kw,
         )
 
 
 @router.callback_query(F.data == "help:faq")
 async def help_faq(callback: CallbackQuery, session: AsyncSession):
-    from app.services.formatting import format_message
+    from app.services.rich_text import outbound_setting_text
 
     await callback.answer()
     ui = await get_all_settings(session)
+    text, send_kw = outbound_setting_text(
+        ui.get("faq_text") or "", title="❓ سوالات متداول"
+    )
     if callback.message:
         await safe_edit_text(
             callback.message,
-            format_message("❓ سوالات متداول", ui.get("faq_text") or ""),
+            text,
             reply_markup=kb.back_home(ui),
+            **send_kw,
         )
 
 

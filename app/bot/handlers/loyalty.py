@@ -132,7 +132,15 @@ async def _bot_username(callback_or_message) -> str:
     return me.username or get_settings().bot_username or "bot"
 
 
-async def build_referral_text(session: AsyncSession, db_user: BotUser, uname: str) -> tuple[str, str]:
+async def build_referral_text(
+    session: AsyncSession, db_user: BotUser, uname: str
+) -> tuple[str, str, dict]:
+    from app.services.rich_text import (
+        outbound_setting_text,
+        rich_plain_text,
+        unpack_rich_text,
+    )
+
     ui = await get_all_settings(session)
     link = referral_link(uname, db_user.referral_code)
     try:
@@ -140,27 +148,42 @@ async def build_referral_text(session: AsyncSession, db_user: BotUser, uname: st
     except Exception:
         pass
     stats = await referral_stats(session, db_user.id)
+    _, packed_ents = unpack_rich_text(ui.get("referral_text"))
+    if packed_ents:
+        extra = "\n".join(
+            [
+                "",
+                f"👥 دعوت‌های موفق: {stats['qualified'] or stats['total']}",
+                f"⭐ امتیاز از دعوت: {stats['earned_points']}",
+                "",
+                f"لینک دعوت:\n{link}",
+            ]
+        )
+    else:
+        extra = "\n".join(
+            [
+                "",
+                kv_line("👥", "دعوت‌های موفق", str(stats["qualified"] or stats["total"])),
+                kv_line("⭐", "امتیاز از دعوت", str(stats["earned_points"])),
+                "",
+                f"لینک دعوت:\n<code>{link}</code>",
+            ]
+        )
     try:
-        body = render_message_template(
-            ui["referral_text"],
+        text, send_kw = outbound_setting_text(
+            ui.get("referral_text") or "",
+            title="👥 دعوت دوستان",
             domain=DOMAIN_REFERRAL,
+            append=extra,
             code=db_user.referral_code,
             link=link,
-            shop_title=ui.get("shop_title") or "",
+            shop_title=rich_plain_text(ui.get("shop_title")) or "",
         )
     except Exception:
         body = f"کد دعوت: <code>{db_user.referral_code}</code>\n{link}"
-    extra = "\n".join(
-        [
-            "",
-            kv_line("👥", "دعوت‌های موفق", str(stats["qualified"] or stats["total"])),
-            kv_line("⭐", "امتیاز از دعوت", str(stats["earned_points"])),
-            "",
-            f"لینک دعوت:\n<code>{link}</code>",
-        ]
-    )
-    text = format_message("👥 دعوت دوستان", body + extra)
-    return text, link
+        text = format_message("👥 دعوت دوستان", body + extra)
+        send_kw = {}
+    return text, link, send_kw
 
 
 async def build_loyalty_text(session: AsyncSession, db_user: BotUser) -> str:
@@ -289,7 +312,7 @@ async def open_loyalty_referral_message(
     from app.bot import menu_nav as nav
 
     uname = await _bot_username(message)
-    text, link = await build_referral_text(session, db_user, uname)
+    text, link, send_kw = await build_referral_text(session, db_user, uname)
     share = f"https://t.me/share/url?url={link}&text="
     await nav.show_nav_keyboard(
         message,
@@ -299,6 +322,7 @@ async def open_loyalty_referral_message(
         text=text,
         state=state,
         push=push,
+        **send_kw,
     )
     await message.answer(
         "اشتراک و آمار:",
@@ -832,8 +856,10 @@ async def open_admin_loyalty_ref_text(
                 reply_markup=kb.admin_loyalty_reply_keyboard(None, include_tiers=False),
             )
             return
+    from app.services.rich_text import rich_plain_text
+
     cur = await get_setting(session, "referral_text", "", reseller_id=scope)
-    preview = (cur or "").strip() or "—"
+    preview = (rich_plain_text(cur) or "").strip() or "—"
     if len(preview) > 400:
         preview = preview[:399] + "…"
     await message.answer(
@@ -841,7 +867,8 @@ async def open_admin_loyalty_ref_text(
             "📝 متن دعوت",
             f"فعلی:\n<code>{preview}</code>\n\n"
             "متغیرها: <code>{code}</code> و <code>{link}</code>\n"
-            "متن جدید را بفرستید یا «انصراف» بزنید.",
+            "متن جدید را بفرستید یا «انصراف» بزنید.\n"
+            "<i>ایموجی پریمیوم از همین‌جا حفظ می‌شود.</i>",
         ),
         reply_markup=kb.cancel_reply(),
     )
@@ -864,13 +891,14 @@ async def open_admin_loyalty_ref_text(
 async def referral_home(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     await callback.answer()
     uname = await _bot_username(callback)
-    text, link = await build_referral_text(session, db_user, uname)
+    text, link, send_kw = await build_referral_text(session, db_user, uname)
     share = f"https://t.me/share/url?url={link}&text="
     if callback.message:
         await safe_edit_text(
             callback.message,
             text,
             reply_markup=_ref_actions_keyboard(share_url=share),
+            **send_kw,
         )
 
 
@@ -1615,7 +1643,10 @@ async def staff_save_referral_text(
     if not text:
         await message.answer("متن خالی نباشد.")
         return
-    await set_setting(session, "referral_text", text, reseller_id=scope)
+    from app.services.rich_text import pack_setting_from_message
+
+    packed = pack_setting_from_message("referral_text", message)
+    await set_setting(session, "referral_text", packed, reseller_id=scope)
     await state.clear()
     await message.answer(
         "متن دعوت ذخیره شد ✅",

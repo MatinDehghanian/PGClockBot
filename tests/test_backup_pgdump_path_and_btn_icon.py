@@ -106,7 +106,10 @@ class ButtonIconPremiumTests(unittest.TestCase):
 
         packed = pack_setting_from_message("btn_shop", Msg())
         self.assertTrue(packed.startswith("\x1eRICH1:"))
-        plain = pack_setting_from_message("welcome_text", Msg())
+        # Message bodies also pack when they are MESSAGE_RICH_KEYS.
+        packed_msg = pack_setting_from_message("welcome_text", Msg())
+        self.assertTrue(packed_msg.startswith("\x1eRICH1:"))
+        plain = pack_setting_from_message("some_number_key", Msg())
         self.assertEqual(plain, "x😀")
 
     def test_web_merge_keeps_button_icon(self):

@@ -632,9 +632,29 @@ def render_daily_report_template(
     enabled_keys: list[str],
 ) -> str:
     """Fill template; disabled keys stay as empty string (placeholder removed)."""
-    raw = (template or "").strip() or DEFAULT_REPORT_TEMPLATE
-    # Only pass enabled keys — others remain literal {key} or we blank them.
-    # Product choice: blank disabled placeholders so toggles hide lines cleanly.
+    text, _kw = render_daily_report_outbound(
+        template, values, enabled_keys=enabled_keys
+    )
+    return text
+
+
+def render_daily_report_outbound(
+    template: str | None,
+    values: dict[str, Any],
+    *,
+    enabled_keys: list[str],
+) -> tuple[str, dict]:
+    """Fill template; preserve packed custom-emoji entities when present."""
+    from app.services.rich_text import (
+        rich_plain_text,
+        substitute_preserving_entities,
+        unpack_rich_text,
+    )
+
+    plain, ents = unpack_rich_text(template)
+    raw = (plain or "").strip() or DEFAULT_REPORT_TEMPLATE
+    if not rich_plain_text(template).strip():
+        ents = None
     fill: dict[str, Any] = {}
     enabled = set(enabled_keys)
     for m in _METRICS:
@@ -642,8 +662,13 @@ def render_daily_report_template(
             fill[m.key] = values.get(m.key, "")
         else:
             fill[m.key] = ""
-    # safe_format (not domain filter) so all known report keys can blank out
-    return safe_format(raw, fill).strip()
+    if ents:
+        text, out_ents = substitute_preserving_entities(raw, ents, fill)
+        text = (text or "").strip()
+        if out_ents:
+            return text, {"entities": out_ents, "parse_mode": None}
+        return text, {}
+    return safe_format(raw, fill).strip(), {}
 
 
 async def build_daily_report(
@@ -655,6 +680,26 @@ async def build_daily_report(
     template: str | None,
     metrics_raw: str | None,
 ) -> str:
+    text, _kw = await build_daily_report_outbound(
+        session,
+        reseller_id=reseller_id,
+        actor=actor,
+        admin_name=admin_name,
+        template=template,
+        metrics_raw=metrics_raw,
+    )
+    return text
+
+
+async def build_daily_report_outbound(
+    session: AsyncSession,
+    *,
+    reseller_id: int | None,
+    actor: str,
+    admin_name: str,
+    template: str | None,
+    metrics_raw: str | None,
+) -> tuple[str, dict]:
     keys = parse_metric_keys(metrics_raw, actor=actor)
     values = await collect_report_values(
         session,
@@ -663,7 +708,7 @@ async def build_daily_report(
         admin_name=admin_name,
         enabled_keys=keys,
     )
-    return render_daily_report_template(template, values, enabled_keys=keys)
+    return render_daily_report_outbound(template, values, enabled_keys=keys)
 
 
 async def shop_daily_report_chat_ids(session: AsyncSession, reseller_id: int) -> list[int]:

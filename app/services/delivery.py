@@ -22,26 +22,56 @@ from app.services.users import get_all_settings, on
 logger = logging.getLogger(__name__)
 
 
-def _subscription_success_body(ui: dict[str, str], order) -> str:
-    raw = (ui.get("purchase_success_text") or "").strip()
-    if not raw:
-        return f"سفارش #{order.id} با موفقیت فعال شد."
-    plan_name = ""
+def _plan_name(order) -> str:
     try:
         plan = getattr(order, "plan", None)
         if plan is not None:
-            plan_name = getattr(plan, "name", "") or ""
+            return getattr(plan, "name", "") or ""
     except Exception:
-        plan_name = ""
-    success = render_message_template(
+        pass
+    return ""
+
+
+def _rendered_purchase_success_body(ui: dict[str, str], order) -> str:
+    from app.services.rich_text import rich_plain_text
+
+    plain = rich_plain_text(ui.get("purchase_success_text")).strip()
+    if not plain:
+        return f"سفارش #{order.id} با موفقیت فعال شد."
+    try:
+        body = render_message_template(
+            plain,
+            domain=DOMAIN_ORDER,
+            order_id=order.id,
+            plan_name=_plan_name(order),
+            shop_title=rich_plain_text(ui.get("shop_title")) or "",
+            url=getattr(order, "subscription_url", None) or "",
+        ).strip()
+    except Exception:
+        body = plain
+    return body or f"سفارش #{order.id} با موفقیت فعال شد."
+
+
+def _subscription_success_outbound(ui: dict[str, str], order) -> tuple[str, dict]:
+    """Full outbound success card (title + body) with optional entities."""
+    from app.services.rich_text import outbound_setting_text, rich_plain_text
+
+    title = rich_plain_text(ui.get("delivery_title")) or "✅ سرویس آماده است"
+    raw = ui.get("purchase_success_text")
+    if not rich_plain_text(raw).strip():
+        return format_message(title, f"سفارش #{order.id} با موفقیت فعال شد."), {}
+    text, send_kw = outbound_setting_text(
         raw,
+        title=title,
         domain=DOMAIN_ORDER,
         order_id=order.id,
-        plan_name=plan_name,
-        shop_title=ui.get("shop_title") or "",
+        plan_name=_plan_name(order),
+        shop_title=rich_plain_text(ui.get("shop_title")) or "",
         url=getattr(order, "subscription_url", None) or "",
-    ).strip()
-    return success or f"سفارش #{order.id} با موفقیت فعال شد."
+    )
+    if not (text or "").strip():
+        return format_message(title, f"سفارش #{order.id} با موفقیت فعال شد."), {}
+    return text, send_kw
 
 
 async def build_delivery_content(
@@ -57,25 +87,29 @@ async def build_delivery_content(
     (no service card / sub link); details stay available via sub_info/sub_url for QR.
 
     Wholesale (qty > 1): never attach a QR URL — links are listed in text only.
+
+    When custom-emoji entities are packed on success texts, ``send_kw`` carries
+    ``entities`` / ``parse_mode=None`` and HTML details go in ``detail_text``.
     """
+    from app.services.rich_text import outbound_setting_text, rich_plain_text
+
     shop_rid = getattr(order, "reseller_id", None) if order is not None else None
     ui = await get_all_settings(session, reseller_id=shop_rid)
     markup = kb.back_home(ui)
-    title = ui.get("delivery_title") or "✅ سرویس آماده است"
+    title = rich_plain_text(ui.get("delivery_title")) or "✅ سرویس آماده است"
     sub_url = None
     sub_info: dict | None = None
-    body_parts: list[str] = []
 
     if order and order.service_id:
         from app.services.orders import order_quantity
 
         qty = order_quantity(order)
         svc = await session.get(UserService, order.service_id)
-        success = _subscription_success_body(ui, order)
-        if success:
-            body_parts.append(success)
+        success_text, send_kw = _subscription_success_outbound(ui, order)
+        detail_parts: list[str] = []
+
         if qty > 1:
-            body_parts.append(f"📦 تعداد سرویس تحویل‌شده: <b>{qty}</b>")
+            detail_parts.append(f"📦 تعداد سرویس تحویل‌شده: <b>{qty}</b>")
             siblings = (
                 await session.execute(
                     select(UserService)
@@ -93,13 +127,31 @@ async def build_delivery_content(
                         )
                     else:
                         lines.append(f"{i}. {copyable(uname)}")
-                body_parts.append("\n\n".join(lines))
-            markup = kb.back_home(ui)
-            # Wholesale: no QR (would only cover the first link)
-            body = "\n\n".join(body_parts)
+                detail_parts.append("\n\n".join(lines))
+            detail_html = "\n\n".join(detail_parts)
+            if send_kw.get("entities"):
+                return {
+                    "title": title,
+                    "text": success_text,
+                    "send_kw": send_kw,
+                    "detail_text": format_message("📦 جزئیات سفارش", detail_html)
+                    if detail_html
+                    else None,
+                    "markup": markup,
+                    "sub_url": None,
+                    "sub_info": None,
+                    "ui": ui,
+                    "is_subscription": True,
+                    "skip_qr": True,
+                }
+            body = "\n\n".join(
+                [p for p in [_rendered_purchase_success_body(ui, order), *detail_parts] if p]
+            )
             return {
                 "title": title,
                 "text": format_message(title, body),
+                "send_kw": {},
+                "detail_text": None,
                 "markup": markup,
                 "sub_url": None,
                 "sub_info": None,
@@ -113,13 +165,13 @@ async def build_delivery_content(
                 info = await get_pg().subscription_info(svc.subscription_token)
                 sub_info = info if isinstance(info, dict) else None
                 if include_details:
-                    body_parts.append(service_card(info))
+                    detail_parts.append(service_card(info))
             except Exception:
                 if include_details and svc.pg_username:
-                    body_parts.append(f"👤 {copyable(svc.pg_username)}")
+                    detail_parts.append(f"👤 {copyable(svc.pg_username)}")
             sub_url = svc.subscription_url
             if include_details and sub_url and on(ui.get("show_sub_link_in_text", "1")):
-                body_parts.append(
+                detail_parts.append(
                     info_block(
                         [
                             "🔗 <b>لینک اشتراک</b>",
@@ -128,10 +180,32 @@ async def build_delivery_content(
                     )
                 )
             markup = kb.service_actions(svc.id, ui)
-        body = "\n\n".join(body_parts)
+
+        if send_kw.get("entities"):
+            detail_html = "\n\n".join(detail_parts)
+            return {
+                "title": title,
+                "text": success_text,
+                "send_kw": send_kw,
+                "detail_text": format_message("📦 جزئیات سرویس", detail_html)
+                if detail_html
+                else None,
+                "markup": markup,
+                "sub_url": sub_url,
+                "sub_info": sub_info,
+                "ui": ui,
+                "is_subscription": True,
+                "skip_qr": False,
+            }
+
+        body = "\n\n".join(
+            [p for p in [_rendered_purchase_success_body(ui, order), *detail_parts] if p]
+        )
         return {
             "title": title,
             "text": format_message(title, body),
+            "send_kw": {},
+            "detail_text": None,
             "markup": markup,
             "sub_url": sub_url,
             "sub_info": sub_info,
@@ -141,21 +215,25 @@ async def build_delivery_content(
         }
 
     if payment and payment.is_wallet_topup:
-        title = ui.get("wallet_success_title") or "💰 شارژ کیف پول"
+        title = rich_plain_text(ui.get("wallet_success_title")) or "💰 شارژ کیف پول"
         amount_txt = format_toman(payment.amount, get_settings().currency)
-        body = render_message_template(
+        text, send_kw = outbound_setting_text(
             ui.get("wallet_success_text")
             or "✅ مبلغ {amount} به کیف پول شما اضافه شد.",
+            title=title,
             domain=DOMAIN_WALLET,
             amount=amount_txt,
             payment_id=payment.id,
-            shop_title=ui.get("shop_title") or "",
-        ).strip()
-        if not body:
-            body = f"✅ کیف پول شما {amount_txt} شارژ شد."
+            shop_title=rich_plain_text(ui.get("shop_title")) or "",
+        )
+        if not (text or "").strip():
+            text = format_message(title, f"✅ کیف پول شما {amount_txt} شارژ شد.")
+            send_kw = {}
         return {
             "title": title,
-            "text": format_message(title, body),
+            "text": text,
+            "send_kw": send_kw,
+            "detail_text": None,
             "markup": markup,
             "sub_url": None,
             "sub_info": None,
@@ -164,7 +242,7 @@ async def build_delivery_content(
             "skip_qr": True,
         }
 
-    title = ui.get("payment_ok_title") or "✅ پرداخت تأیید شد"
+    title = rich_plain_text(ui.get("payment_ok_title")) or "✅ پرداخت تأیید شد"
     body = info_block(
         [
             kv_line("🧾", "پرداخت", f"#{payment.id if payment else '—'}"),
@@ -174,6 +252,8 @@ async def build_delivery_content(
     return {
         "title": title,
         "text": format_message(title, body),
+        "send_kw": {},
+        "detail_text": None,
         "markup": markup,
         "sub_url": None,
         "sub_info": None,
@@ -322,6 +402,8 @@ async def send_delivery_to_user(
         session, payment, order, include_details=not use_short
     )
     text = payload["text"]
+    send_kw = dict(payload.get("send_kw") or {})
+    detail_text = payload.get("detail_text")
     ui = payload["ui"]
     sub_url = payload["sub_url"]
     sub_info = payload.get("sub_info")
@@ -330,14 +412,15 @@ async def send_delivery_to_user(
     # Prefer main reply keyboard over legacy empty inline stubs.
     send_markup = reply_kb
     notify_ok = False
+    msg_kwargs = {"parse_mode": "HTML", **send_kw}
     try:
         await bot.send_message(
-            chat_id, text, reply_markup=send_markup, parse_mode="HTML"
+            chat_id, text, reply_markup=send_markup, **msg_kwargs
         )
         notify_ok = True
     except Exception:
         try:
-            await bot.send_message(chat_id, text, parse_mode="HTML")
+            await bot.send_message(chat_id, text, **msg_kwargs)
             notify_ok = True
         except Exception:
             logger.error(
@@ -347,6 +430,17 @@ async def send_delivery_to_user(
                 chat_id,
                 exc_info=True,
             )
+
+    if detail_text:
+        try:
+            await bot.send_message(
+                chat_id, detail_text, reply_markup=send_markup, parse_mode="HTML"
+            )
+        except Exception:
+            try:
+                await bot.send_message(chat_id, detail_text, parse_mode="HTML")
+            except Exception:
+                logger.debug("delivery detail_text send failed", exc_info=True)
 
     qr_sent = False
     if sub_url and not skip_qr:
@@ -359,19 +453,23 @@ async def send_delivery_to_user(
         detailed = await build_delivery_content(
             session, payment, order, include_details=True
         )
-        if detailed["text"] != text:
+        if detailed["text"] != text or detailed.get("detail_text"):
+            d_kw = dict(detailed.get("send_kw") or {})
+            d_msg_kwargs = {"parse_mode": "HTML", **d_kw}
             try:
                 await bot.send_message(
                     chat_id,
                     detailed["text"],
                     reply_markup=send_markup,
-                    parse_mode="HTML",
+                    **d_msg_kwargs,
                 )
                 notify_ok = True
                 text = detailed["text"]
             except Exception:
                 try:
-                    await bot.send_message(chat_id, detailed["text"], parse_mode="HTML")
+                    await bot.send_message(
+                        chat_id, detailed["text"], **d_msg_kwargs
+                    )
                     notify_ok = True
                     text = detailed["text"]
                 except Exception:
@@ -381,6 +479,16 @@ async def send_delivery_to_user(
                         chat_id,
                         exc_info=True,
                     )
+            if detailed.get("detail_text"):
+                try:
+                    await bot.send_message(
+                        chat_id,
+                        detailed["detail_text"],
+                        reply_markup=send_markup,
+                        parse_mode="HTML",
+                    )
+                except Exception:
+                    pass
 
     if not notify_ok and not qr_sent:
         logger.error(
@@ -418,7 +526,7 @@ async def send_subscription_qr_photo(
             sub_url,
             background=(ui.get("qr_background") if ui else None) or None,
         )
-        caption = build_qr_caption(
+        caption, caption_kw = build_qr_caption(
             sub_url=sub_url,
             ui=ui,
             info=info,
@@ -426,11 +534,12 @@ async def send_subscription_qr_photo(
             expire=expire,
             username=username,
         )
+        photo_kw = {"parse_mode": "HTML", **caption_kw}
         await bot.send_photo(
             chat_id,
             photo=BufferedInputFile(buf.read(), filename="subscription_qr.png"),
             caption=caption[:1024],
-            parse_mode="HTML",
+            **photo_kw,
         )
         return True
     except Exception:
