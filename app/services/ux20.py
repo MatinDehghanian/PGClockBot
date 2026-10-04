@@ -917,27 +917,118 @@ async def export_shop_bundle(
     }
 
 
+def shop_bundle_allowed_setting_keys() -> set[str]:
+    """Keys a shop import may write — same surface as shop-settings tabs + domain posts."""
+    from app.services.resellers import (
+        RESELLER_SETTINGS_TABS,
+        SHOP_SETTINGS_DOMAIN_POST_TABS,
+    )
+    from app.services.users import keys_for_tab
+
+    keys: set[str] = {"menu_order"}
+    for tab, _label in RESELLER_SETTINGS_TABS:
+        keys |= keys_for_tab(tab)
+    for tab in SHOP_SETTINGS_DOMAIN_POST_TABS:
+        keys |= keys_for_tab(tab)
+    return keys
+
+
+def _parse_import_group_ids(raw: Any) -> list[int]:
+    if raw is None or raw == "":
+        return []
+    if isinstance(raw, list):
+        out: list[int] = []
+        for x in raw:
+            try:
+                out.append(int(x))
+            except (TypeError, ValueError) as exc:
+                raise ValueError("گروه‌های پلن نامعتبر است") from exc
+        return out
+    text = str(raw).strip()
+    if not text:
+        return []
+    try:
+        return [int(x.strip()) for x in text.split(",") if x.strip()]
+    except (TypeError, ValueError) as exc:
+        raise ValueError("گروه‌های پلن نامعتبر است") from exc
+
+
+async def _validate_import_plan(
+    session: AsyncSession,
+    raw: dict[str, Any],
+    *,
+    staff: dict | None,
+) -> None:
+    """Apply the same template / group / quota gates as manual plan create."""
+    if not staff:
+        return
+    from app.services.pg_quota import PgQuotaError, assert_user_plan_within_limits
+    from app.services.plans_catalog import (
+        groups_allowed_for_staff,
+        template_allowed_for_staff,
+    )
+
+    tpl_raw = raw.get("pg_template_id")
+    tpl_id: int | None = None
+    if tpl_raw is not None and str(tpl_raw).strip() != "":
+        try:
+            tpl_id = int(tpl_raw)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("تمپلیت پلن نامعتبر است") from exc
+        if not template_allowed_for_staff(staff, tpl_id):
+            raise ValueError("تمپلیت انتخاب‌شده در دسترس این حساب نیست")
+
+    gids = _parse_import_group_ids(raw.get("pg_group_ids"))
+    if gids and not groups_allowed_for_staff(staff, gids):
+        raise ValueError("یکی از گروه‌های پلن در دسترس این حساب نیست")
+
+    try:
+        duration_days = int(raw.get("duration_days") or 30)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("مدت پلن نامعتبر است") from exc
+    data_limit = None
+    if raw.get("data_limit_gb") is not None and str(raw.get("data_limit_gb")).strip() != "":
+        try:
+            data_limit = int(float(raw.get("data_limit_gb")) * (1024**3))
+        except (TypeError, ValueError) as exc:
+            raise ValueError("حجم پلن نامعتبر است") from exc
+    try:
+        await assert_user_plan_within_limits(
+            staff,
+            data_limit=data_limit,
+            duration_days=duration_days,
+            label="پلن ایمپورت",
+            session=session,
+        )
+    except PgQuotaError as exc:
+        raise ValueError(exc.message) from exc
+
+
 async def import_shop_bundle(
     session: AsyncSession,
     payload: dict[str, Any],
     *,
     reseller_id: int | None = None,
     replace_plans: bool = False,
+    staff: dict | None = None,
 ) -> dict[str, int]:
-    from app.services.users import set_settings_bulk
+    from app.services.users import DEFAULT_SETTINGS, set_settings_bulk
 
     if not isinstance(payload, dict) or payload.get("format") != "pgclock-shop-bundle":
         raise ValueError("فرمت فایل نامعتبر است")
     settings = payload.get("settings") or {}
     if not isinstance(settings, dict):
         raise ValueError("settings نامعتبر است")
-    # Only known keys
-    from app.services.users import DEFAULT_SETTINGS
-
+    # Known keys only; shop imports are further limited to shop-settings surface.
+    allowed_keys = (
+        shop_bundle_allowed_setting_keys()
+        if reseller_id is not None
+        else set(DEFAULT_SETTINGS)
+    )
     clean = {
         str(k): "" if v is None else str(v)
         for k, v in settings.items()
-        if str(k) in DEFAULT_SETTINGS
+        if str(k) in DEFAULT_SETTINGS and str(k) in allowed_keys
     }
     if clean:
         await set_settings_bulk(session, clean, reseller_id=reseller_id)
@@ -959,6 +1050,15 @@ async def import_shop_bundle(
             name = str(raw.get("name") or "").strip()
             if not name:
                 continue
+            await _validate_import_plan(session, raw, staff=staff)
+            gids = _parse_import_group_ids(raw.get("pg_group_ids"))
+            pg_group_ids = ",".join(str(g) for g in gids) if gids else raw.get("pg_group_ids")
+            if isinstance(pg_group_ids, list):
+                pg_group_ids = ",".join(str(int(x)) for x in pg_group_ids)
+            tpl_raw = raw.get("pg_template_id")
+            tpl_id = None
+            if tpl_raw is not None and str(tpl_raw).strip() != "":
+                tpl_id = int(tpl_raw)
             session.add(
                 Plan(
                     name=name[:128],
@@ -966,8 +1066,8 @@ async def import_shop_bundle(
                     price=int(raw.get("price") or 0),
                     duration_days=int(raw.get("duration_days") or 30),
                     data_limit_gb=raw.get("data_limit_gb"),
-                    pg_template_id=raw.get("pg_template_id"),
-                    pg_group_ids=raw.get("pg_group_ids"),
+                    pg_template_id=tpl_id,
+                    pg_group_ids=pg_group_ids,
                     pg_username_prefix=raw.get("pg_username_prefix"),
                     pg_username_suffix=raw.get("pg_username_suffix"),
                     pg_username_pattern=raw.get("pg_username_pattern"),

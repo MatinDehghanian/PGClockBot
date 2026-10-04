@@ -250,6 +250,7 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
                 payload,
                 reseller_id=rid,
                 replace_plans=(replace_plans or "").strip() in {"1", "on", "true"},
+                staff=staff,
             )
             msg = f"وارد شد: {stats.get('settings', 0)} تنظیمات، {stats.get('plans', 0)} پلن"
             if is_platform_admin(staff):

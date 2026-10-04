@@ -374,6 +374,9 @@ async def res_user_view(
     if not owner_id or not profile:
         await callback.answer("فقط نمایندگان", show_alert=True)
         return
+    if not has_bot_perm(profile, "dashboard"):
+        await callback.answer("دسترسی ندارید", show_alert=True)
+        return
     try:
         uid = int((callback.data or "").rsplit(":", 1)[-1])
     except ValueError:
@@ -451,6 +454,9 @@ async def res_user_message_start(
     if not owner_id or not profile:
         await callback.answer("فقط نمایندگان", show_alert=True)
         return
+    if not has_bot_perm(profile, "dashboard"):
+        await callback.answer("دسترسی ندارید", show_alert=True)
+        return
     try:
         uid = int((callback.data or "").rsplit(":", 1)[-1])
     except ValueError:
@@ -484,6 +490,10 @@ async def res_user_message_send(
     )
     if not owner_id or not profile:
         await state.clear()
+        return
+    if not has_bot_perm(profile, "dashboard"):
+        await state.clear()
+        await message.answer("دسترسی ندارید.")
         return
     if kb.is_cancel_text(message.text):
         await state.clear()

@@ -686,6 +686,7 @@
       [
         'position', 'inset', 'inset-inline', 'inset-inline-start', 'inset-inline-end',
         'top', 'left', 'right', 'bottom', 'width', 'min-width', 'max-height', 'z-index',
+        'overflow', 'overflow-x', 'overflow-y', '-webkit-overflow-scrolling',
       ].forEach((p) => menu.style.removeProperty(p));
       if (home && home.parent) {
         if (home.next && home.next.parentNode === home.parent) {
@@ -731,6 +732,11 @@
       set('inset-inline-end', 'auto');
       set('min-width', '0');
       set('z-index', '5000');
+      /* Ported menus must own their scroll — CSS alone is not enough when
+         modal wheel/touch guards run in capture, and some hosts reset overflow. */
+      set('overflow-x', 'hidden');
+      set('overflow-y', 'auto');
+      set('-webkit-overflow-scrolling', 'touch');
 
       let width = Math.max(rect.width, 120);
       let left = rect.left;
@@ -1192,6 +1198,14 @@
       return modalScrollRoot(modal);
     }
 
+    function portedOverlayScroller(target){
+      /* ui-select / kebab menus are ported to document.body — outside the modal
+         DOM — so modal.contains(target) is false. Without this carve-out the
+         capture wheel/touch guards call preventDefault and long lists cannot scroll. */
+      if (!target || !target.closest) return null;
+      return target.closest('.ui-select-menu') || target.closest('.row-actions-menu');
+    }
+
     function installModalScrollGuards(){
       if (modalWheelGuard) return;
       let touchStartY = 0;
@@ -1199,6 +1213,12 @@
         if (!document.body.classList.contains('modal-open')) return;
         const modal = topOpenModal();
         if (!modal) return;
+        const overlay = portedOverlayScroller(e.target);
+        if (overlay) {
+          if (canScrollInside(overlay, e.deltaY)) return;
+          e.preventDefault();
+          return;
+        }
         if (!modal.contains(e.target)) {
           e.preventDefault();
           return;
@@ -1222,6 +1242,15 @@
         if (!document.body.classList.contains('modal-open')) return;
         const modal = topOpenModal();
         if (!modal) return;
+        const overlay = portedOverlayScroller(e.target);
+        if (overlay) {
+          if (!e.touches || !e.touches.length) return;
+          const dyOverlay = touchStartY - e.touches[0].clientY;
+          if (Math.abs(dyOverlay) < 1) return;
+          if (canScrollInside(overlay, dyOverlay)) return;
+          e.preventDefault();
+          return;
+        }
         if (!modal.contains(e.target)
             || e.target === modal
             || (e.target.classList && e.target.classList.contains('ui-modal-backdrop'))) {
