@@ -41,14 +41,17 @@
       <div class="setting-item full">
         <label>دامنه پنل و مینی‌اپ
           
-          <input name="domain" value="{{ st.domain }}" dir="ltr" required placeholder="bot.example.com" autocomplete="off" />
+          <input name="domain" value="{{ st.pending_domain or st.domain }}" dir="ltr" required placeholder="bot.example.com" autocomplete="off" />
         <small class="muted">DNS باید به IP همین سرور اشاره کند</small>
+        {% if st.pending_domain and st.domain and st.pending_domain != st.domain %}
+        <small class="muted">در حال دریافت برای <code dir="ltr">{{ st.pending_domain }}</code> — تا موفقیت، دامنهٔ فعال همان <code dir="ltr">{{ st.domain }}</code> می‌ماند.</small>
+        {% endif %}
         </label>
       </div>
       <div class="setting-item full">
         <label>ایمیل Let's Encrypt
           
-          <input name="acme_email" type="email" value="{{ st.email }}" dir="ltr" required placeholder="admin@example.com" />
+          <input name="acme_email" type="email" value="{{ st.pending_email or st.email }}" dir="ltr" required placeholder="admin@example.com" />
         <small class="muted">برای اعلان انقضا — عمومی نمی‌شود.</small>
         </label>
       </div>

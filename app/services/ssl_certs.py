@@ -161,6 +161,24 @@ def write_meta(data: dict[str, Any]) -> None:
         pass
 
 
+def _clear_pending_issue(
+    meta: dict[str, Any] | None = None,
+    *,
+    write: bool = False,
+) -> dict[str, Any]:
+    """Drop in-flight domain/email hints without touching the active cert identity."""
+    data = meta if meta is not None else read_meta()
+    if not isinstance(data, dict):
+        data = {}
+    had_pending = bool(data.get("pending_domain") or data.get("pending_email"))
+    data.pop("pending_domain", None)
+    data.pop("pending_email", None)
+    # Write when caller already mutated ``meta`` (errors), or pending keys existed.
+    if write and (meta is not None or had_pending):
+        write_meta(data)
+    return data
+
+
 def cert_files_exist() -> bool:
     return LIVE_CERT.is_file() and LIVE_KEY.is_file()
 
@@ -337,6 +355,8 @@ def cert_status() -> dict[str, Any]:
         "self_signed": bool(meta.get("self_signed")),
         "mode": mode,
         "last_error": meta.get("last_error"),
+        "pending_domain": normalize_domain(meta.get("pending_domain") or ""),
+        "pending_email": (meta.get("pending_email") or "").strip(),
         "public_https": public_https_url(domain) if domain else "",
         "web_port": port,
         "progress": read_progress(),
@@ -399,30 +419,54 @@ def _copy_live_from_letsencrypt(name: str) -> str | None:
     return str(live)
 
 
+def _lineage_names_for_domain(primary: str) -> tuple[str, ...]:
+    """Exact Let's Encrypt lineage names that belong to this hostname only."""
+    d = normalize_domain(primary)
+    if not d:
+        return ()
+    return (f"pgclock-{d}", d)
+
+
 def _find_and_copy_cert(primary: str) -> str | None:
-    for name in (f"pgclock-{primary}", primary):
+    """Copy live cert for ``primary`` only — never fall back to an unrelated lineage.
+
+    A previous "newest live dir" fallback could copy the *old* domain's cert after
+    a domain switch, leaving HTTPS enabled under the new hostname with the wrong
+    SAN (browser domain mismatch even when DNS was fine).
+    """
+    wanted = set(_lineage_names_for_domain(primary))
+    if not wanted:
+        return None
+    for name in _lineage_names_for_domain(primary):
         found = _copy_live_from_letsencrypt(name)
         if found:
             return found
+    # Permission-denied listing: still only accept exact name matches.
     live_root = Path("/etc/letsencrypt/live")
     try:
         is_dir = live_root.is_dir()
     except PermissionError:
         is_dir = True
-    if is_dir:
-        try:
-            children = sorted(
-                [p for p in live_root.iterdir() if p.is_dir() and not p.name.startswith(".")],
-                key=lambda p: p.stat().st_mtime,
-                reverse=True,
-            )
-        except PermissionError:
-            _code, out = _run(_with_sudo(["ls", "-1", str(live_root)]), timeout=20)
-            children = [live_root / line.strip() for line in (out or "").splitlines() if line.strip()]
-        for child in children:
-            found = _copy_live_from_letsencrypt(child.name if isinstance(child, Path) else Path(child).name)
-            if found:
-                return found
+    if not is_dir:
+        return None
+    try:
+        children = [
+            p for p in live_root.iterdir() if p.is_dir() and not p.name.startswith(".")
+        ]
+    except PermissionError:
+        _code, out = _run(_with_sudo(["ls", "-1", str(live_root)]), timeout=20)
+        children = [
+            live_root / line.strip()
+            for line in (out or "").splitlines()
+            if line.strip()
+        ]
+    for child in children:
+        cname = str(getattr(child, "name", "") or Path(str(child)).name)
+        if cname not in wanted:
+            continue
+        found = _copy_live_from_letsencrypt(cname)
+        if found:
+            return found
     return None
 
 
@@ -575,13 +619,32 @@ def _certbot_issue(domain: str, email: str, *, force: bool = False) -> tuple[boo
         code, out = _run(cmd, timeout=240)
         if code == 0:
             return True, out
-        hint = ""
-        low = (out or "").lower()
-        if "nxdomain" in low or "dns" in low or "no valid" in low:
-            hint = "\nDNS دامنه باید به IP همین سرور اشاره کند."
+        hint = _dns_failure_hint(out or "")
         return False, ((out or "certbot failed").strip()[-1800:] + hint).strip()
     finally:
         _stop_acme_http(helper)
+
+
+def _dns_failure_hint(log: str) -> str:
+    """Append a DNS hint only for real DNS failures — not certbot boilerplate.
+
+    Certbot's generic failure text often mentions "DNS A/AAAA record(s)" even when
+    the actual problem was HTTP-01 / port 80. Matching bare ``dns`` caused false
+    "دامنه مشکل دارد" reports after domain switches.
+    """
+    low = (log or "").lower()
+    if not low:
+        return ""
+    specific = (
+        "nxdomain",
+        "dns problem:",
+        "no valid ip addresses found",
+        "servfail looking up",
+        "dnssec",
+    )
+    if any(s in low for s in specific):
+        return "\nDNS دامنه باید به IP همین سرور اشاره کند."
+    return ""
 
 
 def issue_or_renew(
@@ -601,12 +664,19 @@ def issue_or_renew(
 
     if not is_valid_domain(domain):
         _set_progress(pct=100, stage="error", message="دامنه نامعتبر است", done=True, ok=False)
+        _clear_pending_issue(read_meta(), write=True)
         return {"ok": False, "error": "دامنه نامعتبر است (مثال: panel.example.com)"}
     if not email or "@" not in email or "." not in email.split("@")[-1]:
         _set_progress(pct=100, stage="error", message="ایمیل نامعتبر است", done=True, ok=False)
+        _clear_pending_issue(read_meta(), write=True)
         return {"ok": False, "error": "ایمیل معتبر برای Let's Encrypt لازم است"}
 
-    _set_progress(pct=5, stage="start", message="شروع دریافت گواهی…", done=False)
+    _set_progress(
+        pct=5,
+        stage="start",
+        message=f"شروع دریافت گواهی برای {domain}…",
+        done=False,
+    )
     _install_progress(f"start issue/renew · domain={domain}")
 
     if not certbot_available():
@@ -616,8 +686,10 @@ def issue_or_renew(
             err = str(inst.get("error") or "نصب certbot ناموفق")
             _set_progress(pct=100, stage="error", message=err[:200], done=True, ok=False)
             meta = read_meta()
-            meta.update({"last_error": err, "domain": domain, "email": email})
-            write_meta(meta)
+            # Keep active domain/cert identity — only record the error + clear pending.
+            meta["last_error"] = err
+            meta["ssl_enabled"] = was_enabled
+            _clear_pending_issue(meta, write=True)
             _install_progress(f"certbot install failed: {err[:200]}")
             return {"ok": False, "error": err}
 
@@ -626,26 +698,25 @@ def issue_or_renew(
     ok, log = _certbot_issue(domain, email, force=force)
     if not ok:
         meta = read_meta()
-        meta.update(
-            {
-                "last_error": log[-2000:],
-                "domain": domain,
-                "email": email,
-                # keep previous ssl_enabled as-is on failure
-                "ssl_enabled": was_enabled,
-            }
-        )
-        write_meta(meta)
+        meta["last_error"] = log[-2000:]
+        # keep previous ssl_enabled + domain/public_https as-is on failure
+        meta["ssl_enabled"] = was_enabled
+        _clear_pending_issue(meta, write=True)
         _set_progress(pct=100, stage="error", message=(log[-280:] or "ناموفق"), done=True, ok=False)
         return {"ok": False, "error": log[-1500:] or "صدور گواهی ناموفق بود"}
 
     _set_progress(pct=82, stage="copy", message="کپی گواهی به data/certs…", done=False)
     live = _find_and_copy_cert(domain)
     if not live or not cert_files_exist():
-        msg = "گواهی صادر شد ولی خواندن فایل‌ها ممکن نشد — دسترسی /etc/letsencrypt را بررسی کنید"
+        msg = (
+            "گواهی برای این دامنه صادر شد ولی فایل live متناظر پیدا/کپی نشد "
+            f"(انتظار: pgclock-{domain}). دسترسی /etc/letsencrypt را بررسی کنید — "
+            "گواهی دامنه قبلی دست‌نخورده ماند."
+        )
         meta = read_meta()
-        meta.update({"last_error": msg, "domain": domain, "email": email, "ssl_enabled": was_enabled})
-        write_meta(meta)
+        meta["last_error"] = msg
+        meta["ssl_enabled"] = was_enabled
+        _clear_pending_issue(meta, write=True)
         _set_progress(pct=100, stage="error", message=msg, done=True, ok=False)
         return {"ok": False, "error": msg}
 
@@ -667,6 +738,8 @@ def issue_or_renew(
         "letsencrypt_live": live,
         "log_tail": (log or "")[-800:],
         "public_https": public_https_url(domain),
+        "pending_domain": None,
+        "pending_email": None,
     }
     write_meta(meta)
     if not enable:
@@ -1048,7 +1121,8 @@ def start_issue_job(*, domain: str, email: str, force: bool = False) -> dict[str
             _set_progress(pct=100, stage="error", message=str(exc)[:240], done=True, ok=False)
             meta = read_meta()
             meta["last_error"] = str(exc)
-            write_meta(meta)
+            # Keep active domain/cert; only clear the in-flight switch hint.
+            _clear_pending_issue(meta, write=True)
         finally:
             with _JOB_LOCK:
                 _JOB_RUNNING = False

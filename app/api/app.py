@@ -4207,6 +4207,22 @@ def create_api_app(lifespan=None) -> FastAPI:
             email = str(form.get("acme_email") or "").strip()
 
             if action == "enable":
+                # Enable only applies the cert already on disk. Switching domains
+                # requires a successful issue first — never flip PUBLIC_BASE_URL
+                # to a hostname the live cert does not cover.
+                meta = read_meta()
+                active = normalize_domain(
+                    meta.get("domain") or meta.get("host") or meta.get("panel_domain") or ""
+                )
+                if domain and is_valid_domain(domain) and active and domain != active:
+                    return RedirectResponse(
+                        "/settings?tab=ssl&err="
+                        + quote(
+                            "برای تعویض دامنه ابتدا «دریافت گواهی» را بزنید. "
+                            "فعال‌سازی HTTPS فقط برای دامنه‌ای است که گواهی‌اش صادر شده."
+                        ),
+                        status_code=303,
+                    )
                 result = enable_https(restart=True)
                 if not result.get("ok"):
                     return RedirectResponse(
@@ -4237,12 +4253,21 @@ def create_api_app(lifespan=None) -> FastAPI:
                     "/settings?tab=ssl&err=" + quote("ایمیل معتبر لازم است"),
                     status_code=303,
                 )
+            # Do NOT commit domain/panel_domain/public_https until issue succeeds.
+            # Premature write left HTTPS=on + old cert + new hostname (browser
+            # domain mismatch) when Let's Encrypt failed after a domain switch.
             meta = read_meta()
-            meta.update({"domain": domain, "panel_domain": domain, "miniapp_domain": domain, "email": email})
+            meta["pending_domain"] = domain
+            meta["pending_email"] = email
+            meta["last_error"] = None
             write_meta(meta)
             force = action == "renew"
             result = start_issue_job(domain=domain, email=email, force=force)
             if not result.get("ok"):
+                meta = read_meta()
+                meta.pop("pending_domain", None)
+                meta.pop("pending_email", None)
+                write_meta(meta)
                 return RedirectResponse(
                     "/settings?tab=ssl&err=" + quote(str(result.get("error") or "خطا")[:400]),
                     status_code=303,
