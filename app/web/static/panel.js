@@ -3942,3 +3942,30 @@ const root = document.getElementById('upd-root');
     bootPickers();
   }
 })();
+
+/* Tag filter dropdown — navigate on change (keeps search form separate). */
+(function () {
+  function bindNav(sel) {
+    if (!sel || sel.dataset.boundColorTagNav === '1') return;
+    sel.dataset.boundColorTagNav = '1';
+    sel.addEventListener('change', function () {
+      var href = sel.value;
+      if (href) window.location.assign(href);
+    });
+  }
+  function bindAll(root) {
+    var scope = root && root.querySelectorAll ? root : document;
+    scope.querySelectorAll('select[data-color-tag-nav]').forEach(bindNav);
+  }
+  function boot() {
+    bindAll(document);
+    document.addEventListener('panel:dom-ready', function (e) {
+      bindAll((e && e.detail && e.detail.root) || document);
+    });
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+})();

@@ -74,19 +74,23 @@
   <a class="{% if flt=='blocked' %}active{% endif %}" href="{{ filter_href(filter_key='blocked', q=q) }}">مسدود</a>
   <a class="{% if flt=='alerts' %}active{% endif %}" href="{{ filter_href(filter_key='alerts', q=q) }}">دارای اعلان</a>
 </nav>
-{% if color_tags is defined and color_tags %}
-<div class="color-tag-filters" aria-label="فیلتر تگ ریسک">
-  <a class="color-tag-filter{% if not color_filter %} is-active{% endif %}" href="{{ filter_href(filter_key=flt, q=q, color=none) }}">همه تگ‌ها</a>
-  {% for t in color_tags %}
-  <a class="color-tag-filter{% if color_filter == t.key %} is-active{% endif %}" href="{{ filter_href(filter_key=flt, q=q, color=t.key) }}">
-    <span class="color-tag-dot" style="--tag-color: {{ t.hex }}" aria-hidden="true"></span>
-    {{ t.title_fa }}
-  </a>
-  {% endfor %}
-</div>
-{% endif %}
-
 <div class="card card-flush">
+  {% if color_tags is defined and color_tags %}
+  {% set active_tag = (color_tags | selectattr('key', 'equalto', color_filter) | first) if color_filter else none %}
+  <div class="color-tag-toolbar" aria-label="فیلتر تگ ریسک">
+    <label class="color-tag-select-wrap">
+      {% if active_tag %}
+      <span class="color-tag-dot" style="--tag-color: {{ active_tag.hex }}" aria-hidden="true"></span>
+      {% endif %}
+      <select class="select-sm color-tag-select" data-color-tag-nav aria-label="فیلتر تگ ریسک">
+        <option value="{{ filter_href(filter_key=flt, q=q, color=none) }}"{% if not color_filter %} selected{% endif %}>همه تگ‌ها</option>
+        {% for t in color_tags %}
+        <option value="{{ filter_href(filter_key=flt, q=q, color=t.key) }}"{% if color_filter == t.key %} selected{% endif %}>{{ t.title_fa }}</option>
+        {% endfor %}
+      </select>
+    </label>
+  </div>
+  {% endif %}
   <form method="get" action="/users" class="search-bar">
     {% if flt and flt != 'all' %}
     <input type="hidden" name="filter" value="{{ flt }}" />
