@@ -103,8 +103,13 @@ class ShopSettingsCompletenessTests(unittest.TestCase):
 
     def test_shop_buttons_filter_platform_labels(self):
         src = (ROOT / "app/api/shop_settings.py").read_text(encoding="utf-8")
-        self.assertIn("btn_admin", src)
-        self.assertIn("_shop_btn_block", src)
+        self.assertIn("PLATFORM_ONLY_BTN_KEYS", src)
+        from app.services.settings_button_labels import PLATFORM_ONLY_BTN_KEYS
+
+        self.assertIn("btn_admin", PLATFORM_ONLY_BTN_KEYS)
+        self.assertIn("btn_reseller_apply", PLATFORM_ONLY_BTN_KEYS)
+        self.assertIn("btn_miniapp", PLATFORM_ONLY_BTN_KEYS)
+        self.assertIn("btn_adm_users", PLATFORM_ONLY_BTN_KEYS)
 
 
 if __name__ == "__main__":
