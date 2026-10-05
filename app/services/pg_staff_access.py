@@ -131,6 +131,24 @@ async def enforce_pg_admin_web_gate(
     return result
 
 
+async def _detach_pg_staff_fk_deps(session: AsyncSession, staff_id: int) -> None:
+    """Clear org_principals / panel_tickets FKs before deleting PgStaffAccess."""
+    from sqlalchemy import update
+
+    from app.db.models import PanelTicket
+    from app.services.org_principals import purge_principal_for_pg_staff
+
+    sid = int(staff_id)
+    if sid <= 0:
+        return
+    await purge_principal_for_pg_staff(session, sid)
+    await session.execute(
+        update(PanelTicket)
+        .where(PanelTicket.opener_pg_staff_id == sid)
+        .values(opener_pg_staff_id=None)
+    )
+
+
 async def purge_orphaned_staff_access(session: AsyncSession) -> int:
     """Delete PgStaffAccess rows whose PG admin no longer exists in PasarGuard."""
     rows = await list_access_rows(session)
@@ -151,6 +169,7 @@ async def purge_orphaned_staff_access(session: AsyncSession) -> int:
     for row in rows:
         key = _norm_pg(row.pg_username)
         if key and key not in alive:
+            await _detach_pg_staff_fk_deps(session, int(row.id))
             await session.delete(row)
             removed += 1
     if removed:
@@ -815,6 +834,8 @@ async def revoke_web_access(
     row = await access_by_pg_username(session, pg_username)
     if not row:
         return False
+
+    await _detach_pg_staff_fk_deps(session, int(row.id))
     await session.delete(row)
     if commit:
         await session.commit()
