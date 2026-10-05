@@ -74,23 +74,36 @@ class OutboundSettingTextTests(unittest.TestCase):
         # Title prefix shifts entity offsets
         self.assertGreater(kw["entities"][0].offset, 2)
 
-    def test_shop_title_raw_preserves_premium_emoji(self):
+    def test_shop_title_raw_preserves_premium_emoji_no_hardcoded_prefix(self):
         title_body = "کلاک🐸"
         ent = MessageEntity(
             type="custom_emoji", offset=4, length=2, custom_emoji_id="pepe1"
         )
         packed = pack_rich_text(title_body, [ent])
-        text, kw = outbound_setting_text(
-            "بدنه پیام",
-            title_raw=packed,
-            title_prefix="✨ ",
-        )
+        text, kw = outbound_setting_text("بدنه پیام", title_raw=packed)
         self.assertIn("entities", kw)
         self.assertEqual(kw.get("parse_mode"), None)
         self.assertEqual(kw["entities"][0].custom_emoji_id, "pepe1")
-        # prefix "✨ " is UTF-16 length 2 → emoji moves from 4 to 6
-        self.assertEqual(kw["entities"][0].offset, 6)
-        self.assertTrue(text.startswith("✨ کلاک"))
+        self.assertEqual(kw["entities"][0].offset, 4)
+        self.assertTrue(text.startswith("کلاک"))
+
+    def test_plain_shop_title_is_exact_setting(self):
+        from app.services.formatting import format_message
+
+        text, kw = outbound_setting_text(
+            "بدنه پیام",
+            title_raw="کلاک بات",
+        )
+        self.assertEqual(kw, {})
+        self.assertEqual(text, format_message("کلاک بات", "بدنه پیام"))
+
+    def test_home_render_has_no_hardcoded_title_emoji(self):
+        from pathlib import Path
+
+        src = Path("app/bot/handlers/start.py").read_text(encoding="utf-8")
+        self.assertNotIn('title_prefix="✨ ', src)
+        self.assertNotIn('title_prefix="🛠 ', src)
+        self.assertNotIn('f"✨ {title_plain}"', src)
 
     def test_pack_setting_from_message_message_and_button_keys(self):
         class Msg:
