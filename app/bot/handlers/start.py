@@ -129,6 +129,12 @@ async def render_home(
     if not is_reseller_bot:
         mini = kb.miniapp_inline_keyboard(ui)
 
+    from app.bot.tg_utils import attach_reply_keyboard, send_reply_keyboard_last
+
+    ahead: list[tuple[str, object]] = []
+    if mini is not None:
+        ahead.append(("📱", mini))
+
     if edit:
         from aiogram.exceptions import TelegramBadRequest
 
@@ -142,40 +148,48 @@ async def render_home(
                         await message.delete()
                     except Exception:
                         pass
-                    await message.answer(text, reply_markup=reply_kb, **home_send_kw)
-                    if mini:
-                        await message.answer("📱", reply_markup=mini)
+                    # Mini (inline) first if any; welcome+reply KB must be last.
+                    await send_reply_keyboard_last(
+                        message,
+                        text,
+                        reply_kb,
+                        ahead=ahead or None,
+                        **home_send_kw,
+                    )
                     return
         except Exception:
             pass
-        await seed_main_reply_kb(
-            message,
-            reply_kb,
-            tip=ui.get("btn_menu_home") or "⌨️ منوی اصلی",
-        )
-        if mini:
+        # edit_text cannot set ReplyKeyboard — lasting attach AFTER any mini.
+        if mini is not None:
             try:
                 await message.answer("📱", reply_markup=mini)
             except Exception:
                 pass
+        await attach_reply_keyboard(
+            message,
+            reply_kb,
+            text=ui.get("btn_menu_home") or "⌨️ منوی اصلی",
+        )
         return
 
-    await message.answer(text, reply_markup=reply_kb, **home_send_kw)
-    if mini:
-        # Never let Mini App keyboard failure break /start (HTTPS-only WebApp).
-        try:
-            await message.answer("📱", reply_markup=mini)
-        except Exception:
-            pass
-    # seed_reply_kb kept for API compat — reply kb already attached to welcome
+    # Contract: reply keyboard carrier is the *last* message in this turn.
+    # Sending Mini App (inline-only) after welcome hid the custom keyboard and
+    # the 4-square menu icon on iOS when returning home from shop/submenus.
+    await send_reply_keyboard_last(
+        message,
+        text,
+        reply_kb,
+        ahead=ahead or None,
+        **home_send_kw,
+    )
     _ = seed_reply_kb
 
 
 async def seed_main_reply_kb(message: Message, reply_kb, *, tip: str = "⌨️") -> None:
-    from app.bot.tg_utils import seed_reply_keyboard
+    from app.bot.tg_utils import attach_reply_keyboard
 
-    # Welcome already carries the reply KB; ephemeral tip is polish only.
-    await seed_reply_keyboard(message, reply_kb, tip=tip, ephemeral=True)
+    # Always lasting — ephemeral tip-delete alone clears the menu on mobile.
+    await attach_reply_keyboard(message, reply_kb, text=tip or "⌨️ منوی اصلی")
 
 
 @router.message(F.text.func(kb.is_restart_text))
