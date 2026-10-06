@@ -160,6 +160,10 @@ class WiringTests(unittest.TestCase):
             "alembic/versions/0031_plan_categories_service_addons.py"
         ).read_text(encoding="utf-8")
         self.assertIn("0030_legacy_wallet_isolation_repair", mig)
+        # PostgreSQL rejects BOOLEAN DEFAULT 1 — must use sa.true()/false().
+        self.assertIn("server_default=sa.true()", mig)
+        self.assertNotIn('server_default=sa.text("1")', mig)
+        self.assertNotIn("server_default=sa.text('1')", mig)
         svc = Path("app/bot/handlers/services.py").read_text(encoding="utf-8")
         self.assertIn("svc:addon:", svc)
         self.assertIn("create_addon_order", svc)

@@ -28,7 +28,10 @@ def upgrade() -> None:
             sa.Column("name", sa.String(length=128), nullable=False),
             sa.Column("description", sa.String(length=255), nullable=True),
             sa.Column("owner_reseller_id", sa.Integer(), nullable=True),
-            sa.Column("is_active", sa.Boolean(), server_default=sa.text("1"), nullable=False),
+            # sa.true()/false() → DEFAULT true/false on PostgreSQL; 1/0 on SQLite.
+            # Literal integer boolean defaults are rejected by PostgreSQL and
+            # abort panel startup (uvicorn exit 3) during upgrade to 0.2.0.
+            sa.Column("is_active", sa.Boolean(), server_default=sa.true(), nullable=False),
             sa.Column("sort_order", sa.Integer(), server_default="0", nullable=False),
             sa.Column(
                 "created_at",
@@ -71,7 +74,7 @@ def upgrade() -> None:
             sa.Column("amount", sa.Float(), nullable=False),
             sa.Column("price", sa.Integer(), nullable=False),
             sa.Column("owner_reseller_id", sa.Integer(), nullable=True),
-            sa.Column("is_active", sa.Boolean(), server_default=sa.text("1"), nullable=False),
+            sa.Column("is_active", sa.Boolean(), server_default=sa.true(), nullable=False),
             sa.Column("sort_order", sa.Integer(), server_default="0", nullable=False),
             sa.Column(
                 "created_at",
