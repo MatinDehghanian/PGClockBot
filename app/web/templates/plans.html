@@ -868,7 +868,7 @@
       {{ modal_title('plans', 'برچسب دسته', caption='برچسب اختیاری برای پلن‌های ثابت کاربران یا اشتراک نمایندگان — نوع پلن (ثابت/تست/…) جدا می‌ماند', tone='brand', heading_id='plan-categories-title') }}
       <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
-    <form method="post" action="/plans/categories" class="form-stack" id="plan-category-form" data-create-action="/plans/categories">
+    <form method="post" action="/plans/categories" class="form-stack plan-cat-form" id="plan-category-form" data-create-action="/plans/categories">
       <div class="settings-grid">
         <label class="form-field">نام برچسب
           <input name="name" id="plan-category-name" required maxlength="128" placeholder="مثلاً ویژه / اقتصادی" />
@@ -895,64 +895,66 @@
         <button type="button" class="btn btn-ghost" data-modal-close>بستن</button>
       </div>
     </form>
-    <h3 class="gift-codes-recent-title">برچسب‌های فعلی</h3>
-    <div class="table-wrap">
-      <table class="table-compact">
-        <thead>
-          <tr>
-            <th>نام</th>
-            <th>مخاطب</th>
-            <th class="col-hide-sm">پلن‌ها</th>
-            <th class="col-hide-sm">ترتیب</th>
-            <th>وضعیت</th>
-            <th class="col-actions"></th>
-          </tr>
-        </thead>
-        <tbody>
-        {% for c in plan_categories or [] %}
-          {% set linked = (category_linked_plans or {}).get(c.id) or [] %}
-          <tr>
-            <td>
-              {{ c.name }}
-              {% if c.description %}<br><small class="muted">{{ c.description }}</small>{% endif %}
-            </td>
-            <td>{% if (c.audience or 'users') == 'resellers' %}نمایندگان{% else %}کاربران{% endif %}</td>
-            <td class="col-hide-sm">
-              {% if linked %}
-                <span class="muted">{{ linked | join('، ') }}</span>
-              {% else %}
-                <span class="muted">—</span>
-              {% endif %}
-            </td>
-            <td class="col-hide-sm mono">{{ c.sort_order }}</td>
-            <td>{% if c.is_active %}<span class="badge active">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}</td>
-            <td class="col-actions">
-              {% call row_actions() %}
-                <button type="button" class="btn btn-ghost btn-sm"
-                        data-category-edit
-                        data-id="{{ c.id }}"
-                        data-name="{{ c.name }}"
-                        data-sort="{{ c.sort_order }}"
-                        data-audience="{{ c.audience or 'users' }}"
-                        data-description="{{ c.description or '' }}">ویرایش</button>
-                <form method="post" action="/plans/categories/{{ c.id }}/toggle">
-                  <button class="btn btn-ghost btn-sm" type="submit">{% if c.is_active %}خاموش{% else %}روشن{% endif %}</button>
-                </form>
-                <form method="post" action="/plans/categories/{{ c.id }}/delete"
-                      data-confirm="این برچسب حذف شود؟ پلن‌هایش بدون برچسب می‌مانند."
-                      data-confirm-title="حذف برچسب دسته"
-                      data-confirm-danger="1"
-                      data-confirm-label="حذف">
-                  <button class="btn btn-danger btn-sm" type="submit">حذف</button>
-                </form>
-              {% endcall %}
-            </td>
-          </tr>
-        {% else %}
-          <tr><td colspan="6" class="muted">هنوز برچسبی نیست — از فرم بالا بسازید.</td></tr>
-        {% endfor %}
-        </tbody>
-      </table>
+    <div class="plan-cat-list">
+      <h3 class="gift-codes-recent-title">برچسب‌های فعلی</h3>
+      <div class="table-wrap">
+        <table class="table-compact">
+          <thead>
+            <tr>
+              <th>نام</th>
+              <th>مخاطب</th>
+              <th class="col-hide-sm">پلن‌ها</th>
+              <th class="col-hide-sm">ترتیب</th>
+              <th>وضعیت</th>
+              <th class="col-actions"></th>
+            </tr>
+          </thead>
+          <tbody>
+          {% for c in plan_categories or [] %}
+            {% set linked = (category_linked_plans or {}).get(c.id) or [] %}
+            <tr>
+              <td>
+                {{ c.name }}
+                {% if c.description %}<br><small class="muted">{{ c.description }}</small>{% endif %}
+              </td>
+              <td>{% if (c.audience or 'users') == 'resellers' %}نمایندگان{% else %}کاربران{% endif %}</td>
+              <td class="col-hide-sm">
+                {% if linked %}
+                  <span class="muted">{{ linked | join('، ') }}</span>
+                {% else %}
+                  <span class="muted">—</span>
+                {% endif %}
+              </td>
+              <td class="col-hide-sm mono">{{ c.sort_order }}</td>
+              <td>{% if c.is_active %}<span class="badge active">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}</td>
+              <td class="col-actions">
+                {% call row_actions() %}
+                  <button type="button" class="btn btn-ghost btn-sm"
+                          data-category-edit
+                          data-id="{{ c.id }}"
+                          data-name="{{ c.name }}"
+                          data-sort="{{ c.sort_order }}"
+                          data-audience="{{ c.audience or 'users' }}"
+                          data-description="{{ c.description or '' }}">ویرایش</button>
+                  <form method="post" action="/plans/categories/{{ c.id }}/toggle">
+                    <button class="btn btn-ghost btn-sm" type="submit">{% if c.is_active %}خاموش{% else %}روشن{% endif %}</button>
+                  </form>
+                  <form method="post" action="/plans/categories/{{ c.id }}/delete"
+                        data-confirm="این برچسب حذف شود؟ پلن‌هایش بدون برچسب می‌مانند."
+                        data-confirm-title="حذف برچسب دسته"
+                        data-confirm-danger="1"
+                        data-confirm-label="حذف">
+                    <button class="btn btn-danger btn-sm" type="submit">حذف</button>
+                  </form>
+                {% endcall %}
+              </td>
+            </tr>
+          {% else %}
+            <tr><td colspan="6" class="muted">هنوز برچسبی نیست — از فرم بالا بسازید.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 </div>

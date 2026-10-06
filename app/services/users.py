@@ -931,7 +931,7 @@ SETTING_GROUPS = {
         ("empty_services_text", "وقتی سرویسی ندارد", "textarea", "پیام بخش سرویس‌های من اگر لیست خالی باشد"),
         ("shop_empty_text", "وقتی پلنی نیست", "textarea", "پیام فروشگاه اگر پلن فعالی نباشد"),
         ("delivery_title", "عنوان پیام تحویل سرویس", "text", "مثلاً: ✅ سرویس آماده است"),
-        ("purchase_success_text", "متن موفقیت خرید", "textarea", "متغیرها: {order_id} {plan_name} — فهرست: /message-variables"),
+        ("purchase_success_text", "متن موفقیت خرید", "textarea", "متغیرها: {order_id} {plan_name} {plan_type} — فهرست: /message-variables"),
         ("wallet_success_title", "عنوان موفقیت شارژ کیف پول", "text", "عنوان پیام بعد از تأیید شارژ"),
         ("wallet_success_text", "متن موفقیت شارژ کیف پول", "textarea", "متغیرها: {amount} {payment_id}"),
         ("payment_ok_title", "عنوان تأیید پرداخت", "text", "عنوان پیام وقتی پرداخت غیر از شارژ کیف پول تأیید می‌شود"),
