@@ -3740,6 +3740,10 @@ def create_api_app(lifespan=None) -> FastAPI:
                     user.role = role
                     await session.commit()
                     info = {"telegram_id": user.telegram_id}
+                except Exception as e:
+                    from app.services.users import friendly_user_delete_error
+
+                    return _redirect_msg("/users", err=friendly_user_delete_error(e))
                 if role == Role.ADMIN.value:
                     user = await session.get(BotUser, user_id)
                     if user and user.role != Role.ADMIN.value:

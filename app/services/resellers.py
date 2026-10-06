@@ -1826,33 +1826,39 @@ async def notify_reseller_revoked(
     user: BotUser | None = None,
     actor: str | None = None,
 ) -> bool:
-    """Best-effort Telegram notice after revoke. Returns True if subject was notified."""
+    """Best-effort Telegram notice after revoke. Returns True if subject was notified.
+
+    Never raises — callers (web delete / demote) must not turn notify failures into HTTP 500.
+    """
     from app.services.notifications import (
         format_account_edit_subject,
         notify_account_edit,
     )
 
-    if session is not None and user is not None:
-        result = await notify_account_edit(
-            session,
-            user=user,
-            event="reseller_revoke",
-            reason=reason,
-            new_role=Role.USER.value,
-            old_role=Role.RESELLER.value,
-            actor=actor,
-            notify_subject=True,
-        )
-        return bool(result.get("subject"))
-
-    # Legacy path (telegram_id only) — subject message, no admin mirror
     try:
+        if session is not None and user is not None:
+            result = await notify_account_edit(
+                session,
+                user=user,
+                event="reseller_revoke",
+                reason=reason,
+                new_role=Role.USER.value,
+                old_role=Role.RESELLER.value,
+                actor=actor,
+                notify_subject=True,
+            )
+            return bool(result.get("subject"))
+
+        # Legacy path (telegram_id only) — subject message, no admin mirror
+        tid = int(telegram_id or 0)
+        if tid <= 0:
+            return False
         from app.bot import create_bot
 
         bot = create_bot()
         try:
             await bot.send_message(
-                telegram_id,
+                tid,
                 format_account_edit_subject(event="reseller_revoke", reason=reason),
                 parse_mode="HTML",
             )
@@ -1860,4 +1866,7 @@ async def notify_reseller_revoked(
         finally:
             await bot.session.close()
     except Exception:
+        logger.exception(
+            "notify_reseller_revoked failed telegram_id=%s", telegram_id
+        )
         return False

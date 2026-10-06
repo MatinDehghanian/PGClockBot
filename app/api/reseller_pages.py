@@ -986,6 +986,12 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
                 )
             except ValueError as e:
                 return RedirectResponse(f"/resellers?err={_q(str(e))}", status_code=303)
+            except Exception as e:
+                from app.services.users import friendly_user_delete_error
+
+                return RedirectResponse(
+                    f"/resellers?err={_q(friendly_user_delete_error(e))}", status_code=303
+                )
             from app.services.notifications import actor_label_from_staff
 
             user = await session.get(BotUser, user_id)

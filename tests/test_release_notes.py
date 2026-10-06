@@ -77,7 +77,7 @@ class ReleaseNotesTests(unittest.TestCase):
         self.assertIn("0.1.0", parsed)
         self.assertTrue(parsed["0.2.6"])
         self.assertTrue(
-            any("دسته" in n or "می‌چسب" in n or "visualViewport" in n for n in parsed["0.2.6"])
+            any("دسته" in n or "می‌چسب" in n or "visualViewport" in n or "PAYG" in n for n in parsed["0.2.6"])
         )
         self.assertTrue(parsed["0.2.4"])
         self.assertTrue(
@@ -165,7 +165,7 @@ class ReleaseNotesTests(unittest.TestCase):
             },
         )
         self.assertTrue(
-            any("دسته" in n or "می‌چسب" in n or "visualViewport" in n for n in parsed["0.2.6"])
+            any("دسته" in n or "می‌چسب" in n or "visualViewport" in n or "PAYG" in n for n in parsed["0.2.6"])
         )
         self.assertTrue(
             any("on_hold" in n or "تحویل" in n or "برچسب" in n for n in parsed["0.2.4"])
