@@ -105,9 +105,11 @@ class SourceContractTests(unittest.TestCase):
         sig = inspect.signature(seed_reply_keyboard)
         self.assertEqual(sig.parameters["ephemeral"].default, False)
 
-    def test_start_seed_uses_ephemeral_polish(self):
+    def test_start_seed_uses_lasting_attach(self):
         src = (ROOT / "app/bot/handlers/start.py").read_text(encoding="utf-8")
-        self.assertIn("ephemeral=True", src)
+        self.assertIn("attach_reply_keyboard", src)
+        self.assertNotIn("ephemeral=True", src)
+        self.assertIn("send_reply_keyboard_last", src)
 
 
 if __name__ == "__main__":

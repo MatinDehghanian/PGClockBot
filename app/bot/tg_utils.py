@@ -85,6 +85,38 @@ async def attach_reply_keyboard(
         return None
 
 
+async def send_reply_keyboard_last(
+    message: Message,
+    text: str,
+    reply_markup: ReplyKeyboardMarkup,
+    *,
+    ahead: list[tuple[str, Any]] | None = None,
+    **send_kw: Any,
+) -> Message | None:
+    """Send optional inline-only messages first, then text **with** reply KB last.
+
+    Telegram allows only one ``reply_markup`` per message. Any inline bubble
+    (e.g. Mini App) sent *after* the reply-keyboard carrier leaves that carrier
+    non-final; on iOS the custom keyboard and 4-square menu icon then hide and
+    the system keyboard opens. Always finish a navigation turn with a lasting
+    ``ReplyKeyboardMarkup`` unless the user must type free text.
+    """
+    for ahead_text, ahead_markup in ahead or []:
+        try:
+            await message.answer(ahead_text, reply_markup=ahead_markup)
+        except Exception:
+            logger.warning(
+                "send_reply_keyboard_last: ahead message failed (%s)",
+                ahead_text[:20],
+                exc_info=True,
+            )
+    try:
+        return await message.answer(text, reply_markup=reply_markup, **send_kw)
+    except Exception:
+        logger.warning("send_reply_keyboard_last: reply carrier failed", exc_info=True)
+        return None
+
+
 async def seed_reply_keyboard(
     message: Message,
     reply_markup,
@@ -94,11 +126,12 @@ async def seed_reply_keyboard(
 ) -> None:
     """Register a reply keyboard with Telegram.
 
-    ``ephemeral=True`` deletes the tip (legacy start-menu polish). Safe **only**
-    when another lasting message in the same chat already carries the same
-    ``ReplyKeyboardMarkup`` (e.g. /start welcome). Do **not** use ephemeral
-    seeding as the *only* restore after ``cancel_reply()`` or as shop/reseller
-    chrome — tip-delete hides the custom keyboard and menu icon on mobile.
+    ``ephemeral=True`` deletes the tip (legacy polish). Safe **only** when
+    another lasting message in the same chat already carries the same
+    ``ReplyKeyboardMarkup`` (e.g. welcome sent after this tip). Do **not** use
+    ephemeral seeding as the *only* restore after ``cancel_reply()``, shop
+    chrome, or home — tip-delete hides the custom keyboard and menu icon.
+    Prefer ``attach_reply_keyboard`` / ``send_reply_keyboard_last``.
     """
     try:
         tip_msg = await message.answer(tip or "·", reply_markup=reply_markup)
