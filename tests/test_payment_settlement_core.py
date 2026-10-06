@@ -100,7 +100,8 @@ class SettlementWiringTests(unittest.TestCase):
         self.assertIn('("card_auto"', admin)
         kb = (ROOT / "app/bot/keyboards.py").read_text(encoding="utf-8")
         self.assertIn("REPLY_ACTION_TOPUP_PSP", kb)
-        self.assertIn("wtop:psp", kb)
+        reply_nav = (ROOT / "app/bot/handlers/reply_nav.py").read_text(encoding="utf-8")
+        self.assertIn("wtop:psp", reply_nav)
         wallet = (ROOT / "app/bot/handlers/wallet.py").read_text(encoding="utf-8")
         self.assertIn('key == "psp"', wallet)
 
