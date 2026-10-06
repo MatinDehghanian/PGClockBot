@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from sqlalchemy import select
@@ -22,6 +22,8 @@ from app.services.formatting import (
     format_bytes,
     format_bytes_ratio,
     format_expire_short,
+    is_on_hold_status,
+    on_hold_expire_duration_seconds,
     status_label_plain,
 )
 from app.services.pasarguard import (
@@ -163,16 +165,28 @@ async def service_snapshot(session: AsyncSession, service: UserService) -> Servi
         lim_for_ratio = limit_n if limit_n > 0 else None
         # Keep users-list cache warm whenever we successfully read live PG.
         sync_service_quota_cache(service, info)
+        status_raw = info.get("status")
+        exp_raw = info.get("expire") if "expire" in info else info.get("expire_date")
+        hold_dur = on_hold_expire_duration_seconds(info)
+        days_left = expire_remaining_days(
+            exp_raw, status=status_raw, expire_duration=hold_dur
+        )
+        expire_text = format_expire_short(
+            exp_raw, status=status_raw, expire_duration=hold_dur
+        )
+        # on_hold without a known duration: never show «نامحدود» for remaining days
+        if is_on_hold_status(status_raw) and days_left is None and not exp_raw:
+            days_left = None  # snapshot_telegram_lines must not say نامحدود
         return ServiceSnapshot(
             service=service,
             pg=info,
-            status_fa=status_label_plain(info.get("status")),
+            status_fa=status_label_plain(status_raw),
             used_text=format_bytes(used),
             limit_text=format_bytes(limit_n) if limit_n > 0 else "نامحدود",
             volume_text=format_bytes_ratio(used, lim_for_ratio),
             remain_gb_text=remain_gb,
-            days_left=expire_remaining_days(info.get("expire") or info.get("expire_date")),
-            expire_text=format_expire_short(info.get("expire") or info.get("expire_date")),
+            days_left=days_left,
+            expire_text=expire_text,
             subscription_url=live_url or url,
             error=None,
         )
@@ -521,6 +535,9 @@ def sync_service_quota_cache(
     ``expire_ts`` / ``data_limit_bytes`` from the write just issued (partial OK).
     ``quota_expire_at is None`` + synced ⇒ unlimited time;
     ``quota_data_limit_bytes == 0`` + synced ⇒ unlimited volume.
+
+    PasarGuard ``on_hold`` users often have ``expire=0`` until first connect, with
+    ``expire_duration`` holding the real TTL — that must NOT sync as unlimited.
     """
     from app.services.formatting import parse_expire
 
@@ -529,11 +546,25 @@ def sync_service_quota_cache(
         has_expire = "expire" in info or "expire_date" in info
         if has_expire:
             exp_raw = info["expire"] if "expire" in info else info.get("expire_date")
-            # PG: 0 / null ⇒ unlimited (parse_expire(0) would be epoch — wrong)
+            # PG: 0 / null ⇒ unlimited *unless* on_hold with expire_duration
             if exp_raw in (None, "", 0, 0.0) or (
                 isinstance(exp_raw, (int, float)) and int(exp_raw) <= 0
             ):
-                service.quota_expire_at = None
+                hold_dur = on_hold_expire_duration_seconds(info)
+                if hold_dur is not None:
+                    service.quota_expire_at = datetime.now(timezone.utc) + timedelta(
+                        seconds=int(hold_dur)
+                    )
+                elif is_on_hold_status(info.get("status")):
+                    # Pending start — approximate from plan so list never shows
+                    # «نامحدود» for a timed on_hold service.
+                    plan = getattr(service, "plan", None)
+                    days = int(getattr(plan, "duration_days", 0) or 0) if plan else 0
+                    service.quota_expire_at = datetime.now(timezone.utc) + timedelta(
+                        days=max(1, days)
+                    )
+                else:
+                    service.quota_expire_at = None
             else:
                 exp_dt = parse_expire(exp_raw)
                 if exp_dt is not None and exp_dt.tzinfo is None:
@@ -875,7 +906,13 @@ async def detach_local_services_for_pg_user(
 def snapshot_telegram_lines(snap: ServiceSnapshot) -> str:
     svc = snap.service
     plan_name = svc.plan.name if svc.plan else "—"
-    days = "نامحدود" if snap.days_left is None else f"{snap.days_left} روز"
+    if snap.days_left is None:
+        if is_on_hold_status((snap.pg or {}).get("status") if snap.pg else None):
+            days = "پس از اتصال"
+        else:
+            days = "نامحدود"
+    else:
+        days = f"{snap.days_left} روز"
     lines = [
         f"📦 سرویس #{svc.id} · {plan_name}",
         f"وضعیت: {snap.status_fa}",

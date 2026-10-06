@@ -501,6 +501,10 @@ def parse_expire(value: Any) -> Optional[datetime]:
         return None
     if isinstance(value, (int, float)):
         ts = int(value)
+        if ts <= 0:
+            # PG: 0 / negative = unset (unlimited OR on_hold pending start) —
+            # never treat as unix epoch 1970.
+            return None
         if ts > 10_000_000_000:
             ts //= 1000
         return datetime.fromtimestamp(ts, tz=timezone.utc)
@@ -512,9 +516,59 @@ def parse_expire(value: Any) -> Optional[datetime]:
     return None
 
 
-def format_expire(value: Any) -> str:
+def _expire_raw_unset(value: Any) -> bool:
+    if value in (None, "", 0, 0.0):
+        return True
+    if isinstance(value, (int, float)) and int(value) <= 0:
+        return True
+    return False
+
+
+def parse_expire_duration_seconds(value: Any) -> int | None:
+    """PasarGuard ``expire_duration`` (seconds after first connect) for on_hold."""
+    if value in (None, "", 0, 0.0):
+        return None
+    try:
+        n = int(float(value))
+    except (TypeError, ValueError):
+        return None
+    return n if n > 0 else None
+
+
+def is_on_hold_status(status: Any) -> bool:
+    s = str(status or "").strip().lower().replace("-", "_")
+    return s in {"on_hold", "onhold"}
+
+
+def on_hold_expire_duration_seconds(info: dict[str, Any] | None) -> int | None:
+    """Seconds of validity after first connect when status is on_hold and expire unset."""
+    if not isinstance(info, dict) or not is_on_hold_status(info.get("status")):
+        return None
+    exp_raw = info["expire"] if "expire" in info else info.get("expire_date")
+    if not _expire_raw_unset(exp_raw):
+        return None
+    for key in ("expire_duration", "on_hold_expire_duration", "hold_expire_duration"):
+        dur = parse_expire_duration_seconds(info.get(key))
+        if dur is not None:
+            return dur
+    return None
+
+
+def format_expire_duration_days(seconds: int | None) -> str:
+    if seconds is None or seconds <= 0:
+        return "—"
+    days = max(1, int((int(seconds) + 86399) // 86400))
+    return f"{days} روز"
+
+
+def format_expire(value: Any, *, status: Any = None, expire_duration: Any = None) -> str:
     dt = parse_expire(value)
     if not dt:
+        if is_on_hold_status(status):
+            dur = parse_expire_duration_seconds(expire_duration)
+            if dur is not None:
+                return f"{format_expire_duration_days(dur)} (پس از اتصال)"
+            return "پس از اتصال"
         return "نامحدود"
     local = dt.astimezone()
     remaining = dt - datetime.now(timezone.utc)
@@ -523,10 +577,17 @@ def format_expire(value: Any) -> str:
     return f"{local.strftime('%Y/%m/%d %H:%M')} ({days} روز و {hours} ساعت)"
 
 
-def format_expire_short(value: Any) -> str:
+def format_expire_short(
+    value: Any, *, status: Any = None, expire_duration: Any = None
+) -> str:
     """Compact expire for tables: date + remaining days."""
     dt = parse_expire(value)
     if not dt:
+        if is_on_hold_status(status):
+            dur = parse_expire_duration_seconds(expire_duration)
+            if dur is not None:
+                return f"{format_expire_duration_days(dur)} · در انتظار"
+            return "در انتظار"
         return "—"
     remaining = dt - datetime.now(timezone.utc)
     if remaining.total_seconds() <= 0:
@@ -535,10 +596,21 @@ def format_expire_short(value: Any) -> str:
     return f"{dt.astimezone().strftime('%Y/%m/%d')} · {days} روز"
 
 
-def expire_remaining_days(value: Any) -> int | None:
-    """Whole days left until expire (ceil); None if unlimited."""
+def expire_remaining_days(
+    value: Any, *, status: Any = None, expire_duration: Any = None
+) -> int | None:
+    """Whole days left until expire (ceil); None if unlimited.
+
+    For on_hold with ``expire_duration``, returns the pending duration in days
+    (not unlimited).
+    """
     dt = parse_expire(value)
     if not dt:
+        if is_on_hold_status(status):
+            dur = parse_expire_duration_seconds(expire_duration)
+            if dur is not None:
+                return max(1, int((int(dur) + 86399) // 86400))
+            return None  # on_hold without duration — unknown, not unlimited
         return None
     remaining = dt - datetime.now(timezone.utc)
     if remaining.total_seconds() <= 0:
@@ -601,10 +673,17 @@ def info_block(lines: list[str]) -> str:
 
 def service_card(info: dict, currency_note: str = "") -> str:
     username = info.get("username", "—")
-    status = status_label(info.get("status"))
+    status_raw = info.get("status")
+    status = status_label(status_raw)
     used = info.get("used_traffic") or 0
     limit = info.get("data_limit")
-    expire = format_expire(info.get("expire"))
+    expire_raw = info.get("expire") if "expire" in info else info.get("expire_date")
+    expire = format_expire(
+        expire_raw,
+        status=status_raw,
+        expire_duration=info.get("expire_duration")
+        or info.get("on_hold_expire_duration"),
+    )
     bar = progress_bar(float(used), float(limit) if limit else None)
     lines = [
         f"👤 {copyable(username)}",

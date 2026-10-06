@@ -32,6 +32,50 @@ def _plan_name(order) -> str:
     return ""
 
 
+def _plan_type_label(order) -> str:
+    """Persian plan-kind label for delivery messages (user or reseller)."""
+    note = (getattr(order, "note", None) or "").strip()
+    if note.startswith("svc_addon:"):
+        return "بسته حجم/زمان"
+    if note.startswith("renew:"):
+        return "تمدید"
+    if note.startswith("reseller_app:") or note.startswith("reseller_renew:"):
+        return "اشتراک نمایندگی"
+    if note.startswith("wholesale:") or note == "wholesale":
+        return "فروش عمده"
+    if note == "custom" or note.startswith("custom:"):
+        return "دلخواه"
+    try:
+        plan = getattr(order, "plan", None)
+        if plan is not None and bool(getattr(plan, "is_trial", False)):
+            return "تست"
+        # ResellerPlan billing_mode
+        bm = (getattr(plan, "billing_mode", None) or "").strip().lower()
+        if bm == "payg":
+            return "PAYG"
+        pk = (getattr(plan, "plan_kind", None) or "").strip().lower()
+        if pk in {"addon_volume", "addon_users"}:
+            return "بسته نماینده"
+        if pk == "subscription" or bm == "fixed":
+            return "اشتراک ثابت"
+    except Exception:
+        pass
+    return "ثابت"
+
+
+def _plan_delivery_line(order) -> str | None:
+    """Always-shown plan type (+ name) line for delivery cards."""
+    kind = _plan_type_label(order)
+    name = (_plan_name(order) or "").strip()
+    if name and kind:
+        return kv_line("💎", "نوع پلن", f"<b>{kind}</b> — {name}")
+    if name:
+        return kv_line("💎", "پلن", name)
+    if kind:
+        return kv_line("💎", "نوع پلن", f"<b>{kind}</b>")
+    return None
+
+
 def _rendered_purchase_success_body(ui: dict[str, str], order) -> str:
     from app.services.rich_text import rich_plain_text
 
@@ -44,6 +88,7 @@ def _rendered_purchase_success_body(ui: dict[str, str], order) -> str:
             domain=DOMAIN_ORDER,
             order_id=order.id,
             plan_name=_plan_name(order),
+            plan_type=_plan_type_label(order),
             shop_title=rich_plain_text(ui.get("shop_title")) or "",
             url=getattr(order, "subscription_url", None) or "",
         ).strip()
@@ -66,6 +111,7 @@ def _subscription_success_outbound(ui: dict[str, str], order) -> tuple[str, dict
         domain=DOMAIN_ORDER,
         order_id=order.id,
         plan_name=_plan_name(order),
+        plan_type=_plan_type_label(order),
         shop_title=rich_plain_text(ui.get("shop_title")) or "",
         url=getattr(order, "subscription_url", None) or "",
     )
@@ -100,6 +146,14 @@ async def build_delivery_content(
     sub_url = None
     sub_info: dict | None = None
 
+    # Ensure plan is available for نوع پلن / {plan_name} even if caller didn't load it.
+    if order is not None and getattr(order, "plan", None) is None:
+        plan_id = getattr(order, "plan_id", None)
+        if plan_id:
+            from app.db.models import Plan
+
+            order.plan = await session.get(Plan, int(plan_id))
+
     if order and order.service_id:
         from app.services.orders import order_quantity
 
@@ -107,6 +161,10 @@ async def build_delivery_content(
         svc = await session.get(UserService, order.service_id)
         success_text, send_kw = _subscription_success_outbound(ui, order)
         detail_parts: list[str] = []
+
+        plan_line = _plan_delivery_line(order)
+        if plan_line:
+            detail_parts.append(plan_line)
 
         if qty > 1:
             detail_parts.append(f"📦 تعداد سرویس تحویل‌شده: <b>{qty}</b>")
