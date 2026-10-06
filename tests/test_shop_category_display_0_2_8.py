@@ -20,8 +20,8 @@ class ShopKeyboardAttachTests(unittest.TestCase):
         # Must send inline on the shop message — not ReplyKeyboard-then-edit
         self.assertIn("reply_markup=inline", helper)
         self.assertNotIn("edit_reply_markup(", helper)
-        # Reply chrome must be lasting (never delete tip)
-        self.assertIn("attach_reply_keyboard", helper)
+        # Reply chrome must be lasting via shared helper (never delete tip)
+        self.assertIn("present_inline_with_reply_chrome", helper)
         self.assertNotIn(".delete(", helper)
 
     def test_shop_list_callback_edits_without_orphan_caption(self):

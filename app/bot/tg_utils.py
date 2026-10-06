@@ -117,6 +117,29 @@ async def send_reply_keyboard_last(
         return None
 
 
+async def present_inline_with_reply_chrome(
+    message: Message,
+    *,
+    text: str,
+    inline: InlineKeyboardMarkup,
+    reply: ReplyKeyboardMarkup,
+    chrome_text: str,
+    **send_kw: Any,
+) -> None:
+    """Dual-keyboard contract for choice screens.
+
+    1. Content bubble carries the **inline** keyboard (Telegram forbids Reply+Inline
+       on the same message; never convert Reply→Inline via ``edit_reply_markup``).
+    2. A **lasting** follow-up carries the reply chrome (back/home or submenu).
+       Never delete that follow-up — deletion clears the custom keyboard and the
+       4-square menu icon on iOS.
+    3. The reply chrome must match the screen (shop chrome in shop, apply chrome
+       in reseller-apply, …) — never force the main menu unless the user is home.
+    """
+    await message.answer(text, reply_markup=inline, **send_kw)
+    await attach_reply_keyboard(message, reply, text=chrome_text)
+
+
 async def seed_reply_keyboard(
     message: Message,
     reply_markup,

@@ -301,6 +301,7 @@ async def open_shop_list(
 
 async def open_services_list(message: Message, session: AsyncSession, db_user: BotUser) -> None:
     from app.bot.menu_nav import build_main_reply_keyboard
+    from app.bot.tg_utils import present_inline_with_reply_chrome
 
     ui = await get_all_settings(session)
     result = await session.execute(
@@ -319,8 +320,14 @@ async def open_services_list(message: Message, session: AsyncSession, db_user: B
         )
         await message.answer(text, reply_markup=main_kb, **send_kw)
         return
-    await message.answer("📦 <b>سرویس‌های شما</b>", reply_markup=main_kb)
-    await message.answer("یکی را انتخاب کنید:", reply_markup=kb.services_keyboard(services, ui))
+    # Inline list first; lasting main menu last (never leave inline as final message).
+    await present_inline_with_reply_chrome(
+        message,
+        text="📦 <b>سرویس‌های شما</b>\nیکی را انتخاب کنید:",
+        inline=kb.services_keyboard(services, ui),
+        reply=main_kb,
+        chrome_text="⌨️ منوی اصلی",
+    )
 
 
 async def open_wallet_home(
@@ -452,9 +459,15 @@ async def open_support_home(
             if url:
                 rows.append([InlineKeyboardButton(text=f"💬 گفتگو با {title}", url=url)])
         if rows:
+            from app.bot.tg_utils import attach_reply_keyboard
+
             await message.answer(
                 "ارتباط مستقیم:",
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+            )
+            # Re-affirm support reply chrome after inline (must be last).
+            await attach_reply_keyboard(
+                message, kb.support_reply_keyboard(ui), text="⌨️ پشتیبانی"
             )
 
 
@@ -493,13 +506,14 @@ async def open_support_list(
         ]
         for t in tickets[:20]
     ]
-    await message.answer(
-        "📋 تیکت‌های شما:",
-        reply_markup=kb.support_reply_keyboard(ui),
-    )
-    await message.answer(
-        "یکی را باز کنید:",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+    from app.bot.tg_utils import present_inline_with_reply_chrome
+
+    await present_inline_with_reply_chrome(
+        message,
+        text="📋 تیکت‌های شما — یکی را باز کنید:",
+        inline=InlineKeyboardMarkup(inline_keyboard=rows),
+        reply=kb.support_reply_keyboard(ui),
+        chrome_text="⌨️ پشتیبانی",
     )
 
 
@@ -551,9 +565,17 @@ async def open_admin_loyalty_hub(
     )
 
 
-async def open_reseller_apply(message: Message, session: AsyncSession, db_user: BotUser) -> None:
+async def open_reseller_apply(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext | None = None,
+    *,
+    push: bool = True,
+) -> None:
     from app.bot.handlers.reseller import _resapply_mode_keyboard
     from app.bot.menu_nav import build_main_reply_keyboard
+    from app.bot.tg_utils import present_inline_with_reply_chrome
     from app.services.billing import BILLING_MODE_FIXED, BILLING_MODE_PAYG
     from app.services.resellers import list_active_reseller_plans
 
@@ -586,13 +608,16 @@ async def open_reseller_apply(message: Message, session: AsyncSession, db_user: 
         "• <b>ثابت</b> — اشتراک با قیمت ثابت\n"
         "• <b>PAYG</b> — پرداخت بر اساس مصرف ترافیک",
     )
-    from app.bot.tg_utils import attach_reply_keyboard
-
-    # Attach mode buttons to the main bubble — never a separate «نوع پلن:» caption.
-    # Reply chrome must be lasting: delete-after-send clears the custom keyboard
-    # and the 4-square menu icon on iOS/mobile.
-    await message.answer(text, reply_markup=await _resapply_mode_keyboard(session, ui))
-    await attach_reply_keyboard(message, main_kb, text="⌨️ منوی اصلی")
+    if state is not None:
+        await nav.set_nav_level(state, nav.NAV_RESELLER_APPLY, push=push)
+    # Inline modes on the main bubble; lasting apply chrome (back/home) — NEVER main menu.
+    await present_inline_with_reply_chrome(
+        message,
+        text=text,
+        inline=await _resapply_mode_keyboard(session, ui),
+        reply=kb.reseller_apply_reply_keyboard(ui),
+        chrome_text="⌨️ درخواست نمایندگی",
+    )
 
 
 async def open_reseller_home(
@@ -1399,6 +1424,9 @@ async def handle_back(
     if level == nav.NAV_SHOP:
         await open_shop_list(message, session, db_user, state, push=False)
         return
+    if level == nav.NAV_RESELLER_APPLY:
+        await open_reseller_apply(message, session, db_user, state, push=False)
+        return
     if level == nav.NAV_SUPPORT:
         await open_support_home(message, session, db_user, state, push=False)
         return
@@ -2192,7 +2220,7 @@ async def reply_main_nav(
             reseller_owner_id=reseller_owner_id,
         )
     elif action == kb.REPLY_ACTION_RESELLER_APPLY:
-        await open_reseller_apply(message, session, db_user)
+        await open_reseller_apply(message, session, db_user, state)
     elif action == kb.REPLY_ACTION_RESELLER:
         await open_reseller_home(
             message,

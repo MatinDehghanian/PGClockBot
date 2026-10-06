@@ -1077,10 +1077,31 @@ def _shop_submenu_entries(
         )
     return entries
 
+def submenu_chrome_reply_keyboard(
+    ui: dict | None = None,
+    *,
+    placeholder: str = "از کیبورد پایین بازگردید…",
+) -> ReplyKeyboardMarkup:
+    """Back + Home only — for screens whose choices live on inline keyboards."""
+    rows = _pack_reply_rows([], ui, footer_row=_submenu_footer(ui))
+    return _reply_markup(rows, placeholder=placeholder)
+
+
 def shop_reply_keyboard(ui: dict | None = None) -> ReplyKeyboardMarkup:
     """Shop nav chrome — plan kind + lists are inline under the message."""
-    rows = _pack_reply_rows([], ui, footer_row=_submenu_footer(ui))
-    return _reply_markup(rows, placeholder="فروشگاه — نوع پلن را از زیر پیام انتخاب کنید…")
+    return submenu_chrome_reply_keyboard(
+        ui,
+        placeholder="فروشگاه — نوع پلن را از زیر پیام انتخاب کنید…",
+    )
+
+
+def reseller_apply_reply_keyboard(ui: dict | None = None) -> ReplyKeyboardMarkup:
+    """Reseller-apply chrome — plan mode/list are inline under the message."""
+    return submenu_chrome_reply_keyboard(
+        ui,
+        placeholder="درخواست نمایندگی — نوع پلن را از زیر پیام انتخاب کنید…",
+    )
+
 
 def _service_action_entries(ui: dict | None = None) -> list[tuple[str, str]]:
     return [

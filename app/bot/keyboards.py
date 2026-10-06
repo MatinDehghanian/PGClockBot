@@ -632,6 +632,8 @@ from app.bot.reply_keyboards import (  # noqa: E402
     reply_action_map,
     _shop_submenu_entries,
     shop_reply_keyboard,
+    reseller_apply_reply_keyboard,
+    submenu_chrome_reply_keyboard,
     _service_action_entries,
     service_actions_reply_keyboard,
     _review_submenu_entries,
