@@ -665,43 +665,38 @@
       menu.style.overflow = 'visible';
       const mw = Math.max(menu.offsetWidth || 168, 168);
       const mh = menu.offsetHeight || 120;
+      /* getBoundingClientRect = visual viewport; position:fixed = layout viewport.
+         Convert with visualViewport.offset* so the menu stays glued to the toggle
+         when the soft keyboard resizes/shifts the visual viewport. */
       const vv = window.visualViewport;
-      const vw = (vv && vv.width) || window.innerWidth;
-      const vh = (vv && vv.height) || window.innerHeight;
-      const vOffsetTop = (vv && typeof vv.offsetTop === 'number') ? vv.offsetTop : 0;
-      const vOffsetLeft = (vv && typeof vv.offsetLeft === 'number') ? vv.offsetLeft : 0;
-      const viewTop = vOffsetTop;
-      const viewBottom = vOffsetTop + vh;
-      const viewLeft = vOffsetLeft;
-      const viewRight = vOffsetLeft + vw;
+      const vvH = (vv && vv.height) || window.innerHeight;
+      const vvW = (vv && vv.width) || window.innerWidth;
+      const offTop = (vv && typeof vv.offsetTop === 'number') ? vv.offsetTop : 0;
+      const offLeft = (vv && typeof vv.offsetLeft === 'number') ? vv.offsetLeft : 0;
 
-      /* Inward: actions sit on the inline-end (physical left in RTL). Open toward table center (right). */
-      let left = rect.left;
-      if (left + mw > viewRight - pad) {
-        left = rect.right - mw; /* flip if needed */
-      }
-      if (left < viewLeft + pad) left = viewLeft + pad;
-      if (left + mw > viewRight - pad) left = Math.max(viewLeft + pad, viewRight - pad - mw);
-
-      const spaceBelow = viewBottom - rect.bottom - gap - pad;
-      const spaceAbove = rect.top - viewTop - gap - pad;
-      /* Prefer down when it fits; flip up only when below is short */
+      const spaceBelow = Math.max(0, vvH - rect.bottom - gap - pad);
+      const spaceAbove = Math.max(0, rect.top - gap - pad);
       let openDown;
       if (spaceBelow >= mh) openDown = true;
       else if (spaceAbove >= mh) openDown = false;
       else openDown = spaceBelow >= spaceAbove;
 
-      let top;
-      if (openDown) {
-        top = rect.bottom + gap;
-        if (top + mh > viewBottom - pad) top = Math.max(viewTop + pad, viewBottom - pad - mh);
-      } else {
-        top = rect.top - gap - mh;
-        if (top < viewTop + pad) top = viewTop + pad;
-      }
+      /* Horizontal: prefer toggle's inline-end; keep within visual width */
+      let leftVis = rect.left;
+      if (leftVis + mw > vvW - pad) leftVis = rect.right - mw;
+      if (leftVis < pad) leftVis = pad;
+      if (leftVis + mw > vvW - pad) leftVis = Math.max(pad, vvW - pad - mw);
 
-      menu.style.top = Math.round(top) + 'px';
-      menu.style.left = Math.round(left) + 'px';
+      let topVis;
+      if (openDown) {
+        topVis = rect.bottom + gap;
+      } else {
+        topVis = rect.top - gap - mh;
+      }
+      /* Stay attached to the toggle — never pin to the screen edge away from it */
+
+      menu.style.top = Math.round(topVis + offTop) + 'px';
+      menu.style.left = Math.round(leftVis + offLeft) + 'px';
       menu.style.right = 'auto';
       menu.style.bottom = 'auto';
       menu.style.maxHeight = 'none';
@@ -743,18 +738,15 @@
       const gap = UI_SELECT_GAP;
       const pad = UI_SELECT_PAD;
       const rect = toggle.getBoundingClientRect();
-      /* When the mobile keyboard is open, layout viewport (innerHeight) and
-         visual viewport diverge — menus jump far above the toggle. Prefer
-         visualViewport for available height and clamp to its bounds. */
+      /* getBoundingClientRect is visual-viewport-relative; position:fixed is
+         layout-viewport-relative. Add visualViewport.offset* so the menu stays
+         glued to the toggle when the soft keyboard is open. Shrink height to
+         fit — never jump the menu to the top/bottom of the screen. */
       const vv = window.visualViewport;
-      const vw = (vv && vv.width) || window.innerWidth || document.documentElement.clientWidth;
-      const vh = (vv && vv.height) || window.innerHeight || document.documentElement.clientHeight;
-      const vOffsetTop = (vv && typeof vv.offsetTop === 'number') ? vv.offsetTop : 0;
-      const vOffsetLeft = (vv && typeof vv.offsetLeft === 'number') ? vv.offsetLeft : 0;
-      const viewTop = vOffsetTop;
-      const viewBottom = vOffsetTop + vh;
-      const viewLeft = vOffsetLeft;
-      const viewRight = vOffsetLeft + vw;
+      const vvW = (vv && vv.width) || window.innerWidth || document.documentElement.clientWidth;
+      const vvH = (vv && vv.height) || window.innerHeight || document.documentElement.clientHeight;
+      const offTop = (vv && typeof vv.offsetTop === 'number') ? vv.offsetTop : 0;
+      const offLeft = (vv && typeof vv.offsetLeft === 'number') ? vv.offsetLeft : 0;
 
       if (!wrap.dataset.uiSelectId) {
         wrap.dataset.uiSelectId = 'us-' + Math.random().toString(36).slice(2, 9);
@@ -764,7 +756,6 @@
       }
       wrap._portedMenu = menu;
       menu.dataset.uiSelectOwner = wrap.dataset.uiSelectId;
-      /* Escape modal overflow — fixed coords are viewport-relative on body */
       if (menu.parentNode !== document.body) {
         document.body.appendChild(menu);
       }
@@ -779,41 +770,33 @@
       set('inset-inline-end', 'auto');
       set('min-width', '0');
       set('z-index', '5000');
-      /* Ported menus must own their scroll — CSS alone is not enough when
-         modal wheel/touch guards run in capture, and some hosts reset overflow. */
       set('overflow-x', 'hidden');
       set('overflow-y', 'auto');
       set('-webkit-overflow-scrolling', 'touch');
 
       let width = Math.max(rect.width, 120);
-      let left = rect.left;
-      const maxW = Math.max(120, vw - pad * 2);
+      let leftVis = rect.left;
+      const maxW = Math.max(120, vvW - pad * 2);
       if (width > maxW) width = maxW;
-      if (left < viewLeft + pad) left = viewLeft + pad;
-      if (left + width > viewRight - pad) left = Math.max(viewLeft + pad, viewRight - pad - width);
-      /* Prefer exact toggle alignment when it fits in the visual viewport */
-      if (rect.width <= maxW && rect.left >= viewLeft + pad - 0.5 && rect.right <= viewRight - pad + 0.5) {
-        left = rect.left;
+      if (leftVis < pad) leftVis = pad;
+      if (leftVis + width > vvW - pad) leftVis = Math.max(pad, vvW - pad - width);
+      if (rect.width <= maxW && rect.left >= pad - 0.5 && rect.right <= vvW - pad + 0.5) {
+        leftVis = rect.left;
         width = rect.width;
       }
-      set('left', Math.round(left) + 'px');
+      set('left', Math.round(leftVis + offLeft) + 'px');
       set('width', Math.round(width) + 'px');
 
-      /* Space relative to the *visible* viewport (keyboard-aware) */
-      const roomBelow = Math.max(0, viewBottom - rect.bottom - gap - pad);
-      const roomAbove = Math.max(0, rect.top - viewTop - gap - pad);
-      set('max-height', Math.min(280, Math.max(80, Math.max(roomBelow, roomAbove, 80))) + 'px');
+      const roomBelow = Math.max(0, vvH - rect.bottom - gap - pad);
+      const roomAbove = Math.max(0, rect.top - gap - pad);
+      set('max-height', Math.min(280, Math.max(48, Math.max(roomBelow, roomAbove, 48))) + 'px');
       let mh = menu.offsetHeight || 120;
 
       let openUp;
       if (wrap.closest('.ticket-status-form, .ticket-status-actions')) {
         openUp = true;
-      } else if (roomBelow >= Math.min(mh, 120) || roomBelow >= roomAbove) {
-        /* Prefer down when keyboard ate bottom space but toggle is mid-screen —
-           opening up would pin the menu to the top far from the field. */
-        openUp = roomBelow < 72 && roomAbove > roomBelow + 24;
-        if (roomBelow >= mh) openUp = false;
-        else if (roomAbove >= mh && roomAbove > roomBelow) openUp = true;
+      } else if (roomBelow >= mh) {
+        openUp = false;
       } else if (roomAbove >= mh) {
         openUp = true;
       } else {
@@ -824,23 +807,16 @@
       else menu.removeAttribute('data-drop-up');
 
       if (openUp) {
-        const maxH = Math.min(280, Math.max(80, roomAbove));
+        const maxH = Math.min(280, Math.max(48, roomAbove));
         set('max-height', maxH + 'px');
         mh = menu.offsetHeight || Math.min(mh, maxH);
-        let top = rect.top - gap - mh;
-        if (top < viewTop + pad) top = viewTop + pad;
-        set('top', Math.round(top) + 'px');
+        /* Anchor to toggle bottom-edge going up — do not clamp away from field */
+        set('top', Math.round(rect.top - gap - mh + offTop) + 'px');
         set('bottom', 'auto');
       } else {
-        /* Open down: always leave UI_SELECT_GAP under the toggle; clamp height to fit */
-        const maxH = Math.min(280, Math.max(80, roomBelow));
+        const maxH = Math.min(280, Math.max(48, roomBelow));
         set('max-height', maxH + 'px');
-        let top = rect.bottom + gap;
-        if (top + 80 > viewBottom - pad) {
-          /* Still prefer near the toggle — shrink rather than jump to page top */
-          top = Math.max(viewTop + pad, Math.min(top, viewBottom - pad - 80));
-        }
-        set('top', Math.round(top) + 'px');
+        set('top', Math.round(rect.bottom + gap + offTop) + 'px');
         set('bottom', 'auto');
       }
     }
@@ -1124,7 +1100,6 @@
       window.visualViewport.addEventListener('resize', repositionOpenUiMenus);
       window.visualViewport.addEventListener('scroll', repositionOpenUiMenus);
     }
-    window.addEventListener('resize', repositionOpenUiMenus);
     enhanceAllSelects();
     window.enhanceAllSelects = enhanceAllSelects;
     document.addEventListener('panel:dom-ready', (e) => {
@@ -1164,11 +1139,28 @@
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') closeUiSelects();
     });
-    window.addEventListener('resize', () => closeUiSelects());
-    window.addEventListener('scroll', (e) => {
-      if (!document.querySelector('.ui-select.open')) return;
-      if (e.target && e.target.closest && e.target.closest('.ui-select-menu')) return;
+    /* Soft keyboard fires window resize — reposition instead of closing so the
+       menu stays glued to the field inside modals. */
+    window.addEventListener('resize', () => {
+      if (document.querySelector('.ui-select.open, .row-actions.open')) {
+        repositionOpenUiMenus();
+        return;
+      }
       closeUiSelects();
+    });
+    window.addEventListener('scroll', (e) => {
+      const openSel = document.querySelector('.ui-select.open');
+      const openRow = document.querySelector('.row-actions.open');
+      if (!openSel && !openRow) return;
+      if (e.target && e.target.closest && e.target.closest('.ui-select-menu, .row-actions-menu')) return;
+      const host = openSel || openRow;
+      const modal = host && host.closest('.ui-modal, .modal, dialog, [role="dialog"]');
+      if (modal && e.target && (e.target === modal || modal.contains(e.target))) {
+        repositionOpenUiMenus();
+        return;
+      }
+      closeUiSelects();
+      closeRowActions();
     }, true);
 
     document.addEventListener('click', (e) => {

@@ -73,11 +73,11 @@ class ReleaseNotesTests(unittest.TestCase):
 
         src = Path("app/services/release_notes.py").read_text(encoding="utf-8")
         parsed = parse_release_notes_source(src)
-        self.assertEqual(list(parsed.keys())[0], "0.2.5")
+        self.assertEqual(list(parsed.keys())[0], "0.2.6")
         self.assertIn("0.1.0", parsed)
-        self.assertTrue(parsed["0.2.5"])
+        self.assertTrue(parsed["0.2.6"])
         self.assertTrue(
-            any("دسته" in n or "ثابت" in n or "visualViewport" in n for n in parsed["0.2.5"])
+            any("دسته" in n or "می‌چسب" in n or "visualViewport" in n for n in parsed["0.2.6"])
         )
         self.assertTrue(parsed["0.2.4"])
         self.assertTrue(
@@ -140,6 +140,7 @@ class ReleaseNotesTests(unittest.TestCase):
         self.assertEqual(
             set(parsed),
             {
+                "0.2.6",
                 "0.2.5",
                 "0.2.4",
                 "0.2.3",
@@ -164,7 +165,7 @@ class ReleaseNotesTests(unittest.TestCase):
             },
         )
         self.assertTrue(
-            any("دسته" in n or "ثابت" in n or "visualViewport" in n for n in parsed["0.2.5"])
+            any("دسته" in n or "می‌چسب" in n or "visualViewport" in n for n in parsed["0.2.6"])
         )
         self.assertTrue(
             any("on_hold" in n or "تحویل" in n or "برچسب" in n for n in parsed["0.2.4"])
