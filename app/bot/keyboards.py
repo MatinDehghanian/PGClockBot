@@ -970,8 +970,9 @@ def plans_keyboard(
     rows = []
     for p in plans:
         cat = ""
-        if p.category_id and int(p.category_id) in cat_names:
-            cat = f"[{cat_names[int(p.category_id)]}] "
+        cid = getattr(p, "category_id", None)
+        if cid is not None and int(cid) in cat_names:
+            cat = f"[{cat_names[int(cid)]}] "
         rows.append(
             [
                 _ikb(
