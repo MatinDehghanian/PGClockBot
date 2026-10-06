@@ -55,8 +55,9 @@ async def resolve_reseller_owner_id(
     in the current bot context.
 
     - Dedicated reseller bot only: owner OR configured bot_admin_ids → that shop.
-    - Main (platform) bot: never — panel ops live on the shop's own bot.
-      On the main bot, resellers only see credentials / deep-link info.
+    - Main (platform) bot: never — full shop panel ops live on the shop's own bot.
+      On the main bot, shop owners see credentials plus capacity renew/extras
+      (see ``load_reseller_capacity_actor``).
     """
     if not is_reseller_bot or not reseller_owner_id:
         return None
@@ -87,6 +88,34 @@ async def load_reseller_actor(
     if not profile or not profile.is_active:
         return None, None
     return owner_id, profile
+
+
+async def load_reseller_capacity_actor(
+    session: AsyncSession,
+    db_user: BotUser,
+    *,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+) -> tuple[int | None, ResellerProfile | None]:
+    """Actor for renew / buy-extra / addon packs.
+
+    Shop-bot: same as the full panel actor (owner or bot_admin).
+    Main (platform) bot: shop owner only — renew their subscription with the
+    platform without opening the full shop panel.
+    """
+    if is_reseller_bot:
+        return await load_reseller_actor(
+            session,
+            db_user,
+            is_reseller_bot=True,
+            reseller_owner_id=reseller_owner_id,
+        )
+    if db_user.role != Role.RESELLER.value:
+        return None, None
+    profile = await get_reseller_profile(session, int(db_user.id))
+    if not profile or not profile.is_active:
+        return None, None
+    return int(db_user.id), profile
 
 
 async def effective_menu_role(

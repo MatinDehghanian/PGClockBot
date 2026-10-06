@@ -28,7 +28,7 @@ class ResellerHubStartTests(unittest.TestCase):
         self.assertIn("پیش‌نمایش منوی کاربر", chunk)
 
     def test_hub_keyboard_has_preview(self):
-        src = (ROOT / "app/bot/keyboards.py").read_text(encoding="utf-8")
+        src = (ROOT / "app/bot/reply_keyboards.py").read_text(encoding="utf-8")
         self.assertIn("REPLY_ACTION_RES_PREVIEW", src)
         self.assertIn("def reseller_hub_main_keyboard", src)
         chunk = src.split("def _reseller_submenu_entries")[1].split("\ndef ")[0]

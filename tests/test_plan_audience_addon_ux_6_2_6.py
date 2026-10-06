@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PLANS_HTML = (ROOT / "app/web/templates/plans.html").read_text(encoding="utf-8")
 EDIT_HTML = (ROOT / "app/web/templates/reseller_plan_edit.html").read_text(encoding="utf-8")
 RESELLER_PAGES = (ROOT / "app/api/reseller_pages.py").read_text(encoding="utf-8")
-KEYBOARDS = (ROOT / "app/bot/keyboards.py").read_text(encoding="utf-8")
+KEYBOARDS = (ROOT / "app/bot/reply_keyboards.py").read_text(encoding="utf-8")
 RESELLER_BOT = (ROOT / "app/bot/handlers/reseller.py").read_text(encoding="utf-8")
 
 
@@ -65,16 +65,21 @@ class PlanAudienceAddonUxTests(unittest.TestCase):
 
     def test_bot_menu_fail_closed_for_addons(self):
         block = KEYBOARDS[
+            KEYBOARDS.find("def _reseller_capacity_entries") : KEYBOARDS.find(
+                "def _reseller_submenu_entries"
+            )
+        ]
+        self.assertIn("is_subscription_plan", block)
+        self.assertIn('entries.append(("res_addon_packs"', block)
+        except_tail = block[block.rfind("except Exception:") :]
+        self.assertIn("Fail closed", except_tail)
+        self.assertNotIn('entries.append(("res_addon_packs"', except_tail)
+        submenu = KEYBOARDS[
             KEYBOARDS.find("def _reseller_submenu_entries") : KEYBOARDS.find(
                 "def reseller_hub_main_keyboard"
             )
         ]
-        self.assertIn("is_subscription_plan", block)
-        capacity = block[block.find("# Capacity:") :]
-        self.assertIn('entries.append(("res_addon_packs"', capacity)
-        except_tail = capacity[capacity.rfind("except Exception:") :]
-        self.assertIn("Fail closed", except_tail)
-        self.assertNotIn('entries.append(("res_addon_packs"', except_tail)
+        self.assertIn("_reseller_capacity_entries", submenu)
 
     def test_res_addons_requires_subscription_plan(self):
         fn = RESELLER_BOT[

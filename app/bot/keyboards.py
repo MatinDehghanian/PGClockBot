@@ -278,7 +278,7 @@ def main_menu(
             )
         )
     elif show_reseller_creds:
-        # Main bot: credentials / deep-link only — no panel ops here
+        # Main bot: credentials / deep-link (capacity renew is on reply KB)
         full_width.append(
             _ikb(
                 _t(ui, "btn_reseller_creds"),
@@ -593,6 +593,7 @@ from app.bot.reply_keyboards import (  # noqa: E402
     _support_submenu_entries,
     _loyalty_submenu_entries,
     _admin_loyalty_submenu_entries,
+    _reseller_capacity_entries,
     _reseller_submenu_entries,
     reseller_hub_main_keyboard,
     _pay_method_entries,

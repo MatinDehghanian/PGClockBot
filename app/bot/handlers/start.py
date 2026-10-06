@@ -89,6 +89,13 @@ async def render_home(
     else:
         show_creds = is_shop_owner_on_main_bot(db_user, is_reseller_bot=is_reseller_bot)
         has = await _has_services(session, db_user.id)
+        owner_profile = None
+        if show_creds:
+            from app.services.resellers import get_reseller_profile
+
+            owner_profile = await get_reseller_profile(session, int(db_user.id))
+            if owner_profile is not None and not owner_profile.is_active:
+                owner_profile = None
         welcome = ui.get("welcome_text", "")
         shop_title_raw = ui.get("shop_title", "")
         title_plain = rich_plain_text(shop_title_raw)
@@ -110,6 +117,7 @@ async def render_home(
             has_services=has,
             ui=ui,
             show_reseller_creds=show_creds,
+            profile=owner_profile,
         )
 
     mini = None

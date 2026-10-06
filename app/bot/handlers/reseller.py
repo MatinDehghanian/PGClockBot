@@ -157,7 +157,7 @@ async def res_creds(
         return
     await callback.answer()
     text = await format_reseller_access_card(session, profile)
-    # URL button is allowed (not a menu); nav via reply KB
+    # URL / renew buttons are allowed (not a shop-panel menu); nav via reply KB
     rows: list[list[InlineKeyboardButton]] = []
     if profile.bot_username:
         rows.append(
@@ -168,6 +168,16 @@ async def res_creds(
                 )
             ]
         )
+    try:
+        from app.services.pg_admin_subscription import is_subscription_plan
+
+        plan = getattr(profile, "plan", None)
+        if plan is not None and is_subscription_plan(plan):
+            rows.append(
+                [InlineKeyboardButton(text="🔄 تمدید سرویس", callback_data="res:renew")]
+            )
+    except Exception:
+        pass
     if callback.message:
         await safe_edit_text(
             callback.message,
@@ -1131,12 +1141,19 @@ async def _capacity_context(
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ):
-    owner_id, profile = await _actor(
-        session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
+    from app.services.reseller_access import load_reseller_capacity_actor
+    from app.services.reseller_capacity import load_reseller_plan
+
+    # Capacity (renew / extras / addons) is allowed on the platform bot for the
+    # shop owner — unlike the full shop panel which stays dedicated-bot only.
+    owner_id, profile = await load_reseller_capacity_actor(
+        session,
+        db_user,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
     )
     if not owner_id or not profile:
         return None, None, None, None
-    from app.services.reseller_capacity import load_reseller_plan
 
     plan = await load_reseller_plan(session, profile)
     owner = await session.get(BotUser, int(owner_id))

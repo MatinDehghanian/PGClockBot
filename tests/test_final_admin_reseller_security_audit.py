@@ -54,11 +54,13 @@ class NodesAclIsolationTests(unittest.TestCase):
 
     def test_reseller_bot_settings_have_no_nodes_surface(self):
         settings = (ROOT / "app/bot/handlers/reseller_settings.py").read_text(encoding="utf-8")
-        keyboards = (ROOT / "app/bot/keyboards.py").read_text(encoding="utf-8")
+        keyboards = (ROOT / "app/bot/reply_keyboards.py").read_text(encoding="utf-8")
         self.assertNotIn("pg_nodes", settings)
         self.assertNotIn("نودها", settings)
         start = keyboards.find("def _reseller_submenu_entries")
         end = keyboards.find("def reseller_hub_main_keyboard")
+        self.assertGreater(start, -1)
+        self.assertGreater(end, start)
         hub_fn = keyboards[start:end]
         self.assertNotIn("REPLY_ACTION_PG_NODES", hub_fn)
         self.assertNotIn("نودها", hub_fn)

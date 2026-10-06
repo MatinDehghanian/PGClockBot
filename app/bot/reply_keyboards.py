@@ -132,6 +132,7 @@ def _reply_user_entries(
     has_services: bool,
     ui: dict | None,
     show_reseller_creds: bool = False,
+    profile=None,
 ) -> list[tuple[str, str]]:
     """Ordered (action_key, button_text) for the customer/reseller reply keyboard."""
     entries: list[tuple[str, str]] = []
@@ -161,6 +162,8 @@ def _reply_user_entries(
             entries.append((REPLY_ACTION_ADMIN_PG, _t(ui, "btn_adm_pg")))
     elif show_reseller_creds:
         entries.append((REPLY_ACTION_CREDS, _t(ui, "btn_reseller_creds")))
+        # Platform bot: shop owner can renew / buy capacity without opening shop panel
+        entries.extend(_reseller_capacity_entries(profile))
         entries.append((REPLY_ACTION_ADMIN_PG, _t(ui, "btn_adm_pg")))
     if role == Role.ADMIN.value:
         entries.append((REPLY_ACTION_ADMIN, _t(ui, "btn_admin")))
@@ -462,6 +465,30 @@ def _admin_loyalty_submenu_entries(ui: dict | None = None, *, include_tiers: boo
     return entries
 
 
+def _reseller_capacity_entries(profile=None) -> list[tuple[str, str]]:
+    """Renew / buy-extra / addon packs — shop bot hub and main-bot shop owner."""
+    if profile is None:
+        return []
+    entries: list[tuple[str, str]] = []
+    try:
+        from app.services.pg_admin_subscription import is_subscription_plan
+        from app.services.reseller_capacity import plan_allows_buy_extra
+
+        plan = getattr(profile, "plan", None)
+        if plan is not None and plan_allows_buy_extra(plan):
+            entries.append(("res_buy_gb", "📦 خرید حجم اضافه"))
+            entries.append(("res_buy_users", "👤 خرید کاربر اضافه"))
+        # Addon catalog: only resellers who already hold a subscription plan
+        if plan is not None and is_subscription_plan(plan):
+            entries.append(("res_addon_packs", "📦 بسته‌های حجم/کاربر"))
+        if plan is not None and is_subscription_plan(plan):
+            entries.append(("res_renew", "🔄 تمدید سرویس"))
+    except Exception:
+        # Fail closed — do not expose capacity without a verified subscription plan
+        pass
+    return entries
+
+
 def _reseller_submenu_entries(
     profile=None, *, can_add_representative: bool = False
 ) -> list[tuple[str, str]]:
@@ -484,23 +511,7 @@ def _reseller_submenu_entries(
             entries.append(("res_billing", "💰 کیف پول PAYG"))
     except Exception:
         pass
-    # Capacity: buy extra volume/users when plan allows; otherwise renew only
-    try:
-        from app.services.pg_admin_subscription import is_subscription_plan
-        from app.services.reseller_capacity import plan_allows_buy_extra
-
-        plan = getattr(profile, "plan", None)
-        if plan is not None and plan_allows_buy_extra(plan):
-            entries.append(("res_buy_gb", "📦 خرید حجم اضافه"))
-            entries.append(("res_buy_users", "👤 خرید کاربر اضافه"))
-        # Addon catalog: only resellers who already hold a subscription plan
-        if plan is not None and is_subscription_plan(plan):
-            entries.append(("res_addon_packs", "📦 بسته‌های حجم/کاربر"))
-        if plan is not None and is_subscription_plan(plan):
-            entries.append(("res_renew", "🔄 تمدید سرویس"))
-    except Exception:
-        # Fail closed — do not expose addon packs without a verified subscription plan
-        pass
+    entries.extend(_reseller_capacity_entries(profile))
     if shop_feature_allowed(key="orders", profile=profile) or shop_feature_allowed(
         key="payments", profile=profile
     ):
@@ -628,6 +639,7 @@ def main_reply_keyboard(
     ui: dict | None = None,
     as_user: bool = False,
     show_reseller_creds: bool = False,
+    profile=None,
     pg_features: frozenset[str] | set[str] | None = None,
     can_manage_representatives: bool = True,
 ) -> ReplyKeyboardMarkup:
@@ -647,6 +659,7 @@ def main_reply_keyboard(
             has_services=has_services,
             ui=ui,
             show_reseller_creds=False if as_user else show_reseller_creds,
+            profile=None if as_user else profile,
         )
         rows = _pack_reply_rows(entries, ui, footer=home_footer)
     return _reply_markup(rows, placeholder="از منوی پایین انتخاب کنید…")
@@ -933,6 +946,7 @@ def reply_action_map(
             has_services=has_services,
             ui=ui,
             show_reseller_creds=show_reseller_creds,
+            profile=profile if (show_reseller_creds and not is_reseller_bot) else None,
         ):
             mapping[(text or "").strip()] = key
         # L1 on the platform bot: register migrated PG submenu labels (not overview).
@@ -941,6 +955,9 @@ def reply_action_map(
                 {"pg_users", "pg_nodes", "pg_templates", "pg_groups"}
             )
             for key, text in _pg_submenu_entries(ui, features=l1_pg):
+                mapping[(text or "").strip()] = key
+            # Capacity labels (renew / extras) — also registered via _reply_user_entries
+            for key, text in _reseller_capacity_entries(profile):
                 mapping[(text or "").strip()] = key
         # Preview escape on main bot only
         if role == Role.ADMIN.value and as_user and not is_reseller_bot:
