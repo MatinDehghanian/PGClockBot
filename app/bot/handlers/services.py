@@ -229,7 +229,11 @@ async def svc_renew_pay(
             except Exception:
                 pass
             if callback.message:
-                await safe_edit_text(callback.message, f"❌ {e}", reply_markup=None)
+                await safe_edit_text(
+                    callback.message,
+                    f"❌ {user_safe_error(e)}",
+                    reply_markup=None,
+                )
             return
         if callback.message:
             await safe_edit_text(callback.message, 
@@ -379,7 +383,7 @@ async def svc_addon_pay(
             session, user_id=db_user.id, service=svc, pack=pack
         )
     except Exception as e:
-        await callback.answer(str(e), show_alert=True)
+        await callback.answer(user_safe_error(e), show_alert=True)
         return
     await callback.answer()
 
@@ -396,7 +400,11 @@ async def svc_addon_pay(
             except Exception:
                 pass
             if callback.message:
-                await safe_edit_text(callback.message, f"❌ {e}", reply_markup=None)
+                await safe_edit_text(
+                    callback.message,
+                    f"❌ {user_safe_error(e)}",
+                    reply_markup=None,
+                )
             return
         if callback.message:
             await safe_edit_text(
