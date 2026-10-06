@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import secrets
 import string
 from typing import Optional
@@ -504,7 +505,9 @@ def calc_custom_plan_price(
     price_per_gb: int,
     price_per_day: int,
 ) -> int:
-    return max(0, int(gb) * int(price_per_gb) + int(days) * int(price_per_day))
+    # Ceil fractional GB so e.g. 1.9 is billed as 2 (never undercharge).
+    gb_units = max(0, math.ceil(float(gb))) if float(gb) > 0 else 0
+    return max(0, gb_units * int(price_per_gb) + int(days) * int(price_per_day))
 
 
 async def create_custom_order(
