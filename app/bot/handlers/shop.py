@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -38,6 +40,7 @@ from app.services.users import get_all_settings, on
 from app.services.message_variables import DOMAIN_PAYMENT, render_message_template
 
 router = Router(name="shop")
+logger = logging.getLogger(__name__)
 
 
 async def _show_order_pay(message, session, db_user, order_id, state, text: str):
@@ -254,6 +257,49 @@ def _shop_picker_copy(*, use_categories: bool) -> tuple[str, str]:
     )
 
 
+async def present_shop_kind_picker(
+    message: Message,
+    *,
+    ui: dict,
+    body: str,
+    fixed_on: bool,
+    trial_on: bool,
+    custom_on: bool,
+    wholesale_on: bool,
+    categories: list | None = None,
+    include_uncategorized: bool = False,
+    mode: str = "send",
+) -> None:
+    """Show shop kind/category picker as a *single* bubble.
+
+    ``mode="edit"`` — refresh an existing shop message (back from plan list).
+    ``mode="send"`` — new entry: set reply chrome on the same message, then
+    attach the inline kind/category keyboard (no orphan «فروشگاه:» caption).
+    """
+    text = format_message("🛒 فروشگاه", body)
+    inline = kb.shop_kind_keyboard(
+        ui,
+        fixed_on=fixed_on,
+        trial_on=trial_on,
+        custom_on=custom_on,
+        wholesale_on=wholesale_on,
+        categories=categories,
+        include_uncategorized=include_uncategorized,
+    )
+    if mode == "edit":
+        await safe_edit_text(message, text, reply_markup=inline)
+        return
+
+    sent = await message.answer(text, reply_markup=kb.shop_reply_keyboard(ui))
+    try:
+        await sent.edit_reply_markup(reply_markup=inline)
+    except Exception:
+        logger.warning(
+            "shop picker: inline attach failed; kinds may be missing",
+            exc_info=True,
+        )
+
+
 @router.callback_query(F.data == "shop:list")
 async def shop_list(callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext):
     ui_gate = await get_all_settings(session)
@@ -282,23 +328,18 @@ async def shop_list(callback: CallbackQuery, session: AsyncSession, db_user: Bot
     cats, include_other = await _shop_category_menu(session, fixed_plans)
     body, _cap = _shop_picker_copy(use_categories=bool(cats))
     if callback.message:
-        await safe_edit_text(
-            callback.message,
-            format_message("🛒 فروشگاه", body),
-            reply_markup=kb.shop_kind_keyboard(
-                ui,
-                fixed_on=fixed_on,
-                trial_on=trial_on,
-                custom_on=custom_on,
-                wholesale_on=wholesale_on,
-                categories=cats,
-                include_uncategorized=include_other,
-            ),
-        )
         await state.update_data(_shop_custom=custom_on, _shop_wholesale=wholesale_on)
-        await callback.message.answer(
-            "فروشگاه:",
-            reply_markup=kb.shop_reply_keyboard(ui),
+        await present_shop_kind_picker(
+            callback.message,
+            ui=ui,
+            body=body,
+            fixed_on=fixed_on,
+            trial_on=trial_on,
+            custom_on=custom_on,
+            wholesale_on=wholesale_on,
+            categories=cats,
+            include_uncategorized=include_other,
+            mode="edit",
         )
 
 

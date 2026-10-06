@@ -251,6 +251,7 @@ async def open_shop_list(
         _shop_category_menu,
         _shop_kind_flags,
         _shop_picker_copy,
+        present_shop_kind_picker,
         shop_under_maintenance,
     )
 
@@ -280,25 +281,20 @@ async def open_shop_list(
     await state.update_data(_shop_custom=custom_on, _shop_wholesale=wholesale_on)
     cats, include_other = await _shop_category_menu(session, fixed_plans)
     body, _cap = _shop_picker_copy(use_categories=bool(cats))
-    # Attach inline kind/category keyboard to the shop bubble (same as shop:list /
-    # back navigation). A separate «📁 دسته:» caption made buttons look detached.
+    # Single bubble: reply chrome + inline kinds (no orphan «فروشگاه:» caption).
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_SHOP, push=push)
-    await message.answer(
-        format_message("🛒 فروشگاه", body),
-        reply_markup=kb.shop_kind_keyboard(
-            ui,
-            fixed_on=fixed_on,
-            trial_on=trial_on,
-            custom_on=custom_on,
-            wholesale_on=wholesale_on,
-            categories=cats,
-            include_uncategorized=include_other,
-        ),
-    )
-    await message.answer(
-        "فروشگاه:",
-        reply_markup=kb.shop_reply_keyboard(ui),
+    await present_shop_kind_picker(
+        message,
+        ui=ui,
+        body=body,
+        fixed_on=fixed_on,
+        trial_on=trial_on,
+        custom_on=custom_on,
+        wholesale_on=wholesale_on,
+        categories=cats,
+        include_uncategorized=include_other,
+        mode="send",
     )
 
 

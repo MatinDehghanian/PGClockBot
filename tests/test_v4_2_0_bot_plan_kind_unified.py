@@ -7,6 +7,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 KEYBOARDS_SRC = (ROOT / "app/bot/keyboards.py").read_text(encoding="utf-8")
+REPLY_KB_SRC = (ROOT / "app/bot/reply_keyboards.py").read_text(encoding="utf-8")
 
 
 class ShopKindFlowTests(unittest.TestCase):
@@ -26,10 +27,9 @@ class ShopKindFlowTests(unittest.TestCase):
         self.assertIn("shop:kind:wholesale", KEYBOARDS_SRC)
 
     def test_shop_reply_keyboard_chrome_only(self):
-        block = KEYBOARDS_SRC[
-            KEYBOARDS_SRC.find("def shop_reply_keyboard")
-            : KEYBOARDS_SRC.find("def shop_reply_keyboard") + 320
-        ]
+        start = REPLY_KB_SRC.find("def shop_reply_keyboard")
+        self.assertGreater(start, 0)
+        block = REPLY_KB_SRC[start : start + 320]
         self.assertIn("_submenu_footer", block)
         self.assertNotIn("REPLY_ACTION_SHOP_CUSTOM", block)
 
