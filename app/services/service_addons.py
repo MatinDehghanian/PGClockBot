@@ -51,7 +51,13 @@ def format_addon_note(
     if k == KIND_DURATION:
         amt_s = str(int(amt))
     else:
-        amt_s = f"{amt:g}"
+        # Avoid :g scientific notation (e.g. 1e+06) which breaks _NOTE_RE.
+        if amt == int(amt) and abs(amt) < 1e15:
+            amt_s = str(int(amt))
+        else:
+            amt_s = format(amt, ".10f").rstrip("0").rstrip(".")
+            if not amt_s or amt_s == "-":
+                amt_s = "0"
     return f"svc_addon:{int(pack_id)}:{int(service_id)}:{k}:{amt_s}"
 
 
@@ -402,6 +408,7 @@ async def apply_service_addon(
         )
         await session.commit()
 
+    pg_applied = False
     try:
         pack = await session.get(ServiceAddonPack, pack_id)
         service = await session.get(UserService, service_id)
@@ -425,6 +432,8 @@ async def apply_service_addon(
         if apply_kind not in VALID_KINDS:
             raise ValueError("نوع بسته نامعتبر است")
 
+        # PG mutate first. After it succeeds we must not release the claim —
+        # releasing would let a retry double-apply capacity.
         await _apply_pack_to_service(
             session,
             service,
@@ -432,6 +441,7 @@ async def apply_service_addon(
             amount=apply_amount,
             order_reseller_id=order.reseller_id,
         )
+        pg_applied = True
 
         with session.no_autoflush:
             done = await session.execute(
@@ -444,15 +454,39 @@ async def apply_service_addon(
                 .execution_options(synchronize_session=False)
             )
         if done.rowcount != 1:
+            # PG already mutated — do not release; seal below in except path.
+            log.error(
+                "addon deliver seal failed after PG apply order=%s", order_id
+            )
             raise ValueError("ثبت تحویل افزونه ناموفق بود")
         await session.commit()
         await session.refresh(order)
         return order
     except Exception:
-        try:
-            await _release()
-        except Exception:
-            log.exception("addon claim release failed order=%s", order_id)
+        if not pg_applied:
+            try:
+                await _release()
+            except Exception:
+                log.exception("addon claim release failed order=%s", order_id)
+        else:
+            # Capacity already on PG — leave order DELIVERED so retries do not
+            # re-apply. Prefer seal over leaving DELIVERING/PAID.
+            try:
+                await session.execute(
+                    update(Order)
+                    .where(
+                        Order.id == order_id,
+                        Order.status == OrderStatus.DELIVERING.value,
+                    )
+                    .values(status=OrderStatus.DELIVERED.value)
+                    .execution_options(synchronize_session=False)
+                )
+                await session.commit()
+            except Exception:
+                log.exception(
+                    "addon post-PG seal failed order=%s — manual check needed",
+                    order_id,
+                )
         raise
 
 
@@ -521,10 +555,17 @@ async def _apply_pack_to_service(
         raise ValueError("نوع بسته پشتیبانی نمی‌شود")
 
     await pg.modify_user_by_id(int(service.pg_user_id), payload)
-    await sync_service_quota_cache(
-        session,
-        service,
-        expire_ts=expire_ts,
-        data_limit_bytes=data_limit_bytes,
-    )
-    await session.flush()
+    # Cache sync is best-effort — PG already mutated. Never fail the delivery
+    # claim here or a retry would double-apply the same addon.
+    try:
+        sync_service_quota_cache(
+            service,
+            expire_ts=expire_ts,
+            data_limit_bytes=data_limit_bytes,
+        )
+    except Exception:
+        log.exception(
+            "addon quota cache sync failed svc=%s kind=%s",
+            getattr(service, "id", None),
+            kind,
+        )

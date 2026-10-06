@@ -1607,6 +1607,14 @@ async def reject_order(session: AsyncSession, order: Order, *, note: str = "") -
 
 async def deliver_order(session: AsyncSession, order: Order) -> Order:
     order_id = int(order.id)
+    note = _order_note(order)
+    # Defense-in-depth: mutation orders must never be sealed by mint-delivery.
+    # Callers should use fulfill_paid_order; this guard prevents silent no-ops
+    # that look like "wrong package" / "addon not applied".
+    if is_mutation_order_note(note):
+        raise ValueError(
+            "این سفارش تمدید/افزونه/نمایندگی است — از مسیر fulfill استفاده کنید"
+        )
     # If a prior delivery already linked services (even after status tampering),
     # never mint another PG user — just seal the order as delivered.
     if order.service_id:

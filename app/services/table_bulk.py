@@ -289,7 +289,6 @@ async def bulk_order_action(
     from app.services.orders import (
         approve_payment,
         cancel_order,
-        deliver_order,
         manual_fulfill_unpaid_order,
         reject_order,
     )
@@ -333,14 +332,24 @@ async def bulk_order_action(
                             continue
                     await approve_payment(session, payment, reviewer_tg=0)
                 elif order.status == OrderStatus.PAID.value:
-                    await deliver_order(session, order)
+                    # Must route renew/addon/reseller_app — deliver_order alone
+                    # would seal mutation orders (service_id set) without applying.
+                    from app.services.orders import fulfill_paid_order
+
+                    await fulfill_paid_order(session, order)
                 elif order.status in {
                     OrderStatus.PENDING.value,
                     OrderStatus.AWAITING_RECEIPT.value,
                 }:
                     await manual_fulfill_unpaid_order(session, order, note="web bulk approve")
                 elif order.status == OrderStatus.AWAITING_APPROVAL.value:
-                    await deliver_order(session, order)
+                    from app.services.orders import fulfill_paid_order
+
+                    # Pending staff approval with no receipt path — mark PAID then fulfill.
+                    if order.status != OrderStatus.PAID.value:
+                        order.status = OrderStatus.PAID.value
+                        await session.flush()
+                    await fulfill_paid_order(session, order)
                 else:
                     fail += 1
                     continue
