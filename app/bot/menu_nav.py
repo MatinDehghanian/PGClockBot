@@ -152,6 +152,13 @@ async def build_main_reply_keyboard(
         return markup, ui, role
     has = False if (role == "admin" and not as_user) else await user_has_services(session, db_user.id)
     show_creds = is_shop_owner_on_main_bot(db_user, is_reseller_bot=is_reseller_bot)
+    owner_profile = None
+    if show_creds and not as_user:
+        from app.services.resellers import get_reseller_profile
+
+        owner_profile = await get_reseller_profile(session, int(db_user.id))
+        if owner_profile is not None and not owner_profile.is_active:
+            owner_profile = None
     pg_feats: frozenset[str] | set[str] | None = None
     can_reps = True
     if role == "admin" and not as_user:
@@ -164,6 +171,7 @@ async def build_main_reply_keyboard(
         ui=ui,
         as_user=as_user,
         show_reseller_creds=show_creds,
+        profile=owner_profile,
         pg_features=pg_feats,
         can_manage_representatives=can_reps,
     )

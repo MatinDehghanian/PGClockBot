@@ -77,8 +77,14 @@ class ReplyMenuTextFilter(BaseFilter):
                 is_reseller_bot=is_reseller_bot,
                 reseller_owner_id=reseller_owner_id,
             )
+        elif show_creds and not is_reseller_bot:
+            from app.services.resellers import get_reseller_profile
+
+            profile = await get_reseller_profile(session, int(db_user.id))
+            if profile is not None and not profile.is_active:
+                profile = None
         can_add = False
-        if profile is not None:
+        if profile is not None and is_reseller_bot:
             from app.services.representative_unification import (
                 shop_bot_can_manage_representatives,
             )
@@ -664,9 +670,22 @@ async def open_reseller_creds(message: Message, session: AsyncSession, db_user: 
                 )
             ]
         )
+    try:
+        from app.services.pg_admin_subscription import is_subscription_plan
+
+        plan = getattr(profile, "plan", None)
+        if plan is not None and is_subscription_plan(plan):
+            rows.append(
+                [InlineKeyboardButton(text="🔄 تمدید سرویس", callback_data="res:renew")]
+            )
+    except Exception:
+        pass
     await message.answer(text, reply_markup=main_kb)
     if rows:
-        await message.answer("لینک ربات:", reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
+        await message.answer(
+            "لینک ربات / تمدید:",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+        )
 
 
 async def open_pg_home(
@@ -1692,6 +1711,12 @@ async def _handle_topup_action(
             await message.answer(f"خطا: {user_safe_error(e)}")
 
 
+# Capacity ops are allowed on the platform bot for the shop owner (renew/extras).
+_RESELLER_CAPACITY_ACTIONS = frozenset(
+    {"res_renew", "res_buy_gb", "res_buy_users", "res_addon_packs"}
+)
+
+
 async def _soft_reseller(
     message: Message,
     session: AsyncSession,
@@ -1705,20 +1730,35 @@ async def _soft_reseller(
     from app.bot.handlers import reseller as res_h
     from app.bot.handlers import reseller_plans as res_plans_h
     from app.bot.handlers import reseller_settings as res_st_h
-    from app.services.reseller_access import load_reseller_actor
+    from app.services.reseller_access import (
+        load_reseller_actor,
+        load_reseller_capacity_actor,
+    )
 
     if not is_reseller_bot:
-        await open_reseller_creds(message, session, db_user)
-        return
-    owner_id, profile = await load_reseller_actor(
-        session,
-        db_user,
-        is_reseller_bot=is_reseller_bot,
-        reseller_owner_id=reseller_owner_id,
-    )
-    if not owner_id or not profile:
-        await message.answer("دسترسی نماینده یافت نشد.")
-        return
+        if action not in _RESELLER_CAPACITY_ACTIONS:
+            await open_reseller_creds(message, session, db_user)
+            return
+        owner_id, profile = await load_reseller_capacity_actor(
+            session,
+            db_user,
+            is_reseller_bot=False,
+            reseller_owner_id=None,
+        )
+        if not owner_id or not profile:
+            await message.answer("دسترسی نماینده یافت نشد.")
+            return
+        # Fall through to capacity mapping below (no shop-panel gates).
+    else:
+        owner_id, profile = await load_reseller_actor(
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
+        if not owner_id or not profile:
+            await message.answer("دسترسی نماینده یافت نشد.")
+            return
 
     if action == kb.REPLY_ACTION_RES_ADD_REP:
         from app.bot.handlers.reseller_reps import start_add_representative
