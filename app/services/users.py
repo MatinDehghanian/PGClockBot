@@ -1812,6 +1812,16 @@ async def delete_bot_user(
             update(Order).where(Order.plan_id.in_(plan_ids)).values(plan_id=None)
         )
         await session.execute(delete(Plan).where(Plan.id.in_(plan_ids)))
+    # Shop catalog labels / add-on packs (FK owner_reseller_id → bot_users, no CASCADE).
+    # PAYG shops often have these; without cleanup DELETE bot_users raises IntegrityError.
+    from app.db.models import PlanCategory, ServiceAddonPack
+
+    await session.execute(
+        delete(PlanCategory).where(PlanCategory.owner_reseller_id == user_id)
+    )
+    await session.execute(
+        delete(ServiceAddonPack).where(ServiceAddonPack.owner_reseller_id == user_id)
+    )
     panel_ticket_ids = list(
         (
             await session.execute(
