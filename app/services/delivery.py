@@ -14,7 +14,7 @@ from app.db.models import Payment, UserService
 from app.services.formatting import format_message, format_toman, info_block, kv_line, service_card, copyable
 from app.bot import keyboards as kb
 from app.config import get_settings
-from app.services.pasarguard import get_pg
+from app.services.pasarguard import absolutize_subscription_url, get_pg
 from app.services.qrcode_gen import make_subscription_qr
 from app.services.message_variables import DOMAIN_ORDER, DOMAIN_WALLET, render_message_template
 from app.services.users import get_all_settings, on
@@ -121,9 +121,10 @@ async def build_delivery_content(
                 lines = []
                 for i, s in enumerate(siblings, 1):
                     uname = s.pg_username or f"#{s.id}"
-                    if s.subscription_url and on(ui.get("show_sub_link_in_text", "1")):
+                    sib_url = absolutize_subscription_url(s.subscription_url) or s.subscription_url
+                    if sib_url and on(ui.get("show_sub_link_in_text", "1")):
                         lines.append(
-                            f"{i}. {copyable(uname)}\n{copyable(s.subscription_url)}"
+                            f"{i}. {copyable(uname)}\n{copyable(sib_url)}"
                         )
                     else:
                         lines.append(f"{i}. {copyable(uname)}")
@@ -169,7 +170,7 @@ async def build_delivery_content(
             except Exception:
                 if include_details and svc.pg_username:
                     detail_parts.append(f"👤 {copyable(svc.pg_username)}")
-            sub_url = svc.subscription_url
+            sub_url = absolutize_subscription_url(svc.subscription_url) or svc.subscription_url
             if include_details and sub_url and on(ui.get("show_sub_link_in_text", "1")):
                 detail_parts.append(
                     info_block(

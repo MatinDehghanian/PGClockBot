@@ -24,7 +24,7 @@ from app.db.models import (
     UserService,
     WalletTransaction,
 )
-from app.services.pasarguard import extract_sub_token, get_pg
+from app.services.pasarguard import extract_sub_token, get_pg, user_subscription_url
 from app.services.provision_gate import (
     ProvisionError,
     assert_provision_create,
@@ -1783,7 +1783,7 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
             elif order.reseller_id and not pg_uid:
                 raise ValueError("ساخت کاربر پاسارگارد شناسه برنگرداند — تحویل لغو شد")
 
-            sub_url = pg_user.get("subscription_url")
+            sub_url = user_subscription_url(pg_user if isinstance(pg_user, dict) else None)
             service = UserService(
                 bot_user_id=order.user_id,
                 plan_id=plan.id,
@@ -1999,7 +1999,10 @@ async def apply_renewal(session: AsyncSession, order: Order, service: UserServic
                     "expire": expire,
                 },
             )
-        sub_url = pg_user.get("subscription_url") or service.subscription_url
+        sub_url = (
+            user_subscription_url(pg_user if isinstance(pg_user, dict) else None)
+            or service.subscription_url
+        )
         service.subscription_url = sub_url
         service.subscription_token = extract_sub_token(sub_url)
         service.plan_id = plan.id

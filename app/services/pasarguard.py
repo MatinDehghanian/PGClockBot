@@ -1054,12 +1054,38 @@ async def get_pg_for_principal(
 
 
 def public_pg_api_base() -> str:
-    """Best-known API root for building public /sub links."""
+    """Best-known API root (may include a dashboard path). Prefer ``public_pg_sub_origin`` for /sub links."""
     client = _pg
     if client and client.base_url:
         return client.base_url.rstrip("/")
     cands = pg_api_base_candidates(get_settings().pg_base_url or "")
     return (cands[0] if cands else "").rstrip("/")
+
+
+def public_pg_sub_origin() -> str:
+    """Scheme + host (+ port) of the PasarGuard panel — no dashboard/UI path.
+
+    When PG has no dedicated subscription host configured it often returns a
+    path-only ``/sub/…`` URL. Public links must still be absolute; use this
+    origin (not the panel path) as the fallback base.
+    """
+    from urllib.parse import urlparse, urlunparse
+
+    from app.config import normalize_pg_base_url
+
+    raw = ""
+    client = _pg
+    if client and getattr(client, "base_url", None):
+        raw = str(client.base_url or "")
+    if not raw:
+        raw = get_settings().pg_base_url or ""
+    base = normalize_pg_base_url(raw)
+    if not base:
+        return ""
+    parsed = urlparse(base)
+    if not parsed.scheme or not parsed.netloc:
+        return base.rstrip("/")
+    return urlunparse((parsed.scheme, parsed.netloc, "", "", "", "")).rstrip("/")
 
 
 def extract_sub_token(subscription_url: str | None) -> str | None:
@@ -1090,8 +1116,22 @@ def _sanitize_subscription_url(raw: str) -> str | None:
     return url
 
 
+def absolutize_subscription_url(raw: str | None) -> str | None:
+    """Sanitize and turn path-only ``/sub/…`` into an absolute URL via PG panel origin."""
+    cleaned = _sanitize_subscription_url(raw or "")
+    if not cleaned:
+        return None
+    if cleaned.startswith("/"):
+        origin = public_pg_sub_origin()
+        if not origin:
+            # Incomplete without a host — do not hand out path-only links
+            return None
+        return f"{origin}{cleaned}"
+    return cleaned
+
+
 def user_subscription_url(user: dict | None) -> str | None:
-    """Best-effort subscription URL from a PG user payload."""
+    """Best-effort absolute subscription URL from a PG user payload."""
     if not isinstance(user, dict):
         return None
     for key in (
@@ -1104,14 +1144,14 @@ def user_subscription_url(user: dict | None) -> str | None:
     ):
         raw = user.get(key)
         if isinstance(raw, str) and raw.strip():
-            cleaned = _sanitize_subscription_url(raw)
+            cleaned = absolutize_subscription_url(raw)
             if cleaned:
                 return cleaned
         if isinstance(raw, dict):
             for k in ("url", "subscription_url", "link", "href"):
                 v = raw.get(k)
                 if isinstance(v, str) and v.strip():
-                    cleaned = _sanitize_subscription_url(v)
+                    cleaned = absolutize_subscription_url(v)
                     if cleaned:
                         return cleaned
     links = user.get("links")
@@ -1119,20 +1159,20 @@ def user_subscription_url(user: dict | None) -> str | None:
         for k in ("subscription", "subscription_url", "url", "sub"):
             v = links.get(k)
             if isinstance(v, str) and v.strip():
-                cleaned = _sanitize_subscription_url(v)
+                cleaned = absolutize_subscription_url(v)
                 if cleaned:
                     return cleaned
     if isinstance(links, list):
         for item in links:
             if isinstance(item, str) and ("/sub/" in item or item.startswith("http")):
-                cleaned = _sanitize_subscription_url(item)
+                cleaned = absolutize_subscription_url(item)
                 if cleaned:
                     return cleaned
             if isinstance(item, dict):
                 for k in ("url", "link", "href"):
                     v = item.get(k)
                     if isinstance(v, str) and v.strip():
-                        cleaned = _sanitize_subscription_url(v)
+                        cleaned = absolutize_subscription_url(v)
                         if cleaned:
                             return cleaned
     token = (
@@ -1142,9 +1182,9 @@ def user_subscription_url(user: dict | None) -> str | None:
         or user.get("subscription_id")
     )
     if isinstance(token, str) and token.strip():
-        base = public_pg_api_base()
-        if base:
-            return f"{base}/sub/{token.strip()}"
+        origin = public_pg_sub_origin()
+        if origin:
+            return f"{origin}/sub/{token.strip()}"
     return None
 
 
