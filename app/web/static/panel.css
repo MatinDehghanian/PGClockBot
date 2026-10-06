@@ -557,48 +557,100 @@ a.topbar-brand:focus-visible {
   line-height: 1.2;
   color: var(--text, inherit);
 }
-/* Tag filter: compact dropdown under list title, same inset as h2 / search. */
+/* Tag filter sits in the search row, physical-left of the search button
+   (between the button and the card edge), same height as the button. */
 .color-tag-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: var(--space-2);
-  margin: 0;
-  padding: 0;
-}
-.card.card-flush > .color-tag-toolbar {
-  padding: 0 var(--card-pad) var(--space-1);
-}
-.card.card-flush > .color-tag-toolbar:first-child {
-  padding-top: var(--card-pad);
-}
-.card.card-flush > h2 + .color-tag-toolbar {
-  /* Sit tight under the list title; share --card-pad with h2. */
-  padding-top: 0;
-  margin-top: 0;
+  display: none; /* legacy; filter now lives in .search-bar--with-tag */
 }
 .color-tag-select-wrap {
   display: inline-flex;
-  align-items: center;
-  gap: 8px;
+  align-items: stretch;
+  gap: 0;
   min-width: 0;
   max-width: 100%;
-}
-.color-tag-select-wrap > .color-tag-dot {
   flex: 0 0 auto;
+  height: var(--btn-h);
+  min-height: var(--btn-h);
+  margin: 0;
+  border-radius: var(--radius-sm, 10px);
+  overflow: hidden;
+  box-sizing: border-box;
 }
 .color-tag-select-wrap > .ui-select,
 .color-tag-select-wrap > select.color-tag-select {
   width: auto;
-  min-width: 9.5rem;
-  max-width: min(15rem, 100%);
+  min-width: 7.5rem;
+  max-width: min(12rem, 42vw);
   margin-top: 0;
+  height: 100%;
+  min-height: 100%;
+}
+.color-tag-select-wrap .ui-select {
+  height: 100%;
 }
 .color-tag-select-wrap .ui-select-toggle {
-  min-width: 9.5rem;
+  min-width: 7.5rem;
+  height: 100%;
+  min-height: 100%;
+  display: inline-flex;
+  align-items: center;
+  padding-block: 0;
+  box-sizing: border-box;
+}
+/* Selected tag: paint the whole control with tag color (no separate dot). */
+.color-tag-select-wrap.is-tagged {
+  background: color-mix(in srgb, var(--tag-color, #22c55e) 22%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tag-color, #22c55e) 55%, transparent);
+}
+.color-tag-select-wrap.is-tagged > select.color-tag-select,
+.color-tag-select-wrap.is-tagged .ui-select-toggle {
+  background: transparent;
+  border-color: transparent;
+  color: var(--tag-color, #22c55e);
+  font-weight: 600;
+}
+.color-tag-select-wrap.is-tagged .ui-select-label {
+  color: var(--tag-color, #22c55e);
+  font-weight: 600;
+}
+/* Option text tinted to match each tag's circle color (native select). */
+.color-tag-select option[data-tag-color] {
+  color: var(--opt-color, inherit);
+  font-weight: 600;
+}
+.ui-select-menu button.color-tag-menu-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: flex-start;
+}
+.ui-select-menu button.color-tag-menu-option .color-tag-swatch {
+  width: 10px;
+  height: 10px;
+}
+.ui-select-menu button.color-tag-menu-option .color-tag-menu-label {
+  font-weight: 600;
+}
+.search-bar--with-tag {
+  flex-wrap: nowrap;
+  align-items: center;
+}
+.search-bar--with-tag > .color-tag-select-wrap {
+  order: 3; /* after field + search button → physical left in RTL row */
+  align-self: center;
+}
+.search-bar--with-tag > .search-bar-field {
+  order: 1;
+}
+.search-bar--with-tag > .btn {
+  order: 2;
+  align-self: center;
 }
 html[data-theme="light"] .color-tag-option {
   background: color-mix(in srgb, #fff 92%, var(--border, #e2e8f0));
+}
+html[data-theme="light"] .color-tag-select-wrap.is-tagged {
+  background: color-mix(in srgb, var(--tag-color, #22c55e) 18%, #fff);
 }
 .badge.badge-inline {
   font-size: 11px;
@@ -2233,10 +2285,16 @@ a.btn.btn-ghost:hover {
 }
 .page-head-actions {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   justify-content: flex-end;
   gap: var(--space-1);
+  max-width: min(100%, 62vw);
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  overscroll-behavior-x: contain;
 }
 .page-head > .btn,
 .page-head > a.btn,
@@ -4748,17 +4806,25 @@ form.settings-form > .actions.sticky-actions,
     margin-top: 0;
     max-width: 100%;
   }
-  /* Match direct «افزودن نماینده» sizing — content width, not equal-column stretch */
+  /* Match direct «افزودن نماینده» sizing — content width, not equal-column stretch.
+     Many actions (plans): keep one row and scroll horizontally — never wrap the
+     title/icon onto a second line or shove the page title. */
   .page-head > .actions,
   .page-head > .page-head-actions {
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     align-items: center;
     justify-content: flex-end;
     gap: var(--space-1);
     width: auto;
-    max-width: 100%;
+    max-width: min(100%, 58vw);
     flex: 0 1 auto;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    overscroll-behavior-x: contain;
   }
   .page-head > .actions > .btn,
   .page-head > .actions > a.btn,
@@ -6808,7 +6874,8 @@ td.col-address {
 .row-actions-menu.is-ported {
   display: flex !important;
   position: fixed !important;
-  z-index: 3200;
+  /* Floor above .ui-modal (4000); JS raises further when a modal is open. */
+  z-index: 5000;
   flex-direction: column !important;
   flex-wrap: nowrap !important;
   align-items: stretch !important;

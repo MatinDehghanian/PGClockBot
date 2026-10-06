@@ -27,6 +27,7 @@ router = Router(name="plan_catalog_manage")
 
 class PlanCatalogStates(StatesGroup):
     cat_name = State()
+    cat_audience = State()
     cat_edit_name = State()
     addon_name = State()
     addon_kind = State()
@@ -115,10 +116,12 @@ def _cat_list_markup(cats) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
     for c in cats[:25]:
         mark = "✅" if c.is_active else "⏸"
+        aud = str(getattr(c, "audience", None) or "users").strip().lower()
+        aud_mark = "🤝" if aud == "resellers" else "👤"
         rows.append(
             [
                 InlineKeyboardButton(
-                    text=f"{mark} {c.name}"[:48],
+                    text=f"{mark}{aud_mark} {c.name}"[:48],
                     callback_data=f"pcm:cat:tog:{c.id}",
                 ),
                 InlineKeyboardButton(
@@ -372,8 +375,42 @@ async def pcm_cat_name_save(
         await state.clear()
         await message.answer("دسترسی ندارید.")
         return
+    name = (message.text or "").strip()
+    if not name:
+        await message.answer("نام خالی است.", reply_markup=kb.cancel_reply())
+        return
+    # Platform Owner can target users or resellers; shop bots always users.
+    if staff_is_platform_admin(staff):
+        await state.update_data(_pcm_cat_name=name[:128])
+        await state.set_state(PlanCatalogStates.cat_audience)
+        await message.answer(
+            "مخاطب این برچسب؟",
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text="👤 کاربران", callback_data="pcm:cat:aud:users"
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            text="🤝 نمایندگان",
+                            callback_data="pcm:cat:aud:resellers",
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            text="❌ انصراف", callback_data="pcm:cat:list"
+                        )
+                    ],
+                ]
+            ),
+        )
+        return
     try:
-        cat = await create_category(session, staff, name=(message.text or "").strip())
+        cat = await create_category(
+            session, staff, name=name, audience="users"
+        )
     except (ShopScopeError, ValueError) as e:
         await message.answer(user_safe_error(e), reply_markup=kb.cancel_reply())
         return
@@ -389,6 +426,61 @@ async def pcm_cat_name_save(
         ),
     )
     await message.answer("دسته‌ها:", reply_markup=_cat_list_markup(cats))
+
+
+@router.callback_query(
+    F.data.startswith("pcm:cat:aud:"), PlanCatalogStates.cat_audience
+)
+async def pcm_cat_audience_save(
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    from app.services.plan_categories import create_category, list_categories
+
+    staff = await _ctx_from_callback(
+        callback,
+        session,
+        db_user,
+        state,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
+    )
+    if not staff:
+        await callback.answer("دسترسی ندارید", show_alert=True)
+        return
+    parts = (callback.data or "").split(":")
+    aud = parts[-1] if parts else "users"
+    if aud not in {"users", "resellers"}:
+        aud = "users"
+    data = await state.get_data()
+    name = str(data.get("_pcm_cat_name") or "").strip()
+    if not name:
+        await callback.answer("نام یافت نشد", show_alert=True)
+        await state.set_state(None)
+        return
+    try:
+        cat = await create_category(
+            session, staff, name=name, audience=aud
+        )
+    except (ShopScopeError, ValueError) as e:
+        await callback.answer(user_safe_error(e), show_alert=True)
+        return
+    except Exception as e:
+        await callback.answer(user_safe_error(e), show_alert=True)
+        return
+    await state.set_state(None)
+    cats = await list_categories(session, staff, active_only=False)
+    await callback.answer()
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            f"✅ دسته «{html.escape(cat.name)}» ذخیره شد.",
+            reply_markup=_cat_list_markup(cats),
+        )
 
 
 @router.callback_query(F.data.startswith("pcm:cat:tog:"))

@@ -73,8 +73,12 @@ class ReleaseNotesTests(unittest.TestCase):
 
         src = Path("app/services/release_notes.py").read_text(encoding="utf-8")
         parsed = parse_release_notes_source(src)
-        self.assertEqual(list(parsed.keys())[0], "0.2.1")
+        self.assertEqual(list(parsed.keys())[0], "0.2.2")
         self.assertIn("0.1.0", parsed)
+        self.assertTrue(parsed["0.2.2"])
+        self.assertTrue(
+            any("افزونه" in n or "fulfill" in n or "حجم" in n for n in parsed["0.2.2"])
+        )
         self.assertTrue(parsed["0.2.1"])
         self.assertTrue(
             any("0031" in n or "PostgreSQL" in n or "۰٫۲٫۰" in n for n in parsed["0.2.1"])
@@ -124,6 +128,7 @@ class ReleaseNotesTests(unittest.TestCase):
         self.assertEqual(
             set(parsed),
             {
+                "0.2.2",
                 "0.2.1",
                 "0.2.0",
                 "0.1.14",
@@ -142,6 +147,9 @@ class ReleaseNotesTests(unittest.TestCase):
                 "0.1.1",
                 "0.1.0",
             },
+        )
+        self.assertTrue(
+            any("افزونه" in n or "fulfill" in n or "حجم" in n for n in parsed["0.2.2"])
         )
         self.assertTrue(
             any("0031" in n or "PostgreSQL" in n or "۰٫۲٫۰" in n for n in parsed["0.2.1"])

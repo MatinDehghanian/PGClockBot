@@ -68,6 +68,18 @@ class PlanCategoryScopeTests(unittest.TestCase):
         self.assertTrue(category_matches_shop(cat, 42))
         self.assertFalse(category_matches_shop(cat, None))
 
+    def test_audience_normalize(self):
+        from app.services.plan_categories import (
+            AUDIENCE_RESELLERS,
+            AUDIENCE_USERS,
+            normalize_audience,
+        )
+
+        self.assertEqual(normalize_audience("resellers"), AUDIENCE_RESELLERS)
+        self.assertEqual(normalize_audience("USERS"), AUDIENCE_USERS)
+        self.assertEqual(normalize_audience("nope"), AUDIENCE_USERS)
+        self.assertEqual(normalize_audience(None), AUDIENCE_USERS)
+
 
 class ServiceAddonScopeTests(unittest.TestCase):
     def test_pack_scope(self):
@@ -136,11 +148,15 @@ class WiringTests(unittest.TestCase):
         self.assertIn("modal-plan-categories", plans)
         self.assertIn("modal-service-addons", plans)
         self.assertIn("برچسب دسته", plans)
-        self.assertIn("بسته حجم/زمان", plans)
+        self.assertIn("user-service-addons", plans)
+        self.assertIn("addon_duration", plans)
+        self.assertIn("plan-category-audience", plans)
         self.assertIn('name="category_id"', plans)
+        self.assertIn("category_linked_plans", plans)
         # Existing plan kinds (ثابت/…) must remain; labels are additive
         self.assertIn("USER_KINDS", plans)
         self.assertIn("{value: 'fixed', label: 'ثابت'}", plans)
+        self.assertIn("{value: 'addon_volume', label: 'بسته حجم'}", plans)
         self.assertIn("data-category-edit", plans)
         self.assertIn("data-addon-edit", plans)
         self.assertIn("service-addon-kind", plans)
@@ -148,14 +164,17 @@ class WiringTests(unittest.TestCase):
         self.assertIn('/plans/categories', extras)
         self.assertIn('/plans/addons', extras)
         self.assertIn("/edit", extras)
+        self.assertIn("audience", extras)
         app = Path("app/api/app.py").read_text(encoding="utf-8")
         self.assertIn("register_plan_catalog_extras", app)
         self.assertIn("is_mutation_order_note", app)
         self.assertIn("fulfill_paid_order", app)
+        self.assertIn("category_plans_map", app)
         models = Path("app/db/models.py").read_text(encoding="utf-8")
         self.assertIn("class PlanCategory", models)
         self.assertIn("class ServiceAddonPack", models)
         self.assertIn("category_id", models)
+        self.assertIn('audience: Mapped[str]', models)
         mig = Path(
             "alembic/versions/0031_plan_categories_service_addons.py"
         ).read_text(encoding="utf-8")
@@ -164,12 +183,27 @@ class WiringTests(unittest.TestCase):
         self.assertIn("server_default=sa.true()", mig)
         self.assertNotIn('server_default=sa.text("1")', mig)
         self.assertNotIn("server_default=sa.text('1')", mig)
+        mig2 = Path(
+            "alembic/versions/0032_plan_category_audience_reseller.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("0031_plan_categories_service_addons", mig2)
+        self.assertIn("audience", mig2)
+        self.assertIn("reseller_plans", mig2)
         svc = Path("app/bot/handlers/services.py").read_text(encoding="utf-8")
         self.assertIn("svc:addon:", svc)
         self.assertIn("create_addon_order", svc)
         addons = Path("app/services/service_addons.py").read_text(encoding="utf-8")
         self.assertIn("format_addon_note", addons)
         self.assertIn("حجم نامحدود", addons)
+        css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
+        self.assertIn("search-bar--with-tag", css)
+        self.assertIn("color-tag-select-wrap.is-tagged", css)
+        self.assertIn("overflow-x: auto", css)
+        js = Path("app/web/static/panel.js").read_text(encoding="utf-8")
+        self.assertIn("color-tag-select", js)
+        self.assertIn("data-tag-color", js)
+        # Kebab menus must paint above open modals
+        self.assertIn("raZ", js)
 
     def test_bot_manage_parity_wiring(self):
         """Admin/reseller bot hubs expose category + addon manage (web parity)."""
@@ -197,7 +231,9 @@ class WiringTests(unittest.TestCase):
         self.assertIn("resolve_catalog_staff", manage)
         self.assertIn("user_safe_error", manage)
         self.assertIn("pcm:cat:", manage)
+        self.assertIn("pcm:cat:aud:", manage)
         self.assertIn("pcm:addon:", manage)
+        self.assertIn("cat_audience", manage)
 
         admin = Path("app/bot/handlers/admin.py").read_text(encoding="utf-8")
         self.assertIn("adm:plan:newcat:", admin)
@@ -270,6 +306,113 @@ class ApplyServiceAddonUnpackTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(ValueError) as ctx:
                 await apply_service_addon(session, order)
         self.assertIn("بسته یا سرویس", str(ctx.exception))
+
+
+class AddonNoteFormatTests(unittest.TestCase):
+    def test_volume_amount_never_scientific(self):
+        from app.services.service_addons import format_addon_note, parse_addon_note
+
+        note = format_addon_note(1, 2, kind="volume", amount=1_000_000)
+        self.assertNotIn("e+", note.lower())
+        self.assertNotIn("e-", note.lower())
+        parsed = parse_addon_note(note)
+        self.assertIsNotNone(parsed)
+        self.assertEqual(parsed[3], 1_000_000.0)
+
+    def test_fractional_volume_roundtrips(self):
+        from app.services.service_addons import format_addon_note, parse_addon_note
+
+        note = format_addon_note(3, 9, kind="volume", amount=2.5)
+        self.assertEqual(parse_addon_note(note), (3, 9, "volume", 2.5))
+
+
+class DeliverOrderMutationGuardTests(unittest.IsolatedAsyncioTestCase):
+    async def test_deliver_order_rejects_addon_note(self):
+        from unittest.mock import AsyncMock, MagicMock
+
+        from app.db.models import OrderStatus
+        from app.services.orders import deliver_order
+
+        order = MagicMock()
+        order.id = 11
+        order.note = "svc_addon:1:2:volume:5"
+        order.service_id = 2
+        order.status = OrderStatus.PAID.value
+        session = AsyncMock()
+        with self.assertRaises(ValueError) as ctx:
+            await deliver_order(session, order)
+        self.assertIn("fulfill", str(ctx.exception))
+
+
+class AddonQuotaCacheCallTests(unittest.IsolatedAsyncioTestCase):
+    async def test_apply_uses_sync_cache_not_await_session(self):
+        """Regression: await sync_service_quota_cache(session, …) crashed after PG
+        mutate and released the claim → retry double-applied capacity."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from app.db.models import OrderStatus, ServiceAddonPack, UserService
+        from app.services.service_addons import _apply_pack_to_service
+
+        service = MagicMock(spec=UserService)
+        service.id = 2
+        service.pg_user_id = 99
+        service.bot_user_id = 7
+        session = AsyncMock()
+
+        pg = MagicMock()
+        pg.get_user_by_id = AsyncMock(
+            return_value={"data_limit": 10 * (1024**3), "expire": 2_000_000_000}
+        )
+        pg.modify_user_by_id = AsyncMock()
+
+        sync_calls: list[tuple] = []
+
+        def _sync(svc, info=None, *, expire_ts=None, data_limit_bytes=None):
+            sync_calls.append((svc, info, expire_ts, data_limit_bytes))
+
+        with (
+            patch(
+                "app.services.pasarguard.get_pg",
+                return_value=pg,
+            ),
+            patch(
+                "app.services.users.current_shop_reseller_id",
+                return_value=None,
+            ),
+            patch(
+                "app.services.bot_user_admin.sync_service_quota_cache",
+                side_effect=_sync,
+            ),
+        ):
+            await _apply_pack_to_service(
+                session,
+                service,
+                kind="volume",
+                amount=5,
+                order_reseller_id=None,
+            )
+
+        self.assertEqual(len(sync_calls), 1)
+        self.assertIs(sync_calls[0][0], service)
+        self.assertIsNone(sync_calls[0][1])
+        self.assertEqual(sync_calls[0][3], 15 * (1024**3))
+        pg.modify_user_by_id.assert_awaited_once()
+
+
+class FulfillRoutesAddonTests(unittest.TestCase):
+    def test_bulk_and_retry_use_fulfill(self):
+        from pathlib import Path
+
+        bulk = Path("app/services/table_bulk.py").read_text(encoding="utf-8")
+        self.assertIn("fulfill_paid_order", bulk)
+        self.assertNotIn("await deliver_order(session, order)", bulk)
+        ux = Path("app/services/ux20.py").read_text(encoding="utf-8")
+        self.assertIn("fulfill_paid_order", ux)
+        self.assertIn("open_notify_bot_for_user", ux)
+        addons = Path("app/services/service_addons.py").read_text(encoding="utf-8")
+        # Must not await the sync cache helper with a session first arg
+        self.assertNotIn("await sync_service_quota_cache(", addons)
+        self.assertIn("sync_service_quota_cache(\n            service,", addons)
 
 
 if __name__ == "__main__":

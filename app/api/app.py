@@ -2545,10 +2545,13 @@ def create_api_app(lifespan=None) -> FastAPI:
 
         plan_categories: list = []
         plan_category_map: dict = {}
+        reseller_plan_category_map: dict = {}
+        category_linked_plans: dict = {}
         service_addon_packs: list = []
         try:
             from app.services.plan_categories import (
                 category_map_for_plans,
+                category_plans_map,
                 list_categories,
             )
             from app.services.service_addons import list_packs
@@ -2557,6 +2560,13 @@ def create_api_app(lifespan=None) -> FastAPI:
                 plan_categories = await list_categories(session, staff)
                 plan_category_map = await category_map_for_plans(
                     session, staff, sale_plans
+                )
+                if reseller_plans:
+                    reseller_plan_category_map = await category_map_for_plans(
+                        session, staff, reseller_plans
+                    )
+                category_linked_plans = await category_plans_map(
+                    session, staff, plan_categories
                 )
                 service_addon_packs = await list_packs(session, staff)
         except Exception:
@@ -2588,6 +2598,8 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "gift_codes": gift_codes,
                 "plan_categories": plan_categories,
                 "plan_category_map": plan_category_map,
+                "reseller_plan_category_map": reseller_plan_category_map,
+                "category_linked_plans": category_linked_plans,
                 "service_addon_packs": service_addon_packs,
                 "pg_limit_snapshot": limit_snapshot,
                 "pg_limit_cards": limit_snapshot_cards(limit_snapshot),

@@ -24,6 +24,7 @@ def register_plan_catalog_extras(app, *, require_perm, get_db):
         name: str = Form(...),
         description: str = Form(""),
         sort_order: int = Form(0),
+        audience: str = Form("users"),
         staff: dict = Depends(require_perm("plans")),
         session: AsyncSession = Depends(get_db),
     ):
@@ -36,6 +37,7 @@ def register_plan_catalog_extras(app, *, require_perm, get_db):
                 name=name,
                 description=description,
                 sort_order=sort_order,
+                audience=audience,
             )
         except (ShopScopeError, ValueError) as e:
             return RedirectResponse(
@@ -89,6 +91,7 @@ def register_plan_catalog_extras(app, *, require_perm, get_db):
         name: str = Form(...),
         description: str = Form(""),
         sort_order: int = Form(0),
+        audience: str = Form("users"),
         staff: dict = Depends(require_perm("plans")),
         session: AsyncSession = Depends(get_db),
     ):
@@ -102,6 +105,7 @@ def register_plan_catalog_extras(app, *, require_perm, get_db):
                 name=name,
                 description=description,
                 sort_order=sort_order,
+                audience=audience,
             )
         except (ShopScopeError, ValueError) as e:
             return RedirectResponse(
@@ -141,10 +145,10 @@ def register_plan_catalog_extras(app, *, require_perm, get_db):
             )
         except (ShopScopeError, ValueError) as e:
             return RedirectResponse(
-                f"/plans?addons=1&err={quote(str(e))}", status_code=303
+                f"/plans?err={quote(str(e))}#user-service-addons", status_code=303
             )
         return RedirectResponse(
-            f"/plans?addons=1&ok={quote('بسته افزونه ذخیره شد')}",
+            f"/plans?ok={quote('بسته افزونه ذخیره شد')}#user-service-addons",
             status_code=303,
         )
 
@@ -159,12 +163,12 @@ def register_plan_catalog_extras(app, *, require_perm, get_db):
         pack = await get_owned_pack(session, pack_id, staff)
         if not pack:
             return RedirectResponse(
-                f"/plans?addons=1&err={quote('بسته یافت نشد')}",
+                f"/plans?err={quote('بسته یافت نشد')}#user-service-addons",
                 status_code=303,
             )
         pack.is_active = not pack.is_active
         await session.commit()
-        return RedirectResponse("/plans?addons=1", status_code=303)
+        return RedirectResponse("/plans#user-service-addons", status_code=303)
 
     @app.post("/plans/addons/{pack_id}/delete")
     async def plans_addon_delete(
@@ -178,10 +182,10 @@ def register_plan_catalog_extras(app, *, require_perm, get_db):
             await delete_pack(session, staff, pack_id)
         except (ShopScopeError, ValueError) as e:
             return RedirectResponse(
-                f"/plans?addons=1&err={quote(str(e))}", status_code=303
+                f"/plans?err={quote(str(e))}#user-service-addons", status_code=303
             )
         return RedirectResponse(
-            f"/plans?addons=1&ok={quote('بسته حذف شد')}",
+            f"/plans?ok={quote('بسته حذف شد')}#user-service-addons",
             status_code=303,
         )
 
@@ -213,9 +217,9 @@ def register_plan_catalog_extras(app, *, require_perm, get_db):
             )
         except (ShopScopeError, ValueError) as e:
             return RedirectResponse(
-                f"/plans?addons=1&err={quote(str(e))}", status_code=303
+                f"/plans?err={quote(str(e))}#user-service-addons", status_code=303
             )
         return RedirectResponse(
-            f"/plans?addons=1&ok={quote('بسته به‌روزرسانی شد')}",
+            f"/plans?ok={quote('بسته به‌روزرسانی شد')}#user-service-addons",
             status_code=303,
         )
