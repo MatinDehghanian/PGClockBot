@@ -572,7 +572,9 @@ a.topbar-brand:focus-visible {
   height: var(--btn-h);
   min-height: var(--btn-h);
   margin: 0;
-  border-radius: var(--radius-sm, 10px);
+  /* Must stay capsule even when .is-tagged paints bg on the wrap
+     (inner toggle border becomes transparent — wrap shape is what you see). */
+  border-radius: var(--control-radius);
   overflow: hidden;
   box-sizing: border-box;
 }
@@ -601,11 +603,13 @@ a.topbar-brand:focus-visible {
 .color-tag-select-wrap.is-tagged {
   background: color-mix(in srgb, var(--tag-color, #22c55e) 22%, transparent);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tag-color, #22c55e) 55%, transparent);
+  border-radius: var(--control-radius);
 }
 .color-tag-select-wrap.is-tagged > select.color-tag-select,
 .color-tag-select-wrap.is-tagged .ui-select-toggle {
   background: transparent;
   border-color: transparent;
+  border-radius: var(--control-radius);
   color: var(--tag-color, #22c55e);
   font-weight: 600;
 }
