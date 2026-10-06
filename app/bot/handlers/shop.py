@@ -270,11 +270,15 @@ async def present_shop_kind_picker(
     include_uncategorized: bool = False,
     mode: str = "send",
 ) -> None:
-    """Show shop kind/category picker as a *single* bubble.
+    """Show shop kind/category picker with inline buttons on the shop bubble.
 
     ``mode="edit"`` — refresh an existing shop message (back from plan list).
-    ``mode="send"`` — new entry: set reply chrome on the same message, then
-    attach the inline kind/category keyboard (no orphan «فروشگاه:» caption).
+    ``mode="send"`` — new entry: send shop text **with** the inline kind/category
+    keyboard, then apply reply-chrome (Home/Back) via a throwaway message that
+    is deleted immediately. Reply keyboards persist after delete; this avoids
+    both the orphan «فروشگاه:» caption and the broken ReplyKeyboard→Inline
+    ``edit_reply_markup`` path (Telegram rejects that conversion, which hid
+    all category buttons after v0.2.7).
     """
     text = format_message("🛒 فروشگاه", body)
     inline = kb.shop_kind_keyboard(
@@ -290,14 +294,15 @@ async def present_shop_kind_picker(
         await safe_edit_text(message, text, reply_markup=inline)
         return
 
-    sent = await message.answer(text, reply_markup=kb.shop_reply_keyboard(ui))
+    # Inline MUST be on the shop message at send-time. Do not send ReplyKeyboard
+    # first and hope edit_reply_markup will swap it — that API call fails and
+    # categories never appear.
+    await message.answer(text, reply_markup=inline)
+    chrome = await message.answer("\u2060", reply_markup=kb.shop_reply_keyboard(ui))
     try:
-        await sent.edit_reply_markup(reply_markup=inline)
+        await chrome.delete()
     except Exception:
-        logger.warning(
-            "shop picker: inline attach failed; kinds may be missing",
-            exc_info=True,
-        )
+        logger.debug("shop picker: chrome delete skipped", exc_info=True)
 
 
 @router.callback_query(F.data == "shop:list")
