@@ -551,6 +551,7 @@ async def open_admin_loyalty_hub(
 
 
 async def open_reseller_apply(message: Message, session: AsyncSession, db_user: BotUser) -> None:
+    from app.bot.handlers.reseller import _resapply_mode_keyboard
     from app.bot.menu_nav import build_main_reply_keyboard
     from app.services.billing import BILLING_MODE_FIXED, BILLING_MODE_PAYG
     from app.services.resellers import list_active_reseller_plans
@@ -578,33 +579,19 @@ async def open_reseller_apply(message: Message, session: AsyncSession, db_user: 
             reply_markup=main_kb,
         )
         return
-    rows = [
-        [
-            InlineKeyboardButton(
-                text=f"📦 ثابت — {fixed_n} پلن",
-                callback_data="resapply:mode:fixed",
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                text=f"⚡ PAYG — {payg_n} پلن",
-                callback_data="resapply:mode:payg",
-            )
-        ],
-    ]
-    await message.answer(
-        format_message(
-            "🤝 درخواست نمایندگی",
-            "ابتدا <b>نوع پلن</b> را انتخاب کنید:\n"
-            "• <b>ثابت</b> — اشتراک با قیمت ثابت\n"
-            "• <b>PAYG</b> — پرداخت بر اساس مصرف ترافیک",
-        ),
-        reply_markup=main_kb,
+    text = format_message(
+        "🤝 درخواست نمایندگی",
+        "ابتدا <b>نوع پلن</b> را انتخاب کنید:\n"
+        "• <b>ثابت</b> — اشتراک با قیمت ثابت\n"
+        "• <b>PAYG</b> — پرداخت بر اساس مصرف ترافیک",
     )
-    await message.answer(
-        "نوع پلن:",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
-    )
+    # Attach mode buttons to the main bubble — never a separate «نوع پلن:» caption.
+    await message.answer(text, reply_markup=await _resapply_mode_keyboard(session, ui))
+    chrome = await message.answer("\u2060", reply_markup=main_kb)
+    try:
+        await chrome.delete()
+    except Exception:
+        pass
 
 
 async def open_reseller_home(
