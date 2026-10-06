@@ -25,6 +25,7 @@ from app.services.formatting import (
     status_label_plain,
 )
 from app.services.pasarguard import (
+    absolutize_subscription_url,
     build_user_modify_payload,
     get_pg,
     user_subscription_url,
@@ -115,7 +116,11 @@ async def service_snapshot(session: AsyncSession, service: UserService) -> Servi
     """Live PG status for one shop service."""
     import asyncio
 
-    url = (service.subscription_url or "").strip() or None
+    url = absolutize_subscription_url(service.subscription_url) or (
+        (service.subscription_url or "").strip() or None
+    )
+    if url and url != (service.subscription_url or "").strip():
+        service.subscription_url = url
     if not service.pg_user_id:
         return ServiceSnapshot(
             service=service,
@@ -420,7 +425,7 @@ async def admin_provision_service(
         elif shop_rid and not pg_uid:
             raise ValueError("ساخت کاربر پاسارگارد شناسه برنگرداند — اختصاص لغو شد")
 
-        sub_url = pg_user.get("subscription_url") if isinstance(pg_user, dict) else None
+        sub_url = user_subscription_url(pg_user if isinstance(pg_user, dict) else None)
         service = UserService(
             bot_user_id=int(user.id),
             plan_id=int(plan.id),

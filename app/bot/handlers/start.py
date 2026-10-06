@@ -12,7 +12,12 @@ from app.bot.tg_utils import safe_edit_text
 from app.config import get_settings
 from app.db.models import BotUser, UserService
 from app.services.formatting import service_card
-from app.services.pasarguard import extract_sub_token, get_pg
+from app.services.pasarguard import (
+    absolutize_subscription_url,
+    extract_sub_token,
+    get_pg,
+    user_subscription_url,
+)
 from app.services.users import get_all_settings, on
 from app.services.message_variables import DOMAIN_USER
 
@@ -854,7 +859,9 @@ async def _link_subscription(
                 reseller_owner_id=reseller_owner_id,
             )
             return
-        sub_url = f"{pg.base_url.rstrip('/')}/sub/{token}"
+        sub_url = user_subscription_url(info if isinstance(info, dict) else None) or (
+            absolutize_subscription_url(f"/sub/{token}")
+        )
         svc = UserService(
             bot_user_id=db_user.id,
             pg_user_id=info.get("id"),

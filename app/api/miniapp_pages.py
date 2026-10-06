@@ -158,10 +158,13 @@ def _serialize_service(svc: UserService, info: dict | None = None) -> dict:
     status_raw = (info.get("status") or "").strip() or None
     days = expire_remaining_days(expire) if not upstream_err else None
     # Never expose subscription_token — only the share URL the user already owns.
+    from app.services.pasarguard import absolutize_subscription_url
+
+    sub_url = absolutize_subscription_url(svc.subscription_url) or (svc.subscription_url or "")
     return {
         "id": svc.id,
         "username": svc.pg_username or "",
-        "subscription_url": svc.subscription_url or "",
+        "subscription_url": sub_url,
         "plan_id": svc.plan_id,
         "status": status_raw or "—",
         "status_fa": status_label_plain(status_raw)
@@ -431,12 +434,15 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
     async def mini_service_qr(
         service_id: int, request: Request, session: AsyncSession = Depends(get_db)
     ):
+        from app.services.pasarguard import absolutize_subscription_url
         from app.services.qrcode_gen import make_subscription_qr
 
         user = await load_mini_user(session, request)
         _require_commerce(user)
         svc = _owned_service_or_404(await session.get(UserService, service_id), user)
-        url = (svc.subscription_url or "").strip()
+        url = absolutize_subscription_url(svc.subscription_url) or (
+            (svc.subscription_url or "").strip()
+        )
         if not url:
             raise HTTPException(404, "no subscription url")
         ui = await get_all_settings(session)
