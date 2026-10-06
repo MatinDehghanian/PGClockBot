@@ -23,6 +23,15 @@ from app.services.support_contacts import (
     upsert_support_contact,
 )
 from app.services.users import get_all_settings, get_setting, on, set_setting
+from app.services.settings_button_labels import (
+    BTN_PAY_CARD,
+    BTN_PAY_CRYPTO,
+    BTN_PAY_GATEWAY,
+    BTN_PAY_PSP,
+    BTN_PAY_STARS,
+    BTN_PAY_WALLET_DISCOUNT,
+    shop_button_subs,
+)
 
 router = Router(name="admin_settings")
 
@@ -100,7 +109,7 @@ def settings_actor_required(fn):
 Field = tuple[str, str, str]
 
 SECTIONS: dict[str, dict] = {
-    # Ops remote-control: short identity + essentials only.
+    # Ops remote-control: identity + texts + full button catalogs by category.
     "shop": {
         "title": "فروشگاه",
         "subs": [
@@ -114,16 +123,7 @@ SECTIONS: dict[str, dict] = {
                 ("purchase_success_text", "موفقیت خرید", "textarea"),
                 ("payment_reject_text", "رد پرداخت", "textarea"),
             ]),
-            ("btn_labels", "متن دکمه‌های اصلی", [
-                ("btn_shop", "خرید", "text"),
-                ("btn_services", "سرویس‌ها", "text"),
-                ("btn_wallet", "کیف پول", "text"),
-                ("btn_support", "پشتیبانی", "text"),
-                ("btn_referral", "دعوت", "text"),
-                ("btn_wholesale", "فروش عمده", "text"),
-                ("btn_menu_home", "منوی اصلی", "text"),
-                ("btn_back", "بازگشت", "text"),
-            ]),
+            *shop_button_subs(include_platform=True),
         ],
     },
     "menu": {
@@ -147,10 +147,12 @@ SECTIONS: dict[str, dict] = {
                 ("pay_discount_enabled", "کد تخفیف", "toggle"),
                 ("auto_approve_payments", "تأیید خودکار رسید", "toggle"),
             ]),
+            ("pay_btns", "متن دکمه‌های پرداخت مشترک", BTN_PAY_WALLET_DISCOUNT),
             ("card", "کارت به کارت", [
                 ("card_number", "شماره کارت", "text"),
                 ("card_holder", "صاحب کارت", "text"),
                 ("card_pay_text", "راهنمای پرداخت", "textarea"),
+                *BTN_PAY_CARD,
             ]),
             ("card_auto", "تأیید خودکار کارت به کارت", [
                 ("card_auto_provider", "ارائه‌دهنده", "text"),
@@ -161,24 +163,27 @@ SECTIONS: dict[str, dict] = {
                 ("gateway_name", "نام درگاه", "text"),
                 ("gateway_link", "لینک", "text"),
                 ("gateway_pay_text", "راهنما", "textarea"),
+                *BTN_PAY_GATEWAY,
             ]),
             ("psp", "درگاه API", [
                 ("psp_provider", "ارائه‌دهنده (zarinpal/mock)", "text"),
                 ("psp_merchant_id", "مرچنت", "text"),
                 ("psp_sandbox", "سندباکس", "toggle"),
                 ("psp_pay_text", "راهنما", "textarea"),
-                ("btn_pay_psp", "متن دکمه", "text"),
+                *BTN_PAY_PSP,
             ]),
             ("crypto", "رمزارز", [
                 ("crypto_asset", "رمزارز", "text"),
                 ("crypto_network", "شبکه", "text"),
                 ("crypto_address", "آدرس ولت", "text"),
                 ("crypto_pay_text", "راهنما", "textarea"),
+                *BTN_PAY_CRYPTO,
             ]),
             ("stars", "استارز", [
                 ("stars_toman_per_star", "تومان هر استارز", "number"),
                 ("stars_title", "عنوان فاکتور", "text"),
                 ("stars_description", "توضیح فاکتور", "text"),
+                *BTN_PAY_STARS,
             ]),
             ("pay_extra", "پاداش دعوت", [
                 ("referral_bonus", "پاداش دعوت", "number"),
@@ -259,6 +264,7 @@ MENU_ORDER_LABELS = {
     "services": "سرویس‌ها",
     "wallet": "کیف پول",
     "support": "پشتیبانی",
+    "loyalty": "باشگاه",
     "referral": "دعوت",
     "reseller_apply": "نمایندگی",
     "miniapp": "مینی‌اپ",
