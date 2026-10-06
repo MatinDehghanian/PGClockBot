@@ -278,7 +278,7 @@ async def present_shop_kind_picker(
     * ``mode="edit"`` — refresh an existing shop message (back from plan list).
     * ``mode="send"`` — send shop text **with** the inline kind/category
       keyboard, then attach shop reply-chrome (Home/Back) on a **lasting**
-      message via ``attach_reply_keyboard``.
+      message via ``present_inline_with_reply_chrome``.
 
     Never delete the reply-chrome message. On iOS/mobile, deleting the message
     that set ``ReplyKeyboardMarkup`` drops the custom keyboard and the
@@ -286,7 +286,7 @@ async def present_shop_kind_picker(
     Also never use ReplyKeyboard→Inline ``edit_reply_markup`` (Telegram
     rejects that conversion and hides category buttons).
     """
-    from app.bot.tg_utils import attach_reply_keyboard
+    from app.bot.tg_utils import present_inline_with_reply_chrome
 
     text = format_message("🛒 فروشگاه", body)
     inline = kb.shop_kind_keyboard(
@@ -302,15 +302,12 @@ async def present_shop_kind_picker(
         await safe_edit_text(message, text, reply_markup=inline)
         return
 
-    # Inline MUST be on the shop message at send-time. Do not send ReplyKeyboard
-    # first and hope edit_reply_markup will swap it — that API call fails and
-    # categories never appear.
-    await message.answer(text, reply_markup=inline)
-    # Lasting chrome only — never delete (see attach_reply_keyboard docstring).
-    await attach_reply_keyboard(
+    await present_inline_with_reply_chrome(
         message,
-        kb.shop_reply_keyboard(ui),
-        text="⌨️ منوی فروشگاه",
+        text=text,
+        inline=inline,
+        reply=kb.shop_reply_keyboard(ui),
+        chrome_text="⌨️ منوی فروشگاه",
     )
 
 
@@ -1066,6 +1063,7 @@ async def wholesale_qty_entered(
     )
     # Leave cancel_reply; restore shop chrome so user is not stuck on «انصراف»
     from app.bot import menu_nav as nav
+    from app.bot.tg_utils import attach_reply_keyboard
 
     custom_on = on(ui.get("custom_plan_enabled"))
     wholesale_on = True
@@ -1085,6 +1083,8 @@ async def wholesale_qty_entered(
         "تعداد را با دکمه‌ها تنظیم کنید:",
         reply_markup=kb.wholesale_qty_keyboard(qty, ui, plan_id=plan.id),
     )
+    # Inline qty must not be the final message — re-affirm lasting shop chrome.
+    await attach_reply_keyboard(message, kb.shop_reply_keyboard(ui), text="⌨️ منوی فروشگاه")
 
 
 @router.callback_query(F.data == "shop:wholesale:confirm")

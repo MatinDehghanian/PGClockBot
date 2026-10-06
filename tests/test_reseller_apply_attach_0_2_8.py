@@ -1,4 +1,4 @@
-"""Reseller-apply mode buttons must attach to the main message (no «نوع پلن:» orphan)."""
+"""Reseller-apply: inline modes + lasting apply chrome (never main menu)."""
 
 from __future__ import annotations
 
@@ -11,19 +11,17 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 
 class ResellerApplyAttachTests(unittest.IsolatedAsyncioTestCase):
-    async def test_open_reseller_apply_attaches_inline_and_lasting_reply(self):
+    async def test_open_reseller_apply_uses_apply_chrome_not_main(self):
         from app.bot.handlers.reply_nav import open_reseller_apply
         from app.db.models import Role
 
         message = AsyncMock()
-        main_msg = AsyncMock()
-        chrome = AsyncMock()
-        chrome.delete = AsyncMock()
-        message.answer = AsyncMock(side_effect=[main_msg, chrome])
+        message.answer = AsyncMock(side_effect=[AsyncMock(), AsyncMock()])
 
         session = AsyncMock()
         db_user = MagicMock()
         db_user.role = Role.USER.value
+        state = AsyncMock()
 
         markup = InlineKeyboardMarkup(
             inline_keyboard=[
@@ -31,6 +29,7 @@ class ResellerApplyAttachTests(unittest.IsolatedAsyncioTestCase):
                 [InlineKeyboardButton(text="⚡ PAYG — 0 پلن", callback_data="resapply:mode:payg")],
             ]
         )
+        apply_kb = MagicMock(name="APPLY_CHROME")
 
         with (
             patch(
@@ -49,22 +48,31 @@ class ResellerApplyAttachTests(unittest.IsolatedAsyncioTestCase):
                 "app.bot.handlers.reseller._resapply_mode_keyboard",
                 new=AsyncMock(return_value=markup),
             ),
+            patch(
+                "app.bot.handlers.reply_nav.kb.reseller_apply_reply_keyboard",
+                return_value=apply_kb,
+            ),
+            patch(
+                "app.bot.handlers.reply_nav.nav.set_nav_level",
+                new=AsyncMock(),
+            ) as set_nav,
         ):
-            await open_reseller_apply(message, session, db_user)
+            await open_reseller_apply(message, session, db_user, state)
 
+        set_nav.assert_awaited()
         self.assertEqual(message.answer.await_count, 2)
         first = message.answer.await_args_list[0]
         self.assertIs(first.kwargs.get("reply_markup"), markup)
         self.assertIn("درخواست نمایندگی", first.args[0])
         second = message.answer.await_args_list[1]
-        self.assertEqual(second.kwargs.get("reply_markup"), "MAIN")
-        # Critical: chrome must stay — delete drops reply KB + menu icon on iOS
-        chrome.delete.assert_not_awaited()
+        self.assertIs(second.kwargs.get("reply_markup"), apply_kb)
+        self.assertIn("درخواست نمایندگی", second.args[0])
+        # Must NOT re-attach the main menu while inside apply flow
+        self.assertIsNot(second.kwargs.get("reply_markup"), "MAIN")
 
 
 class ResellerApplySourceGuards(unittest.TestCase):
     def test_no_orphan_plan_type_caption(self):
-        src = Path("app/bot/handlers/reply_nav.py").read_text(encoding="utf-8")
         fn = inspect.getsource(
             __import__(
                 "app.bot.handlers.reply_nav", fromlist=["open_reseller_apply"]
@@ -73,8 +81,10 @@ class ResellerApplySourceGuards(unittest.TestCase):
         self.assertNotIn('"نوع پلن:"', fn)
         self.assertNotIn("'نوع پلن:'", fn)
         self.assertIn("_resapply_mode_keyboard", fn)
-        self.assertIn("attach_reply_keyboard", fn)
-        self.assertNotIn("chrome.delete", fn)
+        self.assertIn("present_inline_with_reply_chrome", fn)
+        self.assertIn("reseller_apply_reply_keyboard", fn)
+        self.assertNotIn('text="⌨️ منوی اصلی"', fn)
+        self.assertIn("NAV_RESELLER_APPLY", fn)
 
 
 if __name__ == "__main__":

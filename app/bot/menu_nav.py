@@ -40,6 +40,7 @@ NAV_ADMIN_PLANS_ADD_TYPE = "admin_plans_add_type"
 NAV_RESELLER = "reseller"
 NAV_RESELLER_SETTINGS = "reseller_settings"
 NAV_RESELLER_PLANS = "reseller_plans"
+NAV_RESELLER_APPLY = "reseller_apply"
 NAV_PAY = "pay"
 NAV_TOPUP_PAY = "topup_pay"
 NAV_USER_PREVIEW = "user_preview"
@@ -311,6 +312,8 @@ async def show_nav_keyboard(
 
     if level == NAV_SHOP:
         markup = kb.shop_reply_keyboard(ui)
+    elif level == NAV_RESELLER_APPLY:
+        markup = kb.reseller_apply_reply_keyboard(ui)
     elif level == NAV_WALLET:
         markup = kb.wallet_reply_keyboard(ui)
     elif level == NAV_SUPPORT:
