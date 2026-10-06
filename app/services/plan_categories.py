@@ -1,17 +1,33 @@
-"""Shop-scoped plan categories — fail-closed like the sales-plan catalog."""
+"""Shop-scoped plan categories — fail-closed like the sales-plan catalog.
+
+Categories are additive labels (not replacements for plan kinds like
+fixed/trial/custom). Each category targets an ``audience``:
+``users`` (sales ``Plan``) or ``resellers`` (``ResellerPlan`` packages).
+"""
 
 from __future__ import annotations
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import Plan, PlanCategory
+from app.db.models import Plan, PlanCategory, ResellerPlan
 from app.services.plans_catalog import (
     apply_catalog_owner_filter,
     catalog_owner_id,
     require_catalog_owner_id,
 )
 from app.services.shop_scope import ShopScopeError, is_platform_admin, shop_owner_id
+
+AUDIENCE_USERS = "users"
+AUDIENCE_RESELLERS = "resellers"
+VALID_AUDIENCES = frozenset({AUDIENCE_USERS, AUDIENCE_RESELLERS})
+
+
+def normalize_audience(raw: str | None, *, default: str = AUDIENCE_USERS) -> str:
+    key = str(raw or "").strip().lower()
+    if key in VALID_AUDIENCES:
+        return key
+    return default
 
 
 def apply_category_owner_filter(query, staff: dict | None):
@@ -53,11 +69,15 @@ async def list_categories(
     staff: dict | None,
     *,
     active_only: bool = False,
+    audience: str | None = None,
 ) -> list[PlanCategory]:
     q = select(PlanCategory).order_by(PlanCategory.sort_order, PlanCategory.id)
     q = apply_category_owner_filter(q, staff)
     if active_only:
         q = q.where(PlanCategory.is_active.is_(True))
+    if audience is not None:
+        aud = normalize_audience(audience)
+        q = q.where(PlanCategory.audience == aud)
     return list((await session.execute(q)).scalars().all())
 
 
@@ -66,6 +86,7 @@ async def list_shop_categories(
     *,
     reseller_id: int | None = None,
     active_only: bool = True,
+    audience: str | None = AUDIENCE_USERS,
 ) -> list[PlanCategory]:
     """Bot catalog listing by shop context (not staff)."""
     from app.services.users import current_shop_reseller_id
@@ -78,6 +99,8 @@ async def list_shop_categories(
         q = q.where(PlanCategory.owner_reseller_id.is_(None))
     if active_only:
         q = q.where(PlanCategory.is_active.is_(True))
+    if audience is not None:
+        q = q.where(PlanCategory.audience == normalize_audience(audience))
     return list((await session.execute(q)).scalars().all())
 
 
@@ -97,6 +120,7 @@ async def create_category(
     name: str,
     description: str | None = None,
     sort_order: int = 0,
+    audience: str = AUDIENCE_USERS,
 ) -> PlanCategory:
     owner_id = require_catalog_owner_id(staff)
     cleaned = (name or "").strip()
@@ -107,9 +131,14 @@ async def create_category(
     desc = (description or "").strip() or None
     if desc and len(desc) > 255:
         raise ValueError("توضیح خیلی طولانی است")
+    aud = normalize_audience(audience)
+    # Only platform Owner may create reseller-audience labels (ResellerPlan packages).
+    if aud == AUDIENCE_RESELLERS and not is_platform_admin(staff):
+        raise ShopScopeError("برچسب نمایندگان فقط برای ادمین اصلی است")
     cat = PlanCategory(
         name=cleaned,
         description=desc,
+        audience=aud,
         owner_reseller_id=owner_id,
         sort_order=int(sort_order or 0),
         is_active=True,
@@ -129,6 +158,7 @@ async def update_category(
     description: str | None = None,
     sort_order: int | None = None,
     is_active: bool | None = None,
+    audience: str | None = None,
 ) -> PlanCategory:
     cat = await get_owned_category(session, category_id, staff)
     if not cat:
@@ -149,6 +179,18 @@ async def update_category(
         cat.sort_order = int(sort_order)
     if is_active is not None:
         cat.is_active = bool(is_active)
+    if audience is not None:
+        aud = normalize_audience(audience)
+        if aud == AUDIENCE_RESELLERS and not is_platform_admin(staff):
+            raise ShopScopeError("برچسب نمایندگان فقط برای ادمین اصلی است")
+        # Refuse audience flip when plans of the other type still reference it.
+        if aud != normalize_audience(getattr(cat, "audience", None)):
+            linked = await _linked_plan_names(session, cat)
+            if linked:
+                raise ValueError(
+                    "اول پلن‌های این برچسب را جدا کنید، بعد مخاطب را عوض کنید"
+                )
+        cat.audience = aud
     await session.commit()
     await session.refresh(cat)
     return cat
@@ -160,18 +202,28 @@ async def delete_category(
     cat = await get_owned_category(session, category_id, staff)
     if not cat:
         raise ShopScopeError("دسته‌بندی یافت نشد")
-    # Detach plans in this shop only (defense-in-depth on owner_reseller_id).
-    detach = (
-        update(Plan)
-        .where(Plan.category_id == int(category_id))
-        .values(category_id=None)
-        .execution_options(synchronize_session=False)
-    )
-    if cat.owner_reseller_id is None:
-        detach = detach.where(Plan.owner_reseller_id.is_(None))
+    aud = normalize_audience(getattr(cat, "audience", None))
+    if aud == AUDIENCE_RESELLERS:
+        detach = (
+            update(ResellerPlan)
+            .where(ResellerPlan.category_id == int(category_id))
+            .values(category_id=None)
+            .execution_options(synchronize_session=False)
+        )
+        await session.execute(detach)
     else:
-        detach = detach.where(Plan.owner_reseller_id == int(cat.owner_reseller_id))
-    await session.execute(detach)
+        # Detach plans in this shop only (defense-in-depth on owner_reseller_id).
+        detach = (
+            update(Plan)
+            .where(Plan.category_id == int(category_id))
+            .values(category_id=None)
+            .execution_options(synchronize_session=False)
+        )
+        if cat.owner_reseller_id is None:
+            detach = detach.where(Plan.owner_reseller_id.is_(None))
+        else:
+            detach = detach.where(Plan.owner_reseller_id == int(cat.owner_reseller_id))
+        await session.execute(detach)
     await session.delete(cat)
     await session.commit()
 
@@ -182,8 +234,9 @@ async def resolve_category_for_plan_write(
     category_id_raw: str | int | None,
     *,
     allow_inactive_id: int | None = None,
+    expected_audience: str = AUDIENCE_USERS,
 ) -> int | None:
-    """Parse optional category id; must belong to the same shop as the plan.
+    """Parse optional category id; must belong to the same shop + audience.
 
     ``allow_inactive_id`` lets plan edit keep the currently assigned inactive
     category without forcing a clear/reassign.
@@ -200,6 +253,10 @@ async def resolve_category_for_plan_write(
     cat = await get_owned_category(session, cid, staff)
     if not cat:
         raise ShopScopeError("دسته‌بندی در این فروشگاه یافت نشد")
+    want = normalize_audience(expected_audience)
+    got = normalize_audience(getattr(cat, "audience", None))
+    if got != want:
+        raise ValueError("این برچسب برای مخاطب انتخاب‌شده نیست")
     if not cat.is_active:
         if allow_inactive_id is not None and int(cat.id) == int(allow_inactive_id):
             return int(cat.id)
@@ -208,9 +265,9 @@ async def resolve_category_for_plan_write(
 
 
 async def category_map_for_plans(
-    session: AsyncSession, staff: dict | None, plans: list[Plan]
+    session: AsyncSession, staff: dict | None, plans: list
 ) -> dict[int, PlanCategory]:
-    ids = {int(p.category_id) for p in plans if p.category_id}
+    ids = {int(p.category_id) for p in plans if getattr(p, "category_id", None)}
     if not ids:
         return {}
     q = select(PlanCategory).where(PlanCategory.id.in_(ids))
@@ -219,7 +276,54 @@ async def category_map_for_plans(
     return {int(c.id): c for c in rows}
 
 
+async def _linked_plan_names(
+    session: AsyncSession, cat: PlanCategory, *, limit: int = 12
+) -> list[str]:
+    aud = normalize_audience(getattr(cat, "audience", None))
+    names: list[str] = []
+    if aud == AUDIENCE_RESELLERS:
+        q = (
+            select(ResellerPlan.name)
+            .where(ResellerPlan.category_id == int(cat.id))
+            .order_by(ResellerPlan.sort_order, ResellerPlan.id)
+            .limit(limit)
+        )
+        names = [str(n) for n in (await session.execute(q)).scalars().all()]
+    else:
+        q = select(Plan.name).where(Plan.category_id == int(cat.id))
+        if cat.owner_reseller_id is None:
+            q = q.where(Plan.owner_reseller_id.is_(None))
+        else:
+            q = q.where(Plan.owner_reseller_id == int(cat.owner_reseller_id))
+        q = q.order_by(Plan.sort_order, Plan.id).limit(limit)
+        names = [str(n) for n in (await session.execute(q)).scalars().all()]
+    return names
+
+
+async def category_plans_map(
+    session: AsyncSession,
+    staff: dict | None,
+    categories: list[PlanCategory],
+    *,
+    limit_per: int = 12,
+) -> dict[int, list[str]]:
+    """Map category id → plan names currently using that label (for modal UI)."""
+    out: dict[int, list[str]] = {}
+    for cat in categories:
+        if not category_belongs_to_staff(cat, staff):
+            continue
+        out[int(cat.id)] = await _linked_plan_names(
+            session, cat, limit=limit_per
+        )
+    return out
+
+
 def staff_shop_key(staff: dict | None) -> str:
     """Stable key for tests / logging."""
     rid = catalog_owner_id(staff)
     return "platform" if rid is None else f"shop:{rid}"
+
+
+def audience_label_fa(audience: str | None) -> str:
+    aud = normalize_audience(audience)
+    return "نمایندگان" if aud == AUDIENCE_RESELLERS else "کاربران"

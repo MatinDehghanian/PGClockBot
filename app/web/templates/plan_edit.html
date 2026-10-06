@@ -41,7 +41,9 @@
       <select name="category_id">
         <option value="">— بدون برچسب —</option>
         {% for c in plan_categories or [] %}
-        <option value="{{ c.id }}" {% if plan.category_id == c.id %}selected{% endif %}>{{ c.name }}{% if not c.is_active %} (خاموش){% endif %}</option>
+          {% if (c.audience or 'users') == 'users' or plan.category_id == c.id %}
+          <option value="{{ c.id }}" {% if plan.category_id == c.id %}selected{% endif %}>{{ c.name }}{% if not c.is_active %} (خاموش){% endif %}</option>
+          {% endif %}
         {% endfor %}
       </select>
       <small class="muted">نوع پلن (ثابت/تست/…) عوض نمی‌شود؛ برچسب خاموش فعلی قابل نگه‌داشتن است</small>

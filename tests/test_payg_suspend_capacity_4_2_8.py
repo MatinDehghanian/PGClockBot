@@ -115,8 +115,10 @@ class ResellerCapacityPlanTests(unittest.TestCase):
         profile = MagicMock(billing_mode="fixed", plan=plan_on)
         with patch("app.services.authz.shop_feature_allowed", return_value=True):
             labels = [t for _, t in _reseller_submenu_entries(profile)]
-        self.assertIn("📦 خرید حجم اضافه", labels)
-        self.assertIn("👤 خرید کاربر اضافه", labels)
+        # Unit buy-extra + catalog packs share one hub button.
+        self.assertIn("📦 بسته‌های حجم/کاربر", labels)
+        self.assertNotIn("📦 خرید حجم اضافه", labels)
+        self.assertNotIn("👤 خرید کاربر اضافه", labels)
         self.assertIn("🔄 تمدید سرویس", labels)
 
         plan_off = MagicMock(
@@ -128,6 +130,7 @@ class ResellerCapacityPlanTests(unittest.TestCase):
         with patch("app.services.authz.shop_feature_allowed", return_value=True):
             labels2 = [t for _, t in _reseller_submenu_entries(profile)]
         self.assertNotIn("📦 خرید حجم اضافه", labels2)
+        self.assertIn("📦 بسته‌های حجم/کاربر", labels2)
         self.assertIn("🔄 تمدید سرویس", labels2)
 
         payg_plan = MagicMock(
@@ -140,6 +143,8 @@ class ResellerCapacityPlanTests(unittest.TestCase):
         with patch("app.services.authz.shop_feature_allowed", return_value=True):
             labels3 = [t for _, t in _reseller_submenu_entries(profile)]
         self.assertNotIn("📦 خرید حجم اضافه", labels3)
+        self.assertNotIn("👤 خرید کاربر اضافه", labels3)
+        self.assertIn("📦 بسته‌های حجم/کاربر", labels3)
 
 
 class SchemaAddonTests(unittest.TestCase):

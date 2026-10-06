@@ -477,7 +477,11 @@ def _admin_loyalty_submenu_entries(ui: dict | None = None, *, include_tiers: boo
 
 
 def _reseller_capacity_entries(profile=None) -> list[tuple[str, str]]:
-    """Renew / buy-extra / addon packs — shop bot hub and main-bot shop owner."""
+    """Renew + unified volume/user packs hub — shop bot and main-bot shop owner.
+
+    Unit buy-extra (GB/users) and catalog addon packs share one reply button
+    («بسته‌های حجم/کاربر») so the hub is not cluttered with three similar entries.
+    """
     if profile is None:
         return []
     entries: list[tuple[str, str]] = []
@@ -486,14 +490,14 @@ def _reseller_capacity_entries(profile=None) -> list[tuple[str, str]]:
         from app.services.reseller_capacity import plan_allows_buy_extra
 
         plan = getattr(profile, "plan", None)
-        if plan is not None and plan_allows_buy_extra(plan):
-            entries.append(("res_buy_gb", "📦 خرید حجم اضافه"))
-            entries.append(("res_buy_users", "👤 خرید کاربر اضافه"))
-        # Addon catalog: only resellers who already hold a subscription plan
         if plan is not None and is_subscription_plan(plan):
+            # One hub: catalog packs + unit buy-extra (when plan allows).
             entries.append(("res_addon_packs", "📦 بسته‌های حجم/کاربر"))
-        if plan is not None and is_subscription_plan(plan):
             entries.append(("res_renew", "🔄 تمدید سرویس"))
+        elif plan is not None and plan_allows_buy_extra(plan):
+            # Subscription check failed closed above; still expose unit extras
+            # only when allow_buy_extra is set (rare non-subscription edge).
+            entries.append(("res_addon_packs", "📦 بسته‌های حجم/کاربر"))
     except Exception:
         # Fail closed — do not expose capacity without a verified subscription plan
         pass

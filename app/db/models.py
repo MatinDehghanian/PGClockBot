@@ -114,13 +114,19 @@ class BotUser(Base):
 
 
 class PlanCategory(Base):
-    """Shop-scoped grouping for fixed sales plans (not trial/custom/wholesale kinds)."""
+    """Shop-scoped grouping label for plans — selectable when adding a plan.
+
+    ``audience``: ``users`` (sales Plan) or ``resellers`` (ResellerPlan packages).
+    Not a replacement for plan kinds (fixed/trial/custom/…) — additive label.
+    """
 
     __tablename__ = "plan_categories"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(128))
     description: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    # users | resellers — which unified-modal audience can pick this label
+    audience: Mapped[str] = mapped_column(String(16), default="users", index=True)
     # NULL = platform (admin) catalog; set for reseller-owned shop categories
     owner_reseller_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("bot_users.id"), nullable=True, index=True
@@ -619,6 +625,12 @@ class ResellerPlan(Base):
     renew_price: Mapped[int] = mapped_column(Integer, default=0)  # 0 = use plan.price
     # NULL = inherit plan-kind btn_style_*; "" = explicit Telegram default (white)
     button_style: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    # Optional category label (audience=resellers); NULL = uncategorized
+    category_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("plan_categories.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

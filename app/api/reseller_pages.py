@@ -1169,6 +1169,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
                 share_pg_panel_url=False,
                 pg_role_id=None,
                 button_style=button_style,
+                category_id=None,
                 is_active=bool(form.get("is_active", "1")),
                 sort_order=sort_order,
             )
@@ -1212,6 +1213,25 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
                 f"/plans?err={_q(str(e))}#reseller-plans",
                 status_code=303,
             )
+        category_id = None
+        try:
+            from app.services.plan_categories import (
+                AUDIENCE_RESELLERS,
+                resolve_category_for_plan_write,
+            )
+            from app.services.shop_scope import ShopScopeError
+
+            category_id = await resolve_category_for_plan_write(
+                session,
+                staff,
+                form.get("category_id"),
+                expected_audience=AUDIENCE_RESELLERS,
+            )
+        except (ShopScopeError, ValueError) as e:
+            return RedirectResponse(
+                f"/plans?err={_q(str(e))}#reseller-plans",
+                status_code=303,
+            )
         plan = ResellerPlan(
             name=name,
             description=str(form.get("description") or "").strip() or None,
@@ -1243,6 +1263,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             share_pg_panel_url=bool(form.get("share_pg_panel_url")),
             pg_role_id=int(pg_role_raw) if pg_role_raw.isdigit() else None,
             button_style=button_style,
+            category_id=category_id,
             is_active=bool(form.get("is_active", "1")),
             sort_order=sort_order,
         )
@@ -1284,6 +1305,14 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         }
         snap = await load_staff_limit_snapshot(staff, session=session)
         from app.services.button_styles import PLAN_BUTTON_STYLE_OPTIONS
+        from app.services.plan_categories import (
+            AUDIENCE_RESELLERS,
+            list_categories,
+        )
+
+        plan_categories = await list_categories(
+            session, staff, audience=AUDIENCE_RESELLERS
+        )
 
         return render(
             request,
@@ -1301,6 +1330,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
                 "groups": groups,
                 "plan_group_ids": plan_group_ids,
                 "plan_style_options": PLAN_BUTTON_STYLE_OPTIONS,
+                "plan_categories": plan_categories,
                 "flash_ok": request.query_params.get("ok"),
                 "flash_err": request.query_params.get("err"),
             },
@@ -1443,6 +1473,25 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
                 status_code=303,
             )
         plan.pg_role_id = int(pg_role_raw)
+        try:
+            from app.services.plan_categories import (
+                AUDIENCE_RESELLERS,
+                resolve_category_for_plan_write,
+            )
+            from app.services.shop_scope import ShopScopeError
+
+            plan.category_id = await resolve_category_for_plan_write(
+                session,
+                staff,
+                form.get("category_id"),
+                expected_audience=AUDIENCE_RESELLERS,
+                allow_inactive_id=plan.category_id,
+            )
+        except (ShopScopeError, ValueError) as e:
+            return RedirectResponse(
+                f"/resellers/plans/{plan_id}/edit?err={_q(str(e))}",
+                status_code=303,
+            )
         from app.services.billing import sync_plan_billing_rate
 
         await sync_plan_billing_rate(session, plan)

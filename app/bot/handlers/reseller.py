@@ -1471,10 +1471,16 @@ async def res_addons(
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ):
+    """Unified capacity hub: catalog packs + unit buy-extra when allowed."""
     from app.services.pg_admin_subscription import (
         get_or_create_subscription,
         is_subscription_plan,
         list_addon_plans,
+    )
+    from app.services.reseller_capacity import (
+        plan_allows_buy_extra,
+        plan_extra_gb_price,
+        plan_extra_user_price,
     )
 
     owner_id, profile, plan, owner = await _capacity_context(
@@ -1506,30 +1512,76 @@ async def res_addons(
             show_alert=True,
         )
         return
+
+    rows: list[list[InlineKeyboardButton]] = []
     addons = await list_addon_plans(session)
-    if not addons:
-        await callback.answer("بستهٔ اضافه فعالی تعریف نشده", show_alert=True)
-        return
-    rows = []
     for p in addons:
         kind = str(getattr(p, "plan_kind", "") or "")
         if kind == "addon_volume":
-            label = f"{p.name} — +{int(p.addon_gb or 0)} گیگ — {format_toman(p.price, get_settings().currency)}"
+            label = (
+                f"{p.name} — +{int(p.addon_gb or 0)} گیگ — "
+                f"{format_toman(p.price, get_settings().currency)}"
+            )
         else:
-            label = f"{p.name} — +{int(p.addon_users or 0)} کاربر — {format_toman(p.price, get_settings().currency)}"
+            label = (
+                f"{p.name} — +{int(p.addon_users or 0)} کاربر — "
+                f"{format_toman(p.price, get_settings().currency)}"
+            )
         rows.append(
-            [InlineKeyboardButton(text=label[:64], callback_data=f"res:addon:buy:{p.id}")]
+            [
+                InlineKeyboardButton(
+                    text=label[:64], callback_data=f"res:addon:buy:{p.id}"
+                )
+            ]
         )
+
+    allow_extra = plan_allows_buy_extra(plan)
+    if allow_extra:
+        gb_price = plan_extra_gb_price(plan)
+        user_price = plan_extra_user_price(plan)
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=(
+                        f"📦 حجم واحدی — "
+                        f"{format_toman(gb_price, get_settings().currency)}/گیگ"
+                    ),
+                    callback_data="res:buy_gb",
+                )
+            ]
+        )
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=(
+                        f"👤 کاربر واحدی — "
+                        f"{format_toman(user_price, get_settings().currency)}/کاربر"
+                    ),
+                    callback_data="res:buy_users",
+                )
+            ]
+        )
+
+    if not rows:
+        await callback.answer("بستهٔ اضافه فعالی تعریف نشده", show_alert=True)
+        return
+
     rows.append([InlineKeyboardButton(text="انصراف", callback_data="menu:home")])
+    body = (
+        "بستهٔ آماده از کاتالوگ، یا خرید واحدی (اگر پلن اجازه دهد).\n"
+        "با خرید بستهٔ آماده فقط ظرفیت اضافه می‌شود و تاریخ انقضا عوض نمی‌شود."
+    )
+    if allow_extra and not addons:
+        body = (
+            "هنوز بستهٔ آماده‌ای در کاتالوگ نیست — می‌توانید از خرید واحدی استفاده کنید.\n"
+            f"نرخ حجم: <b>{format_toman(plan_extra_gb_price(plan), get_settings().currency)}</b> / گیگ\n"
+            f"نرخ کاربر: <b>{format_toman(plan_extra_user_price(plan), get_settings().currency)}</b> / کاربر"
+        )
     await callback.answer()
     if callback.message:
         await safe_edit_text(
             callback.message,
-            format_message(
-                "📦 بسته‌های حجم / کاربر",
-                "با خرید بسته، فقط ظرفیت اضافه می‌شود و تاریخ انقضا عوض نمی‌شود.\n"
-                "در تمدید بعدی، مبلغ بر اساس مجموع ظرفیت جدید محاسبه می‌شود.",
-            ),
+            format_message("📦 بسته‌های حجم / کاربر", body),
             reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
         )
 

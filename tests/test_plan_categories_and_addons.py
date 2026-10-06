@@ -68,6 +68,18 @@ class PlanCategoryScopeTests(unittest.TestCase):
         self.assertTrue(category_matches_shop(cat, 42))
         self.assertFalse(category_matches_shop(cat, None))
 
+    def test_audience_normalize(self):
+        from app.services.plan_categories import (
+            AUDIENCE_RESELLERS,
+            AUDIENCE_USERS,
+            normalize_audience,
+        )
+
+        self.assertEqual(normalize_audience("resellers"), AUDIENCE_RESELLERS)
+        self.assertEqual(normalize_audience("USERS"), AUDIENCE_USERS)
+        self.assertEqual(normalize_audience("nope"), AUDIENCE_USERS)
+        self.assertEqual(normalize_audience(None), AUDIENCE_USERS)
+
 
 class ServiceAddonScopeTests(unittest.TestCase):
     def test_pack_scope(self):
@@ -136,11 +148,15 @@ class WiringTests(unittest.TestCase):
         self.assertIn("modal-plan-categories", plans)
         self.assertIn("modal-service-addons", plans)
         self.assertIn("برچسب دسته", plans)
-        self.assertIn("بسته حجم/زمان", plans)
+        self.assertIn("user-service-addons", plans)
+        self.assertIn("addon_duration", plans)
+        self.assertIn("plan-category-audience", plans)
         self.assertIn('name="category_id"', plans)
+        self.assertIn("category_linked_plans", plans)
         # Existing plan kinds (ثابت/…) must remain; labels are additive
         self.assertIn("USER_KINDS", plans)
         self.assertIn("{value: 'fixed', label: 'ثابت'}", plans)
+        self.assertIn("{value: 'addon_volume', label: 'بسته حجم'}", plans)
         self.assertIn("data-category-edit", plans)
         self.assertIn("data-addon-edit", plans)
         self.assertIn("service-addon-kind", plans)
@@ -148,14 +164,17 @@ class WiringTests(unittest.TestCase):
         self.assertIn('/plans/categories', extras)
         self.assertIn('/plans/addons', extras)
         self.assertIn("/edit", extras)
+        self.assertIn("audience", extras)
         app = Path("app/api/app.py").read_text(encoding="utf-8")
         self.assertIn("register_plan_catalog_extras", app)
         self.assertIn("is_mutation_order_note", app)
         self.assertIn("fulfill_paid_order", app)
+        self.assertIn("category_plans_map", app)
         models = Path("app/db/models.py").read_text(encoding="utf-8")
         self.assertIn("class PlanCategory", models)
         self.assertIn("class ServiceAddonPack", models)
         self.assertIn("category_id", models)
+        self.assertIn('audience: Mapped[str]', models)
         mig = Path(
             "alembic/versions/0031_plan_categories_service_addons.py"
         ).read_text(encoding="utf-8")
@@ -164,12 +183,27 @@ class WiringTests(unittest.TestCase):
         self.assertIn("server_default=sa.true()", mig)
         self.assertNotIn('server_default=sa.text("1")', mig)
         self.assertNotIn("server_default=sa.text('1')", mig)
+        mig2 = Path(
+            "alembic/versions/0032_plan_category_audience_reseller.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("0031_plan_categories_service_addons", mig2)
+        self.assertIn("audience", mig2)
+        self.assertIn("reseller_plans", mig2)
         svc = Path("app/bot/handlers/services.py").read_text(encoding="utf-8")
         self.assertIn("svc:addon:", svc)
         self.assertIn("create_addon_order", svc)
         addons = Path("app/services/service_addons.py").read_text(encoding="utf-8")
         self.assertIn("format_addon_note", addons)
         self.assertIn("حجم نامحدود", addons)
+        css = Path("app/web/static/panel.css").read_text(encoding="utf-8")
+        self.assertIn("search-bar--with-tag", css)
+        self.assertIn("color-tag-select-wrap.is-tagged", css)
+        self.assertIn("overflow-x: auto", css)
+        js = Path("app/web/static/panel.js").read_text(encoding="utf-8")
+        self.assertIn("color-tag-select", js)
+        self.assertIn("data-tag-color", js)
+        # Kebab menus must paint above open modals
+        self.assertIn("raZ", js)
 
     def test_bot_manage_parity_wiring(self):
         """Admin/reseller bot hubs expose category + addon manage (web parity)."""
@@ -197,7 +231,9 @@ class WiringTests(unittest.TestCase):
         self.assertIn("resolve_catalog_staff", manage)
         self.assertIn("user_safe_error", manage)
         self.assertIn("pcm:cat:", manage)
+        self.assertIn("pcm:cat:aud:", manage)
         self.assertIn("pcm:addon:", manage)
+        self.assertIn("cat_audience", manage)
 
         admin = Path("app/bot/handlers/admin.py").read_text(encoding="utf-8")
         self.assertIn("adm:plan:newcat:", admin)

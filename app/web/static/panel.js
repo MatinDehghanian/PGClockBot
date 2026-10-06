@@ -642,6 +642,15 @@
       menu.classList.add('is-ported');
       menu.hidden = false;
       menu.setAttribute('aria-hidden', 'false');
+      /* Above open modals (4000–4600+) — same floor as ported ui-select menus.
+         Without this, kebab actions inside categories/addons modals paint behind
+         the dialog and look “broken”. */
+      let raZ = 5000;
+      document.querySelectorAll('.ui-modal.open').forEach((m) => {
+        const z = parseInt(m.style.zIndex || window.getComputedStyle(m).zIndex, 10);
+        if (!isNaN(z) && z + 50 > raZ) raZ = z + 50;
+      });
+      menu.style.setProperty('z-index', String(raZ), 'important');
 
       const gap = 8; /* --space-1 */
       const pad = 8;
@@ -930,6 +939,18 @@
           : (sel.dataset.tone || '');
         if (tone) wrap.setAttribute('data-tone', tone);
         else wrap.removeAttribute('data-tone');
+        /* Color-tag filter: paint the wrap with the selected tag color. */
+        const tagHost = wrap.closest('.color-tag-select-wrap');
+        if (tagHost) {
+          const tagColor = (opt && opt.getAttribute('data-tag-color')) || '';
+          if (tagColor) {
+            tagHost.classList.add('is-tagged');
+            tagHost.style.setProperty('--tag-color', tagColor);
+          } else {
+            tagHost.classList.remove('is-tagged');
+            tagHost.style.removeProperty('--tag-color');
+          }
+        }
         menu.querySelectorAll('[role="option"]').forEach(btn => {
           btn.classList.toggle('active', btn.dataset.value === sel.value);
           btn.setAttribute('aria-selected', btn.dataset.value === sel.value ? 'true' : 'false');
@@ -941,6 +962,7 @@
       function rebuildOptions(){
         menu.innerHTML = '';
         const isUsersSvc = sel.classList.contains('users-svc-select');
+        const isColorTag = sel.classList.contains('color-tag-select');
         Array.from(sel.options).forEach(opt => {
           if (opt.disabled && opt.value === '' && !opt.textContent.trim()) return;
           const btn = document.createElement('button');
@@ -948,6 +970,13 @@
           btn.setAttribute('role', 'option');
           btn.dataset.value = opt.value;
           if (opt.dataset && opt.dataset.tone) btn.dataset.tone = opt.dataset.tone;
+          const tagColor = opt.getAttribute('data-tag-color');
+          if (tagColor) {
+            btn.setAttribute('data-tag-color', tagColor);
+            btn.style.setProperty('--tag-color', tagColor);
+            btn.style.color = tagColor;
+            btn.style.fontWeight = '600';
+          }
           if (isUsersSvc) {
             const optLabel = document.createElement('span');
             optLabel.className = 'users-svc-menu-label';
@@ -959,6 +988,18 @@
               dot.setAttribute('aria-hidden', 'true');
               btn.appendChild(dot);
             }
+          } else if (isColorTag && tagColor) {
+            const swatch = document.createElement('span');
+            swatch.className = 'color-tag-swatch';
+            swatch.style.setProperty('--tag-color', tagColor);
+            swatch.setAttribute('aria-hidden', 'true');
+            const optLabel = document.createElement('span');
+            optLabel.className = 'color-tag-menu-label';
+            optLabel.textContent = opt.textContent;
+            optLabel.style.color = tagColor;
+            btn.appendChild(swatch);
+            btn.appendChild(optLabel);
+            btn.classList.add('color-tag-menu-option');
           } else {
             btn.textContent = opt.textContent;
           }
