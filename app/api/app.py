@@ -1202,6 +1202,40 @@ def create_api_app(lifespan=None) -> FastAPI:
                 secondary_href="/logout",
                 secondary_label="خروج",
             )
+        if exc.status_code == 405:
+            # Usually a GET on a POST-only mutation URL (delete admin/plan).
+            safe_back = "/"
+            ref = (request.headers.get("referer") or "").strip()
+            if ref:
+                try:
+                    from urllib.parse import urlparse
+
+                    host = (request.headers.get("host") or "").split(":")[0].lower()
+                    parsed = urlparse(ref)
+                    ref_host = (parsed.hostname or "").lower()
+                    if parsed.scheme in {"http", "https"} and (
+                        not host or not ref_host or ref_host == host
+                    ):
+                        path = parsed.path or "/"
+                        if path.startswith("/") and not path.startswith("//"):
+                            safe_back = path + (
+                                ("?" + parsed.query) if parsed.query else ""
+                            )
+                except Exception:
+                    safe_back = "/"
+            return _status_page(
+                request,
+                code=405,
+                title="این عملیات از این آدرس ممکن نیست",
+                message=(
+                    "حذف ادمین یا پلن فقط با دکمهٔ حذف داخل پنل انجام می‌شود. "
+                    "به لیست برگردید و دوباره از همان دکمه اقدام کنید."
+                ),
+                primary_href=safe_back if safe_back != "/" else "/home",
+                primary_label="بازگشت",
+                secondary_href="/home",
+                secondary_label="داشبورد",
+            )
         # Other HTTP errors → branded status without leaking details
         msg = "درخواست قابل انجام نیست."
         if isinstance(exc.detail, str) and exc.detail and len(exc.detail) < 120:

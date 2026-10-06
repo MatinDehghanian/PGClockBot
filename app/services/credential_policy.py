@@ -306,6 +306,10 @@ _PG_TRANSPORT_MSG_MAP: list[tuple[re.Pattern[str], str]] = [
         re.compile(r"failed\s*\(\s*403\s*\)", re.I),
         "اجازه این عمل را ندارید.",
     ),
+    (
+        re.compile(r"failed\s*\(\s*405\s*\)|method\s*not\s*allowed", re.I),
+        "این عملیات در پاسارگارد پشتیبانی نشد (متد نامعتبر). آدرس PG_BASE_URL و نسخه پنل را بررسی کنید.",
+    ),
 ]
 
 
@@ -329,6 +333,11 @@ def friendly_pg_error(text: str, *, status_code: int | None = None) -> str:
         return "پاسارگارد موقتاً در دسترس نیست. کمی بعد دوباره تلاش کنید."
     if status_code == 429:
         return "درخواست‌ها زیاد شده است. کمی صبر کنید و دوباره تلاش کنید."
+    if status_code == 405:
+        return (
+            "این عملیات در پاسارگارد پشتیبانی نشد (متد نامعتبر). "
+            "آدرس PG_BASE_URL و نسخه پنل را بررسی کنید."
+        )
     if not raw:
         return raw
     # Already Persian / operator-facing — keep as-is.

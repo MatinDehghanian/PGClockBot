@@ -121,11 +121,32 @@
           'X-CSRF-Token': tok || ''
         }
       }).then(function (res) {
-        if (res && res.url) {
-          window.location.assign(res.url);
+        /* Never location.assign() the POST action URL on failure: those routes
+           are POST-only (/pg/admins/{u}/delete, /plans/{id}/delete, …). A GET
+           navigation there renders the branded 405 «Method Not Allowed» page. */
+        if (!res) {
+          window.location.reload();
           return;
         }
-        window.location.reload();
+        if (res.ok || res.redirected) {
+          if (res.url) {
+            window.location.assign(res.url);
+            return;
+          }
+          window.location.reload();
+          return;
+        }
+        return res.text().then(function (html) {
+          if (html && /<html[\s>]/i.test(html)) {
+            document.open();
+            document.write(html);
+            document.close();
+            return;
+          }
+          window.location.reload();
+        }).catch(function () {
+          window.location.reload();
+        });
       }).catch(function () {
         fallbackFormSubmit();
       });
