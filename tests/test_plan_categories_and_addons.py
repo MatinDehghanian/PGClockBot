@@ -167,6 +167,66 @@ class WiringTests(unittest.TestCase):
         self.assertIn("format_addon_note", addons)
         self.assertIn("حجم نامحدود", addons)
 
+    def test_bot_manage_parity_wiring(self):
+        """Admin/reseller bot hubs expose category + addon manage (web parity)."""
+        from pathlib import Path
+
+        from app.bot import keyboards as kb
+
+        aud = dict(kb._admin_plans_audience_entries())
+        listing = dict(kb._admin_plans_list_entries())
+        res = dict(kb._reseller_plans_submenu_entries())
+        self.assertEqual(aud.get(kb.REPLY_ACTION_ADM_PLANS_CATEGORIES), "🏷 برچسب دسته")
+        self.assertEqual(aud.get(kb.REPLY_ACTION_ADM_PLANS_ADDONS), "⏱ بسته حجم/زمان")
+        self.assertIn(kb.REPLY_ACTION_ADM_PLANS_CATEGORIES, listing)
+        self.assertIn(kb.REPLY_ACTION_ADM_PLANS_ADDONS, listing)
+        self.assertEqual(res.get(kb.REPLY_ACTION_RES_PLAN_CATEGORIES), "🏷 برچسب دسته")
+        self.assertEqual(res.get(kb.REPLY_ACTION_RES_PLAN_ADDONS), "⏱ بسته حجم/زمان")
+
+        manage = Path("app/bot/handlers/plan_catalog_manage.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("create_category", manage)
+        self.assertIn("delete_category", manage)
+        self.assertIn("create_pack", manage)
+        self.assertIn("delete_pack", manage)
+        self.assertIn("resolve_catalog_staff", manage)
+        self.assertIn("user_safe_error", manage)
+        self.assertIn("pcm:cat:", manage)
+        self.assertIn("pcm:addon:", manage)
+
+        admin = Path("app/bot/handlers/admin.py").read_text(encoding="utf-8")
+        self.assertIn("adm:plan:newcat:", admin)
+        self.assertIn("adm:plan:catpick:", admin)
+        self.assertIn("adm:plan:setcat:", admin)
+        self.assertIn("pending_category_id", admin)
+        self.assertIn("resolve_category_for_plan_write", admin)
+        self.assertIn("add_plan_category", admin)
+
+        res_plans = Path("app/bot/handlers/reseller_plans.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("res:plan:newcat:", res_plans)
+        self.assertIn("res:plan:catpick:", res_plans)
+        self.assertIn("res:plan:setcat:", res_plans)
+        self.assertIn("category_id", res_plans)
+        self.assertIn("resolve_category_for_plan_write", res_plans)
+
+        nav = Path("app/bot/handlers/reply_nav.py").read_text(encoding="utf-8")
+        self.assertIn("REPLY_ACTION_ADM_PLANS_CATEGORIES", nav)
+        self.assertIn("REPLY_ACTION_ADM_PLANS_ADDONS", nav)
+        self.assertIn("REPLY_ACTION_RES_PLAN_CATEGORIES", nav)
+        self.assertIn("open_categories_manage", nav)
+        self.assertIn("open_addons_manage", nav)
+
+        init = Path("app/bot/__init__.py").read_text(encoding="utf-8")
+        self.assertIn("plan_catalog_manage", init)
+
+        labels = Path("app/services/settings_button_labels.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("btn_svc_addon", labels)
+
 
 class PlanModelFieldTests(unittest.TestCase):
     def test_plan_has_category_attr(self):

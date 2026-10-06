@@ -126,7 +126,7 @@ async def _custom_link_summary(session: AsyncSession) -> tuple[str, InlineKeyboa
     return text, InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-async def _plan_detail_text(p: Plan) -> str:
+async def _plan_detail_text(p: Plan, *, category_name: str | None = None) -> str:
     gb = f"{p.data_limit_gb:g} گیگ" if p.data_limit_gb is not None else "نامحدود"
     if p.pg_template_id:
         link = f"تمپلیت #{p.pg_template_id}"
@@ -134,13 +134,35 @@ async def _plan_detail_text(p: Plan) -> str:
         link = f"گروه‌ها: {p.pg_group_ids}"
     else:
         link = "⚠️ هنوز به تمپلیت/گروه وصل نشده — خرید تحویل نمی‌شود"
+    cat = html.escape(category_name) if category_name else "—"
     return (
         f"💎 <b>پلن #{p.id}</b> — {html.escape(p.name)}\n\n"
         f"قیمت: {format_toman(p.price, get_settings().currency)}\n"
         f"مدت: {p.duration_days} روز\n"
         f"حجم: {gb}\n"
+        f"برچسب دسته: {cat}\n"
         f"وضعیت: {'فعال' if p.is_active else 'خاموش'}\n"
         f"اتصال پاسارگارد: {link}"
+    )
+
+
+async def _plan_category_label(session: AsyncSession, plan: Plan) -> str | None:
+    if not plan.category_id:
+        return None
+    from app.db.models import PlanCategory
+
+    cat = await session.get(PlanCategory, int(plan.category_id))
+    if not cat:
+        return None
+    name = cat.name or ""
+    if not cat.is_active:
+        name = f"{name} (خاموش)"
+    return name or None
+
+
+async def _plan_detail_text_for(session: AsyncSession, plan: Plan) -> str:
+    return await _plan_detail_text(
+        plan, category_name=await _plan_category_label(session, plan)
     )
 
 
@@ -158,6 +180,13 @@ def _plan_detail_keyboard(p: Plan, ui: dict | None = None) -> InlineKeyboardMark
         [kb._ikb("✏️ ترتیب نمایش", callback_data=f"adm:plan:edit:sort:{pid}", style=st)],
         [kb._ikb("✏️ پیشوند نام", callback_data=f"adm:plan:edit:prefix:{pid}", style=st)],
         [kb._ikb("✏️ پسوند نام", callback_data=f"adm:plan:edit:suffix:{pid}", style=st)],
+        [
+            kb._ikb(
+                "🏷 برچسب دسته",
+                callback_data=f"adm:plan:catpick:{pid}",
+                style=st,
+            )
+        ],
         [
             kb._ikb(
                 "🎨 رنگ دکمه",
@@ -285,7 +314,8 @@ class AdminStates(StatesGroup):
     add_plan_days = State()
     add_plan_gb = State()
     add_plan_link = State()  # waiting for mode after basics
-    add_plan_color = State()  # Telegram button color before save
+    add_plan_color = State()  # Telegram button color before category/save
+    add_plan_category = State()  # optional PlanCategory before save
     plan_edit_field = State()
     make_reseller = State()
     ticket_reply = State()
@@ -765,7 +795,7 @@ async def adm_plan_view(callback: CallbackQuery, session: AsyncSession, db_user:
     await callback.answer()
     if callback.message:
         await callback.message.edit_text(
-            await _plan_detail_text(plan),
+            await _plan_detail_text_for(session, plan),
             reply_markup=await _plan_detail_markup(session, plan),
         )
 
@@ -855,7 +885,7 @@ async def adm_plan_edit_save(
     await state.set_state(None)
     await message.answer("ذخیره شد ✅", reply_markup=await _plans_flow_reply_kb(state))
     await message.answer(
-        await _plan_detail_text(plan),
+        await _plan_detail_text_for(session, plan),
         reply_markup=await _plan_detail_markup(session, plan),
     )
 
@@ -996,6 +1026,8 @@ async def _finish_new_plan(
         raise ValueError("plan name missing from FSM")
     price = int(data.get("price") or 0)
     days = int(data.get("days") or 30)
+    cat_raw = data.get("pending_category_id")
+    category_id = int(cat_raw) if cat_raw not in (None, "", 0, "0") else None
     plan = Plan(
         name=name[:128],
         price=max(0, price),
@@ -1004,6 +1036,7 @@ async def _finish_new_plan(
         pg_template_id=template_id,
         pg_group_ids=group_ids,
         button_style=button_style,
+        category_id=category_id,
         is_active=True,
     )
     session.add(plan)
@@ -1015,6 +1048,8 @@ async def _finish_new_plan(
         selected_groups=[],
         pending_tpl_id=None,
         pending_group_ids=None,
+        pending_category_id=None,
+        pending_button_style=None,
         name=None,
         price=None,
         days=None,
@@ -1306,6 +1341,98 @@ async def adm_plan_new_back_link(callback: CallbackQuery, state: FSMContext, db_
         )
 
 
+async def _platform_catalog_staff(
+    session: AsyncSession, db_user: BotUser
+) -> dict | None:
+    from app.bot.auth import resolve_bot_principal_bridge
+    from app.services.shop_scope import is_platform_admin as staff_is_platform_admin
+
+    bridge = await resolve_bot_principal_bridge(
+        session, db_user, is_reseller_bot=False
+    )
+    if not bridge or not bridge.staff or not staff_is_platform_admin(bridge.staff):
+        return None
+    return bridge.staff
+
+
+async def _show_plan_category_picker(
+    target: CallbackQuery,
+    session: AsyncSession,
+    staff: dict,
+    *,
+    plan_id: int | None,
+    selected_id: int | None = None,
+) -> None:
+    """Inline category picker — plan_id None = new-plan flow (adm:plan:newcat)."""
+    from app.services.plan_categories import list_categories
+
+    cats = await list_categories(session, staff, active_only=False)
+    active = [c for c in cats if c.is_active]
+    if selected_id:
+        # Keep currently assigned inactive category visible on edit.
+        for c in cats:
+            if int(c.id) == int(selected_id) and c not in active:
+                active.append(c)
+                break
+    rows: list[list[InlineKeyboardButton]] = []
+    if plan_id is None:
+        rows.append(
+            [InlineKeyboardButton(text="بدون دسته", callback_data="adm:plan:newcat:0")]
+        )
+        for c in active[:20]:
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        text=c.name[:48],
+                        callback_data=f"adm:plan:newcat:{c.id}",
+                    )
+                ]
+            )
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="⬅️ رنگ دکمه", callback_data="adm:plan:new:backcolor"
+                )
+            ]
+        )
+    else:
+        prefix = f"adm:plan:setcat:{plan_id}"
+        mark0 = "✅ " if not selected_id else ""
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=f"{mark0}بدون دسته",
+                    callback_data=f"{prefix}:0",
+                )
+            ]
+        )
+        for c in active[:20]:
+            mark = "✅ " if selected_id and int(c.id) == int(selected_id) else ""
+            suffix = "" if c.is_active else " (خاموش)"
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        text=f"{mark}{c.name}{suffix}"[:48],
+                        callback_data=f"{prefix}:{c.id}",
+                    )
+                ]
+            )
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="⬅️ بازگشت", callback_data=f"adm:plan:view:{plan_id}"
+                )
+            ]
+        )
+    if target.message:
+        await safe_edit_text(
+            target.message,
+            "🏷 <b>برچسب دسته</b> (اختیاری)\n"
+            "نوع پلن ثابت می‌ماند — این فقط برچسب نمایش در فروشگاه است.",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+        )
+
+
 @router.callback_query(F.data.startswith("adm:plan:newcolor:"))
 @require_bot_owner_handler
 async def adm_plan_new_color(
@@ -1320,8 +1447,67 @@ async def adm_plan_new_color(
     from app.services.button_styles import parse_plan_button_style_callback
 
     style = parse_plan_button_style_callback(callback.data.rsplit(":", 1)[-1])
+    await state.update_data(pending_button_style=style)
+    await state.set_state(AdminStates.add_plan_category)
+    staff = await _platform_catalog_staff(session, db_user)
+    if not staff:
+        await callback.answer("دسترسی مالک سیستم لازم است", show_alert=True)
+        return
+    await callback.answer()
+    await _show_plan_category_picker(
+        callback, session, staff, plan_id=None, selected_id=None
+    )
+
+
+@router.callback_query(F.data == "adm:plan:new:backcolor")
+@require_bot_owner_handler
+async def adm_plan_new_back_color(
+    callback: CallbackQuery, session: AsyncSession, state: FSMContext, db_user: BotUser
+):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    await state.set_state(AdminStates.add_plan_color)
+    await callback.answer()
+    await _show_user_plan_color_picker(
+        callback,
+        session=session,
+        callback_prefix="adm:plan:newcolor",
+        back_callback="adm:plan:new:backlink",
+    )
+
+
+@router.callback_query(F.data.startswith("adm:plan:newcat:"), AdminStates.add_plan_category)
+@require_bot_owner_handler
+async def adm_plan_new_category(
+    callback: CallbackQuery, session: AsyncSession, state: FSMContext, db_user: BotUser
+):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    staff = await _platform_catalog_staff(session, db_user)
+    if not staff:
+        await callback.answer("دسترسی مالک سیستم لازم است", show_alert=True)
+        return
+    from app.services.plan_categories import resolve_category_for_plan_write
+    from app.services.shop_scope import ShopScopeError
+
+    raw = callback.data.rsplit(":", 1)[-1]
     try:
-        plan = await _pending_user_plan_finish(session, state, button_style=style)
+        if raw in {"0", ""}:
+            cat_id = None
+        else:
+            cat_id = await resolve_category_for_plan_write(session, staff, raw)
+    except (ShopScopeError, ValueError) as e:
+        await callback.answer(user_safe_error(e, limit=160), show_alert=True)
+        return
+    data = await state.get_data()
+    style = data.get("pending_button_style")
+    await state.update_data(pending_category_id=cat_id)
+    try:
+        plan = await _pending_user_plan_finish(
+            session, state, button_style=style
+        )
     except Exception:
         await callback.answer("ساخت پلن ناموفق بود", show_alert=True)
         return
@@ -1332,10 +1518,89 @@ async def adm_plan_new_color(
             link_note = f" با تمپلیت #{plan.pg_template_id}"
         elif plan.pg_group_ids:
             link_note = f" با گروه(ها) {plan.pg_group_ids}"
-        text = f"پلن #{plan.id}{link_note} ساخته شد ✅\n\n" + await _plan_detail_text(plan)
+        text = (
+            f"پلن #{plan.id}{link_note} ساخته شد ✅\n\n"
+            + await _plan_detail_text_for(session, plan)
+        )
         await safe_edit_text(
             callback.message,
             text,
+            reply_markup=await _plan_detail_markup(session, plan),
+        )
+
+
+@router.callback_query(F.data.startswith("adm:plan:catpick:"))
+@require_bot_owner_handler
+async def adm_plan_cat_pick(
+    callback: CallbackQuery, session: AsyncSession, db_user: BotUser
+):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    staff = await _platform_catalog_staff(session, db_user)
+    if not staff:
+        await callback.answer("دسترسی مالک سیستم لازم است", show_alert=True)
+        return
+    pid = int(callback.data.rsplit(":", 1)[-1])
+    plan = await session.get(Plan, pid)
+    if not plan or plan.owner_reseller_id is not None:
+        await callback.answer("یافت نشد", show_alert=True)
+        return
+    await callback.answer()
+    await _show_plan_category_picker(
+        callback,
+        session,
+        staff,
+        plan_id=pid,
+        selected_id=int(plan.category_id) if plan.category_id else None,
+    )
+
+
+@router.callback_query(F.data.startswith("adm:plan:setcat:"))
+@require_bot_owner_handler
+async def adm_plan_set_cat(
+    callback: CallbackQuery, session: AsyncSession, db_user: BotUser
+):
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    staff = await _platform_catalog_staff(session, db_user)
+    if not staff:
+        await callback.answer("دسترسی مالک سیستم لازم است", show_alert=True)
+        return
+    parts = callback.data.split(":")
+    # adm:plan:setcat:{pid}:{cid}
+    if len(parts) < 5:
+        await callback.answer("نامعتبر", show_alert=True)
+        return
+    pid = int(parts[3])
+    raw = parts[4]
+    plan = await session.get(Plan, pid)
+    if not plan or plan.owner_reseller_id is not None:
+        await callback.answer("یافت نشد", show_alert=True)
+        return
+    from app.services.plan_categories import resolve_category_for_plan_write
+    from app.services.shop_scope import ShopScopeError
+
+    try:
+        if raw in {"0", ""}:
+            plan.category_id = None
+        else:
+            plan.category_id = await resolve_category_for_plan_write(
+                session,
+                staff,
+                raw,
+                allow_inactive_id=plan.category_id,
+            )
+        await session.commit()
+    except (ShopScopeError, ValueError) as e:
+        await callback.answer(user_safe_error(e, limit=160), show_alert=True)
+        return
+    await callback.answer("ذخیره شد")
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            await _plan_detail_text_for(session, plan),
             reply_markup=await _plan_detail_markup(session, plan),
         )
 

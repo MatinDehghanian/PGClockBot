@@ -339,14 +339,18 @@ def _admin_plans_audience_entries(ui: dict | None = None) -> list[tuple[str, str
     return [
         (REPLY_ACTION_ADM_PLANS_AUD_USERS, "📦 پلن‌های کاربران"),
         (REPLY_ACTION_ADM_PLANS_AUD_RESELLERS, "🤝 پلن‌های نمایندگان"),
+        (REPLY_ACTION_ADM_PLANS_CATEGORIES, "🏷 برچسب دسته"),
+        (REPLY_ACTION_ADM_PLANS_ADDONS, "⏱ بسته حجم/زمان"),
     ]
 
 
 def _admin_plans_list_entries(ui: dict | None = None) -> list[tuple[str, str]]:
-    """Reply keyboard on audience list screen — add plan only (types via inline picker)."""
+    """Reply keyboard on audience list screen — add plan + catalog extras (web parity)."""
     _ = ui
     return [
         (REPLY_ACTION_ADM_PLANS_ADD, "➕ افزودن پلن"),
+        (REPLY_ACTION_ADM_PLANS_CATEGORIES, "🏷 برچسب دسته"),
+        (REPLY_ACTION_ADM_PLANS_ADDONS, "⏱ بسته حجم/زمان"),
     ]
 
 
@@ -376,6 +380,8 @@ def _admin_plans_kind_entries(audience: str, ui: dict | None = None) -> list[tup
 REPLY_ACTION_ADM_PLANS_AUD_USERS = "adm_plans_aud_users"
 REPLY_ACTION_ADM_PLANS_AUD_RESELLERS = "adm_plans_aud_resellers"
 REPLY_ACTION_ADM_PLANS_ADD = "adm_plans_add"
+REPLY_ACTION_ADM_PLANS_CATEGORIES = "adm_plans_categories"
+REPLY_ACTION_ADM_PLANS_ADDONS = "adm_plans_addons"
 REPLY_ACTION_ADM_PLANS_KIND_USERS_FIXED = "adm_plans_kind_users_fixed"
 REPLY_ACTION_ADM_PLANS_KIND_USERS_CUSTOM = "adm_plans_kind_users_custom"
 REPLY_ACTION_ADM_PLANS_KIND_USERS_TRIAL = "adm_plans_kind_users_trial"
@@ -384,12 +390,16 @@ REPLY_ACTION_ADM_PLANS_KIND_RES_FIXED = "adm_plans_kind_res_fixed"
 REPLY_ACTION_ADM_PLANS_KIND_RES_PAYG = "adm_plans_kind_res_payg"
 REPLY_ACTION_ADM_PLANS_KIND_RES_ADDON_VOL = "adm_plans_kind_res_addon_vol"
 REPLY_ACTION_ADM_PLANS_KIND_RES_ADDON_USERS = "adm_plans_kind_res_addon_users"
+REPLY_ACTION_RES_PLAN_CATEGORIES = "res_plan_categories"
+REPLY_ACTION_RES_PLAN_ADDONS = "res_plan_addons"
 
 
 def _reseller_plans_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]]:
     _ = ui
     return [
         ("res_plan_add", "➕ پلن جدید"),
+        (REPLY_ACTION_RES_PLAN_CATEGORIES, "🏷 برچسب دسته"),
+        (REPLY_ACTION_RES_PLAN_ADDONS, "⏱ بسته حجم/زمان"),
     ]
 
 

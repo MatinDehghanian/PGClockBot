@@ -924,7 +924,7 @@ async def open_admin_plans_hub(
         text=(
             "💎 <b>پلن‌ها</b> (مثل وب‌پنل /plans)\n"
             "«پلن‌های کاربران» یا «پلن‌های نمایندگان» را از کیبورد پایین بزنید.\n"
-            "پلن‌ها اینلاین زیر پیام — افزودن از کیبورد."
+            "برچسب دسته و بسته حجم/زمان هم از همین کیبورد — مثل وب."
         ),
         state=state,
         push=push,
@@ -1019,7 +1019,7 @@ async def open_reseller_plans_hub(
         text=(
             "💎 <b>پلن‌های فروش</b>\n"
             "ساخت از کیبورد؛ انتخاب پلن زیر پیام اینلاین است.\n"
-            "مدیریت کامل‌تر (تست/دلخواه) در وب‌پنل «پلن‌ها»."
+            "برچسب دسته و بسته حجم/زمان از کیبورد — مثل وب‌پنل."
         ),
         state=state,
         push=push,
@@ -1229,6 +1229,8 @@ _OWNER_ONLY_REPLY_ACTIONS = frozenset(
         kb.REPLY_ACTION_ADM_PLANS_AUD_USERS,
         kb.REPLY_ACTION_ADM_PLANS_AUD_RESELLERS,
         kb.REPLY_ACTION_ADM_PLANS_ADD,
+        kb.REPLY_ACTION_ADM_PLANS_CATEGORIES,
+        kb.REPLY_ACTION_ADM_PLANS_ADDONS,
         kb.REPLY_ACTION_ADM_PLANS_KIND_USERS_FIXED,
         kb.REPLY_ACTION_ADM_PLANS_KIND_USERS_CUSTOM,
         kb.REPLY_ACTION_ADM_PLANS_KIND_USERS_TRIAL,
@@ -1821,6 +1823,30 @@ async def _soft_reseller(
             except Exception:
                 pass
         return
+    if action == kb.REPLY_ACTION_RES_PLAN_CATEGORIES:
+        from app.bot.handlers.plan_catalog_manage import open_categories_manage
+
+        await open_categories_manage(
+            message,
+            session,
+            db_user,
+            state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
+        return
+    if action == kb.REPLY_ACTION_RES_PLAN_ADDONS:
+        from app.bot.handlers.plan_catalog_manage import open_addons_manage
+
+        await open_addons_manage(
+            message,
+            session,
+            db_user,
+            state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
+        return
     if action.startswith("res_st_"):
         sec = action.replace("res_st_", "", 1)
         if sec == "panel":
@@ -1936,6 +1962,8 @@ async def reply_main_nav(
         kb.REPLY_ACTION_ADM_PLANS_AUD_USERS,
         kb.REPLY_ACTION_ADM_PLANS_AUD_RESELLERS,
         kb.REPLY_ACTION_ADM_PLANS_ADD,
+        kb.REPLY_ACTION_ADM_PLANS_CATEGORIES,
+        kb.REPLY_ACTION_ADM_PLANS_ADDONS,
         kb.REPLY_ACTION_ADM_PLANS_KIND_USERS_FIXED,
         kb.REPLY_ACTION_ADM_PLANS_KIND_USERS_CUSTOM,
         kb.REPLY_ACTION_ADM_PLANS_KIND_USERS_TRIAL,
@@ -1944,6 +1972,8 @@ async def reply_main_nav(
         kb.REPLY_ACTION_ADM_PLANS_KIND_RES_PAYG,
         "adm_plan_add",
         "res_plan_add",
+        kb.REPLY_ACTION_RES_PLAN_CATEGORIES,
+        kb.REPLY_ACTION_RES_PLAN_ADDONS,
         "backup_upload",
         # Keep nav stack when opening reseller sub-hubs / sections
         "res_settings",
@@ -2284,6 +2314,36 @@ async def reply_main_nav(
         from app.bot.handlers.admin_plans import send_add_plan_type_picker
 
         await send_add_plan_type_picker(message, session, db_user, state, aud)
+    elif action == kb.REPLY_ACTION_ADM_PLANS_CATEGORIES:
+        if not await _deny_unless_owner(
+            message, session, db_user, is_reseller_bot=is_reseller_bot
+        ):
+            return
+        from app.bot.handlers.plan_catalog_manage import open_categories_manage
+
+        await open_categories_manage(
+            message,
+            session,
+            db_user,
+            state,
+            is_reseller_bot=False,
+            reseller_owner_id=None,
+        )
+    elif action == kb.REPLY_ACTION_ADM_PLANS_ADDONS:
+        if not await _deny_unless_owner(
+            message, session, db_user, is_reseller_bot=is_reseller_bot
+        ):
+            return
+        from app.bot.handlers.plan_catalog_manage import open_addons_manage
+
+        await open_addons_manage(
+            message,
+            session,
+            db_user,
+            state,
+            is_reseller_bot=False,
+            reseller_owner_id=None,
+        )
     elif action in {
         kb.REPLY_ACTION_ADM_PLANS_KIND_USERS_FIXED,
         kb.REPLY_ACTION_ADM_PLANS_KIND_USERS_CUSTOM,
