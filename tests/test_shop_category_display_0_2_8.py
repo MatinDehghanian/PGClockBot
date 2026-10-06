@@ -20,6 +20,9 @@ class ShopKeyboardAttachTests(unittest.TestCase):
         # Must send inline on the shop message — not ReplyKeyboard-then-edit
         self.assertIn("reply_markup=inline", helper)
         self.assertNotIn("edit_reply_markup(", helper)
+        # Reply chrome must be lasting (never delete tip)
+        self.assertIn("attach_reply_keyboard", helper)
+        self.assertNotIn(".delete(", helper)
 
     def test_shop_list_callback_edits_without_orphan_caption(self):
         from app.bot.handlers import shop
@@ -31,7 +34,7 @@ class ShopKeyboardAttachTests(unittest.TestCase):
 
 
 class ShopCategoryDisplayFixTests(unittest.IsolatedAsyncioTestCase):
-    async def test_send_mode_puts_inline_on_shop_message(self):
+    async def test_send_mode_puts_inline_then_lasting_reply_chrome(self):
         from app.bot.handlers.shop import present_shop_kind_picker
 
         message = AsyncMock()
@@ -61,16 +64,16 @@ class ShopCategoryDisplayFixTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(first.kwargs.get("reply_markup"), "INLINE")
         second = message.answer.await_args_list[1]
         self.assertEqual(second.kwargs.get("reply_markup"), "REPLY")
-        chrome_msg.delete.assert_awaited_once()
+        self.assertIn("منوی فروشگاه", second.args[0])
+        # Critical: deleting chrome drops reply KB + 4-square menu on iOS
+        chrome_msg.delete.assert_not_awaited()
 
-    async def test_send_mode_keeps_inline_if_chrome_delete_fails(self):
+    async def test_send_mode_survives_attach_failure(self):
         from app.bot.handlers.shop import present_shop_kind_picker
 
         message = AsyncMock()
         shop_msg = AsyncMock()
-        chrome_msg = AsyncMock()
-        chrome_msg.delete = AsyncMock(side_effect=RuntimeError("cannot delete"))
-        message.answer = AsyncMock(side_effect=[shop_msg, chrome_msg])
+        message.answer = AsyncMock(side_effect=[shop_msg, RuntimeError("tg down")])
 
         with patch("app.bot.handlers.shop.kb.shop_reply_keyboard", return_value="REPLY"):
             with patch(

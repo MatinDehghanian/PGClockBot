@@ -73,7 +73,10 @@ async def attach_reply_keyboard(
 
     Never delete this message. On many Telegram clients (especially iOS),
     deleting the message that set ``ReplyKeyboardMarkup`` drops the custom
-    keyboard and leaves the system keyboard after FSM text input.
+    keyboard **and** the input-field 4-square menu icon, leaving the system
+    QWERTY keyboard open. Only remove/replace reply keyboards when the user
+    must type (``cancel_reply`` / ``ForceReply``) or when a new lasting
+    ``ReplyKeyboardMarkup`` is sent.
     """
     try:
         return await message.answer(text or "⌨️", reply_markup=reply_markup)
@@ -91,9 +94,11 @@ async def seed_reply_keyboard(
 ) -> None:
     """Register a reply keyboard with Telegram.
 
-    ``ephemeral=True`` deletes the tip (legacy start-menu polish). Do **not**
-    use ephemeral seeding as the *only* restore after ``cancel_reply()`` —
-    tip-delete often hides the custom keyboard on mobile clients.
+    ``ephemeral=True`` deletes the tip (legacy start-menu polish). Safe **only**
+    when another lasting message in the same chat already carries the same
+    ``ReplyKeyboardMarkup`` (e.g. /start welcome). Do **not** use ephemeral
+    seeding as the *only* restore after ``cancel_reply()`` or as shop/reseller
+    chrome — tip-delete hides the custom keyboard and menu icon on mobile.
     """
     try:
         tip_msg = await message.answer(tip or "·", reply_markup=reply_markup)

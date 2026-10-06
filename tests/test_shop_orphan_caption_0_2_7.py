@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, patch
 
 
 class ShopOrphanCaptionTests(unittest.IsolatedAsyncioTestCase):
-    async def test_present_send_sets_inline_then_deletes_chrome(self):
+    async def test_present_send_sets_inline_then_lasting_chrome(self):
         from app.bot.handlers.shop import present_shop_kind_picker
 
         message = AsyncMock()
@@ -37,7 +37,7 @@ class ShopOrphanCaptionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             message.answer.await_args_list[0].kwargs.get("reply_markup"), "INLINE"
         )
-        chrome.delete.assert_awaited_once()
+        chrome.delete.assert_not_awaited()
 
     async def test_present_edit_does_not_answer_chrome_caption(self):
         from app.bot.handlers.shop import present_shop_kind_picker
