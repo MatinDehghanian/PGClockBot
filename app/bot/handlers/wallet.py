@@ -372,7 +372,8 @@ async def _topup_instructions(
 
 
 @router.callback_query(
-    F.data.regexp(r"^wtop:(card|gateway|psp|crypto)(?::\w+)?$"),
+    # Picker buttons are wtop:card:0:<dest_id> (order_id placeholder 0), matching shop pay:* shape.
+    F.data.regexp(r"^wtop:(card|gateway|psp|crypto)(?::\d+(?::\w+)?)?$"),
     WalletStates.choose_method,
 )
 async def wtop_choose_method(
@@ -391,7 +392,8 @@ async def wtop_choose_method(
     ui = await get_all_settings(session)
     parts = (callback.data or "").split(":")
     key = parts[1]
-    dest_id = parts[2] if len(parts) > 2 else None
+    # wtop:KEY | wtop:KEY:ORDER_ID | wtop:KEY:ORDER_ID:DEST_ID
+    dest_id = parts[3] if len(parts) > 3 else None
     flag, method = _TOPUP_METHODS[key]
     if not on(ui.get(flag)):
         await callback.answer("غیرفعال است", show_alert=True)
@@ -460,6 +462,9 @@ async def wtop_choose_method(
                 )
             return
         card = card_by_id(ui, dest_id) if dest_id else items[0]
+        if not card:
+            await callback.answer("کارت نامعتبر", show_alert=True)
+            return
     elif key == "gateway":
         items = enabled_gateways(ui)
         if not items:
@@ -476,6 +481,9 @@ async def wtop_choose_method(
                 )
             return
         gateway = gateway_by_id(ui, dest_id) if dest_id else items[0]
+        if not gateway:
+            await callback.answer("درگاه نامعتبر", show_alert=True)
+            return
     else:
         items = enabled_crypto_wallets(ui)
         if not items:
@@ -492,6 +500,9 @@ async def wtop_choose_method(
                 )
             return
         wallet = crypto_by_id(ui, dest_id) if dest_id else items[0]
+        if not wallet:
+            await callback.answer("ولت نامعتبر", show_alert=True)
+            return
 
     payment = await create_wallet_topup(session, db_user.id, amount, method=method)
     if key == "card" and on(ui.get("pay_card_auto_enabled")):

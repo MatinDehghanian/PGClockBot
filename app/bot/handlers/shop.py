@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -38,6 +40,7 @@ from app.services.users import get_all_settings, on
 from app.services.message_variables import DOMAIN_PAYMENT, render_message_template
 
 router = Router(name="shop")
+logger = logging.getLogger(__name__)
 
 
 async def _show_order_pay(message, session, db_user, order_id, state, text: str):
@@ -546,7 +549,7 @@ async def custom_gb_entered(
     min_gb, max_gb, _, _, _, _ = _custom_bounds(ui)
     try:
         gb = int(float((message.text or "").replace(",", "").replace("٬", "").strip()))
-    except ValueError:
+    except (ValueError, OverflowError):
         await message.answer("عدد معتبر بفرستید")
         return
     if gb < min_gb or gb > max_gb:
@@ -717,7 +720,7 @@ async def _notify_new_order(bot, session, order, db_user, plan_name: str | None)
             plan_name=plan_name,
         )
     except Exception:
-        pass
+        logger.exception("notify_new_order failed order=%s", getattr(order, "id", None))
 
 
 @router.callback_query(F.data == "shop:custom:buy")
@@ -1526,7 +1529,9 @@ async def pay_wallet_cb(
             needs_approval=False,
         )
     except Exception:
-        pass
+        logger.exception(
+            "notify_new_subscription failed order=%s", getattr(order, "id", None)
+        )
 
 
 async def _await_order_receipt(

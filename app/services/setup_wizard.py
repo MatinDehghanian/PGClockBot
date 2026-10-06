@@ -524,6 +524,29 @@ def normalize_webhook_base_url(raw: str | None) -> str:
     return (raw or "").strip().rstrip("/")
 
 
+def telegram_webhook_endpoint(
+    webhook_url: str | None,
+    webhook_path: str | None = None,
+) -> tuple[str, str, str]:
+    """Return ``(origin, path, full_url)`` for Telegram ``setWebhook``.
+
+    ``WEBHOOK_URL`` must be an https origin. If a path sneaks into the base
+    (common when pasting the full endpoint), it is stripped so Telegram does
+    not POST to ``…/telegram/webhook/telegram/webhook`` while the app listens
+    on ``WEBHOOK_PATH`` only.
+    """
+    from urllib.parse import urlparse
+
+    path = normalize_webhook_path(webhook_path)
+    base = normalize_webhook_base_url(webhook_url)
+    if not base:
+        return "", path, ""
+    parsed = urlparse(base)
+    if parsed.scheme and parsed.netloc and parsed.path not in {"", "/"}:
+        base = f"{parsed.scheme}://{parsed.netloc}"
+    return base, path, f"{base}{path}"
+
+
 def resolve_bot_update_mode(
     *,
     mode: str | None,
