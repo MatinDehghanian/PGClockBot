@@ -369,7 +369,7 @@ async def apply_service_addon(
     parsed = parse_addon_note(order.note)
     if not parsed:
         raise ValueError("سفارش افزونه نامعتبر است")
-    pack_id, service_id = parsed
+    pack_id, service_id, snap_kind, snap_amount = parsed
     order_id = int(order.id)
 
     with session.no_autoflush:
@@ -420,7 +420,6 @@ async def apply_service_addon(
 
         # Prefer snapshotted kind/amount from the order note; fall back to live pack
         # only for legacy notes written before snapshotting.
-        snap_kind, snap_amount = parsed[2], parsed[3]
         apply_kind = snap_kind or pack.kind
         apply_amount = float(snap_amount) if snap_amount is not None else float(pack.amount)
         if apply_kind not in VALID_KINDS:

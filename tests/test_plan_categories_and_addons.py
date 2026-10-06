@@ -174,5 +174,39 @@ class PlanModelFieldTests(unittest.TestCase):
         self.assertTrue(hasattr(p, "category_id"))
 
 
+class ApplyServiceAddonUnpackTests(unittest.IsolatedAsyncioTestCase):
+    async def test_apply_accepts_four_tuple_snapshot_note(self):
+        """Regression: parse_addon_note returns 4 values — unpack must not crash."""
+        from unittest.mock import AsyncMock, patch
+
+        from app.db.models import OrderStatus
+        from app.services.service_addons import apply_service_addon
+
+        order = MagicMock()
+        order.id = 99
+        order.note = "svc_addon:1:2:volume:10"
+        order.status = OrderStatus.PAID.value
+        order.service_id = 2
+        order.user_id = 7
+        order.reseller_id = None
+
+        session = AsyncMock()
+        # Claim PAID → DELIVERING succeeds once
+        claim_result = MagicMock()
+        claim_result.rowcount = 1
+        session.execute = AsyncMock(return_value=claim_result)
+        session.commit = AsyncMock()
+        session.refresh = AsyncMock()
+        # Pack/service missing → ValueError after successful unpack
+        session.get = AsyncMock(return_value=None)
+
+        with patch(
+            "app.services.service_addons.update", return_value=MagicMock()
+        ):
+            with self.assertRaises(ValueError) as ctx:
+                await apply_service_addon(session, order)
+        self.assertIn("بسته یا سرویس", str(ctx.exception))
+
+
 if __name__ == "__main__":
     unittest.main()
