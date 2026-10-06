@@ -281,7 +281,8 @@ async def open_shop_list(
     await state.update_data(_shop_custom=custom_on, _shop_wholesale=wholesale_on)
     cats, include_other = await _shop_category_menu(session, fixed_plans)
     body, _cap = _shop_picker_copy(use_categories=bool(cats))
-    # Single bubble: reply chrome + inline kinds (no orphan «فروشگاه:» caption).
+    # Shop bubble carries inline kinds; lasting reply chrome is attached separately
+    # (never delete chrome — that clears the keyboard / 4-square menu on iOS).
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_SHOP, push=push)
     await present_shop_kind_picker(
@@ -585,13 +586,13 @@ async def open_reseller_apply(message: Message, session: AsyncSession, db_user: 
         "• <b>ثابت</b> — اشتراک با قیمت ثابت\n"
         "• <b>PAYG</b> — پرداخت بر اساس مصرف ترافیک",
     )
+    from app.bot.tg_utils import attach_reply_keyboard
+
     # Attach mode buttons to the main bubble — never a separate «نوع پلن:» caption.
+    # Reply chrome must be lasting: delete-after-send clears the custom keyboard
+    # and the 4-square menu icon on iOS/mobile.
     await message.answer(text, reply_markup=await _resapply_mode_keyboard(session, ui))
-    chrome = await message.answer("\u2060", reply_markup=main_kb)
-    try:
-        await chrome.delete()
-    except Exception:
-        pass
+    await attach_reply_keyboard(message, main_kb, text="⌨️ منوی اصلی")
 
 
 async def open_reseller_home(

@@ -272,14 +272,22 @@ async def present_shop_kind_picker(
 ) -> None:
     """Show shop kind/category picker with inline buttons on the shop bubble.
 
-    ``mode="edit"`` — refresh an existing shop message (back from plan list).
-    ``mode="send"`` — new entry: send shop text **with** the inline kind/category
-    keyboard, then apply reply-chrome (Home/Back) via a throwaway message that
-    is deleted immediately. Reply keyboards persist after delete; this avoids
-    both the orphan «فروشگاه:» caption and the broken ReplyKeyboard→Inline
-    ``edit_reply_markup`` path (Telegram rejects that conversion, which hid
-    all category buttons after v0.2.7).
+    Telegram allows only one ``reply_markup`` per message, so ReplyKeyboard and
+    InlineKeyboard cannot share the shop bubble. Contract:
+
+    * ``mode="edit"`` — refresh an existing shop message (back from plan list).
+    * ``mode="send"`` — send shop text **with** the inline kind/category
+      keyboard, then attach shop reply-chrome (Home/Back) on a **lasting**
+      message via ``attach_reply_keyboard``.
+
+    Never delete the reply-chrome message. On iOS/mobile, deleting the message
+    that set ``ReplyKeyboardMarkup`` drops the custom keyboard and the
+    input-field 4-square menu icon, leaving the system keyboard open.
+    Also never use ReplyKeyboard→Inline ``edit_reply_markup`` (Telegram
+    rejects that conversion and hides category buttons).
     """
+    from app.bot.tg_utils import attach_reply_keyboard
+
     text = format_message("🛒 فروشگاه", body)
     inline = kb.shop_kind_keyboard(
         ui,
@@ -298,11 +306,12 @@ async def present_shop_kind_picker(
     # first and hope edit_reply_markup will swap it — that API call fails and
     # categories never appear.
     await message.answer(text, reply_markup=inline)
-    chrome = await message.answer("\u2060", reply_markup=kb.shop_reply_keyboard(ui))
-    try:
-        await chrome.delete()
-    except Exception:
-        logger.debug("shop picker: chrome delete skipped", exc_info=True)
+    # Lasting chrome only — never delete (see attach_reply_keyboard docstring).
+    await attach_reply_keyboard(
+        message,
+        kb.shop_reply_keyboard(ui),
+        text="⌨️ منوی فروشگاه",
+    )
 
 
 @router.callback_query(F.data == "shop:list")

@@ -11,7 +11,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 
 class ResellerApplyAttachTests(unittest.IsolatedAsyncioTestCase):
-    async def test_open_reseller_apply_attaches_inline_to_main_bubble(self):
+    async def test_open_reseller_apply_attaches_inline_and_lasting_reply(self):
         from app.bot.handlers.reply_nav import open_reseller_apply
         from app.db.models import Role
 
@@ -58,7 +58,8 @@ class ResellerApplyAttachTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("درخواست نمایندگی", first.args[0])
         second = message.answer.await_args_list[1]
         self.assertEqual(second.kwargs.get("reply_markup"), "MAIN")
-        chrome.delete.assert_awaited_once()
+        # Critical: chrome must stay — delete drops reply KB + menu icon on iOS
+        chrome.delete.assert_not_awaited()
 
 
 class ResellerApplySourceGuards(unittest.TestCase):
@@ -72,6 +73,8 @@ class ResellerApplySourceGuards(unittest.TestCase):
         self.assertNotIn('"نوع پلن:"', fn)
         self.assertNotIn("'نوع پلن:'", fn)
         self.assertIn("_resapply_mode_keyboard", fn)
+        self.assertIn("attach_reply_keyboard", fn)
+        self.assertNotIn("chrome.delete", fn)
 
 
 if __name__ == "__main__":
