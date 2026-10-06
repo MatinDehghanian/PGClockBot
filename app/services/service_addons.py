@@ -539,17 +539,30 @@ async def _apply_pack_to_service(
         payload["data_limit"] = data_limit_bytes
     elif kind == KIND_DURATION:
         import time
-        from app.services.formatting import parse_expire
+        from app.services.formatting import (
+            is_on_hold_status,
+            on_hold_expire_duration_seconds,
+            parse_expire,
+        )
 
         days = int(float(amount))
         if days <= 0:
             raise ValueError("مدت نامعتبر است")
         now = int(time.time())
         cur = parse_expire(info.get("expire") or info.get("expire_date"))
-        if cur is None:
+        hold_dur = on_hold_expire_duration_seconds(info)
+        if cur is None and hold_dur is not None:
+            # on_hold pending start: extend from expire_duration, then activate
+            expire_ts = now + int(hold_dur) + days * 86400
+        elif cur is None and is_on_hold_status(info.get("status")):
+            plan = getattr(service, "plan", None)
+            plan_days = int(getattr(plan, "duration_days", 0) or 0) if plan else 0
+            expire_ts = now + max(1, plan_days) * 86400 + days * 86400
+        elif cur is None:
             raise ValueError("این سرویس زمان نامحدود دارد — بسته زمان قابل اعمال نیست")
-        base = max(now, int(cur.timestamp()))
-        expire_ts = base + days * 86400
+        else:
+            base = max(now, int(cur.timestamp()))
+            expire_ts = base + days * 86400
         payload["expire"] = expire_ts
     else:
         raise ValueError("نوع بسته پشتیبانی نمی‌شود")

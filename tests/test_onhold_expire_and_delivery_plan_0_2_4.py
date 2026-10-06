@@ -43,9 +43,49 @@ class OnHoldExpireTests(unittest.TestCase):
                 "expire_duration": 15 * 86400,
             }
         )
-        self.assertIn("در انتظار", card.replace("پس از اتصال", "در انتظار") or card)
         self.assertIn("پس از اتصال", card)
         self.assertNotIn("نامحدود", card.split("انقضا")[1].split("\n")[0])
+
+
+class OnHoldAddonApplyTests(unittest.IsolatedAsyncioTestCase):
+    async def test_apply_duration_on_hold_uses_expire_duration(self):
+        from app.services.service_addons import KIND_DURATION, _apply_pack_to_service
+
+        svc = SimpleNamespace(
+            id=1,
+            pg_user_id=9,
+            plan=SimpleNamespace(duration_days=30),
+            quota_expire_at=None,
+            quota_data_limit_bytes=None,
+            quota_synced_at=None,
+        )
+        pg = MagicMock()
+        pg.get_user_by_id = AsyncMock(
+            return_value={
+                "status": "on_hold",
+                "expire": 0,
+                "expire_duration": 10 * 86400,
+                "data_limit": 5 * (1024**3),
+            }
+        )
+        pg.modify_user_by_id = AsyncMock(return_value={})
+        session = AsyncMock()
+
+        with patch("app.services.pasarguard.get_pg", return_value=pg), patch(
+            "app.services.users.current_shop_reseller_id", return_value=None
+        ):
+            await _apply_pack_to_service(
+                session, svc, kind=KIND_DURATION, amount=5, order_reseller_id=None
+            )
+
+        payload = pg.modify_user_by_id.await_args.args[1]
+        self.assertIn("expire", payload)
+        exp = int(payload["expire"])
+        import time
+
+        # ~15 days from now (10 hold + 5 addon)
+        self.assertGreater(exp, int(time.time()) + 14 * 86400)
+        self.assertLess(exp, int(time.time()) + 16 * 86400)
 
     def test_parse_expire_zero_is_unset(self):
         from app.services.formatting import parse_expire
