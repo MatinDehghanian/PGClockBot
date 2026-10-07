@@ -50,10 +50,13 @@ class SidebarAbovePortedMenusTests(unittest.TestCase):
     def test_nav_open_raises_drawer_z_index(self):
         self.assertIn("body.nav-open .side-backdrop", CSS)
         self.assertIn("body.nav-open .side", CSS)
-        self.assertIn("body.nav-open .menu-toggle", CSS)
+        # Whole topbar must rise — menu-toggle alone stays trapped in topbar's context.
+        self.assertIn("body.nav-open .topbar", CSS)
         self.assertIn("z-index: 5100", CSS)
         self.assertIn("z-index: 5200", CSS)
         self.assertIn("z-index: 5300", CSS)
+        # Regression: bumping only the toggle covered the header under the drawer.
+        self.assertNotIn("body.nav-open .menu-toggle", CSS)
 
     def test_opening_drawer_closes_ported_menus(self):
         start = JS.index("function setOpen(v, instant)")

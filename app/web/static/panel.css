@@ -4676,14 +4676,19 @@ form.settings-form > .actions.sticky-actions,
   }
   /* Ported ui-select / kebab menus use inline z-index ~5000 (above modals).
      When the drawer is open, raise shell chrome above those leftovers so the
-     sidebar never paints under an open dropdown (JS also closes menus on open). */
+     sidebar never paints under an open dropdown (JS also closes menus on open).
+
+     Raise the whole `.topbar` — not only `.menu-toggle`. Toggle lives inside
+     topbar's stacking context (z-index 55); bumping the button alone cannot
+     escape it, so the drawer at 5200 covered the header. Keep topbar above
+     the drawer so header + hamburger stay flush with the shell. */
   body.nav-open .side-backdrop {
     z-index: 5100;
   }
   body.nav-open .side {
     z-index: 5200;
   }
-  body.nav-open .menu-toggle {
+  body.nav-open .topbar {
     z-index: 5300;
   }
 
