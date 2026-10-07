@@ -98,7 +98,8 @@ async def _maybe_pay_referral_bonus(session: AsyncSession, order: Order) -> None
         return
     if int(order.amount or 0) <= 0:
         return
-    buyer = order.user
+    # Prefer already-loaded relationship; never trigger async lazy-load.
+    buyer = order.__dict__.get("user")
     if buyer is None:
         buyer = await session.get(BotUser, order.user_id)
     if not buyer or not buyer.referred_by_id:
@@ -187,6 +188,9 @@ def _random_username(
     """Build a PG username from prefix/suffix or an optional pattern.
 
     Pattern placeholders: ``{prefix}``, ``{random}`` (8 alnum), ``{suffix}``, ``{id}``.
+
+    ``user_id`` fills ``{id}``. For order delivery callers pass ``order.id``
+    (matches UI / message_variables catalog: شناسه سفارش).
     """
     random_part = _random_alnum(8)
     id_part = "" if user_id is None else str(user_id)
@@ -1918,9 +1922,10 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
         services: list[UserService] = []
 
         async def _create_one(index: int) -> UserService:
+            # ``{id}`` in naming pattern = order id (catalog / UI copy), not bot_user.id.
             username = await generate_pg_username(
                 session,
-                user_id=order.user_id,
+                user_id=int(order.id),
                 plan=plan,
                 reseller_id=order.reseller_id,
             )
@@ -1972,11 +1977,17 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
             )
             from app.services.bot_user_admin import sync_service_quota_cache
 
+            plan_days = int(getattr(plan, "duration_days", 0) or 0) or None
             if isinstance(pg_user, dict):
-                sync_service_quota_cache(service, pg_user)
+                sync_service_quota_cache(
+                    service, pg_user, fallback_duration_days=plan_days
+                )
             else:
                 sync_service_quota_cache(
-                    service, expire_ts=expire, data_limit_bytes=data_limit
+                    service,
+                    expire_ts=expire,
+                    data_limit_bytes=data_limit,
+                    fallback_duration_days=plan_days,
                 )
             session.add(service)
             await session.flush()
@@ -2187,11 +2198,17 @@ async def apply_renewal(session: AsyncSession, order: Order, service: UserServic
         service.notified_traffic = False
         from app.services.bot_user_admin import sync_service_quota_cache
 
+        plan_days = int(getattr(plan, "duration_days", 0) or 0) or None
         if isinstance(pg_user, dict):
-            sync_service_quota_cache(service, pg_user)
+            sync_service_quota_cache(
+                service, pg_user, fallback_duration_days=plan_days
+            )
         else:
             sync_service_quota_cache(
-                service, expire_ts=expire, data_limit_bytes=data_limit
+                service,
+                expire_ts=expire,
+                data_limit_bytes=data_limit,
+                fallback_duration_days=plan_days,
             )
         order.status = OrderStatus.DELIVERED.value
         await session.commit()
