@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import socket
 from contextlib import ExitStack
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
@@ -354,7 +355,7 @@ def settings_endpoint():
     )
 
 
-def call_settings(endpoint, **overrides):
+def call_settings(endpoint, *, dns_error=False, **overrides):
     data = {
         "PG_BASE_URL": "https://pg.example:8443/dashboard",
         "PG_SUBSCRIPTION_PATH": "/apilog/",
@@ -367,6 +368,23 @@ def call_settings(endpoint, **overrides):
         query_params={"tab": "pasarguard"}, form=AsyncMock(return_value=FormData(data))
     )
     with ExitStack() as stack:
+        # Unit tests must not depend on external DNS (pg.example is reserved).
+        # Keep URL/SSRF validation real; only control the resolver's result.
+        stack.enter_context(
+            patch(
+                "socket.getaddrinfo",
+                side_effect=socket.gaierror("unavailable") if dns_error else None,
+                return_value=[
+                    (
+                        socket.AF_INET,
+                        socket.SOCK_STREAM,
+                        socket.IPPROTO_TCP,
+                        "",
+                        ("8.8.8.8", 8443),
+                    )
+                ],
+            )
+        )
         stack.enter_context(
             patch(
                 "app.services.setup_wizard.current_setup_values",
@@ -392,7 +410,7 @@ def call_settings(endpoint, **overrides):
 
 def test_panel_settings_save_preserves_password_and_changes_only_pg(settings_endpoint):
     response, save, reset, clear, probe = call_settings(settings_endpoint)
-    assert response.status_code == 200
+    assert response.status_code == 200, response.body.decode()
     assert json.loads(response.body)["ok"]
     save.assert_called_once_with(
         {
@@ -412,7 +430,7 @@ def test_panel_connection_test_does_not_save(settings_endpoint):
     response, save, reset, clear, probe = call_settings(
         settings_endpoint, action="test", PG_PASSWORD="new-secret"
     )
-    assert response.status_code == 200
+    assert response.status_code == 200, response.body.decode()
     probe.assert_awaited_once_with(
         username="panel-user",
         password="new-secret",
@@ -504,3 +522,13 @@ def test_panel_settings_unsafe_url_never_saves_or_dials(settings_endpoint, base)
     save.assert_not_called()
     probe.assert_not_awaited()
     assert "secret" not in response.body.decode()
+
+
+def test_panel_settings_dns_failure_never_saves_or_dials(settings_endpoint):
+    response, save, reset, clear, probe = call_settings(
+        settings_endpoint, dns_error=True
+    )
+    assert response.status_code == 400
+    assert "قابل resolve نیست" in json.loads(response.body)["error"]
+    save.assert_not_called()
+    probe.assert_not_awaited()
