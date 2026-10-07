@@ -46,9 +46,34 @@
      * Building a body-level form with explicit overrides (reason from JS memory)
      * makes the POST independent of kebab/edit-modal visibility.
      */
+    function armPanelNavClock() {
+      /* Shared arm for fetch/POST paths that never fire a navigational submit
+         event (confirm → submitFormPost, kebab POST). Safe no-op if missing. */
+      var clock = document.getElementById('panel-nav-clock');
+      if (!clock) return;
+      clock.hidden = false;
+      clock.setAttribute('aria-hidden', 'false');
+      try { void clock.offsetWidth; } catch (_) {}
+    }
+    function disarmPanelNavClock() {
+      var clock = document.getElementById('panel-nav-clock');
+      if (!clock) return;
+      /* Keep clock if shell-first widgets are still loading. */
+      if (document.documentElement.getAttribute('data-panel-widgets-pending') === '1') return;
+      var dash = document.getElementById('home-dash') || document.getElementById('pg-dash');
+      if (dash && dash.getAttribute('aria-busy') === 'true' && !dash.firstElementChild) return;
+      clock.hidden = true;
+      clock.setAttribute('aria-hidden', 'true');
+    }
+    window.panelArmNavClock = armPanelNavClock;
+    window.panelDisarmNavClock = disarmPanelNavClock;
+
     function submitFormPost(form, overrides) {
       if (!form) return;
       overrides = overrides || {};
+      /* Real mutation is about to leave the page (fetch → assign/reload). Arm
+         here — not on the earlier data-confirm submit that only opens the modal. */
+      armPanelNavClock();
       var action = form.getAttribute('action') || form.action || window.location.href;
       var method = (form.getAttribute('method') || form.method || 'post').toLowerCase();
       if (method !== 'get') method = 'post';
@@ -244,6 +269,12 @@
       }
       document.body.classList.toggle('nav-open', open);
       if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      /* Ported ui-select / kebab menus sit at z-index 5000; drawer is ~50.
+         Close them when opening so they cannot paint over the sidebar. */
+      if (open) {
+        try { if (typeof closeUiSelects === 'function') closeUiSelects(); } catch (_) {}
+        try { if (typeof closeRowActions === 'function') closeRowActions(); } catch (_) {}
+      }
       if (instant) {
         /* Re-enable transition after paint so the next manual open still animates */
         requestAnimationFrame(function () {
@@ -368,6 +399,9 @@
         if (!form || form.tagName !== 'FORM') return;
         if (form.target && form.target !== '' && form.target !== '_self') return;
         if (form.hasAttribute('data-no-nav-clock')) return;
+        /* data-confirm forms only open the shared modal — real POST is via
+           submitFormPost after OK. Arming here left the clock stuck on cancel. */
+        if (form.hasAttribute('data-confirm') || form.id === 'confirm-form') return;
         if (side && side.contains(form)) setOpen(false, true);
         arm();
       }, true);
@@ -2410,6 +2444,12 @@
         resolver = null;
         clearExtraFields();
         if (modal.classList.contains('open')) closeModal(modal);
+        /* Cancel / Escape must clear any stray nav clock (e.g. older builds
+           that armed on the intercepted submit). Confirmed path arms in
+           submitFormPost instead. */
+        if (!result || !result.ok) {
+          try { disarmPanelNavClock(); } catch (_) {}
+        }
         if (r) r(result || { ok: false });
       }
 
@@ -2481,10 +2521,7 @@
       modal.addEventListener('click', (e) => {
         if (!resolver) return;
         if (e.target.closest('[data-modal-close]') || e.target === modal.querySelector('.ui-modal-backdrop')) {
-          const r = resolver;
-          resolver = null;
-          clearExtraFields();
-          if (r) r({ ok: false });
+          finish({ ok: false });
         }
       });
 

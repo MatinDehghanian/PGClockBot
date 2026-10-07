@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.2.17": [
+        "رفع گیر کردن لودینگ ساعت بعد از انصراف از تأیید حذف/عملیات (فرم‌های data-confirm)",
+        "سایدبار موبایل دیگر زیر منوهای باز (تگ‌ها / سلکت / عملیات ردیف) نمی‌رود",
+    ],
     "0.2.16": [
         "رفع فوری تأیید پرداخت: خطای greenlet/عکس در تلاش اول (on_hold بدون expire_duration) — دیگر Lazy-load روی plan نمی‌زند",
         "الگوی نام: متغیر {id} در تحویل سفارش = شناسه سفارش (مطابق راهنما)",

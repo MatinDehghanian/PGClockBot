@@ -4674,6 +4674,18 @@ form.settings-form > .actions.sticky-actions,
        during momentum scroll still opens the drawer (click alone waits for settle). */
     touch-action: manipulation;
   }
+  /* Ported ui-select / kebab menus use inline z-index ~5000 (above modals).
+     When the drawer is open, raise shell chrome above those leftovers so the
+     sidebar never paints under an open dropdown (JS also closes menus on open). */
+  body.nav-open .side-backdrop {
+    z-index: 5100;
+  }
+  body.nav-open .side {
+    z-index: 5200;
+  }
+  body.nav-open .menu-toggle {
+    z-index: 5300;
+  }
 
   .side {
     position: fixed;
