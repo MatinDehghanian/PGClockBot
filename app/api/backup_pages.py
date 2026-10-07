@@ -59,12 +59,25 @@ def register_backup_pages(app, *, render, require_admin, get_db):
         staff: dict = Depends(require_admin),
         note: str = Form(""),
         include_env: str = Form(""),
+        confirm_include_env: str = Form(""),
     ):
+        want_env = str(include_env) in {"1", "on", "true", "yes"}
+        confirmed = str(confirm_include_env) in {"1", "on", "true", "yes"}
+        # Phase 2: .env is opt-in and requires an explicit second confirm field.
+        if want_env and not confirmed:
+            return RedirectResponse(
+                "/settings?tab=backup&err="
+                + quote(
+                    "بکاپ با .env نیاز به تأیید امنیتی دوم دارد "
+                    "(توکن‌ها و اسرار داخل فایل می‌روند)."
+                ),
+                status_code=303,
+            )
         try:
             result = await asyncio.to_thread(
                 create_backup,
                 note=note,
-                include_env=str(include_env) in {"1", "on", "true", "yes"},
+                include_env=want_env and confirmed,
                 created_by=f"web:{staff.get('username') or 'admin'}",
             )
         except Exception as e:
@@ -77,9 +90,17 @@ def register_backup_pages(app, *, render, require_admin, get_db):
                 ),
                 status_code=303,
             )
+        env_note = (
+            " — شامل .env (اسرار)"
+            if result.get("include_env")
+            else " — بدون .env"
+        )
         return RedirectResponse(
             "/settings?tab=backup&ok="
-            + quote(f"بکاپ ساخته شد: {result.get('filename')} ({result.get('size_human')})"),
+            + quote(
+                f"بکاپ ساخته شد: {result.get('filename')} "
+                f"({result.get('size_human')}){env_note}"
+            ),
             status_code=303,
         )
 

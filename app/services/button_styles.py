@@ -201,8 +201,9 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "adm_st_notify", "label": "تنظیمات: اعلان‌ها", "group": "تنظیمات ادمین", "default": ""},
     {"id": "adm_st_panel", "label": "تنظیمات: وب‌پنل", "group": "تنظیمات ادمین", "default": "primary"},
     # Backup sub
-    {"id": "backup_create", "label": "ساخت بکاپ کامل", "group": "بکاپ", "default": "primary"},
-    {"id": "backup_create_noenv", "label": "بکاپ بدون .env", "group": "بکاپ", "default": "primary"},
+    {"id": "backup_create", "label": "ساخت بکاپ (بدون .env)", "group": "بکاپ", "default": "primary"},
+    {"id": "backup_create_env", "label": "بکاپ + .env", "group": "بکاپ", "default": "danger"},
+    {"id": "backup_create_noenv", "label": "بکاپ بدون .env (قدیمی)", "group": "بکاپ", "default": "primary"},
     {"id": "backup_upload", "label": "آپلود فایل بکاپ", "group": "بکاپ", "default": ""},
     {"id": "backup_refresh", "label": "تازه‌سازی لیست بکاپ", "group": "بکاپ", "default": ""},
     # Broadcast audience

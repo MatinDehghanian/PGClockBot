@@ -22,7 +22,7 @@ def _bind_paths(ctx: CliContext) -> None:
     backup_mod.RESTORE_STATUS_FILE = ctx.data_dir / "backup_restore.json"
 
 
-def cmd_backup(ctx: CliContext, *, note: str = "", include_env: bool = True) -> int:
+def cmd_backup(ctx: CliContext, *, note: str = "", include_env: bool = False) -> int:
     header("backup")
     _bind_paths(ctx)
     from app.services.backup import create_backup

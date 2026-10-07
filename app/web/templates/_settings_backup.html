@@ -48,9 +48,9 @@
   <div class="card settings-card">
     <h2>بکاپ کامل اطلاعات</h2>
     <p class="muted update-card-caption">
-      آرشیو ZIP شامل دیتابیس کامل پلتفرم (همه فروشگاه‌ها)، آپلودها، یوزر وب‌پنل و در صورت روشن بودن سوییچ، فایل <code dir="ltr">.env</code> (توکن‌ها و اسرار) است.
-      بکاپ زمان‌بندی‌شده به‌صورت پیش‌فرض <strong>بدون</strong> <code dir="ltr">.env</code> است؛ بکاپ دستی پیش‌فرض با <code dir="ltr">.env</code> است.
-      قبل از هر ریستور، یک بکاپ ایمنی خودکار ساخته می‌شود.
+      آرشیو ZIP همیشه شامل دیتابیس کامل پلتفرم (همه فروشگاه‌ها)، آپلودها و فایل ورود وب‌پنل (<code dir="ltr">web_admin.json</code>) است.
+      فایل <code dir="ltr">.env</code> (توکن ربات و اسرار) پیش‌فرض <strong>خارج</strong> است — مثل بکاپ زمان‌بندی‌شده؛ فقط با سوییچ + تأیید امنیتی اضافه می‌شود.
+      قبل از هر ریستور، یک بکاپ ایمنی خودکار (با .env) ساخته می‌شود.
     </p>
     <div class="update-meta">
       <div><span class="muted">نسخه فعلی</span> <strong>{{ local_version }}</strong></div>
@@ -77,7 +77,21 @@
         <label class="support-enabled">
           <span>شامل .env (توکن‌ها و اسرار)</span>
           <span class="ui-switch">
-            <input type="checkbox" name="include_env" value="1" checked />
+            <input type="checkbox" name="include_env" value="1" id="backup-include-env" />
+            <span class="ui-switch-track" aria-hidden="true"></span>
+          </span>
+        </label>
+      </div>
+      <div class="setting-item full" id="backup-env-confirm-wrap" hidden>
+        <div class="flash err" role="alert">
+          <strong>هشدار امنیتی:</strong>
+          با روشن کردن این گزینه، توکن ربات تلگرام، رمزها و اسرار سرور داخل ZIP می‌روند.
+          حتی بدون .env، فایل <code dir="ltr">web_admin.json</code> (ورود وب‌پنل) همچنان در بکاپ هست — فایل را جای امن نگه دارید.
+        </div>
+        <label class="support-enabled" style="margin-top:var(--space-2)">
+          <span>تأیید می‌کنم که .env (اسرار) داخل بکاپ برود</span>
+          <span class="ui-switch">
+            <input type="checkbox" name="confirm_include_env" value="1" id="backup-confirm-include-env" />
             <span class="ui-switch-track" aria-hidden="true"></span>
           </span>
         </label>
@@ -243,14 +257,41 @@
   <h2>نکات مهم</h2>
   <ol class="update-steps">
     <li class="done"><span class="step-dot"></span><span>بکاپ روی دیسک سرور در <code dir="ltr">data/backups/</code> ذخیره می‌شود (حداکثر ۲۰ مورد).</span></li>
-    <li class="done"><span class="step-dot"></span><span>دانلود را در جای امن نگه دارید؛ آرشیو ممکن است توکن ربات و رمزها را داشته باشد.</span></li>
+    <li class="done"><span class="step-dot"></span><span>پیش‌فرض بدون <code dir="ltr">.env</code> است؛ بکاپ با اسرار فقط با تأیید دو مرحله‌ای.</span></li>
+    <li class="done"><span class="step-dot"></span><span>حتی بدون .env، رمز ورود وب‌پنل (<code dir="ltr">web_admin.json</code>) داخل آرشیو است — دانلود را جای امن نگه دارید.</span></li>
     <li class="done"><span class="step-dot"></span><span>ریستور سرویس را ری‌استارت می‌کند تا دیتابیس جدید لود شود.</span></li>
-    <li class="done"><span class="step-dot"></span><span>از بات ادمین هم می‌توانید بکاپ بسازید و فایل را دریافت کنید.</span></li>
+    <li class="done"><span class="step-dot"></span><span>بکاپ کامل پلتفرم فقط برای مالک است؛ نماینده مسیر بکاپ سرور ندارد.</span></li>
   </ol>
 </div>
 <script>
 (function () {
   const createForm = document.getElementById('backup-create-form');
+  const includeEnv = document.getElementById('backup-include-env');
+  const confirmEnv = document.getElementById('backup-confirm-include-env');
+  const envWrap = document.getElementById('backup-env-confirm-wrap');
+  function syncEnvConfirm() {
+    if (!includeEnv || !envWrap) return;
+    const on = !!includeEnv.checked;
+    envWrap.hidden = !on;
+    if (!on && confirmEnv) confirmEnv.checked = false;
+  }
+  if (includeEnv) {
+    includeEnv.addEventListener('change', syncEnvConfirm);
+    syncEnvConfirm();
+  }
+  if (createForm) {
+    createForm.addEventListener('submit', function (e) {
+      if (includeEnv && includeEnv.checked && confirmEnv && !confirmEnv.checked) {
+        e.preventDefault();
+        envWrap && (envWrap.hidden = false);
+        if (window.showFlash) {
+          window.showFlash('برای بکاپ با .env باید تأیید امنیتی دوم را روشن کنید.', 'err');
+        } else {
+          alert('برای بکاپ با .env باید تأیید امنیتی دوم را روشن کنید.');
+        }
+      }
+    });
+  }
   const uploadForm = document.getElementById('backup-upload-form');
   const restoreForm = document.getElementById('backup-restore-form');
   const restoreModal = document.getElementById('modal-backup-restore');

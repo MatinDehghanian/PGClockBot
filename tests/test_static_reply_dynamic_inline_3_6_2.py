@@ -36,7 +36,8 @@ class StaticReplyDynamicInline362Tests(unittest.TestCase):
         self.assertNotIn("🗓 عملیات روزانه", mapping)
         self.assertNotIn("👤 افراد", mapping)
         self.assertNotIn("💾 بکاپ / ریستور", mapping)
-        self.assertNotIn("🆕 ساخت بکاپ کامل", mapping)
+        self.assertNotIn("🆕 ساخت بکاپ", mapping)
+        self.assertNotIn("🆕 بکاپ + .env", mapping)
         self.assertNotIn("🖥 پاسارگارد", mapping)
         self.assertNotIn("🏠 خانه نماینده", mapping)
 
@@ -49,7 +50,8 @@ class StaticReplyDynamicInline362Tests(unittest.TestCase):
             self.assertNotIn("📊 داشبورد", mapping)
             self.assertNotIn("🗓 عملیات روزانه", mapping)
             self.assertNotIn("🛠 سیستم", mapping)
-            self.assertNotIn("🆕 ساخت بکاپ کامل", mapping)
+            self.assertNotIn("🆕 ساخت بکاپ", mapping)
+            self.assertNotIn("🆕 بکاپ + .env", mapping)
             self.assertNotIn("👥 کاربران VPN", mapping)
             # No platform admin entry forged onto reseller-bot maps
             admin_btn = mapping.get("🛠 پنل ادمین") or mapping.get("پنل ادمین")
@@ -63,11 +65,13 @@ class StaticReplyDynamicInline362Tests(unittest.TestCase):
             "btn_back": "⬅️ بازگشت",
         }
         mapping = reply_action_map("admin", ui=ui, include_submenus=True, is_reseller_bot=False)
-        self.assertEqual(mapping["🆕 ساخت بکاپ کامل"], "backup_create")
+        self.assertEqual(mapping["🆕 ساخت بکاپ"], "backup_create")
+        self.assertEqual(mapping["🆕 بکاپ + .env"], "backup_create_env")
         self.assertEqual(mapping["📢 همه"], "bc_aud_all")
         self.assertEqual(mapping["➕ افزودن پلن"], "adm_plans_add")
         flat = [b.text for row in admin_backup_reply_keyboard(ui).keyboard for b in row]
-        self.assertIn("🆕 ساخت بکاپ کامل", flat)
+        self.assertIn("🆕 ساخت بکاپ", flat)
+        self.assertIn("🆕 بکاپ + .env", flat)
         self.assertIn("⬅️ بازگشت", flat)
         self.assertTrue(admin_broadcast_reply_keyboard(ui).keyboard)
         self.assertTrue(admin_plans_reply_keyboard(ui).keyboard)

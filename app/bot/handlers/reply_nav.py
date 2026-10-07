@@ -1393,6 +1393,10 @@ async def _soft_admin(
             await backup_h.backup_create(cb, db_user, session=session)
         elif data == "adm:backup:create:noenv":
             await backup_h.backup_create(cb, db_user, session=session)
+        elif data == "adm:backup:create:env":
+            await backup_h.backup_create_env_ask(cb, db_user, session=session)
+        elif data == "adm:backup:create:env:yes":
+            await backup_h.backup_create(cb, db_user, session=session)
         elif data == "adm:backup:upload":
             await backup_h.backup_upload_ask(cb, db_user, state, session=session)
         elif data == "adm:broadcast":
@@ -2464,10 +2468,26 @@ async def reply_main_nav(
             is_reseller_bot=is_reseller_bot,
         )
     elif action == "backup_create":
+        # Phase 2 default: without .env
         await _soft_admin(
-            message, session, db_user, "adm:backup:create", state, is_reseller_bot=is_reseller_bot
+            message,
+            session,
+            db_user,
+            "adm:backup:create:noenv",
+            state,
+            is_reseller_bot=is_reseller_bot,
+        )
+    elif action == "backup_create_env":
+        await _soft_admin(
+            message,
+            session,
+            db_user,
+            "adm:backup:create:env",
+            state,
+            is_reseller_bot=is_reseller_bot,
         )
     elif action == "backup_create_noenv":
+        # Legacy reply label — same as safe default
         await _soft_admin(
             message,
             session,
