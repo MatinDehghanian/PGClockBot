@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import html
 from dataclasses import dataclass
-from typing import Any, Iterable, Mapping
+from typing import Any, Mapping
 
 from app.services.safe_format import safe_format
 
@@ -80,9 +80,27 @@ SETTING_DOMAIN: dict[str, str] = {
     "gateway_pay_text": DOMAIN_PAYMENT,
     "gateway_link": DOMAIN_PAYMENT,
     "crypto_pay_text": DOMAIN_PAYMENT,
+    "psp_pay_text": DOMAIN_PAYMENT,
     "force_join_msg": DOMAIN_FORCE_JOIN,
     "pg_username_pattern": DOMAIN_NAMING,
+    "custom_plan_username_pattern": DOMAIN_NAMING,
     "admin_daily_report_template": DOMAIN_DAILY_REPORT,
+}
+
+# Values actually supplied by each field's renderer, not the entire domain.
+# Naming uses the catalog directly; daily reports additionally filter by role.
+_SETTING_CONTEXT_KEYS: dict[str, frozenset[str]] = {
+    "welcome_text": frozenset({"user_name", "user_id", "username", "shop_title"}),
+    "purchase_success_text": frozenset({"order_id", "plan_name", "plan_type", "shop_title", "url"}),
+    "wallet_success_text": frozenset({"amount", "payment_id", "shop_title"}),
+    "referral_text": frozenset({"code", "link", "shop_title"}),
+    "qr_caption": frozenset({"url"}),
+    "card_pay_text": frozenset({"amount", "card", "holder", "payment_id", "shop_title"}),
+    "gateway_pay_text": frozenset({"amount", "order_id", "payment_id", "gateway_name", "shop_title"}),
+    "gateway_link": frozenset({"amount", "order_id", "payment_id"}),
+    "crypto_pay_text": frozenset({"amount", "asset", "network", "address", "payment_id", "shop_title"}),
+    "psp_pay_text": frozenset({"amount", "order_id", "payment_id", "shop_title"}),
+    "force_join_msg": frozenset({"channels"}),
 }
 
 
@@ -399,6 +417,22 @@ def allowed_keys_for_domain(domain: str) -> frozenset[str]:
         keys.add(v.key)
         keys.update(v.aliases)
     return frozenset(keys)
+
+
+def template_variable_specs(actor: str = "owner") -> dict[str, dict[str, str]]:
+    """Panel field -> supported placeholder names and their Persian titles."""
+    specs: dict[str, dict[str, str]] = {}
+    for setting, domain in SETTING_DOMAIN.items():
+        context_keys = _SETTING_CONTEXT_KEYS.get(setting)
+        include_owner_only = domain != DOMAIN_DAILY_REPORT or actor == "owner"
+        names: dict[str, str] = {}
+        for var in vars_for_domain(domain, include_owner_only=include_owner_only):
+            if context_keys is not None and var.key not in context_keys:
+                continue
+            for key in (var.key, *var.aliases):
+                names[key] = var.title_fa
+        specs[setting] = names
+    return specs
 
 
 def _escape_if_needed(key: str, value: Any, *, html_mode: bool) -> str:
