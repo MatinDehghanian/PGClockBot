@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 from typing import Any
 
 from sqlalchemy import select, update
@@ -13,6 +14,7 @@ from app.db.models import (
     BotUser,
     Order,
     OrderStatus,
+    Plan,
     ServiceAddonPack,
     UserService,
 )
@@ -490,6 +492,34 @@ async def apply_service_addon(
         raise
 
 
+async def _on_hold_activation_expire_ts(
+    session: AsyncSession,
+    service: UserService,
+    info: dict[str, Any],
+    *,
+    now: int,
+) -> int:
+    """Resolve a finite expiration before activating a pending-start user."""
+    from app.services.formatting import on_hold_expire_duration_seconds, parse_expire
+
+    current = parse_expire(info.get("expire") or info.get("expire_date"))
+    if current is not None:
+        return int(current.timestamp())
+    duration = on_hold_expire_duration_seconds(info)
+    if duration is not None:
+        return now + duration
+
+    # apply_service_addon loads UserService via session.get, so plan may be
+    # unloaded. Never trigger an async relationship load through getattr.
+    plan = service.__dict__.get("plan")
+    if plan is None and service.plan_id:
+        plan = await session.get(Plan, int(service.plan_id))
+    plan_days = int(getattr(plan, "duration_days", 0) or 0) if plan else 0
+    if plan_days <= 0:
+        raise ValueError("مدت سرویس در انتظار مشخص نیست — بسته قابل اعمال نیست")
+    return now + plan_days * 86400
+
+
 async def _apply_pack_to_service(
     session: AsyncSession,
     service: UserService,
@@ -503,6 +533,7 @@ async def _apply_pack_to_service(
     Unlimited volume/time services are rejected (not converted to limited).
     """
     from app.services.bot_user_admin import sync_service_quota_cache
+    from app.services.formatting import is_on_hold_status, parse_expire
     from app.services.pasarguard import get_pg, get_pg_for_reseller
 
     if not service.pg_user_id:
@@ -537,33 +568,39 @@ async def _apply_pack_to_service(
             raise ValueError("این سرویس حجم نامحدود دارد — بسته حجم قابل اعمال نیست")
         data_limit_bytes = current + add_bytes
         payload["data_limit"] = data_limit_bytes
+        if is_on_hold_status(info.get("status")):
+            # Switching to active does not start PG's pending expiration timer.
+            expire_ts = await _on_hold_activation_expire_ts(
+                session, service, info, now=int(time.time())
+            )
+            payload["expire"] = expire_ts
     elif kind == KIND_DURATION:
-        import time
-        from app.services.formatting import (
-            is_on_hold_status,
-            on_hold_expire_duration_seconds,
-            parse_expire,
-        )
-
         days = int(float(amount))
         if days <= 0:
             raise ValueError("مدت نامعتبر است")
         now = int(time.time())
         cur = parse_expire(info.get("expire") or info.get("expire_date"))
-        hold_dur = on_hold_expire_duration_seconds(info)
-        if cur is None and hold_dur is not None:
-            # on_hold pending start: extend from expire_duration, then activate
-            expire_ts = now + int(hold_dur) + days * 86400
-        elif cur is None and is_on_hold_status(info.get("status")):
-            plan = getattr(service, "plan", None)
-            plan_days = int(getattr(plan, "duration_days", 0) or 0) if plan else 0
-            expire_ts = now + max(1, plan_days) * 86400 + days * 86400
+        if cur is None and is_on_hold_status(info.get("status")):
+            base = await _on_hold_activation_expire_ts(
+                session, service, info, now=now
+            )
+            expire_ts = base + days * 86400
         elif cur is None:
             raise ValueError("این سرویس زمان نامحدود دارد — بسته زمان قابل اعمال نیست")
         else:
             base = max(now, int(cur.timestamp()))
             expire_ts = base + days * 86400
         payload["expire"] = expire_ts
+        if "data_limit" in info:
+            # Preserve the live volume quota explicitly, and cache it alongside
+            # the new expiration so a time-only write cannot look unlimited.
+            try:
+                data_limit_bytes = int(info.get("data_limit") or 0)
+            except (TypeError, ValueError) as e:
+                raise ValueError("حجم سرویس نامعتبر است") from e
+            if data_limit_bytes < 0:
+                raise ValueError("حجم سرویس نامعتبر است")
+            payload["data_limit"] = data_limit_bytes
     else:
         raise ValueError("نوع بسته پشتیبانی نمی‌شود")
 
