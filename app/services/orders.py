@@ -1315,6 +1315,165 @@ async def attach_receipt(session: AsyncSession, payment: Payment, file_id: str) 
     return payment
 
 
+def _wallet_topup_credit_reason(payment_id: int) -> str:
+    return f"شارژ کیف پول #{int(payment_id)}"
+
+
+async def _wallet_topup_already_credited(
+    session: AsyncSession, payment: Payment
+) -> bool:
+    """True when the idempotent top-up ledger row for this payment exists."""
+    reason = _wallet_topup_credit_reason(int(payment.id))
+    topup_shop = (
+        int(payment.wallet_shop_id)
+        if getattr(payment, "wallet_shop_id", None)
+        else None
+    )
+    q = select(WalletTransaction.id).where(
+        WalletTransaction.user_id == int(payment.user_id),
+        WalletTransaction.reason == reason,
+        WalletTransaction.amount == int(payment.amount),
+    )
+    if topup_shop is None:
+        q = q.where(WalletTransaction.reseller_id.is_(None))
+    else:
+        q = q.where(WalletTransaction.reseller_id == topup_shop)
+    row = (
+        await session.execute(q.limit(1))
+    ).scalar_one_or_none()
+    return row is not None
+
+
+async def _resume_approved_payment(
+    session: AsyncSession, payment: Payment
+) -> Order | None:
+    """Continue after APPROVED claim when credit/delivery never finished.
+
+    Security invariants:
+    - Never credit a wallet top-up twice (ledger reason check).
+    - Never mint a second VPN user for an already-delivered order.
+    - APPROVED + incomplete work is retriable; APPROVED + complete is terminal.
+    """
+    if payment.is_wallet_topup:
+        if await _wallet_topup_already_credited(session, payment):
+            return None
+        user = await session.get(BotUser, payment.user_id)
+        if not user:
+            payment.status = PaymentStatus.PENDING.value
+            payment.reviewed_by = None
+            payment.review_note = (
+                payment.review_note or "wallet topup blocked: bot user missing"
+            )
+            await session.commit()
+            raise ValueError(
+                "کاربر پرداخت‌کننده برای شارژ کیف پول یافت نشد — تأیید لغو شد"
+            )
+        try:
+            topup_shop = (
+                int(payment.wallet_shop_id)
+                if getattr(payment, "wallet_shop_id", None)
+                else None
+            )
+            await credit_wallet(
+                session,
+                user,
+                payment.amount,
+                _wallet_topup_credit_reason(int(payment.id)),
+                shop_id=topup_shop,
+            )
+        except Exception:
+            payment.status = PaymentStatus.PENDING.value
+            payment.reviewed_by = None
+            payment.review_note = (
+                payment.review_note or "wallet topup blocked: credit failed"
+            )
+            await session.commit()
+            raise
+        return None
+
+    if not payment.order_id:
+        raise ValueError("این پرداخت قبلاً تأیید شده")
+    order = await session.get(Order, payment.order_id)
+    if not order:
+        raise ValueError("این پرداخت قبلاً تأیید شده")
+
+    note = _order_note(order)
+    is_mutation = is_mutation_order_note(note)
+    if order.status == OrderStatus.DELIVERED.value or (
+        bool(order.service_id) and not is_mutation
+    ):
+        # Truly complete — do not re-run delivery / notifications as a new approve.
+        raise ValueError("این پرداخت قبلاً تأیید شده")
+
+    # Heal mid-flight / crashed delivery back to PAID so fulfill can claim again.
+    if order.status == OrderStatus.DELIVERING.value and not (
+        bool(order.service_id) and not is_mutation
+    ):
+        with session.no_autoflush:
+            await session.execute(
+                update(Order)
+                .where(
+                    Order.id == int(order.id),
+                    Order.status == OrderStatus.DELIVERING.value,
+                )
+                .values(status=OrderStatus.PAID.value)
+                .execution_options(synchronize_session=False)
+            )
+        await session.commit()
+        await session.refresh(order)
+
+    if order.status in {
+        OrderStatus.PENDING.value,
+        OrderStatus.AWAITING_RECEIPT.value,
+        OrderStatus.AWAITING_APPROVAL.value,
+    }:
+        # Payment already APPROVED but order never flipped to PAID (crash between
+        # claims). Finish the PAID claim idempotently, then fulfill.
+        await session.execute(
+            update(Payment)
+            .where(
+                Payment.order_id == order.id,
+                Payment.id != int(payment.id),
+                Payment.status == PaymentStatus.PENDING.value,
+            )
+            .values(
+                status=PaymentStatus.REJECTED.value,
+                review_note="superseded by approved payment",
+            )
+            .execution_options(synchronize_session=False)
+        )
+        paid_claim = await session.execute(
+            update(Order)
+            .where(
+                Order.id == order.id,
+                Order.status.in_(
+                    [
+                        OrderStatus.PENDING.value,
+                        OrderStatus.AWAITING_RECEIPT.value,
+                        OrderStatus.AWAITING_APPROVAL.value,
+                    ]
+                ),
+            )
+            .values(status=OrderStatus.PAID.value)
+            .execution_options(synchronize_session=False)
+        )
+        if paid_claim.rowcount != 1:
+            await session.refresh(order)
+            if order.status not in {
+                OrderStatus.PAID.value,
+                OrderStatus.DELIVERING.value,
+            }:
+                raise ValueError("این سفارش قابل تأیید نیست")
+        else:
+            await session.commit()
+            await session.refresh(order)
+
+    if order.status == OrderStatus.PAID.value:
+        return await fulfill_paid_order(session, order)
+
+    raise ValueError("این پرداخت قبلاً تأیید شده")
+
+
 async def approve_payment(session: AsyncSession, payment: Payment, reviewer_tg: int) -> Order | None:
     payment_id = int(payment.id)
     # DB-only claim: disable autoflush so a dirty in-memory status cannot
@@ -1330,10 +1489,17 @@ async def approve_payment(session: AsyncSession, payment: Payment, reviewer_tg: 
             .execution_options(synchronize_session=False)
         )
     if claim.rowcount != 1:
-        fresh = await session.get(Payment, payment_id)
+        # Force DB truth — expire_on_commit=False can keep a stale PENDING identity.
+        fresh = (
+            await session.execute(
+                select(Payment)
+                .where(Payment.id == payment_id)
+                .execution_options(populate_existing=True)
+            )
+        ).scalar_one_or_none()
         if fresh and fresh.status == PaymentStatus.APPROVED.value:
-            # Do not re-deliver / re-notify — caller must treat as already done.
-            raise ValueError("این پرداخت قبلاً تأیید شده")
+            # Approved but credit/delivery may still be incomplete — resume safely.
+            return await _resume_approved_payment(session, fresh)
         raise ValueError("این پرداخت قابل تأیید نیست")
     await session.refresh(payment)
 
@@ -1361,7 +1527,7 @@ async def approve_payment(session: AsyncSession, payment: Payment, reviewer_tg: 
                 session,
                 user,
                 payment.amount,
-                f"شارژ کیف پول #{payment.id}",
+                _wallet_topup_credit_reason(int(payment.id)),
                 shop_id=topup_shop,
             )
         except Exception:
