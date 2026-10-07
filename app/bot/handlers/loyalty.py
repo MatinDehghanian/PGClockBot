@@ -315,6 +315,8 @@ async def open_loyalty_referral_message(
     uname = await _bot_username(message)
     text, link, send_kw = await build_referral_text(session, db_user, uname)
     share = f"https://t.me/share/url?url={link}&text="
+    from app.bot.tg_utils import attach_reply_keyboard
+
     await nav.show_nav_keyboard(
         message,
         session,
@@ -329,6 +331,9 @@ async def open_loyalty_referral_message(
         "اشتراک و آمار:",
         reply_markup=_ref_actions_keyboard(share_url=share),
     )
+    await attach_reply_keyboard(
+        message, kb.loyalty_reply_keyboard(await get_all_settings(session)), text="⌨️ باشگاه مشتریان"
+    )
 
 
 async def open_loyalty_points_message(
@@ -342,12 +347,15 @@ async def open_loyalty_points_message(
             reply_markup=kb.loyalty_reply_keyboard(ui),
         )
         return
+    from app.bot.tg_utils import attach_reply_keyboard
+
     text = await build_loyalty_text(session, db_user)
     await message.answer(text, reply_markup=kb.loyalty_reply_keyboard(ui))
     await message.answer(
         "جزئیات بیشتر:",
         reply_markup=_points_extras_keyboard(),
     )
+    await attach_reply_keyboard(message, kb.loyalty_reply_keyboard(ui), text="⌨️ باشگاه مشتریان")
 
 
 async def open_loyalty_rewards_message(
@@ -369,6 +377,8 @@ async def open_loyalty_rewards_message(
                 f"  {type_label}: {r.reward_value} · هزینه: {r.points_cost} امتیاز"
                 + (f"\n  <i>{desc}</i>" if desc else "")
             )
+    from app.bot.tg_utils import attach_reply_keyboard
+
     await message.answer(
         format_message("🎁 جوایز", "\n".join(lines)),
         reply_markup=kb.loyalty_reply_keyboard(ui),
@@ -376,6 +386,9 @@ async def open_loyalty_rewards_message(
     redeem_kb = _rewards_redeem_keyboard(rewards, include_back=False)
     if redeem_kb is not None:
         await message.answer("برای دریافت، جایزه را انتخاب کنید:", reply_markup=redeem_kb)
+        await attach_reply_keyboard(
+            message, kb.loyalty_reply_keyboard(ui), text="⌨️ باشگاه مشتریان"
+        )
 
 
 

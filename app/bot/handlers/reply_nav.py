@@ -813,9 +813,14 @@ async def open_admin_resellers_hub(
         None, view="ops", label="📱 مینی‌اپ · نمایندگان / عملیات"
     )
     if mini:
+        from app.bot.tg_utils import attach_reply_keyboard
+
         await message.answer(
             "برای آمار و میانبر وب‌پنل، مینی‌اپ را باز کنید:",
             reply_markup=mini,
+        )
+        await attach_reply_keyboard(
+            message, kb.admin_resellers_reply_keyboard(), text="⌨️ نمایندگان"
         )
 
 
@@ -866,6 +871,8 @@ async def open_admin_backup_hub(
         message, session, db_user, is_reseller_bot=is_reseller_bot
     ):
         return
+    from app.bot.tg_utils import attach_reply_keyboard
+
     await nav.show_nav_keyboard(
         message,
         session,
@@ -879,6 +886,9 @@ async def open_admin_backup_hub(
     await message.answer(
         backup_h._hub_text(backups),
         reply_markup=kb.backup_files_keyboard(backups),
+    )
+    await attach_reply_keyboard(
+        message, kb.admin_backup_reply_keyboard(), text="⌨️ بکاپ"
     )
 
 
