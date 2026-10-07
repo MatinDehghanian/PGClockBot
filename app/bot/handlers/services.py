@@ -125,10 +125,12 @@ async def svc_link(callback: CallbackQuery, session: AsyncSession, db_user: BotU
             format_bytes_ratio,
             format_expire,
             hold_duration_from_info,
+            status_label,
         )
 
         if svc.pg_username:
             parts.append(f"👤 {copyable(svc.pg_username)}")
+        parts.append(f"📶 وضعیت: <b>{status_label(sub_info.get('status'))}</b>")
         parts.append(
             f"📦 حجم: <b>{format_bytes_ratio(sub_info.get('used_traffic'), sub_info.get('data_limit'), joiner=' از ')}</b>"
         )

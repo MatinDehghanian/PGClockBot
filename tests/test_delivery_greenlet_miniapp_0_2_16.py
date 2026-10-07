@@ -191,7 +191,7 @@ class OnHoldDisplayLabelTests(unittest.TestCase):
         )
         self.assertEqual(
             time_remaining_label(days_left=12, status="on_hold"),
-            "12 روز",
+            "12 روز (پس از اتصال)",
         )
         self.assertEqual(
             time_remaining_label(days_left=None, status="active"),

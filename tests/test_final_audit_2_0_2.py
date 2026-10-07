@@ -171,7 +171,7 @@ class VersionBumpTests(unittest.TestCase):
         self.assertEqual(Path("VERSION").read_text(encoding="utf-8").strip(), __version__)
         from app.services.release_notes import RELEASE_NOTES_FA
 
-        self.assertEqual(list(RELEASE_NOTES_FA.keys())[0], "0.2.18")
+        self.assertEqual(list(RELEASE_NOTES_FA.keys())[0], __version__)
 
 
 class PayWithWalletRefundPaymentTests(unittest.IsolatedAsyncioTestCase):

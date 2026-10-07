@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.2.19": [
+        "سرویس‌های on_hold با وضعیت «در انتظار اتصال» و مدت اعتبار پس از اتصال نمایش داده می‌شوند",
+        "مینی‌اپ: پاسخ خالی یا اطلاعات ناقص سابسکریپشن دیگر به‌اشتباه حجم یا زمان نامحدود نشان نمی‌دهد",
+        "نمایش مدت انتظار از on_hold_expire_duration پاسارگارد در جزئیات سرویس، مینی‌اپ و QR یکسان شد",
+    ],
     "0.2.18": [
         "موبایل: هدر دیگر زیر سایدبار نمی‌رود — topbar هم‌سطح/بالای دراور می‌ماند",
         "سایدبار: فلش رنگی/لگ باز شدن اکاردئون‌ها حذف شد (transition پس‌زمینه)",
