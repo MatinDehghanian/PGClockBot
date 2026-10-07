@@ -5586,9 +5586,9 @@ form.settings-form > .actions.sticky-actions,
   border-radius: var(--radius);
   gap: var(--space-0);
   background: transparent;
-  transition:
-    background var(--motion-fast) var(--ease-standard),
-    border-color var(--motion-fast) var(--ease-standard);
+  /* Instant collapsed/open fill — transitioning background flashed the tinted
+     collapsed color for --motion-fast on every accordion open/close. */
+  transition: none;
 }
 .nav-section-home {
   margin-top: var(--space-1);

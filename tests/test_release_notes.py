@@ -77,7 +77,7 @@ class ReleaseNotesTests(unittest.TestCase):
         self.assertIn("0.1.0", parsed)
         self.assertTrue(parsed["0.2.18"])
         self.assertTrue(
-            any("هدر" in n or "topbar" in n or "سایدبار" in n for n in parsed["0.2.18"])
+            any("هدر" in n or "topbar" in n or "سایدبار" in n or "اکاردئون" in n or "مودال" in n for n in parsed["0.2.18"])
         )
         self.assertTrue(parsed["0.2.17"])
         self.assertTrue(
@@ -221,7 +221,7 @@ class ReleaseNotesTests(unittest.TestCase):
             },
         )
         self.assertTrue(
-            any("هدر" in n or "topbar" in n or "سایدبار" in n for n in parsed["0.2.18"])
+            any("هدر" in n or "topbar" in n or "سایدبار" in n or "اکاردئون" in n or "مودال" in n for n in parsed["0.2.18"])
         )
         self.assertTrue(
             any("لودینگ" in n or "سایدبار" in n or "confirm" in n for n in parsed["0.2.17"])
