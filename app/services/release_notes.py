@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.2.20": [
+        "معرف اجباری به مودال تنظیمات پرداخت (مالی ← تنظیمات ← تب پرداخت، اول لیست) منتقل شد",
+        "متن دعوت دوستان در باشگاه مشتریان ماند؛ راهنما واضح‌تر شد: کاربر جدید بدون معرف ثبت‌نام/خرید نمی‌کند",
+    ],
     "0.2.19": [
         "ثبت‌نام اجباری با کد معرف (قابل تنظیم per-shop)؛ بدون کد معتبر حساب ساخته نمی‌شود",
         "نام‌گذاری پاسارگارد: متغیرهای {username}، {plan_volume} و {plan_unit}؛ {id}=شناسه سفارش و یوزرنیم از خریدار",

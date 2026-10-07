@@ -73,8 +73,10 @@ class ReleaseNotesTests(unittest.TestCase):
 
         src = Path("app/services/release_notes.py").read_text(encoding="utf-8")
         parsed = parse_release_notes_source(src)
-        self.assertEqual(list(parsed.keys())[0], "0.2.19")
+        self.assertEqual(list(parsed.keys())[0], "0.2.20")
         self.assertIn("0.1.0", parsed)
+        self.assertTrue(parsed["0.2.20"])
+        self.assertTrue(any("معرف اجباری" in n or "پرداخت" in n for n in parsed["0.2.20"]))
         self.assertTrue(parsed["0.2.19"])
         self.assertTrue(any("on_hold" in n for n in parsed["0.2.19"]))
         self.assertTrue(parsed["0.2.18"])
@@ -186,6 +188,7 @@ class ReleaseNotesTests(unittest.TestCase):
         self.assertEqual(
             set(parsed),
             {
+                "0.2.20",
                 "0.2.19",
                 "0.2.18",
                 "0.2.17",
