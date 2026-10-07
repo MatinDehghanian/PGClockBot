@@ -456,7 +456,7 @@ async def retry_delivery(session: AsyncSession, order_id: int) -> Order:
         raise ValueError("سفارش پیدا نشد")
 
     async def _resend() -> None:
-        user = order.user or await session.get(BotUser, order.user_id)
+        user = order.__dict__.get("user") or await session.get(BotUser, order.user_id)
         if not user or not user.telegram_id:
             return
         pay = (

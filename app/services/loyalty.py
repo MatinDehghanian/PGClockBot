@@ -794,12 +794,13 @@ async def on_order_delivered(session: AsyncSession, order: Order) -> None:
     note = (order.note or "").strip()
     if note.startswith("reseller_app:"):
         return
-    user = order.user
+    # Prefer already-loaded relationships; never trigger async lazy-load (xd2s).
+    user = order.__dict__.get("user")
     if user is None:
         user = await session.get(BotUser, order.user_id)
     if not user:
         return
-    plan = order.plan
+    plan = order.__dict__.get("plan")
     if plan is None and order.plan_id:
         plan = await session.get(Plan, order.plan_id)
     reseller_id = order.reseller_id

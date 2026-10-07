@@ -159,7 +159,7 @@
           </div>
           <div class="user-edit-wallet-pill svc-stat-pill">
             <span class="muted">مانده زمان</span>
-            <strong>{% if s.days_left is none %}نامحدود{% else %}{{ s.days_left }} روز{% endif %}</strong>
+            <strong>{{ s.time_label }}</strong>
           </div>
         </div>
         {% if s.subscription_url %}

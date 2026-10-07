@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.2.16": [
+        "رفع فوری تأیید پرداخت: خطای greenlet/عکس در تلاش اول (on_hold بدون expire_duration) — دیگر Lazy-load روی plan نمی‌زند",
+        "الگوی نام: متغیر {id} در تحویل سفارش = شناسه سفارش (مطابق راهنما)",
+        "مینی‌اپ: سرویس‌های کاربر حتی با توکن خالی/خطای پاسارگارد لیست می‌شوند؛ وضعیت on_hold درست نمایش داده می‌شود",
+        "on_hold دیگر در مینی‌اپ / ویرایش کاربر / QR / لیست پاسارگارد به‌اشتباه «نامحدود» نشان داده نمی‌شود",
+    ],
     "0.2.15": [
         "رفع فوری: صفحه مدیریت مالی (سفارشات / پرداخت‌ها) دیگر خطای HTTP 500 نمی‌دهد — باگ import محلی Payment بعد از تشخیص تحویل",
     ],

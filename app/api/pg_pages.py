@@ -9,7 +9,7 @@ from fastapi import Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.formatting import data_limit_to_gb, expire_remaining_days, format_stat_row
+from app.services.formatting import data_limit_to_gb, format_stat_row, pg_expire_fields
 from app.services.numbers import normalize_number_text, parse_float, parse_int, parse_optional_float, parse_optional_int
 from app.services.pasarguard import (
     PasarGuardError,
@@ -622,7 +622,9 @@ def register_pg_pages(
                 if not isinstance(u, dict):
                     continue
                 u["_sub_url"] = user_subscription_url(u)
-                u["_days_left"] = expire_remaining_days(u.get("expire") or u.get("expire_date"))
+                exp_fields = pg_expire_fields(u)
+                u["_days_left"] = exp_fields["days_left"]
+                u["_expire_text"] = exp_fields["expire_text"]
                 u["_data_gb"] = data_limit_to_gb(u.get("data_limit"))
                 u["_group_ids"] = user_group_ids(u)
 

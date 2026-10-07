@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, Mapping, Optional
 import html as html_mod
 
 
@@ -599,10 +599,10 @@ def format_expire_short(
 def expire_remaining_days(
     value: Any, *, status: Any = None, expire_duration: Any = None
 ) -> int | None:
-    """Whole days left until expire (ceil); None if unlimited.
+    """Whole days left until expire (ceil); None if unlimited *or* unknown.
 
     For on_hold with ``expire_duration``, returns the pending duration in days
-    (not unlimited).
+    (not unlimited). on_hold without duration → None meaning *pending*, not unlimited.
     """
     dt = parse_expire(value)
     if not dt:
@@ -616,6 +616,50 @@ def expire_remaining_days(
     if remaining.total_seconds() <= 0:
         return 0
     return max(1, int((remaining.total_seconds() + 86399) // 86400))
+
+
+def hold_duration_from_info(info: Mapping[str, Any] | dict | None) -> Any:
+    """Pick expire_duration-like field from a PasarGuard user/info dict."""
+    if not isinstance(info, dict):
+        return None
+    for key in ("expire_duration", "on_hold_expire_duration", "hold_expire_duration"):
+        if info.get(key) is not None:
+            return info.get(key)
+    return None
+
+
+def time_remaining_label(
+    *,
+    days_left: int | None,
+    status: Any = None,
+) -> str:
+    """UI label for remaining time — never map on_hold + null days to «نامحدود»."""
+    if days_left is not None:
+        return f"{int(days_left)} روز"
+    if is_on_hold_status(status):
+        return "پس از اتصال"
+    return "نامحدود"
+
+
+def pg_expire_fields(info: Mapping[str, Any] | dict | None) -> dict[str, Any]:
+    """Derive days / text / labels from a PasarGuard user payload (status-aware)."""
+    info = info if isinstance(info, dict) else {}
+    status = info.get("status")
+    expire = info["expire"] if "expire" in info else info.get("expire_date")
+    hold_dur = hold_duration_from_info(info)
+    days = expire_remaining_days(expire, status=status, expire_duration=hold_dur)
+    return {
+        "status": status,
+        "expire_raw": expire,
+        "expire_duration": hold_dur,
+        "days_left": days,
+        "expire_text": format_expire_short(
+            expire, status=status, expire_duration=hold_dur
+        ),
+        "expire_long": format_expire(expire, status=status, expire_duration=hold_dur),
+        "time_label": time_remaining_label(days_left=days, status=status),
+        "pending_start": bool(is_on_hold_status(status)),
+    }
 
 
 def data_limit_to_gb(value: Any) -> float | None:

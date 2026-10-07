@@ -1097,10 +1097,13 @@ def build_qr_caption(
         )
         lines.append(f"📦 حجم: {vol}" if rich else f"📦 حجم: <b>{vol}</b>")
     if exp is not None or info is not None:
+        from app.services.formatting import hold_duration_from_info
+
+        status = info.get("status") if isinstance(info, dict) else None
+        hold_dur = hold_duration_from_info(info) if isinstance(info, dict) else None
+        exp_label = format_expire(exp, status=status, expire_duration=hold_dur)
         lines.append(
-            f"⏱ زمان: {format_expire(exp)}"
-            if rich
-            else f"⏱ زمان: <b>{format_expire(exp)}</b>"
+            f"⏱ زمان: {exp_label}" if rich else f"⏱ زمان: <b>{exp_label}</b>"
         )
     # Honor panel toggle «نمایش لینک در کپشن QR» (same as delivery text path)
     from app.services.formatting import copyable

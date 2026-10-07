@@ -25,6 +25,7 @@ from app.services.formatting import (
     is_on_hold_status,
     on_hold_expire_duration_seconds,
     status_label_plain,
+    time_remaining_label,
 )
 from app.services.pasarguard import (
     absolutize_subscription_url,
@@ -57,6 +58,12 @@ class ServiceSnapshot:
     expire_text: str
     subscription_url: str | None
     error: str | None = None
+
+    @property
+    def time_label(self) -> str:
+        """Remaining-time label — never «نامحدود» for on_hold + null days."""
+        status = (self.pg or {}).get("status") if self.pg else None
+        return time_remaining_label(days_left=self.days_left, status=status)
 
 
 def assert_staff_pg_user_action(staff: dict | None, action: str) -> None:
@@ -449,11 +456,17 @@ async def admin_provision_service(
             subscription_token=extract_sub_token(sub_url),
             remark=f"manual:{actor_label}",
         )
+        plan_days = int(getattr(plan, "duration_days", 0) or 0) or None
         if isinstance(pg_user, dict):
-            sync_service_quota_cache(service, pg_user)
+            sync_service_quota_cache(
+                service, pg_user, fallback_duration_days=plan_days
+            )
         else:
             sync_service_quota_cache(
-                service, expire_ts=expire, data_limit_bytes=data_limit
+                service,
+                expire_ts=expire,
+                data_limit_bytes=data_limit,
+                fallback_duration_days=plan_days,
             )
         session.add(service)
         await session.commit()
@@ -528,6 +541,7 @@ def sync_service_quota_cache(
     *,
     expire_ts: int | None = None,
     data_limit_bytes: int | None = None,
+    fallback_duration_days: int | None = None,
 ) -> None:
     """Persist PG expire/data_limit onto UserService for users-list summaries.
 
@@ -538,6 +552,9 @@ def sync_service_quota_cache(
 
     PasarGuard ``on_hold`` users often have ``expire=0`` until first connect, with
     ``expire_duration`` holding the real TTL — that must NOT sync as unlimited.
+
+    Never lazy-load ``service.plan`` (AsyncSession → MissingGreenlet / xd2s).
+    Pass ``fallback_duration_days`` from an already-loaded Plan when available.
     """
     from app.services.formatting import parse_expire
 
@@ -558,8 +575,18 @@ def sync_service_quota_cache(
                 elif is_on_hold_status(info.get("status")):
                     # Pending start — approximate from plan so list never shows
                     # «نامحدود» for a timed on_hold service.
-                    plan = getattr(service, "plan", None)
+                    # CRITICAL: never touch ``service.plan`` relationship here.
+                    # Under AsyncSession, lazy-load raises MissingGreenlet /
+                    # greenlet_spawn (SQLAlchemy xd2s) and aborts first-time
+                    # approve/delivery — second click then resumes successfully.
+                    # Only use an already-loaded plan, or the optional override.
+                    plan = service.__dict__.get("plan")
                     days = int(getattr(plan, "duration_days", 0) or 0) if plan else 0
+                    if days <= 0 and fallback_duration_days is not None:
+                        try:
+                            days = int(fallback_duration_days or 0)
+                        except (TypeError, ValueError):
+                            days = 0
                     service.quota_expire_at = datetime.now(timezone.utc) + timedelta(
                         days=max(1, days)
                     )
@@ -906,18 +933,11 @@ async def detach_local_services_for_pg_user(
 def snapshot_telegram_lines(snap: ServiceSnapshot) -> str:
     svc = snap.service
     plan_name = svc.plan.name if svc.plan else "—"
-    if snap.days_left is None:
-        if is_on_hold_status((snap.pg or {}).get("status") if snap.pg else None):
-            days = "پس از اتصال"
-        else:
-            days = "نامحدود"
-    else:
-        days = f"{snap.days_left} روز"
     lines = [
         f"📦 سرویس #{svc.id} · {plan_name}",
         f"وضعیت: {snap.status_fa}",
         f"حجم: {snap.volume_text} (مانده {snap.remain_gb_text})",
-        f"زمان: {snap.expire_text} · مانده {days}",
+        f"زمان: {snap.expire_text} · مانده {snap.time_label}",
     ]
     if snap.subscription_url:
         lines.append(f"لینک: {snap.subscription_url}")
