@@ -33,6 +33,7 @@ tests/test_hybrid_quota_boxes.py
 tests/test_inbox_platform_scope_leak.py
 tests/test_live_pg_menus.py
 tests/test_miniapp_security_audit.py
+tests/test_on_hold_addon_quotas.py
 tests/test_owner_bypass_guards.py
 tests/test_pg_admin_web_gate.py
 tests/test_pg_groups_inbound_tag_allowlist.py
