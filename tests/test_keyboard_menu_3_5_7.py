@@ -23,10 +23,10 @@ class KeyboardMenu357Tests(unittest.TestCase):
         self.assertNotIn("faq", DEFAULT_MENU_ORDER)
         self.assertTrue({"guide", "faq", "restart"} <= REMOVED_MENU_KEYS)
 
-    def test_submenus_persistent_with_home(self):
+    def test_submenus_with_home_not_force_persistent(self):
         ui = {"btn_menu_home": "🏠 منوی اصلی", "menu_layout": "compact", "btn_back": "⬅️ بازگشت"}
         for kb in (wallet_reply_keyboard(ui), support_reply_keyboard(ui)):
-            self.assertTrue(kb.is_persistent)
+            self.assertFalse(kb.is_persistent)
             flat = [b.text for row in kb.keyboard for b in row]
             self.assertIn("🏠 منوی اصلی", flat)
             self.assertIn("⬅️ بازگشت", flat)

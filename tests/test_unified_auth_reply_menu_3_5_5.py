@@ -38,7 +38,7 @@ class ReplyKeyboardMenuTests(unittest.TestCase):
         self.assertEqual(len(rows[1]), 2)
         self.assertEqual(len(rows[-1]), 1)
         self.assertEqual(rows[-1][0].text, "🏠 منوی اصلی")
-        self.assertTrue(kb.is_persistent)
+        self.assertFalse(kb.is_persistent)
 
     def test_guide_faq_stripped_from_reply_keyboard(self):
         ui = {
@@ -63,7 +63,7 @@ class ReplyKeyboardMenuTests(unittest.TestCase):
         kb = cancel_reply({})
         flat = [b.text for row in kb.keyboard for b in row]
         self.assertEqual(flat, ["انصراف"])
-        self.assertTrue(kb.is_persistent)
+        self.assertFalse(kb.is_persistent)
 
     def test_reply_action_map_resolves_labels(self):
         ui = {
