@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.2.18": [
+        "موبایل: هدر دیگر زیر سایدبار نمی‌رود — topbar هم‌سطح/بالای دراور می‌ماند",
+        "سایدبار: فلش رنگی/لگ باز شدن اکاردئون‌ها حذف شد (transition پس‌زمینه)",
+        "مودال تأیید: پرش ریز بعد از انصراف/بستن کمتر شد (blur قبل از hide)",
+    ],
     "0.2.17": [
         "رفع گیر کردن لودینگ ساعت بعد از انصراف از تأیید حذف/عملیات (فرم‌های data-confirm)",
         "سایدبار موبایل دیگر زیر منوهای باز (تگ‌ها / سلکت / عملیات ردیف) نمی‌رود",

@@ -1513,6 +1513,13 @@
     function finishCloseModal(el){
       if (!el) return;
       const wasOpen = el.classList.contains('open') || el.classList.contains('is-closing');
+      /* Blur before hide/restore — focus returning to a kebab/delete control that
+         was un-ported (display:none) made mobile browsers scrollIntoView and
+         jump the page a few hundred ms after confirm cancel. */
+      try {
+        const ae = document.activeElement;
+        if (ae && el.contains(ae) && typeof ae.blur === 'function') ae.blur();
+      } catch (_) {}
       el.hidden = true;
       el.classList.remove('open', 'is-closing', 'is-front', 'is-stack');
       try { el.style.zIndex = ''; } catch (_) {}
@@ -3975,7 +3982,9 @@ const root = document.getElementById('upd-root');
         section.classList.toggle('is-collapsed', collapsed);
         if (btn) btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
       }
-      var active = nav.querySelector('.nav-item.active');
+      /* Only scroll when the active link is in the *open* section — scrolling a
+         display:none item in a just-collapsed accordion caused sidebar jump/lag. */
+      var active = nav.querySelector('.nav-section[data-nav-mode]:not(.is-collapsed) .nav-item.active');
       if (active && typeof active.scrollIntoView === 'function') {
         try { active.scrollIntoView({ block: 'nearest' }); } catch (_) {}
       }
