@@ -158,8 +158,19 @@ class DomainSettingGroupsTests(unittest.TestCase):
         self.assertNotIn("support_text", msg_keys)
         self.assertNotIn("referral_text", msg_keys)
         self.assertEqual(keys_for_tab("supports"), {"support_text"})
-        self.assertEqual(keys_for_tab("loyalty"), {"referral_text", "referral_required", "referral_required_text"})
+        self.assertEqual(keys_for_tab("loyalty"), {"referral_text"})
+        self.assertEqual(
+            keys_for_tab("payment") & {"referral_required", "referral_required_text"},
+            {"referral_required", "referral_required_text"},
+        )
+        self.assertEqual(TAB_SETTING_GROUPS["payment"][0], "معرف اجباری")
         self.assertIn("روش‌های پرداخت", TAB_SETTING_GROUPS["payment"])
+        self.assertIn("معرف اجباری", SETTING_GROUPS)
+        self.assertEqual(
+            {f[0] for f in SETTING_GROUPS["معرف اجباری"]},
+            {"referral_required", "referral_required_text"},
+        )
+        self.assertEqual({f[0] for f in SETTING_GROUPS["متن دعوت دوستان"]}, {"referral_text"})
 
     def test_preview_js_drops_moved_message_fields(self):
         src = (TEMPLATES / "_tg_preview_chat_js.html").read_text(encoding="utf-8")

@@ -246,23 +246,40 @@ class ReferralRegistrationTests(unittest.IsolatedAsyncioTestCase):
             ):
                 save = next(route.endpoint for route in app.routes if getattr(route, "path", None) == path and "POST" in route.methods)
                 for enabled in (True, False):
-                    form = {"s_referral_required_text": f"Instructions for {path}", "s_referral_text": "Invite {code}"}
+                    # Required-referral lives on the payment settings tab (finance modal).
+                    pay_form = {
+                        "s_referral_required_text": f"Instructions for {path}",
+                    }
                     if enabled:
-                        form["s_referral_required"] = "1"
-                    body = urlencode(form).encode()
+                        pay_form["s_referral_required"] = "1"
+                    pay_body = urlencode(pay_form).encode()
 
-                    async def receive():
+                    async def receive_pay(body=pay_body):
                         return {"type": "http.request", "body": body, "more_body": False}
 
-                    request = Request({
-                        "type": "http", "method": "POST", "path": path, "query_string": b"tab=loyalty",
+                    pay_request = Request({
+                        "type": "http", "method": "POST", "path": path, "query_string": b"tab=payment",
                         "headers": [(b"content-type", b"application/x-www-form-urlencoded")],
-                    }, receive=receive)
-                    response = await save(request=request, staff=staff, session=self.session)
+                    }, receive_pay)
+                    response = await save(request=pay_request, staff=staff, session=self.session)
                     self.assertEqual(response.status_code, 303)
                     ui = await get_all_settings(self.session, reseller_id=scope)
                     self.assertEqual(ui["referral_required"], "1" if enabled else "0")
                     self.assertEqual(ui["referral_required_text"], f"Instructions for {path}")
+
+                    # Invite copy stays on the loyalty / referral tab.
+                    invite_body = urlencode({"s_referral_text": "Invite {code}"}).encode()
+
+                    async def receive_invite(body=invite_body):
+                        return {"type": "http.request", "body": body, "more_body": False}
+
+                    invite_request = Request({
+                        "type": "http", "method": "POST", "path": path, "query_string": b"tab=loyalty",
+                        "headers": [(b"content-type", b"application/x-www-form-urlencoded")],
+                    }, receive_invite)
+                    response = await save(request=invite_request, staff=staff, session=self.session)
+                    self.assertEqual(response.status_code, 303)
+                    ui = await get_all_settings(self.session, reseller_id=scope)
                     self.assertEqual(ui["referral_text"], "Invite {code}")
 
             # The shop's save must leave the platform's message intact.
