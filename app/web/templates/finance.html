@@ -133,10 +133,10 @@
             {% elif o.status in ['paid','awaiting_approval','delivering'] %}
               {% if o.id in (stuck_order_ids or []) %}
               <form method="post" action="/orders/{{ o.id }}/retry-delivery"
-                    data-confirm="تحویل این سفارش گیرکرده دوباره تلاش شود؟"
-                    data-confirm-title="تلاش مجدد تحویل"
-                    data-confirm-label="تلاش مجدد">
-                <button class="btn btn-ok btn-sm" type="submit">تلاش مجدد تحویل</button>
+                    data-confirm="تحویل این سفارش گیرکرده ادامه یابد؟ (تأیید دوباره نیست)"
+                    data-confirm-title="ادامه تحویل"
+                    data-confirm-label="ادامه تحویل">
+                <button class="btn btn-ok btn-sm" type="submit">ادامه تحویل</button>
               </form>
               {% else %}
               <form method="post" action="/orders/{{ o.id }}/approve" data-confirm="سفارش تأیید و تحویل شود؟" data-confirm-title="تأیید و تحویل" data-confirm-label="تأیید و تحویل">
@@ -306,8 +306,11 @@
 
 {% elif finance_tab == 'delivery' and can_orders %}
 <div class="card card-flush">
+  <p class="muted" style="padding:var(--space-2) var(--space-3) 0;margin:0">
+    اکشن هر ردیف مطابق تشخیص است: <strong>ادامه تحویل</strong> (سرویس ناقص) یا <strong>ارسال مجدد پیام</strong> (سرویس آماده، تلگرام ناموفق). تأیید دوباره انجام نمی‌شود.
+  </p>
   {{ table_bulk_bar('/finance/delivery/bulk-action', [
-    {'key': 'retry', 'label': 'تلاش مجدد', 'class': 'btn-ok', 'confirm': 'تحویل {n} سفارش دوباره تلاش شود؟', 'confirm_title': 'تلاش مجدد گروهی', 'confirm_label': 'تلاش مجدد'},
+    {'key': 'retry', 'label': 'اجرای اکشن تشخیص', 'class': 'btn-ok', 'confirm': 'برای {n} سفارش، اکشن تشخیص‌شده (ادامه تحویل / ارسال مجدد) اجرا شود؟', 'confirm_title': 'اجرای گروهی', 'confirm_label': 'اجرا'},
   ]) }}
   <div class="table-wrap">
   <table class="table-compact" data-sortable data-bulk-select>
@@ -316,6 +319,7 @@
         {{ table_select_head() }}
         <th data-sort-type="num">سفارش</th>
         <th data-sort-type="text">کاربر</th>
+        <th data-sort-type="text">تشخیص</th>
         <th class="col-hide-sm" data-sort-type="text">خطا</th>
         <th data-sort-type="num">تلاش</th>
         <th class="col-actions"></th>
@@ -324,20 +328,29 @@
     <tbody>
     {% for oid in (stuck_only_order_ids or []) %}
       {% set o = (orders_by_id or {}).get(oid) %}
+      {% set diag = (delivery_diag_by_order or {}).get(oid) %}
+      {% set act = diag.preferred_action if diag else 'resume' %}
+      {% set act_label = diag.action_label_fa if diag else 'ادامه تحویل' %}
       {% set uname = (o.user.full_name or o.user.username or o.user_id) if o and o.user else (o.user_id if o else '—') %}
       <tr data-bulk-ops="retry">
         {{ table_select_cell(oid) }}
         <td class="mono" data-sort-value="{{ oid }}">#{{ oid }} <span class="badge warn badge-inline">گیرکرده</span></td>
         <td data-sort-value="{{ uname }}">{{ uname }}</td>
+        <td data-sort-value="{{ diag.kind if diag else 'stuck' }}">
+          <span class="badge warn badge-inline" title="{{ diag.detail_fa if diag else 'پرداخت‌شده بدون سرویس محلی' }}">{{ diag.label_fa if diag else 'تحویل ناقص' }}</span>
+          {% if diag and diag.payment_status %}
+          <small class="muted" style="display:block">پرداخت: {{ pay_status(diag.payment_status) }}{% if diag.order_status %} · سفارش: {{ ord_status(diag.order_status) }}{% endif %}</small>
+          {% endif %}
+        </td>
         <td class="col-hide-sm muted" data-sort-value="stuck">پرداخت‌شده بدون سرویس محلی</td>
         <td class="mono" data-sort-value="0">—</td>
         <td class="col-actions">
           {% call row_actions() %}
             <form method="post" action="/orders/{{ oid }}/retry-delivery"
-                  data-confirm="تحویل این سفارش گیرکرده دوباره تلاش شود؟"
-                  data-confirm-title="تلاش مجدد تحویل"
-                  data-confirm-label="تلاش مجدد">
-              <button class="btn btn-ok btn-sm" type="submit">تلاش مجدد</button>
+                  data-confirm="{% if act == 'resend' %}فقط پیام تحویل دوباره ارسال شود؟ (سرویس دوباره ساخته نمی‌شود){% else %}تحویل این سفارش گیرکرده ادامه یابد؟{% endif %}"
+                  data-confirm-title="{{ act_label }}"
+                  data-confirm-label="{{ act_label }}">
+              <button class="btn btn-ok btn-sm" type="submit">{{ act_label }}</button>
             </form>
           {% endcall %}
         </td>
@@ -345,27 +358,44 @@
     {% endfor %}
     {% for f in delivery_failures %}
       {% set o = (orders_by_id or {}).get(f.order_id) %}
+      {% set diag = (delivery_diag_by_order or {}).get(f.order_id) %}
+      {% set act = diag.preferred_action if diag else 'resume' %}
+      {% set act_label = diag.action_label_fa if diag else 'ادامه تحویل' %}
       {% set uname = (o.user.full_name or o.user.username or o.user_id) if o and o.user else (o.user_id if o else '—') %}
       <tr data-bulk-ops="retry">
         {{ table_select_cell(f.order_id) }}
         <td class="mono" data-sort-value="{{ f.order_id }}">#{{ f.order_id }}{% if f.order_id in (stuck_order_ids or []) %} <span class="badge warn badge-inline">گیرکرده</span>{% endif %}</td>
         <td data-sort-value="{{ uname }}">{{ uname }}</td>
+        <td data-sort-value="{{ diag.kind if diag else 'fail' }}">
+          {% if diag and diag.kind == 'approved_resend' %}
+          <span class="badge pending badge-inline" title="{{ diag.detail_fa }}">{{ diag.label_fa }}</span>
+          {% elif diag and diag.kind == 'approved_fulfill' %}
+          <span class="badge warn badge-inline" title="{{ diag.detail_fa }}">{{ diag.label_fa }}</span>
+          {% elif diag %}
+          <span class="badge neutral badge-inline" title="{{ diag.detail_fa }}">{{ diag.label_fa }}</span>
+          {% else %}
+          <span class="badge warn badge-inline">تحویل ناموفق</span>
+          {% endif %}
+          {% if diag and diag.payment_status %}
+          <small class="muted" style="display:block">پرداخت: {{ pay_status(diag.payment_status) }}{% if diag.order_status %} · سفارش: {{ ord_status(diag.order_status) }}{% endif %}</small>
+          {% endif %}
+        </td>
         <td class="col-hide-sm muted" data-sort-value="{{ f.error or '' }}">{{ (f.error or '—')[:120] }}</td>
         <td class="mono" data-sort-value="{{ f.attempts }}">{{ f.attempts }}</td>
         <td class="col-actions">
           {% call row_actions() %}
             <form method="post" action="/orders/{{ f.order_id }}/retry-delivery"
-                  data-confirm="تحویل این سفارش دوباره تلاش شود؟"
-                  data-confirm-title="تلاش مجدد تحویل"
-                  data-confirm-label="تلاش مجدد">
-              <button class="btn btn-ok btn-sm" type="submit">تلاش مجدد</button>
+                  data-confirm="{% if act == 'resend' %}فقط پیام تحویل دوباره ارسال شود؟ (سرویس دوباره ساخته نمی‌شود){% else %}تحویل این سفارش ادامه یابد؟{% endif %}"
+                  data-confirm-title="{{ act_label }}"
+                  data-confirm-label="{{ act_label }}">
+              <button class="btn btn-ok btn-sm" type="submit">{{ act_label }}</button>
             </form>
           {% endcall %}
         </td>
       </tr>
     {% else %}
       {% if not (stuck_only_order_ids or []) %}
-      <tr><td colspan="6" class="muted">صف تحویل ناموفق خالی است.</td></tr>
+      <tr><td colspan="7" class="muted">صف تحویل ناموفق خالی است.</td></tr>
       {% endif %}
     {% endfor %}
     </tbody>

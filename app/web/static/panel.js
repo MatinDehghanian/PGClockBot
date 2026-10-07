@@ -46,9 +46,34 @@
      * Building a body-level form with explicit overrides (reason from JS memory)
      * makes the POST independent of kebab/edit-modal visibility.
      */
+    function armPanelNavClock() {
+      /* Shared arm for fetch/POST paths that never fire a navigational submit
+         event (confirm → submitFormPost, kebab POST). Safe no-op if missing. */
+      var clock = document.getElementById('panel-nav-clock');
+      if (!clock) return;
+      clock.hidden = false;
+      clock.setAttribute('aria-hidden', 'false');
+      try { void clock.offsetWidth; } catch (_) {}
+    }
+    function disarmPanelNavClock() {
+      var clock = document.getElementById('panel-nav-clock');
+      if (!clock) return;
+      /* Keep clock if shell-first widgets are still loading. */
+      if (document.documentElement.getAttribute('data-panel-widgets-pending') === '1') return;
+      var dash = document.getElementById('home-dash') || document.getElementById('pg-dash');
+      if (dash && dash.getAttribute('aria-busy') === 'true' && !dash.firstElementChild) return;
+      clock.hidden = true;
+      clock.setAttribute('aria-hidden', 'true');
+    }
+    window.panelArmNavClock = armPanelNavClock;
+    window.panelDisarmNavClock = disarmPanelNavClock;
+
     function submitFormPost(form, overrides) {
       if (!form) return;
       overrides = overrides || {};
+      /* Real mutation is about to leave the page (fetch → assign/reload). Arm
+         here — not on the earlier data-confirm submit that only opens the modal. */
+      armPanelNavClock();
       var action = form.getAttribute('action') || form.action || window.location.href;
       var method = (form.getAttribute('method') || form.method || 'post').toLowerCase();
       if (method !== 'get') method = 'post';
@@ -121,11 +146,32 @@
           'X-CSRF-Token': tok || ''
         }
       }).then(function (res) {
-        if (res && res.url) {
-          window.location.assign(res.url);
+        /* Never location.assign() the POST action URL on failure: those routes
+           are POST-only (/pg/admins/{u}/delete, /plans/{id}/delete, …). A GET
+           navigation there renders the branded 405 «Method Not Allowed» page. */
+        if (!res) {
+          window.location.reload();
           return;
         }
-        window.location.reload();
+        if (res.ok || res.redirected) {
+          if (res.url) {
+            window.location.assign(res.url);
+            return;
+          }
+          window.location.reload();
+          return;
+        }
+        return res.text().then(function (html) {
+          if (html && /<html[\s>]/i.test(html)) {
+            document.open();
+            document.write(html);
+            document.close();
+            return;
+          }
+          window.location.reload();
+        }).catch(function () {
+          window.location.reload();
+        });
       }).catch(function () {
         fallbackFormSubmit();
       });
@@ -223,6 +269,12 @@
       }
       document.body.classList.toggle('nav-open', open);
       if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      /* Ported ui-select / kebab menus sit at z-index 5000; drawer is ~50.
+         Close them when opening so they cannot paint over the sidebar. */
+      if (open) {
+        try { if (typeof closeUiSelects === 'function') closeUiSelects(); } catch (_) {}
+        try { if (typeof closeRowActions === 'function') closeRowActions(); } catch (_) {}
+      }
       if (instant) {
         /* Re-enable transition after paint so the next manual open still animates */
         requestAnimationFrame(function () {
@@ -347,6 +399,9 @@
         if (!form || form.tagName !== 'FORM') return;
         if (form.target && form.target !== '' && form.target !== '_self') return;
         if (form.hasAttribute('data-no-nav-clock')) return;
+        /* data-confirm forms only open the shared modal — real POST is via
+           submitFormPost after OK. Arming here left the clock stuck on cancel. */
+        if (form.hasAttribute('data-confirm') || form.id === 'confirm-form') return;
         if (side && side.contains(form)) setOpen(false, true);
         arm();
       }, true);
@@ -621,6 +676,15 @@
       menu.classList.add('is-ported');
       menu.hidden = false;
       menu.setAttribute('aria-hidden', 'false');
+      /* Above open modals (4000–4600+) — same floor as ported ui-select menus.
+         Without this, kebab actions inside categories/addons modals paint behind
+         the dialog and look “broken”. */
+      let raZ = 5000;
+      document.querySelectorAll('.ui-modal.open').forEach((m) => {
+        const z = parseInt(m.style.zIndex || window.getComputedStyle(m).zIndex, 10);
+        if (!isNaN(z) && z + 50 > raZ) raZ = z + 50;
+      });
+      menu.style.setProperty('z-index', String(raZ), 'important');
 
       const gap = 8; /* --space-1 */
       const pad = 8;
@@ -635,36 +699,38 @@
       menu.style.overflow = 'visible';
       const mw = Math.max(menu.offsetWidth || 168, 168);
       const mh = menu.offsetHeight || 120;
-      const vw = window.innerWidth;
-      const vh = window.innerHeight;
+      /* getBoundingClientRect = visual viewport; position:fixed = layout viewport.
+         Convert with visualViewport.offset* so the menu stays glued to the toggle
+         when the soft keyboard resizes/shifts the visual viewport. */
+      const vv = window.visualViewport;
+      const vvH = (vv && vv.height) || window.innerHeight;
+      const vvW = (vv && vv.width) || window.innerWidth;
+      const offTop = (vv && typeof vv.offsetTop === 'number') ? vv.offsetTop : 0;
+      const offLeft = (vv && typeof vv.offsetLeft === 'number') ? vv.offsetLeft : 0;
 
-      /* Inward: actions sit on the inline-end (physical left in RTL). Open toward table center (right). */
-      let left = rect.left;
-      if (left + mw > vw - pad) {
-        left = rect.right - mw; /* flip if needed */
-      }
-      if (left < pad) left = pad;
-      if (left + mw > vw - pad) left = Math.max(pad, vw - pad - mw);
-
-      const spaceBelow = vh - rect.bottom - gap - pad;
-      const spaceAbove = rect.top - gap - pad;
-      /* Prefer down when it fits; flip up only when below is short */
+      const spaceBelow = Math.max(0, vvH - rect.bottom - gap - pad);
+      const spaceAbove = Math.max(0, rect.top - gap - pad);
       let openDown;
       if (spaceBelow >= mh) openDown = true;
       else if (spaceAbove >= mh) openDown = false;
       else openDown = spaceBelow >= spaceAbove;
 
-      let top;
-      if (openDown) {
-        top = rect.bottom + gap;
-        if (top + mh > vh - pad) top = Math.max(pad, vh - pad - mh);
-      } else {
-        top = rect.top - gap - mh;
-        if (top < pad) top = pad;
-      }
+      /* Horizontal: prefer toggle's inline-end; keep within visual width */
+      let leftVis = rect.left;
+      if (leftVis + mw > vvW - pad) leftVis = rect.right - mw;
+      if (leftVis < pad) leftVis = pad;
+      if (leftVis + mw > vvW - pad) leftVis = Math.max(pad, vvW - pad - mw);
 
-      menu.style.top = Math.round(top) + 'px';
-      menu.style.left = Math.round(left) + 'px';
+      let topVis;
+      if (openDown) {
+        topVis = rect.bottom + gap;
+      } else {
+        topVis = rect.top - gap - mh;
+      }
+      /* Stay attached to the toggle — never pin to the screen edge away from it */
+
+      menu.style.top = Math.round(topVis + offTop) + 'px';
+      menu.style.left = Math.round(leftVis + offLeft) + 'px';
       menu.style.right = 'auto';
       menu.style.bottom = 'auto';
       menu.style.maxHeight = 'none';
@@ -706,8 +772,15 @@
       const gap = UI_SELECT_GAP;
       const pad = UI_SELECT_PAD;
       const rect = toggle.getBoundingClientRect();
-      const vw = window.innerWidth || document.documentElement.clientWidth;
-      const vh = window.innerHeight || document.documentElement.clientHeight;
+      /* getBoundingClientRect is visual-viewport-relative; position:fixed is
+         layout-viewport-relative. Add visualViewport.offset* so the menu stays
+         glued to the toggle when the soft keyboard is open. Shrink height to
+         fit — never jump the menu to the top/bottom of the screen. */
+      const vv = window.visualViewport;
+      const vvW = (vv && vv.width) || window.innerWidth || document.documentElement.clientWidth;
+      const vvH = (vv && vv.height) || window.innerHeight || document.documentElement.clientHeight;
+      const offTop = (vv && typeof vv.offsetTop === 'number') ? vv.offsetTop : 0;
+      const offLeft = (vv && typeof vv.offsetLeft === 'number') ? vv.offsetLeft : 0;
 
       if (!wrap.dataset.uiSelectId) {
         wrap.dataset.uiSelectId = 'us-' + Math.random().toString(36).slice(2, 9);
@@ -717,7 +790,6 @@
       }
       wrap._portedMenu = menu;
       menu.dataset.uiSelectOwner = wrap.dataset.uiSelectId;
-      /* Escape modal overflow — fixed coords are viewport-relative on body */
       if (menu.parentNode !== document.body) {
         document.body.appendChild(menu);
       }
@@ -732,30 +804,26 @@
       set('inset-inline-end', 'auto');
       set('min-width', '0');
       set('z-index', '5000');
-      /* Ported menus must own their scroll — CSS alone is not enough when
-         modal wheel/touch guards run in capture, and some hosts reset overflow. */
       set('overflow-x', 'hidden');
       set('overflow-y', 'auto');
       set('-webkit-overflow-scrolling', 'touch');
 
       let width = Math.max(rect.width, 120);
-      let left = rect.left;
-      const maxW = Math.max(120, vw - pad * 2);
+      let leftVis = rect.left;
+      const maxW = Math.max(120, vvW - pad * 2);
       if (width > maxW) width = maxW;
-      if (left < pad) left = pad;
-      if (left + width > vw - pad) left = Math.max(pad, vw - pad - width);
-      /* Prefer exact toggle alignment when it fits in the viewport */
-      if (rect.width <= maxW && rect.left >= pad - 0.5 && rect.right <= vw - pad + 0.5) {
-        left = rect.left;
+      if (leftVis < pad) leftVis = pad;
+      if (leftVis + width > vvW - pad) leftVis = Math.max(pad, vvW - pad - width);
+      if (rect.width <= maxW && rect.left >= pad - 0.5 && rect.right <= vvW - pad + 0.5) {
+        leftVis = rect.left;
         width = rect.width;
       }
-      set('left', Math.round(left) + 'px');
+      set('left', Math.round(leftVis + offLeft) + 'px');
       set('width', Math.round(width) + 'px');
 
-      /* Tentative max-height so offsetHeight reflects a realistic clamped size */
-      const roomBelow = Math.max(0, vh - rect.bottom - gap - pad);
+      const roomBelow = Math.max(0, vvH - rect.bottom - gap - pad);
       const roomAbove = Math.max(0, rect.top - gap - pad);
-      set('max-height', Math.min(280, Math.max(80, Math.max(roomBelow, roomAbove, 80))) + 'px');
+      set('max-height', Math.min(280, Math.max(48, Math.max(roomBelow, roomAbove, 48))) + 'px');
       let mh = menu.offsetHeight || 120;
 
       let openUp;
@@ -773,18 +841,16 @@
       else menu.removeAttribute('data-drop-up');
 
       if (openUp) {
-        const maxH = Math.min(280, Math.max(80, roomAbove));
+        const maxH = Math.min(280, Math.max(48, roomAbove));
         set('max-height', maxH + 'px');
         mh = menu.offsetHeight || Math.min(mh, maxH);
-        let top = rect.top - gap - mh;
-        if (top < pad) top = pad;
-        set('top', Math.round(top) + 'px');
+        /* Anchor to toggle bottom-edge going up — do not clamp away from field */
+        set('top', Math.round(rect.top - gap - mh + offTop) + 'px');
         set('bottom', 'auto');
       } else {
-        /* Open down: always leave UI_SELECT_GAP under the toggle; clamp height to fit */
-        const maxH = Math.min(280, Math.max(80, roomBelow));
+        const maxH = Math.min(280, Math.max(48, roomBelow));
         set('max-height', maxH + 'px');
-        set('top', Math.round(rect.bottom + gap) + 'px');
+        set('top', Math.round(rect.bottom + gap + offTop) + 'px');
         set('bottom', 'auto');
       }
     }
@@ -909,6 +975,18 @@
           : (sel.dataset.tone || '');
         if (tone) wrap.setAttribute('data-tone', tone);
         else wrap.removeAttribute('data-tone');
+        /* Color-tag filter: paint the wrap with the selected tag color. */
+        const tagHost = wrap.closest('.color-tag-select-wrap');
+        if (tagHost) {
+          const tagColor = (opt && opt.getAttribute('data-tag-color')) || '';
+          if (tagColor) {
+            tagHost.classList.add('is-tagged');
+            tagHost.style.setProperty('--tag-color', tagColor);
+          } else {
+            tagHost.classList.remove('is-tagged');
+            tagHost.style.removeProperty('--tag-color');
+          }
+        }
         menu.querySelectorAll('[role="option"]').forEach(btn => {
           btn.classList.toggle('active', btn.dataset.value === sel.value);
           btn.setAttribute('aria-selected', btn.dataset.value === sel.value ? 'true' : 'false');
@@ -920,6 +998,7 @@
       function rebuildOptions(){
         menu.innerHTML = '';
         const isUsersSvc = sel.classList.contains('users-svc-select');
+        const isColorTag = sel.classList.contains('color-tag-select');
         Array.from(sel.options).forEach(opt => {
           if (opt.disabled && opt.value === '' && !opt.textContent.trim()) return;
           const btn = document.createElement('button');
@@ -927,6 +1006,13 @@
           btn.setAttribute('role', 'option');
           btn.dataset.value = opt.value;
           if (opt.dataset && opt.dataset.tone) btn.dataset.tone = opt.dataset.tone;
+          const tagColor = opt.getAttribute('data-tag-color');
+          if (tagColor) {
+            btn.setAttribute('data-tag-color', tagColor);
+            btn.style.setProperty('--tag-color', tagColor);
+            btn.style.color = tagColor;
+            btn.style.fontWeight = '600';
+          }
           if (isUsersSvc) {
             const optLabel = document.createElement('span');
             optLabel.className = 'users-svc-menu-label';
@@ -938,6 +1024,18 @@
               dot.setAttribute('aria-hidden', 'true');
               btn.appendChild(dot);
             }
+          } else if (isColorTag && tagColor) {
+            const swatch = document.createElement('span');
+            swatch.className = 'color-tag-swatch';
+            swatch.style.setProperty('--tag-color', tagColor);
+            swatch.setAttribute('aria-hidden', 'true');
+            const optLabel = document.createElement('span');
+            optLabel.className = 'color-tag-menu-label';
+            optLabel.textContent = opt.textContent;
+            optLabel.style.color = tagColor;
+            btn.appendChild(swatch);
+            btn.appendChild(optLabel);
+            btn.classList.add('color-tag-menu-option');
           } else {
             btn.textContent = opt.textContent;
           }
@@ -1027,6 +1125,15 @@
       if (scope.matches && scope.matches('select')) enhanceSelect(scope);
       scope.querySelectorAll('select').forEach(enhanceSelect);
     }
+    /* Reposition open menus when the soft keyboard resizes the visual viewport */
+    function repositionOpenUiMenus(){
+      document.querySelectorAll('.ui-select.open').forEach((wrap) => placeUiSelectMenu(wrap));
+      document.querySelectorAll('.row-actions.open').forEach((wrap) => placeRowMenu(wrap));
+    }
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', repositionOpenUiMenus);
+      window.visualViewport.addEventListener('scroll', repositionOpenUiMenus);
+    }
     enhanceAllSelects();
     window.enhanceAllSelects = enhanceAllSelects;
     document.addEventListener('panel:dom-ready', (e) => {
@@ -1066,11 +1173,28 @@
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') closeUiSelects();
     });
-    window.addEventListener('resize', () => closeUiSelects());
-    window.addEventListener('scroll', (e) => {
-      if (!document.querySelector('.ui-select.open')) return;
-      if (e.target && e.target.closest && e.target.closest('.ui-select-menu')) return;
+    /* Soft keyboard fires window resize — reposition instead of closing so the
+       menu stays glued to the field inside modals. */
+    window.addEventListener('resize', () => {
+      if (document.querySelector('.ui-select.open, .row-actions.open')) {
+        repositionOpenUiMenus();
+        return;
+      }
       closeUiSelects();
+    });
+    window.addEventListener('scroll', (e) => {
+      const openSel = document.querySelector('.ui-select.open');
+      const openRow = document.querySelector('.row-actions.open');
+      if (!openSel && !openRow) return;
+      if (e.target && e.target.closest && e.target.closest('.ui-select-menu, .row-actions-menu')) return;
+      const host = openSel || openRow;
+      const modal = host && host.closest('.ui-modal, .modal, dialog, [role="dialog"]');
+      if (modal && e.target && (e.target === modal || modal.contains(e.target))) {
+        repositionOpenUiMenus();
+        return;
+      }
+      closeUiSelects();
+      closeRowActions();
     }, true);
 
     document.addEventListener('click', (e) => {
@@ -1389,6 +1513,13 @@
     function finishCloseModal(el){
       if (!el) return;
       const wasOpen = el.classList.contains('open') || el.classList.contains('is-closing');
+      /* Blur before hide/restore — focus returning to a kebab/delete control that
+         was un-ported (display:none) made mobile browsers scrollIntoView and
+         jump the page a few hundred ms after confirm cancel. */
+      try {
+        const ae = document.activeElement;
+        if (ae && el.contains(ae) && typeof ae.blur === 'function') ae.blur();
+      } catch (_) {}
       el.hidden = true;
       el.classList.remove('open', 'is-closing', 'is-front', 'is-stack');
       try { el.style.zIndex = ''; } catch (_) {}
@@ -2320,6 +2451,12 @@
         resolver = null;
         clearExtraFields();
         if (modal.classList.contains('open')) closeModal(modal);
+        /* Cancel / Escape must clear any stray nav clock (e.g. older builds
+           that armed on the intercepted submit). Confirmed path arms in
+           submitFormPost instead. */
+        if (!result || !result.ok) {
+          try { disarmPanelNavClock(); } catch (_) {}
+        }
         if (r) r(result || { ok: false });
       }
 
@@ -2391,10 +2528,7 @@
       modal.addEventListener('click', (e) => {
         if (!resolver) return;
         if (e.target.closest('[data-modal-close]') || e.target === modal.querySelector('.ui-modal-backdrop')) {
-          const r = resolver;
-          resolver = null;
-          clearExtraFields();
-          if (r) r({ ok: false });
+          finish({ ok: false });
         }
       });
 
@@ -3848,7 +3982,9 @@ const root = document.getElementById('upd-root');
         section.classList.toggle('is-collapsed', collapsed);
         if (btn) btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
       }
-      var active = nav.querySelector('.nav-item.active');
+      /* Only scroll when the active link is in the *open* section — scrolling a
+         display:none item in a just-collapsed accordion caused sidebar jump/lag. */
+      var active = nav.querySelector('.nav-section[data-nav-mode]:not(.is-collapsed) .nav-item.active');
       if (active && typeof active.scrollIntoView === 'function') {
         try { active.scrollIntoView({ block: 'nearest' }); } catch (_) {}
       }
@@ -3940,5 +4076,32 @@ const root = document.getElementById('upd-root');
     document.addEventListener('DOMContentLoaded', bootPickers);
   } else {
     bootPickers();
+  }
+})();
+
+/* Tag filter dropdown — navigate on change (keeps search form separate). */
+(function () {
+  function bindNav(sel) {
+    if (!sel || sel.dataset.boundColorTagNav === '1') return;
+    sel.dataset.boundColorTagNav = '1';
+    sel.addEventListener('change', function () {
+      var href = sel.value;
+      if (href) window.location.assign(href);
+    });
+  }
+  function bindAll(root) {
+    var scope = root && root.querySelectorAll ? root : document;
+    scope.querySelectorAll('select[data-color-tag-nav]').forEach(bindNav);
+  }
+  function boot() {
+    bindAll(document);
+    document.addEventListener('panel:dom-ready', function (e) {
+      bindAll((e && e.detail && e.detail.root) || document);
+    });
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
   }
 })();

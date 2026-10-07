@@ -8,19 +8,22 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 ADMIN_PLANS = (ROOT / "app/bot/handlers/admin_plans.py").read_text(encoding="utf-8")
 KEYBOARDS = (ROOT / "app/bot/keyboards.py").read_text(encoding="utf-8")
+REPLY_KB = (ROOT / "app/bot/reply_keyboards.py").read_text(encoding="utf-8")
 REPLY_NAV = (ROOT / "app/bot/handlers/reply_nav.py").read_text(encoding="utf-8")
 MENU_NAV = (ROOT / "app/bot/menu_nav.py").read_text(encoding="utf-8")
 
 
 class PlansDashboardRebuildTests(unittest.TestCase):
     def test_add_plan_on_reply_keyboard_not_kind_picker(self):
-        self.assertIn("REPLY_ACTION_ADM_PLANS_ADD", KEYBOARDS)
-        self.assertIn("➕ افزودن پلن", KEYBOARDS)
-        list_block = KEYBOARDS[
-            KEYBOARDS.find("def _admin_plans_list_entries")
-            : KEYBOARDS.find("def _admin_plans_add_type_entries")
+        self.assertIn("REPLY_ACTION_ADM_PLANS_ADD", REPLY_KB)
+        self.assertIn("➕ افزودن پلن", REPLY_KB)
+        list_block = REPLY_KB[
+            REPLY_KB.find("def _admin_plans_list_entries")
+            : REPLY_KB.find("def _admin_plans_add_type_entries")
         ]
         self.assertIn("REPLY_ACTION_ADM_PLANS_ADD", list_block)
+        # Catalog extras (web parity) are allowed on the list reply keyboard
+        self.assertIn("REPLY_ACTION_ADM_PLANS_CATEGORIES", list_block)
         self.assertNotIn("REPLY_ACTION_ADM_PLANS_KIND_USERS_FIXED", list_block)
 
     def test_type_picker_after_add(self):

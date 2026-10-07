@@ -27,6 +27,7 @@ class ResellerPlanStates(StatesGroup):
     price = State()
     days = State()
     gb = State()
+    category = State()
     mode = State()
 
 
@@ -99,6 +100,12 @@ def _plan_item_kb(plan: Plan) -> InlineKeyboardMarkup:
                 ),
                 InlineKeyboardButton(text="🗑 حذف", callback_data=f"res:plan:del:{plan.id}"),
             ],
+            [
+                InlineKeyboardButton(
+                    text="🏷 برچسب دسته",
+                    callback_data=f"res:plan:catpick:{plan.id}",
+                )
+            ],
         ]
     )
 
@@ -112,20 +119,35 @@ async def _list_plans(session: AsyncSession, owner_id: int) -> list[Plan]:
     return list(result.scalars().all())
 
 
-def _plan_text(plan: Plan) -> str:
+def _plan_text(plan: Plan, *, category_name: str | None = None) -> str:
     gb = f"{plan.data_limit_gb:g} گیگ" if plan.data_limit_gb is not None else "نامحدود"
     src = (
         f"تمپلیت #{plan.pg_template_id}"
         if plan.pg_template_id
         else (f"گروه {plan.pg_group_ids}" if plan.pg_group_ids else "—")
     )
+    cat = category_name or "—"
     return (
         f"💎 <b>{plan.name}</b>\n"
         f"قیمت: {plan.price:,} تومان\n"
         f"مدت: {plan.duration_days} روز · حجم: {gb}\n"
+        f"برچسب دسته: {cat}\n"
         f"پاسارگارد: {src}\n"
         f"وضعیت: {'فعال' if plan.is_active else 'خاموش'}"
     )
+
+
+async def _plan_text_for(session: AsyncSession, plan: Plan) -> str:
+    cat_name = None
+    if plan.category_id:
+        from app.db.models import PlanCategory
+
+        cat = await session.get(PlanCategory, int(plan.category_id))
+        if cat:
+            cat_name = cat.name
+            if not cat.is_active:
+                cat_name = f"{cat_name} (خاموش)"
+    return _plan_text(plan, category_name=cat_name)
 
 
 @router.callback_query(F.data == "res:plans")
@@ -197,7 +219,11 @@ async def res_plan_view(callback: CallbackQuery, session: AsyncSession, db_user:
         return
     await callback.answer()
     if callback.message:
-        await safe_edit_text(callback.message, _plan_text(plan), reply_markup=_plan_item_kb(plan))
+        await safe_edit_text(
+            callback.message,
+            await _plan_text_for(session, plan),
+            reply_markup=_plan_item_kb(plan),
+        )
 
 
 @router.callback_query(F.data.startswith("res:plan:tog:"))
@@ -222,7 +248,11 @@ async def res_plan_toggle(callback: CallbackQuery, session: AsyncSession, db_use
     await session.commit()
     await callback.answer("ذخیره شد")
     if callback.message:
-        await safe_edit_text(callback.message, _plan_text(plan), reply_markup=_plan_item_kb(plan))
+        await safe_edit_text(
+            callback.message,
+            await _plan_text_for(session, plan),
+            reply_markup=_plan_item_kb(plan),
+        )
 
 
 @router.callback_query(F.data.startswith("res:plan:del:"))
@@ -369,6 +399,41 @@ async def res_plan_gb(message: Message, state: FSMContext, session: AsyncSession
         await message.answer("نماینده نیستید.")
         return
     staff = await _staff_ctx(profile, session)
+    from app.services.plan_categories import list_categories
+
+    cats = await list_categories(session, staff, active_only=True)
+    await state.update_data(owner_id=owner_id, _res_plan_staff_ready=1)
+    await state.set_state(ResellerPlanStates.category)
+    rows: list[list[InlineKeyboardButton]] = [
+        [InlineKeyboardButton(text="بدون دسته", callback_data="res:plan:newcat:0")]
+    ]
+    for c in cats[:20]:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=c.name[:48],
+                    callback_data=f"res:plan:newcat:{c.id}",
+                )
+            ]
+        )
+    await message.answer(
+        "🏷 برچسب دسته را انتخاب کنید (اختیاری):",
+        reply_markup=kb.reseller_plans_reply_keyboard(),
+    )
+    await message.answer(
+        "برچسب دسته:",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+    )
+
+
+async def _reseller_continue_pg_mode(
+    message_or_cb: Message | CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+    profile: ResellerProfile,
+    owner_id: int,
+) -> None:
+    staff = await _staff_ctx(profile, session)
     templates, groups, pg_error = await load_pg_plan_options(staff, session=session)
     await state.update_data(templates=templates, groups=groups, owner_id=owner_id)
     rows: list[list[InlineKeyboardButton]] = []
@@ -383,22 +448,75 @@ async def res_plan_gb(message: Message, state: FSMContext, session: AsyncSession
     rows.append([InlineKeyboardButton(text="❌ انصراف", callback_data="res:plans")])
     await state.set_state(ResellerPlanStates.mode)
     note = f"\n⚠️ پاسارگارد: {pg_error}" if pg_error else ""
+    target_msg = (
+        message_or_cb
+        if isinstance(message_or_cb, Message)
+        else message_or_cb.message
+    )
     if not groups and not templates:
         await state.clear()
-        await message.answer(
-            "گروه یا تمپلیت مجازی در نقش پاسارگارد شما نیست.\n"
-            "از وب‌پنل → پاسارگارد دسترسی‌ها را بررسی کنید یا از ادمین بخواهید نقش را باز کند."
-            + note
+        if target_msg:
+            await target_msg.answer(
+                "گروه یا تمپلیت مجازی در نقش پاسارگارد شما نیست.\n"
+                "از وب‌پنل → پاسارگارد دسترسی‌ها را بررسی کنید یا از ادمین بخواهید نقش را باز کند."
+                + note
+            )
+        return
+    if target_msg:
+        await target_msg.answer(
+            "منبع ساخت سرویس در پاسارگارد را انتخاب کنید:" + note,
+            reply_markup=kb.reseller_plans_reply_keyboard(),
         )
+        await target_msg.answer(
+            "یکی از گزینه‌های زیر را انتخاب کنید:",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+        )
+
+
+@router.message(ResellerPlanStates.category)
+async def res_plan_category_cancel(message: Message, state: FSMContext):
+    if kb.is_cancel_text(message.text):
+        await state.clear()
+        await message.answer("لغو شد.", reply_markup=kb.reseller_plans_reply_keyboard())
         return
     await message.answer(
-        "منبع ساخت سرویس در پاسارگارد را انتخاب کنید:" + note,
+        "دسته را از دکمه‌های زیر پیام انتخاب کنید، یا انصراف بزنید.",
         reply_markup=kb.reseller_plans_reply_keyboard(),
     )
-    await message.answer(
-        "یکی از گزینه‌های زیر را انتخاب کنید:",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+
+
+@router.callback_query(F.data.startswith("res:plan:newcat:"), ResellerPlanStates.category)
+async def res_plan_new_category(
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    from app.services.plan_categories import resolve_category_for_plan_write
+    from app.services.redact import user_safe_error
+    from app.services.shop_scope import ShopScopeError
+
+    owner_id, profile = await _actor(
+        session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
     )
+    if not owner_id or not profile:
+        await callback.answer("نماینده نیستید", show_alert=True)
+        return
+    staff = await _staff_ctx(profile, session)
+    raw = callback.data.rsplit(":", 1)[-1]
+    try:
+        if raw in {"0", ""}:
+            cat_id = None
+        else:
+            cat_id = await resolve_category_for_plan_write(session, staff, raw)
+    except (ShopScopeError, ValueError) as e:
+        await callback.answer(user_safe_error(e, limit=160), show_alert=True)
+        return
+    await state.update_data(category_id=cat_id)
+    await callback.answer()
+    await _reseller_continue_pg_mode(callback, state, session, profile, owner_id)
 
 
 @router.message(ResellerPlanStates.mode)
@@ -485,6 +603,8 @@ async def res_plan_save_groups(callback: CallbackQuery, state: FSMContext, sessi
     if not selected or not groups_allowed_for_staff(staff, selected):
         await callback.answer("حداقل یک گروه مجاز انتخاب کنید", show_alert=True)
         return
+    cat_raw = data.get("category_id")
+    category_id = int(cat_raw) if cat_raw not in (None, "", 0, "0") else None
     plan = Plan(
         name=str(data.get("name") or "پلن").strip(),
         price=int(data.get("price") or 0),
@@ -493,6 +613,7 @@ async def res_plan_save_groups(callback: CallbackQuery, state: FSMContext, sessi
         pg_group_ids=",".join(str(i) for i in selected),
         pg_template_id=None,
         owner_reseller_id=owner_id,
+        category_id=category_id,
         is_active=True,
     )
     session.add(plan)
@@ -503,7 +624,7 @@ async def res_plan_save_groups(callback: CallbackQuery, state: FSMContext, sessi
     if callback.message:
         await safe_edit_text(
             callback.message,
-            f"✅ پلن «{plan.name}» ساخته شد.\n" + _plan_text(plan),
+            f"✅ پلن «{plan.name}» ساخته شد.\n" + await _plan_text_for(session, plan),
             reply_markup=await _plans_kb(session, plans, reseller_id=owner_id),
         )
 
@@ -549,6 +670,8 @@ async def res_plan_save_tpl(callback: CallbackQuery, state: FSMContext, session:
         await callback.answer("به این تمپلیت دسترسی ندارید", show_alert=True)
         return
     data = await state.get_data()
+    cat_raw = data.get("category_id")
+    category_id = int(cat_raw) if cat_raw not in (None, "", 0, "0") else None
     plan = Plan(
         name=str(data.get("name") or "پلن").strip(),
         price=int(data.get("price") or 0),
@@ -557,6 +680,7 @@ async def res_plan_save_tpl(callback: CallbackQuery, state: FSMContext, session:
         pg_template_id=tid,
         pg_group_ids=None,
         owner_reseller_id=owner_id,
+        category_id=category_id,
         is_active=True,
     )
     session.add(plan)
@@ -567,6 +691,124 @@ async def res_plan_save_tpl(callback: CallbackQuery, state: FSMContext, session:
     if callback.message:
         await safe_edit_text(
             callback.message,
-            f"✅ پلن «{plan.name}» ساخته شد.\n" + _plan_text(plan),
+            f"✅ پلن «{plan.name}» ساخته شد.\n" + await _plan_text_for(session, plan),
             reply_markup=await _plans_kb(session, plans, reseller_id=owner_id),
+        )
+
+
+@router.callback_query(F.data.startswith("res:plan:catpick:"))
+async def res_plan_cat_pick(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    from app.services.plan_categories import list_categories
+
+    owner_id, profile = await _actor(
+        session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
+    )
+    if not owner_id or not profile:
+        await callback.answer("نماینده نیستید", show_alert=True)
+        return
+    if not has_bot_perm(profile, "plans"):
+        await callback.answer("دسترسی ندارید", show_alert=True)
+        return
+    plan = await session.get(Plan, int(callback.data.split(":")[-1]))
+    if not plan or plan.owner_reseller_id != owner_id or plan.is_trial:
+        await callback.answer("یافت نشد", show_alert=True)
+        return
+    staff = await _staff_ctx(profile, session)
+    cats = await list_categories(session, staff, active_only=False)
+    active = [c for c in cats if c.is_active]
+    selected = int(plan.category_id) if plan.category_id else None
+    if selected:
+        for c in cats:
+            if int(c.id) == selected and c not in active:
+                active.append(c)
+                break
+    rows: list[list[InlineKeyboardButton]] = [
+        [
+            InlineKeyboardButton(
+                text=("✅ " if not selected else "") + "بدون دسته",
+                callback_data=f"res:plan:setcat:{plan.id}:0",
+            )
+        ]
+    ]
+    for c in active[:20]:
+        mark = "✅ " if selected and int(c.id) == selected else ""
+        suffix = "" if c.is_active else " (خاموش)"
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=f"{mark}{c.name}{suffix}"[:48],
+                    callback_data=f"res:plan:setcat:{plan.id}:{c.id}",
+                )
+            ]
+        )
+    rows.append(
+        [InlineKeyboardButton(text="⬅️ بازگشت", callback_data=f"res:plan:view:{plan.id}")]
+    )
+    await callback.answer()
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            "🏷 برچسب دسته (اختیاری):",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+        )
+
+
+@router.callback_query(F.data.startswith("res:plan:setcat:"))
+async def res_plan_set_cat(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+):
+    from app.services.plan_categories import resolve_category_for_plan_write
+    from app.services.redact import user_safe_error
+    from app.services.shop_scope import ShopScopeError
+
+    owner_id, profile = await _actor(
+        session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
+    )
+    if not owner_id or not profile:
+        await callback.answer("نماینده نیستید", show_alert=True)
+        return
+    if not has_bot_perm(profile, "plans"):
+        await callback.answer("دسترسی ندارید", show_alert=True)
+        return
+    parts = callback.data.split(":")
+    # res:plan:setcat:{pid}:{cid}
+    if len(parts) < 5:
+        await callback.answer("نامعتبر", show_alert=True)
+        return
+    plan = await session.get(Plan, int(parts[3]))
+    if not plan or plan.owner_reseller_id != owner_id or plan.is_trial:
+        await callback.answer("یافت نشد", show_alert=True)
+        return
+    staff = await _staff_ctx(profile, session)
+    raw = parts[4]
+    try:
+        if raw in {"0", ""}:
+            plan.category_id = None
+        else:
+            plan.category_id = await resolve_category_for_plan_write(
+                session,
+                staff,
+                raw,
+                allow_inactive_id=plan.category_id,
+            )
+        await session.commit()
+    except (ShopScopeError, ValueError) as e:
+        await callback.answer(user_safe_error(e, limit=160), show_alert=True)
+        return
+    await callback.answer("ذخیره شد")
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            await _plan_text_for(session, plan),
+            reply_markup=_plan_item_kb(plan),
         )

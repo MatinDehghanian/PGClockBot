@@ -235,7 +235,11 @@ def _time_meter(expire_raw: Any, created_raw: Any = None) -> dict[str, Any] | No
         used_sec = max(0.0, min(total_sec, (now - created).total_seconds()))
         pct = min(100.0, (used_sec / total_sec) * 100.0)
         remain_sec = max(0.0, total_sec - used_sec)
-    expire_text = format_expire(expire_raw)
+    expire_text = format_expire(
+        expire_raw,
+        status=None,
+        expire_duration=None,
+    )
     return {
         "label": "زمان",
         "has_limit": True,

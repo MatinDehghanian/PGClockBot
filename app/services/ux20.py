@@ -440,8 +440,10 @@ async def list_open_delivery_failures(
 
 
 async def retry_delivery(session: AsyncSession, order_id: int) -> Order:
+    from app.db.models import BotUser, Payment
     from app.services.delivery import send_delivery_to_user
-    from app.services.orders import deliver_order
+    from app.services.orders import fulfill_paid_order
+    from app.services.reseller_bots import open_notify_bot_for_user
 
     order = (
         await session.execute(
@@ -452,10 +454,35 @@ async def retry_delivery(session: AsyncSession, order_id: int) -> Order:
     ).scalar_one_or_none()
     if not order:
         raise ValueError("سفارش پیدا نشد")
+
+    async def _resend() -> None:
+        user = order.__dict__.get("user") or await session.get(BotUser, order.user_id)
+        if not user or not user.telegram_id:
+            return
+        pay = (
+            await session.execute(
+                select(Payment)
+                .where(Payment.order_id == int(order.id))
+                .order_by(Payment.id.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        bot, should_close = await open_notify_bot_for_user(session, user)
+        try:
+            await send_delivery_to_user(
+                bot, user.telegram_id, session, pay, order
+            )
+        finally:
+            if should_close:
+                try:
+                    await bot.session.close()
+                except Exception:
+                    pass
+
     try:
         if order.status == OrderStatus.DELIVERED.value and order.service_id:
             # Resend Telegram delivery only
-            await send_delivery_to_user(session, order)
+            await _resend()
         elif order.status in {
             OrderStatus.PAID.value,
             OrderStatus.DELIVERING.value,
@@ -464,9 +491,11 @@ async def retry_delivery(session: AsyncSession, order_id: int) -> Order:
             if order.status != OrderStatus.PAID.value:
                 order.status = OrderStatus.PAID.value
                 await session.commit()
-            order = await deliver_order(session, order)
+            # Route renew/addon/reseller_app correctly — deliver_order alone
+            # seals mutation orders (service_id already set) without applying.
+            order = await fulfill_paid_order(session, order)
             try:
-                await send_delivery_to_user(session, order)
+                await _resend()
             except Exception as send_exc:
                 await record_delivery_failure(session, order=order, error=str(send_exc))
                 await session.commit()

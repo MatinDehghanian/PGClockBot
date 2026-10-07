@@ -71,22 +71,40 @@ class BotSettingsHubIATests(unittest.TestCase):
         self.assertEqual(_owner_screen_for_key("force_join_enabled"), ("access", "force"))
         self.assertEqual(_owner_screen_for_key("show_sub_link_in_text"), ("access", "qr"))
 
-    def test_shop_catalog_is_slim(self):
+    def test_shop_catalog_button_groups(self):
         from app.bot.handlers.admin_settings import SECTIONS as admin_s
         from app.bot.handlers.reseller_settings import SECTIONS as res_s
+        from app.services.settings_button_labels import PLATFORM_ONLY_BTN_KEYS
 
         for sections in (admin_s, res_s):
             sub_ids = {s[0] for s in sections["shop"]["subs"]}
             self.assertIn("identity", sub_ids)
-            self.assertIn("btn_labels", sub_ids)
+            self.assertIn("btn_main", sub_ids)
             self.assertNotIn("help_texts", sub_ids)
             self.assertNotIn("sys_texts", sub_ids)
-            btn = next(s[2] for s in sections["shop"]["subs"] if s[0] == "btn_labels")
-            keys = [f[0] for f in btn]
-            self.assertIn("btn_wholesale", keys)
-            self.assertNotIn("btn_guide", keys)
-            self.assertNotIn("btn_miniapp", keys)
-            self.assertNotIn("btn_reseller_apply", keys)
+            self.assertNotIn("btn_labels", sub_ids)
+
+        admin_btn_keys = {
+            f[0]
+            for sub in admin_s["shop"]["subs"]
+            if isinstance(sub[2], list)
+            for f in sub[2]
+            if str(f[0]).startswith("btn_")
+        }
+        self.assertIn("btn_reseller_apply", admin_btn_keys)
+        self.assertIn("btn_miniapp", admin_btn_keys)
+        self.assertIn("btn_wholesale", admin_btn_keys)
+
+        res_btn_keys = {
+            f[0]
+            for sub in res_s["shop"]["subs"]
+            if isinstance(sub[2], list)
+            for f in sub[2]
+            if str(f[0]).startswith("btn_")
+        }
+        self.assertTrue(PLATFORM_ONLY_BTN_KEYS.isdisjoint(res_btn_keys))
+        self.assertIn("btn_loyalty", res_btn_keys)
+        self.assertIn("btn_wholesale", res_btn_keys)
 
     def test_reply_map_reseller_new_labels(self):
         from app.bot.keyboards import reply_action_map, reseller_settings_reply_keyboard

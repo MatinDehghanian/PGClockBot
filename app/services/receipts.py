@@ -9,6 +9,7 @@ from app.db.models import Payment
 from app.services.delivery import send_delivery_to_user
 from app.services.formatting import format_message
 from app.services.notifications import (
+    notify_approved_delivery_stuck,
     notify_auto_approve,
     notify_new_subscription,
     notify_pending_approval,
@@ -60,6 +61,7 @@ async def process_receipt(
         if topup_shop != shop_rid:
             auto = False
     if auto:
+        order = None
         try:
             order = await approve_payment(session, payment, reviewer_tg=0)
             if user_tg_id:
@@ -93,6 +95,40 @@ async def process_receipt(
                 )
             return None
         except Exception as e:
+            # Re-load payment — approve may have committed APPROVED before delivery failed.
+            # Never send pending-approval «رد» chrome for an already-approved row.
+            try:
+                await session.refresh(payment)
+            except Exception:
+                pass
+            from app.db.models import PaymentStatus
+
+            if payment.status == PaymentStatus.APPROVED.value:
+                stuck_order = order
+                if stuck_order is None and payment.order_id:
+                    from app.db.models import Order
+
+                    stuck_order = await session.get(Order, payment.order_id)
+                if stuck_order is not None:
+                    try:
+                        from app.services.ux20 import note_delivery_send_failure
+
+                        await note_delivery_send_failure(
+                            session,
+                            order=stuck_order,
+                            payment=payment,
+                            error=str(e),
+                        )
+                    except Exception:
+                        pass
+                await notify_approved_delivery_stuck(
+                    bot, session, payment, user_tg_id, error=str(e)
+                )
+                return format_message(
+                    "⚠️ رسید ثبت شد",
+                    "پرداخت تأیید شد ولی تحویل کامل نشد.\n"
+                    "ادمین می‌تواند «تلاش مجدد تحویل» را بزند یا از «تحویل ناموفق» پیگیری کند.",
+                )
             await notify_pending_approval(bot, session, payment, user_tg_id)
             return format_message(
                 "⚠️ رسید ثبت شد",

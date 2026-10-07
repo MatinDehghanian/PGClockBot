@@ -73,10 +73,80 @@ class ReleaseNotesTests(unittest.TestCase):
 
         src = Path("app/services/release_notes.py").read_text(encoding="utf-8")
         parsed = parse_release_notes_source(src)
-        self.assertEqual(list(parsed.keys())[0], "0.1.7")
+        self.assertEqual(list(parsed.keys())[0], "0.2.18")
         self.assertIn("0.1.0", parsed)
-        self.assertTrue(parsed["0.1.7"])
-        self.assertTrue(any("نمایندگی" in n or "باشگاه" in n or "گردونه" in n for n in parsed["0.1.7"]))
+        self.assertTrue(parsed["0.2.18"])
+        self.assertTrue(
+            any("هدر" in n or "topbar" in n or "سایدبار" in n or "اکاردئون" in n or "مودال" in n for n in parsed["0.2.18"])
+        )
+        self.assertTrue(parsed["0.2.17"])
+        self.assertTrue(
+            any("لودینگ" in n or "سایدبار" in n or "confirm" in n for n in parsed["0.2.17"])
+        )
+        self.assertTrue(parsed["0.2.16"])
+        self.assertTrue(
+            any("greenlet" in n or "مینی‌اپ" in n or "تأیید" in n for n in parsed["0.2.16"])
+        )
+        self.assertTrue(parsed["0.2.15"])
+        self.assertTrue(
+            any("مدیریت مالی" in n or "500" in n or "سفارشات" in n for n in parsed["0.2.15"])
+        )
+        self.assertTrue(parsed["0.2.14"])
+        self.assertTrue(
+            any("پرداخت" in n or "بکاپ" in n or "اندروید" in n for n in parsed["0.2.14"])
+        )
+        self.assertTrue(parsed["0.2.13"])
+        self.assertTrue(
+            any("تأیید" in n or "تحویل" in n or "APPROVED" in n for n in parsed["0.2.13"])
+        )
+        self.assertTrue(parsed["0.2.12"])
+        self.assertTrue(
+            any("باشگاه" in n or "بکاپ" in n or "دو‌کیبورد" in n for n in parsed["0.2.12"])
+        )
+        self.assertTrue(parsed["0.2.11"])
+        self.assertTrue(
+            any("نمایندگی" in n or "دو‌کیبورد" in n or "سرویس" in n for n in parsed["0.2.11"])
+        )
+        self.assertTrue(parsed["0.2.10"])
+        self.assertTrue(
+            any("منوی اصلی" in n or "مینی" in n or "خانه" in n for n in parsed["0.2.10"])
+        )
+        self.assertTrue(parsed["0.2.9"])
+        self.assertTrue(
+            any("کیبورد" in n or "چهار" in n or "iOS" in n for n in parsed["0.2.9"])
+        )
+        self.assertTrue(parsed["0.2.8"])
+        self.assertTrue(
+            any("فروشگاه" in n or "حباب" in n or "پلن" in n for n in parsed["0.2.8"])
+        )
+        self.assertTrue(parsed["0.2.6"])
+        self.assertTrue(
+            any("دسته" in n or "می‌چسب" in n or "visualViewport" in n or "PAYG" in n for n in parsed["0.2.6"])
+        )
+        self.assertTrue(parsed["0.2.4"])
+        self.assertTrue(
+            any("on_hold" in n or "تحویل" in n or "برچسب" in n for n in parsed["0.2.4"])
+        )
+        self.assertTrue(parsed["0.2.3"])
+        self.assertTrue(
+            any("تگ" in n or "کپسول" in n for n in parsed["0.2.3"])
+        )
+        self.assertTrue(parsed["0.2.2"])
+        self.assertTrue(
+            any("افزونه" in n or "fulfill" in n or "حجم" in n for n in parsed["0.2.2"])
+        )
+        self.assertTrue(parsed["0.2.1"])
+        self.assertTrue(
+            any("0031" in n or "PostgreSQL" in n or "۰٫۲٫۰" in n for n in parsed["0.2.1"])
+        )
+        self.assertTrue(parsed["0.2.0"])
+        self.assertTrue(
+            any("دسته" in n or "افزونه" in n or "تمدید" in n or "اشتراک" in n for n in parsed["0.2.0"])
+        )
+        self.assertTrue(parsed["0.1.14"])
+        self.assertTrue(
+            any("فارسی" in n or "خطا" in n or "پاسارگارد" in n for n in parsed["0.1.14"])
+        )
         self.assertTrue(parsed["0.1.4"])
         self.assertTrue(any("مودال" in n or "گوشه" in n for n in parsed["0.1.4"]))
         self.assertTrue(parsed["0.1.3"])
@@ -112,9 +182,111 @@ class ReleaseNotesTests(unittest.TestCase):
         src = Path("app/services/release_notes.py").read_text(encoding="utf-8")
         parsed = parse_release_notes_source(src)
         self.assertEqual(
-            set(parsed), {"0.1.7", "0.1.6", "0.1.5", "0.1.4", "0.1.3", "0.1.2", "0.1.1", "0.1.0"}
+            set(parsed),
+            {
+                "0.2.18",
+                "0.2.17",
+                "0.2.16",
+                "0.2.15",
+                "0.2.14",
+                "0.2.13",
+                "0.2.12",
+                "0.2.11",
+                "0.2.10",
+                "0.2.9",
+                "0.2.8",
+                "0.2.7",
+                "0.2.6",
+                "0.2.5",
+                "0.2.4",
+                "0.2.3",
+                "0.2.2",
+                "0.2.1",
+                "0.2.0",
+                "0.1.14",
+                "0.1.13",
+                "0.1.12",
+                "0.1.11",
+                "0.1.10",
+                "0.1.9",
+                "0.1.8",
+                "0.1.7",
+                "0.1.6",
+                "0.1.5",
+                "0.1.4",
+                "0.1.3",
+                "0.1.2",
+                "0.1.1",
+                "0.1.0",
+            },
         )
-        self.assertTrue(any("نمایندگی" in n or "باشگاه" in n or "گردونه" in n for n in parsed["0.1.7"]))
+        self.assertTrue(
+            any("هدر" in n or "topbar" in n or "سایدبار" in n or "اکاردئون" in n or "مودال" in n for n in parsed["0.2.18"])
+        )
+        self.assertTrue(
+            any("لودینگ" in n or "سایدبار" in n or "confirm" in n for n in parsed["0.2.17"])
+        )
+        self.assertTrue(
+            any("greenlet" in n or "مینی‌اپ" in n or "تأیید" in n for n in parsed["0.2.16"])
+        )
+        self.assertTrue(
+            any("مدیریت مالی" in n or "500" in n or "سفارشات" in n for n in parsed["0.2.15"])
+        )
+        self.assertTrue(
+            any("پرداخت" in n or "بکاپ" in n or "اندروید" in n for n in parsed["0.2.14"])
+        )
+        self.assertTrue(
+            any("تأیید" in n or "تحویل" in n or "APPROVED" in n for n in parsed["0.2.13"])
+        )
+        self.assertTrue(
+            any("باشگاه" in n or "بکاپ" in n or "دو‌کیبورد" in n for n in parsed["0.2.12"])
+        )
+        self.assertTrue(
+            any("نمایندگی" in n or "دو‌کیبورد" in n or "سرویس" in n for n in parsed["0.2.11"])
+        )
+        self.assertTrue(
+            any("منوی اصلی" in n or "مینی" in n or "خانه" in n for n in parsed["0.2.10"])
+        )
+        self.assertTrue(
+            any("کیبورد" in n or "چهار" in n or "iOS" in n for n in parsed["0.2.9"])
+        )
+        self.assertTrue(
+            any("فروشگاه" in n or "حباب" in n or "پلن" in n for n in parsed["0.2.8"])
+        )
+        self.assertTrue(
+            any("دسته" in n or "می‌چسب" in n or "visualViewport" in n or "PAYG" in n for n in parsed["0.2.6"])
+        )
+        self.assertTrue(
+            any("on_hold" in n or "تحویل" in n or "برچسب" in n for n in parsed["0.2.4"])
+        )
+        self.assertTrue(
+            any("تگ" in n or "کپسول" in n for n in parsed["0.2.3"])
+        )
+        self.assertTrue(
+            any("افزونه" in n or "fulfill" in n or "حجم" in n for n in parsed["0.2.2"])
+        )
+        self.assertTrue(
+            any("0031" in n or "PostgreSQL" in n or "۰٫۲٫۰" in n for n in parsed["0.2.1"])
+        )
+        self.assertTrue(
+            any("دسته" in n or "افزونه" in n or "تمدید" in n or "اشتراک" in n for n in parsed["0.2.0"])
+        )
+        self.assertTrue(
+            any("فارسی" in n or "خطا" in n or "پاسارگارد" in n for n in parsed["0.1.14"])
+        )
+        self.assertTrue(
+            any("تکراری" in n or "تمپلیت" in n or "ساخت" in n for n in parsed["0.1.13"])
+        )
+        self.assertTrue(
+            any("گروه" in n or "اجازه" in n or "نماینده" in n for n in parsed["0.1.12"])
+        )
+        self.assertTrue(
+            any("گروه" in n or "راه‌اندازی" in n or "۴۰۴" in n for n in parsed["0.1.11"])
+        )
+        self.assertTrue(
+            any("نماینده" in n or "Principal" in n or "کارت به کارت" in n for n in parsed["0.1.10"])
+        )
+        self.assertTrue(any("عنوان" in n or "فروشگاه" in n or "ایموجی" in n for n in parsed["0.1.9"]))
         self.assertTrue(any("کیف پول" in n or "امنیت" in n for n in parsed["0.1.2"]))
         self.assertTrue(any("راه‌اندازی" in n or "۰٫۱٫۱" in n for n in parsed["0.1.1"]))
 

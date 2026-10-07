@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import secrets
 import string
 from typing import Optional
@@ -24,7 +25,7 @@ from app.db.models import (
     UserService,
     WalletTransaction,
 )
-from app.services.pasarguard import extract_sub_token, get_pg
+from app.services.pasarguard import extract_sub_token, get_pg, user_subscription_url
 from app.services.provision_gate import (
     ProvisionError,
     assert_provision_create,
@@ -35,6 +36,55 @@ from app.services.wallet import credit_wallet, debit_wallet
 logger = logging.getLogger(__name__)
 
 
+def _order_note(order: Order | None) -> str:
+    return ((order.note if order else None) or "").strip()
+
+
+def is_mutation_order_note(note: str | None) -> bool:
+    """True when ``service_id`` is a target to mutate, not a newly minted service."""
+    n = (note or "").strip()
+    return (
+        n.startswith("renew:")
+        or n.startswith("reseller_app:")
+        or n.startswith("svc_addon:")
+    )
+
+
+def is_addon_order_note(note: str | None) -> bool:
+    return (note or "").strip().startswith("svc_addon:")
+
+
+async def fulfill_paid_order(session: AsyncSession, order: Order) -> Order:
+    """Route a PAID order to renew / addon / reseller_app / new-mint delivery.
+
+    Callers that previously used ``deliver_order`` for PAID recovery must use
+    this helper — addon/renew orders already have ``service_id`` set and
+    ``deliver_order`` would falsely seal them as delivered.
+    """
+    note = _order_note(order)
+    if note.startswith("reseller_app:"):
+        from app.services.resellers import mark_application_paid
+
+        await mark_application_paid(session, order)
+        order.status = OrderStatus.DELIVERED.value
+        await session.commit()
+        await session.refresh(order)
+        return order
+    if note.startswith("renew:"):
+        if not (order.service_id and order.plan_id):
+            raise ValueError("سفارش تمدید ناقص است")
+        service = await session.get(UserService, order.service_id)
+        plan = await session.get(Plan, order.plan_id)
+        if not service or not plan:
+            raise ValueError("سرویس یا پلن تمدید یافت نشد")
+        return await apply_renewal(session, order, service, plan)
+    if is_addon_order_note(note):
+        from app.services.service_addons import apply_service_addon
+
+        return await apply_service_addon(session, order)
+    return await deliver_order(session, order)
+
+
 async def _maybe_pay_referral_bonus(session: AsyncSession, order: Order) -> None:
     """Credit referrer wallet once after invitee's first successful purchase delivery.
 
@@ -43,12 +93,13 @@ async def _maybe_pay_referral_bonus(session: AsyncSession, order: Order) -> None
     spendable platform balance. Skips renewals, reseller fees, trials, and
     zero-amount orders. Idempotent via wallet reason.
     """
-    note = (order.note or "").strip()
-    if note.startswith("renew:") or note.startswith("reseller_app:"):
+    note = _order_note(order)
+    if is_mutation_order_note(note):
         return
     if int(order.amount or 0) <= 0:
         return
-    buyer = order.user
+    # Prefer already-loaded relationship; never trigger async lazy-load.
+    buyer = order.__dict__.get("user")
     if buyer is None:
         buyer = await session.get(BotUser, order.user_id)
     if not buyer or not buyer.referred_by_id:
@@ -140,6 +191,9 @@ def _random_username(
     """Build a PG username from prefix/suffix or an optional pattern.
 
     Pattern placeholders come from the shared naming-domain catalog.
+
+    ``user_id`` fills ``{id}``. For order delivery callers pass ``order.id``
+    (matches UI / message_variables catalog: شناسه سفارش).
     """
     random_part = _random_alnum(8)
     id_part = "" if user_id is None else str(user_id)
@@ -469,7 +523,9 @@ def calc_custom_plan_price(
     price_per_gb: int,
     price_per_day: int,
 ) -> int:
-    return max(0, int(gb) * int(price_per_gb) + int(days) * int(price_per_day))
+    # Ceil fractional GB so e.g. 1.9 is billed as 2 (never undercharge).
+    gb_units = max(0, math.ceil(float(gb))) if float(gb) > 0 else 0
+    return max(0, gb_units * int(price_per_gb) + int(days) * int(price_per_day))
 
 
 async def create_custom_order(
@@ -787,11 +843,11 @@ async def manual_fulfill_unpaid_order(
     Used when status is pending / awaiting_receipt (no pending payment row).
     Still respects single-delivery guards (service_id / delivered).
     """
-    note_txt = (order.note or "").strip()
-    is_renew_or_app = note_txt.startswith("renew:") or note_txt.startswith("reseller_app:")
+    note_txt = _order_note(order)
+    is_mutation = is_mutation_order_note(note_txt)
     if order.status == OrderStatus.DELIVERED.value:
         raise ValueError("این سفارش قبلاً تحویل شده")
-    if order.service_id and not is_renew_or_app:
+    if order.service_id and not is_mutation:
         raise ValueError("این سفارش قبلاً تحویل شده")
     if order.status not in _PAYABLE_ORDER_STATUSES:
         raise ValueError("این سفارش قابل تأیید نیست")
@@ -842,6 +898,11 @@ async def manual_fulfill_unpaid_order(
             raise ValueError("سرویس یا پلن تمدید یافت نشد")
         delivered = await apply_renewal(session, order, service, plan)
         return delivered, payment
+    if is_addon_order_note(note_txt):
+        from app.services.service_addons import apply_service_addon
+
+        delivered = await apply_service_addon(session, order)
+        return delivered, payment
     delivered = await deliver_order(session, order)
     return delivered, payment
 
@@ -854,6 +915,8 @@ def wallet_purchase_reason(order: Order) -> str:
         return f"خرید عمده #{order.id} ({qty} سرویس)"
     if note.startswith("renew:"):
         return f"تمدید سرویس #{order.id}"
+    if note.startswith("svc_addon:"):
+        return f"افزونه سرویس #{order.id}"
     if note.startswith("reseller_app:"):
         return f"هزینه نمایندگی #{order.id}"
     return f"خرید سفارش #{order.id}"
@@ -861,23 +924,8 @@ def wallet_purchase_reason(order: Order) -> str:
 
 async def _resume_paid_wallet_order(session: AsyncSession, order: Order, user) -> Order:
     """Continue delivery for an already-PAID wallet order (crash recovery)."""
-    if order.note and order.note.startswith("reseller_app:"):
-        from app.services.resellers import mark_application_paid
-
-        await mark_application_paid(session, order)
-        order.status = OrderStatus.DELIVERED.value
-        await session.commit()
-        await session.refresh(order)
-        return order
-    if order.note and order.note.startswith("renew:"):
-        if not (order.service_id and order.plan_id):
-            raise ValueError("سفارش تمدید ناقص است")
-        service = await session.get(UserService, order.service_id)
-        plan = await session.get(Plan, order.plan_id)
-        if not service or not plan:
-            raise ValueError("سرویس یا پلن تمدید یافت نشد")
-        return await apply_renewal(session, order, service, plan)
-    return await deliver_order(session, order)
+    _ = user
+    return await fulfill_paid_order(session, order)
 
 
 async def pay_with_wallet(session: AsyncSession, order: Order, user) -> Order:
@@ -1285,6 +1333,165 @@ async def attach_receipt(session: AsyncSession, payment: Payment, file_id: str) 
     return payment
 
 
+def _wallet_topup_credit_reason(payment_id: int) -> str:
+    return f"شارژ کیف پول #{int(payment_id)}"
+
+
+async def _wallet_topup_already_credited(
+    session: AsyncSession, payment: Payment
+) -> bool:
+    """True when the idempotent top-up ledger row for this payment exists."""
+    reason = _wallet_topup_credit_reason(int(payment.id))
+    topup_shop = (
+        int(payment.wallet_shop_id)
+        if getattr(payment, "wallet_shop_id", None)
+        else None
+    )
+    q = select(WalletTransaction.id).where(
+        WalletTransaction.user_id == int(payment.user_id),
+        WalletTransaction.reason == reason,
+        WalletTransaction.amount == int(payment.amount),
+    )
+    if topup_shop is None:
+        q = q.where(WalletTransaction.reseller_id.is_(None))
+    else:
+        q = q.where(WalletTransaction.reseller_id == topup_shop)
+    row = (
+        await session.execute(q.limit(1))
+    ).scalar_one_or_none()
+    return row is not None
+
+
+async def _resume_approved_payment(
+    session: AsyncSession, payment: Payment
+) -> Order | None:
+    """Continue after APPROVED claim when credit/delivery never finished.
+
+    Security invariants:
+    - Never credit a wallet top-up twice (ledger reason check).
+    - Never mint a second VPN user for an already-delivered order.
+    - APPROVED + incomplete work is retriable; APPROVED + complete is terminal.
+    """
+    if payment.is_wallet_topup:
+        if await _wallet_topup_already_credited(session, payment):
+            return None
+        user = await session.get(BotUser, payment.user_id)
+        if not user:
+            payment.status = PaymentStatus.PENDING.value
+            payment.reviewed_by = None
+            payment.review_note = (
+                payment.review_note or "wallet topup blocked: bot user missing"
+            )
+            await session.commit()
+            raise ValueError(
+                "کاربر پرداخت‌کننده برای شارژ کیف پول یافت نشد — تأیید لغو شد"
+            )
+        try:
+            topup_shop = (
+                int(payment.wallet_shop_id)
+                if getattr(payment, "wallet_shop_id", None)
+                else None
+            )
+            await credit_wallet(
+                session,
+                user,
+                payment.amount,
+                _wallet_topup_credit_reason(int(payment.id)),
+                shop_id=topup_shop,
+            )
+        except Exception:
+            payment.status = PaymentStatus.PENDING.value
+            payment.reviewed_by = None
+            payment.review_note = (
+                payment.review_note or "wallet topup blocked: credit failed"
+            )
+            await session.commit()
+            raise
+        return None
+
+    if not payment.order_id:
+        raise ValueError("این پرداخت قبلاً تأیید شده")
+    order = await session.get(Order, payment.order_id)
+    if not order:
+        raise ValueError("این پرداخت قبلاً تأیید شده")
+
+    note = _order_note(order)
+    is_mutation = is_mutation_order_note(note)
+    if order.status == OrderStatus.DELIVERED.value or (
+        bool(order.service_id) and not is_mutation
+    ):
+        # Truly complete — do not re-run delivery / notifications as a new approve.
+        raise ValueError("این پرداخت قبلاً تأیید شده")
+
+    # Heal mid-flight / crashed delivery back to PAID so fulfill can claim again.
+    if order.status == OrderStatus.DELIVERING.value and not (
+        bool(order.service_id) and not is_mutation
+    ):
+        with session.no_autoflush:
+            await session.execute(
+                update(Order)
+                .where(
+                    Order.id == int(order.id),
+                    Order.status == OrderStatus.DELIVERING.value,
+                )
+                .values(status=OrderStatus.PAID.value)
+                .execution_options(synchronize_session=False)
+            )
+        await session.commit()
+        await session.refresh(order)
+
+    if order.status in {
+        OrderStatus.PENDING.value,
+        OrderStatus.AWAITING_RECEIPT.value,
+        OrderStatus.AWAITING_APPROVAL.value,
+    }:
+        # Payment already APPROVED but order never flipped to PAID (crash between
+        # claims). Finish the PAID claim idempotently, then fulfill.
+        await session.execute(
+            update(Payment)
+            .where(
+                Payment.order_id == order.id,
+                Payment.id != int(payment.id),
+                Payment.status == PaymentStatus.PENDING.value,
+            )
+            .values(
+                status=PaymentStatus.REJECTED.value,
+                review_note="superseded by approved payment",
+            )
+            .execution_options(synchronize_session=False)
+        )
+        paid_claim = await session.execute(
+            update(Order)
+            .where(
+                Order.id == order.id,
+                Order.status.in_(
+                    [
+                        OrderStatus.PENDING.value,
+                        OrderStatus.AWAITING_RECEIPT.value,
+                        OrderStatus.AWAITING_APPROVAL.value,
+                    ]
+                ),
+            )
+            .values(status=OrderStatus.PAID.value)
+            .execution_options(synchronize_session=False)
+        )
+        if paid_claim.rowcount != 1:
+            await session.refresh(order)
+            if order.status not in {
+                OrderStatus.PAID.value,
+                OrderStatus.DELIVERING.value,
+            }:
+                raise ValueError("این سفارش قابل تأیید نیست")
+        else:
+            await session.commit()
+            await session.refresh(order)
+
+    if order.status == OrderStatus.PAID.value:
+        return await fulfill_paid_order(session, order)
+
+    raise ValueError("این پرداخت قبلاً تأیید شده")
+
+
 async def approve_payment(session: AsyncSession, payment: Payment, reviewer_tg: int) -> Order | None:
     payment_id = int(payment.id)
     # DB-only claim: disable autoflush so a dirty in-memory status cannot
@@ -1300,10 +1507,17 @@ async def approve_payment(session: AsyncSession, payment: Payment, reviewer_tg: 
             .execution_options(synchronize_session=False)
         )
     if claim.rowcount != 1:
-        fresh = await session.get(Payment, payment_id)
+        # Force DB truth — expire_on_commit=False can keep a stale PENDING identity.
+        fresh = (
+            await session.execute(
+                select(Payment)
+                .where(Payment.id == payment_id)
+                .execution_options(populate_existing=True)
+            )
+        ).scalar_one_or_none()
         if fresh and fresh.status == PaymentStatus.APPROVED.value:
-            # Do not re-deliver / re-notify — caller must treat as already done.
-            raise ValueError("این پرداخت قبلاً تأیید شده")
+            # Approved but credit/delivery may still be incomplete — resume safely.
+            return await _resume_approved_payment(session, fresh)
         raise ValueError("این پرداخت قابل تأیید نیست")
     await session.refresh(payment)
 
@@ -1331,7 +1545,7 @@ async def approve_payment(session: AsyncSession, payment: Payment, reviewer_tg: 
                 session,
                 user,
                 payment.amount,
-                f"شارژ کیف پول #{payment.id}",
+                _wallet_topup_credit_reason(int(payment.id)),
                 shop_id=topup_shop,
             )
         except Exception:
@@ -1352,12 +1566,12 @@ async def approve_payment(session: AsyncSession, payment: Payment, reviewer_tg: 
     # a second APPROVED row that double-counts revenue).
     # Also block when service_id is set even if status was tampered away from
     # delivered (cancel/re-approve must never mint a second VPN user).
-    note = (order.note or "").strip()
-    is_renew_or_app = note.startswith("renew:") or note.startswith("reseller_app:")
+    note = _order_note(order)
+    is_mutation = is_mutation_order_note(note)
     already_fulfilled = order.status in {
         OrderStatus.DELIVERED.value,
         OrderStatus.DELIVERING.value,
-    } or (bool(order.service_id) and not is_renew_or_app)
+    } or (bool(order.service_id) and not is_mutation)
     if already_fulfilled:
         payment.status = PaymentStatus.REJECTED.value
         payment.review_note = payment.review_note or "order already delivered"
@@ -1409,25 +1623,7 @@ async def approve_payment(session: AsyncSession, payment: Payment, reviewer_tg: 
         raise ValueError("این سفارش قابل تأیید نیست")
     await session.commit()
     await session.refresh(order)
-    # Reseller application fee — no VPN delivery; move application to review queue.
-    if order.note and order.note.startswith("reseller_app:"):
-        from app.services.resellers import mark_application_paid
-
-        await mark_application_paid(session, order)
-        order.status = OrderStatus.DELIVERED.value
-        await session.commit()
-        await session.refresh(order)
-        return order
-    # Renewal orders extend existing service instead of creating a new panel user.
-    if order.note and order.note.startswith("renew:"):
-        if not (order.service_id and order.plan_id):
-            raise ValueError("سفارش تمدید ناقص است")
-        service = await session.get(UserService, order.service_id)
-        plan = await session.get(Plan, order.plan_id)
-        if not service or not plan:
-            raise ValueError("سرویس یا پلن تمدید یافت نشد")
-        return await apply_renewal(session, order, service, plan)
-    return await deliver_order(session, order)
+    return await fulfill_paid_order(session, order)
 
 
 async def reject_payment(session: AsyncSession, payment: Payment, reviewer_tg: int, note: str = "") -> None:
@@ -1490,9 +1686,9 @@ async def cancel_order(session: AsyncSession, order: Order, *, note: str = "") -
     re-approve must never become a second delivery path.
     """
     order_id = int(order.id)
-    note_txt = (order.note or "").strip()
-    is_renew_or_app = note_txt.startswith("renew:") or note_txt.startswith("reseller_app:")
-    if order.service_id and not is_renew_or_app:
+    note_txt = _order_note(order)
+    is_mutation = is_mutation_order_note(note_txt)
+    if order.service_id and not is_mutation:
         raise ValueError("این سفارش قبلاً تحویل شده و قابل لغو نیست")
     approved = (
         await session.execute(
@@ -1510,7 +1706,7 @@ async def cancel_order(session: AsyncSession, order: Order, *, note: str = "") -
         Order.id == order_id,
         Order.status.in_(tuple(_MANUAL_CANCEL_STATUSES)),
     ]
-    if not is_renew_or_app:
+    if not is_mutation:
         cond.append(Order.service_id.is_(None))
     with session.no_autoflush:
         claim = await session.execute(
@@ -1598,6 +1794,14 @@ async def reject_order(session: AsyncSession, order: Order, *, note: str = "") -
 
 async def deliver_order(session: AsyncSession, order: Order) -> Order:
     order_id = int(order.id)
+    note = _order_note(order)
+    # Defense-in-depth: mutation orders must never be sealed by mint-delivery.
+    # Callers should use fulfill_paid_order; this guard prevents silent no-ops
+    # that look like "wrong package" / "addon not applied".
+    if is_mutation_order_note(note):
+        raise ValueError(
+            "این سفارش تمدید/افزونه/نمایندگی است — از مسیر fulfill استفاده کنید"
+        )
     # If a prior delivery already linked services (even after status tampering),
     # never mint another PG user — just seal the order as delivered.
     if order.service_id:
@@ -1732,9 +1936,10 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
         services: list[UserService] = []
 
         async def _create_one(index: int) -> UserService:
+            # ``{id}`` in naming pattern = order id (catalog / UI copy), not bot_user.id.
             username = await generate_pg_username(
                 session,
-                user_id=order.user_id,
+                user_id=int(order.id),
                 plan=plan,
                 reseller_id=order.reseller_id,
                 user=order.user,
@@ -1775,7 +1980,7 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
             elif order.reseller_id and not pg_uid:
                 raise ValueError("ساخت کاربر پاسارگارد شناسه برنگرداند — تحویل لغو شد")
 
-            sub_url = pg_user.get("subscription_url")
+            sub_url = user_subscription_url(pg_user if isinstance(pg_user, dict) else None)
             service = UserService(
                 bot_user_id=order.user_id,
                 plan_id=plan.id,
@@ -1787,11 +1992,17 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
             )
             from app.services.bot_user_admin import sync_service_quota_cache
 
+            plan_days = int(getattr(plan, "duration_days", 0) or 0) or None
             if isinstance(pg_user, dict):
-                sync_service_quota_cache(service, pg_user)
+                sync_service_quota_cache(
+                    service, pg_user, fallback_duration_days=plan_days
+                )
             else:
                 sync_service_quota_cache(
-                    service, expire_ts=expire, data_limit_bytes=data_limit
+                    service,
+                    expire_ts=expire,
+                    data_limit_bytes=data_limit,
+                    fallback_duration_days=plan_days,
                 )
             session.add(service)
             await session.flush()
@@ -1991,7 +2202,10 @@ async def apply_renewal(session: AsyncSession, order: Order, service: UserServic
                     "expire": expire,
                 },
             )
-        sub_url = pg_user.get("subscription_url") or service.subscription_url
+        sub_url = (
+            user_subscription_url(pg_user if isinstance(pg_user, dict) else None)
+            or service.subscription_url
+        )
         service.subscription_url = sub_url
         service.subscription_token = extract_sub_token(sub_url)
         service.plan_id = plan.id
@@ -1999,11 +2213,17 @@ async def apply_renewal(session: AsyncSession, order: Order, service: UserServic
         service.notified_traffic = False
         from app.services.bot_user_admin import sync_service_quota_cache
 
+        plan_days = int(getattr(plan, "duration_days", 0) or 0) or None
         if isinstance(pg_user, dict):
-            sync_service_quota_cache(service, pg_user)
+            sync_service_quota_cache(
+                service, pg_user, fallback_duration_days=plan_days
+            )
         else:
             sync_service_quota_cache(
-                service, expire_ts=expire, data_limit_bytes=data_limit
+                service,
+                expire_ts=expire,
+                data_limit_bytes=data_limit,
+                fallback_duration_days=plan_days,
             )
         order.status = OrderStatus.DELIVERED.value
         await session.commit()

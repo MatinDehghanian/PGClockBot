@@ -21,13 +21,11 @@
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   outline: none;
-  transition:
-    background var(--motion-fast, 0.15s) var(--ease-standard, ease),
-    border-color var(--motion-fast, 0.15s) var(--ease-standard, ease),
-    color var(--motion-fast, 0.15s) var(--ease-standard, ease);
+  /* No background transition — post-tap :active fade looked like accordion lag. */
+  transition: none;
 }
 
-/* Press feedback on all devices — disappears when finger lifts */
+/* Press feedback on all devices — instant on/off (no fade after lift) */
 .nav-label-toggle:active {
   background: color-mix(in srgb, var(--muted-fg, #a1a1aa) 10%, transparent);
   border-color: color-mix(in srgb, var(--border, #27272a) 80%, transparent);

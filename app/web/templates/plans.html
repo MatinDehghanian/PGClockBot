@@ -8,6 +8,7 @@
   </div>
   <div class="page-head-actions">
     <button type="button" class="btn btn-ghost" data-modal-open="modal-gift-codes">کد هدیه</button>
+    <button type="button" class="btn btn-ghost" data-modal-open="modal-plan-categories">برچسب دسته</button>
     <button type="button" class="btn" id="btn-add-plan" data-modal-open="modal-plan-unified">افزودن پلن</button>
   </div>
 </div>
@@ -30,13 +31,14 @@
   <div class="table-wrap">
   <table class="table-compact" data-bulk-select>
     <thead>
-      <tr>{{ table_select_head() }}<th>نام</th><th>قیمت</th><th class="col-hide-sm">مدت</th><th>حجم</th><th class="col-hide-sm">منبع پاسارگارد</th><th>وضعیت</th><th class="col-actions"></th></tr>
+      <tr>{{ table_select_head() }}<th>نام</th><th class="col-hide-sm">برچسب</th><th>قیمت</th><th class="col-hide-sm">مدت</th><th>حجم</th><th class="col-hide-sm">منبع پاسارگارد</th><th>وضعیت</th><th class="col-actions"></th></tr>
     </thead>
     <tbody>
     {% for p in plans %}
       <tr data-bulk-ops="toggle,delete">
         {{ table_select_cell(p.id) }}
         <td>{{ p.name }}</td>
+        <td class="col-hide-sm muted">{% if p.category_id and plan_category_map and plan_category_map.get(p.category_id) %}{{ plan_category_map.get(p.category_id).name }}{% else %}—{% endif %}</td>
         <td class="mono">{{ "{:,}".format(p.price).replace(",", "٬") }}</td>
         <td class="col-hide-sm">{{ p.duration_days }} روز</td>
         <td>{% if p.data_limit_gb is not none %}{{ p.data_limit_gb | gb }}{% else %}نامحدود{% endif %}</td>
@@ -76,11 +78,12 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="8" class="muted">پلن ثابتی نیست — از «افزودن پلن» بسازید.</td></tr>
+      <tr><td colspan="9" class="muted">پلن ثابتی نیست — از «افزودن پلن» بسازید.</td></tr>
     {% endfor %}
       <tr>
         <td class="col-select"></td>
         <td>پلن تست{% if trial %} — {{ trial.name }}{% endif %}</td>
+        <td class="col-hide-sm muted">—</td>
         <td class="mono">رایگان</td>
         <td class="col-hide-sm">{% if trial %}{{ trial.duration_days }} روز{% else %}—{% endif %}</td>
         <td>{% if trial and trial.data_limit_gb is not none %}{{ trial.data_limit_gb | gb }}{% elif trial %}نامحدود{% else %}—{% endif %}</td>
@@ -107,6 +110,7 @@
       <tr>
         <td class="col-select"></td>
         <td>پلن دلخواه</td>
+        <td class="col-hide-sm muted">—</td>
         <td class="mono">هر گیگ / روز</td>
         <td class="col-hide-sm">{{ values.get('custom_plan_min_days','1') }}–{{ values.get('custom_plan_max_days','365') }} روز</td>
         <td>{{ values.get('custom_plan_min_gb','1') }}–{{ values.get('custom_plan_max_gb','500') }} گیگ</td>
@@ -133,6 +137,7 @@
       <tr>
         <td class="col-select"></td>
         <td>فروش عمده</td>
+        <td class="col-hide-sm muted">—</td>
         <td class="mono">تخفیف پلکانی</td>
         <td class="col-hide-sm">—</td>
         <td>{{ values.get('wholesale_min_qty','5') }}–{{ values.get('wholesale_max_qty','20') }} عدد</td>
@@ -147,6 +152,63 @@
           {% endcall %}
         </td>
       </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3 id="user-service-addons" class="card-subhead">⏱ بسته‌های حجم / زمان</h3>
+  <p class="muted update-card-caption">کاربر روی سرویس فعلی‌اش حجم یا زمان می‌خرد — از «افزودن پلن» با نوع بسته حجم/زمان بسازید.</p>
+  <div class="table-wrap">
+  <table class="table-compact">
+    <thead>
+      <tr>
+        <th>نام</th>
+        <th>نوع</th>
+        <th>مقدار</th>
+        <th>قیمت</th>
+        <th>وضعیت</th>
+        <th class="col-actions"></th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for a in service_addon_packs or [] %}
+      <tr>
+        <td>
+          {{ a.name }}
+          {% if a.description %}<br><small class="muted">{{ a.description }}</small>{% endif %}
+        </td>
+        <td>{% if a.kind == 'duration' %}زمان{% else %}حجم{% endif %}</td>
+        <td class="mono">{% if a.kind == 'duration' %}{{ a.amount | int }} روز{% else %}{{ a.amount | gb }}{% endif %}</td>
+        <td class="mono">{{ "{:,}".format(a.price).replace(",", "٬") }}</td>
+        <td>{% if a.is_active %}<span class="badge active">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}</td>
+        <td class="col-actions">
+          {% call row_actions() %}
+            <button type="button" class="btn btn-ghost btn-sm"
+                    data-addon-edit
+                    data-modal-open="modal-service-addons"
+                    data-id="{{ a.id }}"
+                    data-name="{{ a.name }}"
+                    data-kind="{{ a.kind }}"
+                    data-amount="{{ a.amount }}"
+                    data-price="{{ a.price }}"
+                    data-sort="{{ a.sort_order }}"
+                    data-description="{{ a.description or '' }}">ویرایش</button>
+            <form method="post" action="/plans/addons/{{ a.id }}/toggle">
+              <button class="btn btn-ghost btn-sm" type="submit">{% if a.is_active %}خاموش{% else %}روشن{% endif %}</button>
+            </form>
+            <form method="post" action="/plans/addons/{{ a.id }}/delete"
+                  data-confirm="این بسته حذف شود؟"
+                  data-confirm-title="حذف بسته افزونه"
+                  data-confirm-danger="1"
+                  data-confirm-label="حذف">
+              <button class="btn btn-danger btn-sm" type="submit">حذف</button>
+            </form>
+          {% endcall %}
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6" class="muted">هنوز بسته‌ای نیست — از «افزودن پلن» با نوع بسته حجم یا زمان بسازید.</td></tr>
+    {% endfor %}
     </tbody>
   </table>
   </div>
@@ -360,6 +422,17 @@
             <small class="muted">خالی = نامحدود{% if pg_limit_snapshot and pg_limit_snapshot.restricted and pg_limit_snapshot.per_user_data_max %} — سقف زنده: {{ pg_limit_snapshot.per_user_data_max | bytes }}{% endif %}</small>
           </label>
         </div>
+        <label class="form-field">برچسب دسته (اختیاری)
+          <select name="category_id" data-plan-category-select data-category-audience="users">
+            <option value="">— بدون برچسب —</option>
+            {% for c in plan_categories or [] %}
+              {% if c.is_active and (c.audience or 'users') == 'users' %}
+              <option value="{{ c.id }}">{{ c.name }}</option>
+              {% endif %}
+            {% endfor %}
+          </select>
+          <small class="muted">برچسب نمایش در بات — از «برچسب دسته» با مخاطب کاربران بسازید</small>
+        </label>
         <label class="form-field">توضیح کوتاه
           <input name="description" placeholder="نمایش در بات" />
         </label>
@@ -609,6 +682,36 @@
       </form>
     </div>
 
+    {# —— User service addon packs (volume / duration) —— #}
+    <div id="panel-user-addon" class="plan-panel" hidden>
+      <p class="muted update-card-caption" id="user-addon-hint">کاربر می‌تواند این بسته را بخرد و به سرویس فعلی‌اش اضافه کند.</p>
+      <form method="post" action="/plans/addons" class="form-stack" id="unified-service-addon-form">
+        <input type="hidden" name="kind" id="unified-addon-kind" value="volume" />
+        <div class="form-row">
+          <label class="form-field">نام بسته
+            <input name="name" id="unified-addon-name" required maxlength="128" placeholder="مثلاً ۱۰ گیگ اضافه" />
+          </label>
+          <label class="form-field">مقدار
+            <input name="amount" id="unified-addon-amount" type="number" min="0.1" step="0.1" required placeholder="۱۰" />
+            <small class="muted" id="unified-addon-amount-hint">برای حجم می‌تواند اعشار باشد؛ برای زمان عدد صحیح روز</small>
+          </label>
+          <label class="form-field">قیمت (تومان)
+            <input name="price" id="unified-addon-price" type="number" min="0" required placeholder="50000" />
+          </label>
+          <label class="form-field">ترتیب
+            <input name="sort_order" type="number" value="0" />
+          </label>
+        </div>
+        <label class="form-field">توضیح (اختیاری)
+          <input name="description" maxlength="255" placeholder="نمایش در بات" />
+        </label>
+        <div class="actions">
+          <button class="btn" type="submit">ذخیره بسته</button>
+          <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
+        </div>
+      </form>
+    </div>
+
     {# —— Reseller —— #}
     {% if is_platform_admin %}
     <div id="panel-reseller" class="plan-panel" hidden>
@@ -638,6 +741,17 @@
             <input name="sort_order" type="number" value="0" />
           </label>
         </div>
+        <label class="form-field" id="reseller-category-field">برچسب دسته (اختیاری)
+          <select name="category_id" data-plan-category-select data-category-audience="resellers">
+            <option value="">— بدون برچسب —</option>
+            {% for c in plan_categories or [] %}
+              {% if c.is_active and (c.audience or 'users') == 'resellers' %}
+              <option value="{{ c.id }}">{{ c.name }}</option>
+              {% endif %}
+            {% endfor %}
+          </select>
+          <small class="muted">برچسب نمایش برای پلن‌های نمایندگی — از «برچسب دسته» با مخاطب نمایندگان بسازید</small>
+        </label>
         <label class="form-field">توضیح
           <textarea name="description" rows="2"></textarea>
         </label>
@@ -746,6 +860,224 @@
   </div>
 </div>
 
+{# —— Plan category labels modal —— #}
+<div class="ui-modal{% if open_categories %} open{% endif %}" id="modal-plan-categories" {% if not open_categories %}hidden{% endif %}>
+  <div class="ui-modal-backdrop" data-modal-close></div>
+  <div class="ui-modal-panel ui-modal-panel-lg" role="dialog" aria-modal="true" aria-labelledby="plan-categories-title">
+    <div class="ui-modal-head">
+      {{ modal_title('plans', 'برچسب دسته', caption='در ربات فروشگاه، به‌جای «ثابت» دکمه‌های دسته نشان داده می‌شوند — رنگ دکمه را اینجا تنظیم کنید', tone='brand', heading_id='plan-categories-title') }}
+      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <form method="post" action="/plans/categories" class="form-stack plan-cat-form" id="plan-category-form" data-create-action="/plans/categories">
+      <div class="settings-grid">
+        <label class="form-field">نام برچسب
+          <input name="name" id="plan-category-name" required maxlength="128" placeholder="مثلاً ویژه / اقتصادی" />
+        </label>
+        <label class="form-field">مخاطب
+          <select name="audience" id="plan-category-audience" required>
+            <option value="users">کاربران</option>
+            {% if is_platform_admin %}
+            <option value="resellers">نمایندگان</option>
+            {% endif %}
+          </select>
+          <small class="muted">در «افزودن پلن» فقط برای همین مخاطب دیده می‌شود</small>
+        </label>
+        <label class="form-field">ترتیب
+          <input name="sort_order" id="plan-category-sort" type="number" value="0" />
+        </label>
+        <label class="form-field">توضیح (اختیاری)
+          <input name="description" id="plan-category-desc" maxlength="255" placeholder="نمایش داخلی" />
+        </label>
+        {% set plan_button_style = 'inherit' %}
+        {% set button_style_name = 'button_style' %}
+        {% set plan_style_options = category_style_options if category_style_options is defined else plan_style_options %}
+        {% set plan_color_hint = 'رنگ دکمه دسته در منوی خرید ربات — «ارث» یعنی همان رنگ «ثابت» در تنظیمات رنگبندی' %}
+        <div class="form-field plan-cat-color-field" id="plan-category-color-field">
+          {% include "_plan_button_style_field.html" %}
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn" type="submit" id="plan-category-submit">افزودن برچسب</button>
+        <button type="button" class="btn btn-ghost" id="plan-category-cancel-edit" hidden>انصراف از ویرایش</button>
+        <button type="button" class="btn btn-ghost" data-modal-close>بستن</button>
+      </div>
+    </form>
+    <div class="plan-cat-list">
+      <h3 class="gift-codes-recent-title">برچسب‌های فعلی</h3>
+      <div class="table-wrap">
+        <table class="table-compact">
+          <thead>
+            <tr>
+              <th>نام</th>
+              <th>مخاطب</th>
+              <th class="col-hide-sm">رنگ دکمه</th>
+              <th class="col-hide-sm">پلن‌ها</th>
+              <th class="col-hide-sm">ترتیب</th>
+              <th>وضعیت</th>
+              <th class="col-actions"></th>
+            </tr>
+          </thead>
+          <tbody>
+          {% for c in plan_categories or [] %}
+            {% set linked = (category_linked_plans or {}).get(c.id) or [] %}
+            {% if c.button_style is none %}
+              {% set cat_style_label = 'ارث' %}
+            {% elif c.button_style == '' %}
+              {% set cat_style_label = 'سفید' %}
+            {% elif c.button_style == 'primary' %}
+              {% set cat_style_label = 'آبی' %}
+            {% elif c.button_style == 'success' %}
+              {% set cat_style_label = 'سبز' %}
+            {% elif c.button_style == 'danger' %}
+              {% set cat_style_label = 'قرمز' %}
+            {% else %}
+              {% set cat_style_label = c.button_style %}
+            {% endif %}
+            <tr>
+              <td>
+                {{ c.name }}
+                {% if c.description %}<br><small class="muted">{{ c.description }}</small>{% endif %}
+              </td>
+              <td>{% if (c.audience or 'users') == 'resellers' %}نمایندگان{% else %}کاربران{% endif %}</td>
+              <td class="col-hide-sm muted">{{ cat_style_label }}</td>
+              <td class="col-hide-sm">
+                {% if linked %}
+                  <span class="muted">{{ linked | join('، ') }}</span>
+                {% else %}
+                  <span class="muted">—</span>
+                {% endif %}
+              </td>
+              <td class="col-hide-sm mono">{{ c.sort_order }}</td>
+              <td>{% if c.is_active %}<span class="badge active">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}</td>
+              <td class="col-actions">
+                {% call row_actions() %}
+                  <button type="button" class="btn btn-ghost btn-sm"
+                          data-category-edit
+                          data-id="{{ c.id }}"
+                          data-name="{{ c.name }}"
+                          data-sort="{{ c.sort_order }}"
+                          data-audience="{{ c.audience or 'users' }}"
+                          data-description="{{ c.description or '' }}"
+                          data-button-style="{% if c.button_style is none %}inherit{% else %}{{ c.button_style }}{% endif %}">ویرایش</button>
+                  <form method="post" action="/plans/categories/{{ c.id }}/toggle">
+                    <button class="btn btn-ghost btn-sm" type="submit">{% if c.is_active %}خاموش{% else %}روشن{% endif %}</button>
+                  </form>
+                  <form method="post" action="/plans/categories/{{ c.id }}/delete"
+                        data-confirm="این برچسب حذف شود؟ پلن‌هایش بدون برچسب می‌مانند."
+                        data-confirm-title="حذف برچسب دسته"
+                        data-confirm-danger="1"
+                        data-confirm-label="حذف">
+                    <button class="btn btn-danger btn-sm" type="submit">حذف</button>
+                  </form>
+                {% endcall %}
+              </td>
+            </tr>
+          {% else %}
+            <tr><td colspan="7" class="muted">هنوز برچسبی نیست — از فرم بالا بسازید.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# —— Service addon packs modal —— #}
+<div class="ui-modal{% if open_addons %} open{% endif %}" id="modal-service-addons" {% if not open_addons %}hidden{% endif %}>
+  <div class="ui-modal-backdrop" data-modal-close></div>
+  <div class="ui-modal-panel ui-modal-panel-lg" role="dialog" aria-modal="true" aria-labelledby="service-addons-title">
+    <div class="ui-modal-head">
+      {{ modal_title('plans', 'بسته حجم / زمان', caption='کاربر می‌تواند حجم یا زمان بخرد و به سرویس فعلی‌اش اضافه کند', tone='brand', heading_id='service-addons-title') }}
+      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <form method="post" action="/plans/addons" class="form-stack" id="service-addon-form" data-create-action="/plans/addons">
+      <div class="settings-grid">
+        <label class="form-field">نام بسته
+          <input name="name" id="service-addon-name" required maxlength="128" placeholder="مثلاً ۱۰ گیگ اضافه" />
+        </label>
+        <label class="form-field">نوع
+          <select name="kind" id="service-addon-kind" required>
+            <option value="volume">حجم (گیگ)</option>
+            <option value="duration">زمان (روز)</option>
+          </select>
+        </label>
+        <label class="form-field">مقدار
+          <input name="amount" id="service-addon-amount" type="number" min="0.1" step="0.1" required placeholder="۱۰" />
+          <small class="muted" id="service-addon-amount-hint">برای حجم می‌تواند اعشار باشد؛ برای زمان عدد صحیح روز</small>
+        </label>
+        <label class="form-field">قیمت (تومان)
+          <input name="price" id="service-addon-price" type="number" min="0" required placeholder="50000" />
+        </label>
+        <label class="form-field">ترتیب
+          <input name="sort_order" id="service-addon-sort" type="number" value="0" />
+        </label>
+        <label class="form-field">توضیح (اختیاری)
+          <input name="description" id="service-addon-desc" maxlength="255" placeholder="نمایش در بات" />
+        </label>
+      </div>
+      <div class="actions">
+        <button class="btn" type="submit" id="service-addon-submit">افزودن بسته</button>
+        <button type="button" class="btn btn-ghost" id="service-addon-cancel-edit" hidden>انصراف از ویرایش</button>
+        <button type="button" class="btn btn-ghost" data-modal-close>بستن</button>
+      </div>
+    </form>
+    <h3 class="gift-codes-recent-title">بسته‌های فعلی</h3>
+    <div class="table-wrap">
+      <table class="table-compact">
+        <thead>
+          <tr>
+            <th>نام</th>
+            <th>نوع</th>
+            <th>مقدار</th>
+            <th>قیمت</th>
+            <th>وضعیت</th>
+            <th class="col-actions"></th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for a in service_addon_packs or [] %}
+          <tr>
+            <td>
+              {{ a.name }}
+              {% if a.description %}<br><small class="muted">{{ a.description }}</small>{% endif %}
+            </td>
+            <td>{% if a.kind == 'duration' %}زمان{% else %}حجم{% endif %}</td>
+            <td class="mono">{% if a.kind == 'duration' %}{{ a.amount | int }} روز{% else %}{{ a.amount | gb }}{% endif %}</td>
+            <td class="mono">{{ "{:,}".format(a.price).replace(",", "٬") }}</td>
+            <td>{% if a.is_active %}<span class="badge active">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}</td>
+            <td class="col-actions">
+              {% call row_actions() %}
+                <button type="button" class="btn btn-ghost btn-sm"
+                        data-addon-edit
+                        data-id="{{ a.id }}"
+                        data-name="{{ a.name }}"
+                        data-kind="{{ a.kind }}"
+                        data-amount="{{ a.amount }}"
+                        data-price="{{ a.price }}"
+                        data-sort="{{ a.sort_order }}"
+                        data-description="{{ a.description or '' }}">ویرایش</button>
+                <form method="post" action="/plans/addons/{{ a.id }}/toggle">
+                  <button class="btn btn-ghost btn-sm" type="submit">{% if a.is_active %}خاموش{% else %}روشن{% endif %}</button>
+                </form>
+                <form method="post" action="/plans/addons/{{ a.id }}/delete"
+                      data-confirm="این بسته حذف شود؟"
+                      data-confirm-title="حذف بسته افزونه"
+                      data-confirm-danger="1"
+                      data-confirm-label="حذف">
+                  <button class="btn btn-danger btn-sm" type="submit">حذف</button>
+                </form>
+              {% endcall %}
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="6" class="muted">هنوز بسته‌ای نیست — از فرم بالا بسازید.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
 <div class="ui-modal{% if open_gifts %} open{% endif %}" id="modal-gift-codes" {% if not open_gifts %}hidden{% endif %}>
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel ui-modal-panel-lg" role="dialog" aria-modal="true" aria-labelledby="gift-codes-title">
@@ -822,13 +1154,17 @@
     'users:trial': document.getElementById('panel-user-trial'),
     'users:custom': document.getElementById('panel-user-custom'),
     'users:wholesale': document.getElementById('panel-user-wholesale'),
+    'users:addon_volume': document.getElementById('panel-user-addon'),
+    'users:addon_duration': document.getElementById('panel-user-addon'),
     'resellers': document.getElementById('panel-reseller')
   };
   const USER_KINDS = [
     {value: 'fixed', label: 'ثابت'},
     {value: 'custom', label: 'دلخواه'},
     {value: 'trial', label: 'تست'},
-    {value: 'wholesale', label: 'فروش عمده'}
+    {value: 'wholesale', label: 'فروش عمده'},
+    {value: 'addon_volume', label: 'بسته حجم'},
+    {value: 'addon_duration', label: 'بسته زمان'}
   ];
   const RESELLER_KINDS = [
     {value: 'fixed', label: 'اشتراک ثابت'},
@@ -914,6 +1250,7 @@
     const priceLabel = document.getElementById('reseller-price-label');
     const priceHint = document.getElementById('reseller-price-hint');
     const nameInput = document.getElementById('reseller-plan-name');
+    const catField = document.getElementById('reseller-category-field');
 
     const isVol = kind === 'addon_volume';
     const isUsers = kind === 'addon_users';
@@ -934,6 +1271,7 @@
     setVisible(addon, isAddon);
     setVisible(addonGb, isVol);
     setVisible(addonUsers, isUsers);
+    setVisible(catField, !isAddon);
 
     if (isPayg || isAddon) {
       const sw = document.querySelector('#reseller-plan-form input[name="allow_buy_extra"]');
@@ -991,6 +1329,39 @@
     });
   }
 
+  function syncUserAddonForm(){
+    const kind = kindSel ? kindSel.value : 'addon_volume';
+    const isDur = kind === 'addon_duration';
+    const kindInput = document.getElementById('unified-addon-kind');
+    const nameInput = document.getElementById('unified-addon-name');
+    const hint = document.getElementById('user-addon-hint');
+    const amountHint = document.getElementById('unified-addon-amount-hint');
+    const amountEl = document.getElementById('unified-addon-amount');
+    if (kindInput) kindInput.value = isDur ? 'duration' : 'volume';
+    if (nameInput) {
+      nameInput.placeholder = isDur ? 'مثلاً ۷ روز اضافه' : 'مثلاً ۱۰ گیگ اضافه';
+    }
+    if (hint) {
+      hint.textContent = isDur
+        ? 'کاربر می‌تواند این بستهٔ زمان را بخرد و به مدت سرویس فعلی‌اش اضافه کند.'
+        : 'کاربر می‌تواند این بستهٔ حجم را بخرد و به حجم سرویس فعلی‌اش اضافه کند.';
+    }
+    if (amountHint) {
+      amountHint.textContent = isDur
+        ? 'تعداد روز (عدد صحیح)'
+        : 'برای حجم می‌تواند اعشار باشد';
+    }
+    if (amountEl) {
+      if (isDur) {
+        amountEl.step = '1';
+        amountEl.min = '1';
+      } else {
+        amountEl.step = '0.1';
+        amountEl.min = '0.1';
+      }
+    }
+  }
+
   function syncAudienceAndKind(){
     if (!audienceSel || !kindSel) return;
     const audience = currentAudience();
@@ -1004,6 +1375,7 @@
     } else {
       const key = 'users:' + kind;
       if (panels[key]) panels[key].hidden = false;
+      if (kind === 'addon_volume' || kind === 'addon_duration') syncUserAddonForm();
     }
   }
 
@@ -1027,8 +1399,10 @@
         if (panels.resellers) panels.resellers.hidden = false;
         syncResellerForm();
       } else {
-        const key = 'users:' + kindSel.value;
+        const kind = kindSel.value;
+        const key = 'users:' + kind;
         if (panels[key]) panels[key].hidden = false;
+        if (kind === 'addon_volume' || kind === 'addon_duration') syncUserAddonForm();
       }
     });
   }
@@ -1158,6 +1532,113 @@
   // Initial: user kinds
   setKindOptions('users', 'fixed');
   syncAudienceAndKind();
+
+  // —— Category label form: create / edit ——
+  (function(){
+    const form = document.getElementById('plan-category-form');
+    if (!form) return;
+    const createAction = form.getAttribute('data-create-action') || '/plans/categories';
+    const nameEl = document.getElementById('plan-category-name');
+    const sortEl = document.getElementById('plan-category-sort');
+    const descEl = document.getElementById('plan-category-desc');
+    const audEl = document.getElementById('plan-category-audience');
+    const styleEl = form.querySelector('select[name="button_style"]');
+    const submitEl = document.getElementById('plan-category-submit');
+    const cancelEl = document.getElementById('plan-category-cancel-edit');
+    function resetCreate(){
+      form.action = createAction;
+      if (nameEl) nameEl.value = '';
+      if (sortEl) sortEl.value = '0';
+      if (descEl) descEl.value = '';
+      if (audEl) audEl.value = 'users';
+      if (styleEl) {
+        styleEl.value = 'inherit';
+        styleEl.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      if (submitEl) submitEl.textContent = 'افزودن برچسب';
+      if (cancelEl) cancelEl.hidden = true;
+    }
+    document.querySelectorAll('[data-category-edit]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-id');
+        form.action = '/plans/categories/' + id + '/edit';
+        if (nameEl) nameEl.value = btn.getAttribute('data-name') || '';
+        if (sortEl) sortEl.value = btn.getAttribute('data-sort') || '0';
+        if (descEl) descEl.value = btn.getAttribute('data-description') || '';
+        if (audEl) {
+          const aud = btn.getAttribute('data-audience') || 'users';
+          audEl.value = aud;
+        }
+        if (styleEl) {
+          const st = btn.getAttribute('data-button-style');
+          styleEl.value = (st === null || st === undefined) ? 'inherit' : st;
+          styleEl.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        if (submitEl) submitEl.textContent = 'ذخیره تغییرات';
+        if (cancelEl) cancelEl.hidden = false;
+        nameEl && nameEl.focus();
+      });
+    });
+    if (cancelEl) cancelEl.addEventListener('click', resetCreate);
+  })();
+
+  // —— Service addon form: create / edit + amount step by kind ——
+  (function(){
+    const form = document.getElementById('service-addon-form');
+    if (!form) return;
+    const createAction = form.getAttribute('data-create-action') || '/plans/addons';
+    const nameEl = document.getElementById('service-addon-name');
+    const kindEl = document.getElementById('service-addon-kind');
+    const amountEl = document.getElementById('service-addon-amount');
+    const priceEl = document.getElementById('service-addon-price');
+    const sortEl = document.getElementById('service-addon-sort');
+    const descEl = document.getElementById('service-addon-desc');
+    const submitEl = document.getElementById('service-addon-submit');
+    const cancelEl = document.getElementById('service-addon-cancel-edit');
+    const hintEl = document.getElementById('service-addon-amount-hint');
+    function syncAmountStep(){
+      if (!amountEl || !kindEl) return;
+      const isDays = kindEl.value === 'duration';
+      amountEl.step = isDays ? '1' : '0.1';
+      amountEl.min = isDays ? '1' : '0.1';
+      if (hintEl) {
+        hintEl.textContent = isDays
+          ? 'تعداد روز — فقط عدد صحیح'
+          : 'حجم به گیگ — اعشار مجاز است';
+      }
+    }
+    function resetCreate(){
+      form.action = createAction;
+      if (nameEl) nameEl.value = '';
+      if (kindEl) kindEl.value = 'volume';
+      if (amountEl) amountEl.value = '';
+      if (priceEl) priceEl.value = '';
+      if (sortEl) sortEl.value = '0';
+      if (descEl) descEl.value = '';
+      if (submitEl) submitEl.textContent = 'افزودن بسته';
+      if (cancelEl) cancelEl.hidden = true;
+      syncAmountStep();
+    }
+    if (kindEl) kindEl.addEventListener('change', syncAmountStep);
+    syncAmountStep();
+    document.querySelectorAll('[data-addon-edit]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-id');
+        form.action = '/plans/addons/' + id + '/edit';
+        if (nameEl) nameEl.value = btn.getAttribute('data-name') || '';
+        if (kindEl) kindEl.value = btn.getAttribute('data-kind') || 'volume';
+        if (amountEl) amountEl.value = btn.getAttribute('data-amount') || '';
+        if (priceEl) priceEl.value = btn.getAttribute('data-price') || '';
+        if (sortEl) sortEl.value = btn.getAttribute('data-sort') || '0';
+        if (descEl) descEl.value = btn.getAttribute('data-description') || '';
+        if (submitEl) submitEl.textContent = 'ذخیره تغییرات';
+        if (cancelEl) cancelEl.hidden = false;
+        syncAmountStep();
+        nameEl && nameEl.focus();
+      });
+    });
+    if (cancelEl) cancelEl.addEventListener('click', resetCreate);
+  })();
 
   const hash = location.hash || '';
   if (

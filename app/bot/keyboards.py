@@ -278,7 +278,7 @@ def main_menu(
             )
         )
     elif show_reseller_creds:
-        # Main bot: credentials / deep-link only — no panel ops here
+        # Main bot: credentials / deep-link (capacity renew is on reply KB)
         full_width.append(
             _ikb(
                 _t(ui, "btn_reseller_creds"),
@@ -579,6 +579,8 @@ from app.bot.reply_keyboards import (  # noqa: E402
     REPLY_ACTION_ADM_PLANS_AUD_USERS,
     REPLY_ACTION_ADM_PLANS_AUD_RESELLERS,
     REPLY_ACTION_ADM_PLANS_ADD,
+    REPLY_ACTION_ADM_PLANS_CATEGORIES,
+    REPLY_ACTION_ADM_PLANS_ADDONS,
     REPLY_ACTION_ADM_PLANS_KIND_USERS_FIXED,
     REPLY_ACTION_ADM_PLANS_KIND_USERS_CUSTOM,
     REPLY_ACTION_ADM_PLANS_KIND_USERS_TRIAL,
@@ -587,12 +589,15 @@ from app.bot.reply_keyboards import (  # noqa: E402
     REPLY_ACTION_ADM_PLANS_KIND_RES_PAYG,
     REPLY_ACTION_ADM_PLANS_KIND_RES_ADDON_VOL,
     REPLY_ACTION_ADM_PLANS_KIND_RES_ADDON_USERS,
+    REPLY_ACTION_RES_PLAN_CATEGORIES,
+    REPLY_ACTION_RES_PLAN_ADDONS,
     _reseller_plans_submenu_entries,
     _reseller_settings_submenu_entries,
     _wallet_submenu_entries,
     _support_submenu_entries,
     _loyalty_submenu_entries,
     _admin_loyalty_submenu_entries,
+    _reseller_capacity_entries,
     _reseller_submenu_entries,
     reseller_hub_main_keyboard,
     _pay_method_entries,
@@ -627,6 +632,8 @@ from app.bot.reply_keyboards import (  # noqa: E402
     reply_action_map,
     _shop_submenu_entries,
     shop_reply_keyboard,
+    reseller_apply_reply_keyboard,
+    submenu_chrome_reply_keyboard,
     _service_action_entries,
     service_actions_reply_keyboard,
     _review_submenu_entries,
@@ -810,10 +817,40 @@ def shop_kind_keyboard(
     trial_on: bool = False,
     custom_on: bool = False,
     wholesale_on: bool = False,
+    categories: list | None = None,
+    include_uncategorized: bool = False,
 ) -> InlineKeyboardMarkup:
-    """Step 1 of user shop — mirrors web modal user kinds."""
+    """Step 1 of user shop — categories replace «ثابت» when configured.
+
+    Legacy shops with no linked categories still get the «ثابت» button.
+    Trial / custom / wholesale remain sibling entries when enabled.
+    """
+    from app.services.button_styles import resolve_category_button_style
+
     rows: list[list[InlineKeyboardButton]] = []
-    if fixed_on:
+    cats = list(categories or [])
+    if fixed_on and cats:
+        for cat in cats:
+            rows.append(
+                [
+                    _ikb(
+                        f"📁 {getattr(cat, 'name', '') or 'دسته'}",
+                        callback_data=f"shop:cat:{int(cat.id)}",
+                        style=resolve_category_button_style(ui, cat),
+                    )
+                ]
+            )
+        if include_uncategorized:
+            rows.append(
+                [
+                    _ikb(
+                        "📂 سایر",
+                        callback_data="shop:cat:none",
+                        style=_style(ui, "shop_kind_fixed", fallback="primary"),
+                    )
+                ]
+            )
+    elif fixed_on:
         rows.append(
             [
                 _ikb(
@@ -894,14 +931,14 @@ def admin_plan_kind_keyboard(
                 _ikb(
                     "📦 بسته حجم",
                     callback_data="adm:plans:kind:resellers:addon_volume",
-                    style=_style(ui, "plan_res_fixed", fallback="primary"),
+                    style=_style(ui, "plan_res_addon_vol", fallback="primary"),
                 )
             ],
             [
                 _ikb(
                     "👤 بسته کاربر",
                     callback_data="adm:plans:kind:resellers:addon_users",
-                    style=_style(ui, "plan_res_fixed", fallback="primary"),
+                    style=_style(ui, "plan_res_addon_users", fallback="primary"),
                 )
             ],
             [back],
@@ -951,6 +988,7 @@ def plans_keyboard(
     wholesale_enabled: bool = False,
     back_callback: str = "shop:list",
     kind: str | None = None,
+    category_names: dict[int, str] | None = None,
 ) -> InlineKeyboardMarkup:
     """Plan name rows — per-plan color override, else plan-kind catalog color."""
     from app.services.button_styles import plan_kind_style_id
@@ -960,16 +998,24 @@ def plans_keyboard(
     kind_style = _style(
         ui, plan_kind_style_id(fallback_kind) or "shop_kind_fixed", fallback="primary"
     )
-    rows = [
-        [
-            _ikb(
-                f"{'🎁' if p.is_trial else '💎'} {p.name} — {p.price:,} ت".replace(",", "٬"),
-                callback_data=f"shop:plan:{p.id}",
-                style=_plan_row_style(ui, p, kind=kind or fallback_kind),
-            )
-        ]
-        for p in plans
-    ]
+    cat_names = category_names or {}
+    rows = []
+    for p in plans:
+        cat = ""
+        cid = getattr(p, "category_id", None)
+        if cid is not None and int(cid) in cat_names:
+            cat = f"[{cat_names[int(cid)]}] "
+        rows.append(
+            [
+                _ikb(
+                    f"{'🎁' if p.is_trial else '💎'} {cat}{p.name} — {p.price:,} ت".replace(
+                        ",", "٬"
+                    ),
+                    callback_data=f"shop:plan:{p.id}",
+                    style=_plan_row_style(ui, p, kind=kind or fallback_kind),
+                )
+            ]
+        )
     if not rows:
         rows = [
             [
@@ -1295,6 +1341,7 @@ def services_keyboard(services: list, ui: dict | None = None) -> InlineKeyboardM
 
 REPLY_ACTION_SVC_LINK = "svc_link"
 REPLY_ACTION_SVC_RENEW = "svc_renew"
+REPLY_ACTION_SVC_ADDON = "svc_addon"
 REPLY_ACTION_SVC_REFRESH = "svc_refresh"
 REPLY_ACTION_SVC_DELETE = "svc_delete"
 
@@ -2196,12 +2243,12 @@ def order_review(order_id: int, ui: dict | None = None) -> InlineKeyboardMarkup:
 
 
 def payment_review(payment_id: int, ui: dict | None = None) -> InlineKeyboardMarkup:
-    """Message-scoped approve/reject (notifications). No nav chrome."""
+    """Pending payment: approve (ok) + reject. No nav chrome."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 _ikb(
-                    "🟢✅ تأیید دستی",
+                    "🟢✅ تأیید",
                     callback_data=f"payrev:ok:{payment_id}",
                     style=_style(ui, "confirm", fallback="success"),
                 ),
@@ -2213,6 +2260,50 @@ def payment_review(payment_id: int, ui: dict | None = None) -> InlineKeyboardMar
             ]
         ]
     )
+
+
+def payment_resume(payment_id: int, ui: dict | None = None) -> InlineKeyboardMarkup:
+    """APPROVED but fulfill/credit incomplete — resume only (never reject)."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                _ikb(
+                    "♻️ ادامه تحویل",
+                    callback_data=f"payrev:go:{payment_id}",
+                    style=_style(ui, "confirm", fallback="success"),
+                ),
+            ]
+        ]
+    )
+
+
+def payment_resend(payment_id: int, ui: dict | None = None) -> InlineKeyboardMarkup:
+    """Service ready; Telegram send failed — resend message only."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                _ikb(
+                    "📤 ارسال مجدد پیام",
+                    callback_data=f"payrev:send:{payment_id}",
+                    style=_style(ui, "confirm", fallback="success"),
+                ),
+            ]
+        ]
+    )
+
+
+def payment_action_markup(
+    payment_id: int,
+    *,
+    action: str,
+    ui: dict | None = None,
+) -> InlineKeyboardMarkup:
+    """Build Phase 1 markup for ``approve`` / ``resume`` / ``resend``."""
+    if action == "resume":
+        return payment_resume(payment_id, ui)
+    if action == "resend":
+        return payment_resend(payment_id, ui)
+    return payment_review(payment_id, ui)
 
 
 def reseller_app_review(

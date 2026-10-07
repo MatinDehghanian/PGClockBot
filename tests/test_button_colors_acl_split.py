@@ -98,7 +98,41 @@ class PlanKindInheritanceTests(unittest.TestCase):
         self.assertEqual(plan_kind_style_id("wholesale"), "shop_kind_wholesale")
         self.assertEqual(plan_kind_style_id("payg"), "plan_res_payg")
         self.assertEqual(plan_kind_style_id("res_fixed"), "plan_res_fixed")
+        self.assertEqual(plan_kind_style_id("addon_volume"), "plan_res_addon_vol")
+        self.assertEqual(plan_kind_style_id("addon_users"), "plan_res_addon_users")
+        self.assertEqual(
+            plan_kind_style_id("resellers:addon_volume"), "plan_res_addon_vol"
+        )
         self.assertIsNone(plan_kind_style_id("nope"))
+
+    def test_recent_reply_actions_in_catalog(self):
+        """New reply hub buttons must appear in the colors tab (correct groups)."""
+        from app.services.button_styles import BUTTON_STYLE_CATALOG, STYLE_ALIASES
+
+        by_id = {i["id"]: i for i in BUTTON_STYLE_CATALOG}
+        expected = {
+            "svc_addon": "زیرمنوها",
+            "svc_delete": "زیرمنوها",
+            "topup_psp": "پرداخت",
+            "adm_reports": "منوی ادمین",
+            "adm_plans_categories": "منوی ادمین",
+            "adm_plans_addons": "منوی ادمین",
+            "plan_res_addon_vol": "پلن نمایندگی",
+            "plan_res_addon_users": "پلن نمایندگی",
+            "res_add_rep": "منوی نماینده",
+            "res_reports": "منوی نماینده",
+            "res_plan_categories": "منوی نماینده",
+            "res_plan_addons": "منوی نماینده",
+            "res_addon_packs": "منوی نماینده",
+        }
+        for bid, group in expected.items():
+            self.assertIn(bid, by_id, bid)
+            self.assertEqual(by_id[bid]["group"], group, bid)
+        self.assertEqual(STYLE_ALIASES.get("adm_plans_kind_res_addon_vol"), "plan_res_addon_vol")
+        self.assertEqual(
+            STYLE_ALIASES.get("adm_plans_kind_res_addon_users"), "plan_res_addon_users"
+        )
+        self.assertEqual(by_id["svc_delete"]["default"], "danger")
 
     def test_shop_plans_keyboard_inherits_kind_color(self):
         from app.bot.keyboards import plans_keyboard, wholesale_plans_keyboard

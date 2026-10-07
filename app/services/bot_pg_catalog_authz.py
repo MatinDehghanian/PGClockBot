@@ -34,8 +34,6 @@ from app.services.bot_principal_identity import (
     resolve_bot_pg_family_identity,
 )
 from app.services.plans_catalog import (
-    _admin_pg_unrestricted,
-    _allowed_id_set,
     filter_groups_for_staff,
     filter_templates_for_staff,
     groups_allowed_for_staff,
@@ -180,28 +178,22 @@ def sanitize_pg_catalog_write_payload(payload: Mapping[str, Any] | None) -> dict
 
 
 def catalog_template_allowed(staff: Mapping[str, Any] | None, template_id: int | None) -> bool:
-    """Existing template allow-list, fail-closed on unresolved list for non-Owner."""
-    if not template_allowed_for_staff(staff, template_id):
-        return False
-    if _admin_pg_unrestricted(staff):
-        return True
-    allowed = _allowed_id_set((staff or {}).get("pg_access", {}).get("allowed_template_ids"))
-    if allowed is None:
-        return False
-    return True
+    """Same object check as web ``template_allowed_for_staff``.
+
+    Open allow-list (None) on a credentialed shop/staff keeps own-client IDs;
+    do not fail closed again after that helper already approved.
+    """
+    return bool(template_allowed_for_staff(staff, template_id))
 
 
 def catalog_groups_allowed(staff: Mapping[str, Any] | None, group_ids: list[int] | None) -> bool:
-    """Existing group allow-list, fail-closed on unresolved list for non-Owner."""
+    """Same object check as web ``groups_allowed_for_staff``.
+
+    Fixes bot picker: list showed groups (trusted open allow-list) but select
+    still denied via a redundant ``allowed is None → False`` gate.
+    """
     ids = [int(g) for g in (group_ids or []) if int(g) > 0]
-    if not groups_allowed_for_staff(staff, ids):
-        return False
-    if _admin_pg_unrestricted(staff):
-        return True
-    allowed = _allowed_id_set((staff or {}).get("pg_access", {}).get("allowed_group_ids"))
-    if allowed is None:
-        return False
-    return True
+    return bool(groups_allowed_for_staff(staff, ids))
 
 
 def _prepare_staff(resolution: BotPrincipalResolution) -> dict[str, Any] | None:
@@ -423,18 +415,22 @@ async def list_scoped_pg_catalog(
     if use_kind not in {"templates", "groups"}:
         return []
     if use_kind == "templates":
-        lister = getattr(gate.pg_client, "get_user_templates", None) or getattr(
-            gate.pg_client, "get_user_templates_simple", None
-        )
+        primary = getattr(gate.pg_client, "get_user_templates", None)
+        fallback = getattr(gate.pg_client, "get_user_templates_simple", None)
     else:
-        lister = getattr(gate.pg_client, "get_groups", None) or getattr(
-            gate.pg_client, "get_groups_simple", None
-        )
-    if lister is None:
+        primary = getattr(gate.pg_client, "get_groups", None)
+        fallback = getattr(gate.pg_client, "get_groups_simple", None)
+    if primary is None and fallback is None:
         return []
-    raw = await lister()
+    raw = await primary() if primary is not None else await fallback()
     items = _unwrap_list(raw, use_kind)
-    # Non-Owner unresolved allow-list → empty (never treat as global).
+    # Match web panel: empty full list → try simple endpoint.
+    if not items and primary is not None and fallback is not None and fallback is not primary:
+        raw = await fallback()
+        items = _unwrap_list(raw, use_kind)
+    # Same trust rule as web ``filter_*_for_staff`` default (own-client keep;
+    # no credentials → fail closed). Never hardcode False — that emptied
+    # reseller bot lists when PasarGuard role has no explicit allow-list.
     if use_kind == "templates":
-        return filter_templates_for_staff(items, gate.staff, trust_client_scope=False)
-    return filter_groups_for_staff(items, gate.staff, trust_client_scope=False)
+        return filter_templates_for_staff(items, gate.staff)
+    return filter_groups_for_staff(items, gate.staff)

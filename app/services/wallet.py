@@ -182,12 +182,14 @@ async def credit_wallet(
                 update(BotUser)
                 .where(BotUser.id == uid)
                 .values(wallet_balance=BotUser.wallet_balance + int(amount))
+                .returning(BotUser.wallet_balance)
                 .execution_options(synchronize_session=False)
             )
-        if result.rowcount != 1:
+        balance_after = result.scalar_one_or_none()
+        if balance_after is None:
             raise ValueError("کاربر یافت نشد")
-        await session.refresh(user)
-        balance_after = int(user.wallet_balance or 0)
+        balance_after = int(balance_after)
+        user.wallet_balance = balance_after
     else:
         row = await _get_or_create_shop_wallet(
             session, user_id=uid, reseller_id=sid
@@ -201,12 +203,14 @@ async def credit_wallet(
                     ShopWallet.reseller_id == sid,
                 )
                 .values(balance=ShopWallet.balance + int(amount))
+                .returning(ShopWallet.balance)
                 .execution_options(synchronize_session=False)
             )
-        if result.rowcount != 1:
+        balance_after = result.scalar_one_or_none()
+        if balance_after is None:
             raise ValueError("کیف فروشگاه یافت نشد")
-        await session.refresh(row)
-        balance_after = int(row.balance or 0)
+        balance_after = int(balance_after)
+        row.balance = balance_after
 
     session.add(
         WalletTransaction(
@@ -263,12 +267,14 @@ async def debit_wallet(
                     BotUser.wallet_balance >= int(amount),
                 )
                 .values(wallet_balance=BotUser.wallet_balance - int(amount))
+                .returning(BotUser.wallet_balance)
                 .execution_options(synchronize_session=False)
             )
-        if result.rowcount != 1:
+        balance_after = result.scalar_one_or_none()
+        if balance_after is None:
             raise ValueError("موجودی کافی نیست")
-        await session.refresh(user)
-        balance_after = int(user.wallet_balance or 0)
+        balance_after = int(balance_after)
+        user.wallet_balance = balance_after
     else:
         with session.no_autoflush:
             result = await session.execute(
@@ -279,19 +285,13 @@ async def debit_wallet(
                     ShopWallet.balance >= int(amount),
                 )
                 .values(balance=ShopWallet.balance - int(amount))
+                .returning(ShopWallet.balance)
                 .execution_options(synchronize_session=False)
             )
-        if result.rowcount != 1:
+        balance_after = result.scalar_one_or_none()
+        if balance_after is None:
             raise ValueError("موجودی کافی نیست")
-        bal = (
-            await session.execute(
-                select(ShopWallet.balance).where(
-                    ShopWallet.user_id == uid,
-                    ShopWallet.reseller_id == sid,
-                )
-            )
-        ).scalar_one_or_none()
-        balance_after = int(bal or 0)
+        balance_after = int(balance_after)
 
     session.add(
         WalletTransaction(

@@ -169,8 +169,29 @@ def main() -> None:
 
                 asyncio.create_task(_pg_warmup())
 
-                if settings.webhook_url.strip():
-                    url = settings.webhook_url.rstrip("/") + settings.webhook_path
+                from app.services.setup_wizard import (
+                    normalize_webhook_base_url,
+                    telegram_webhook_endpoint,
+                )
+                from urllib.parse import urlparse
+
+                wh_base, wh_path, wh_full = telegram_webhook_endpoint(
+                    settings.webhook_url, settings.webhook_path
+                )
+                raw_base = normalize_webhook_base_url(settings.webhook_url)
+                if raw_base:
+                    raw_path = urlparse(raw_base).path
+                    if raw_path not in {"", "/"}:
+                        logger.warning(
+                            "WEBHOOK_URL had a path component %r; using origin %s with path %s",
+                            raw_path,
+                            wh_base,
+                            wh_path,
+                        )
+
+                use_webhook = bool(wh_base)
+                webhook_ok = False
+                if use_webhook:
                     secret = (settings.webhook_secret_token or "").strip()
                     if not secret:
                         from app.services.webhook_secret import ensure_webhook_secret
@@ -178,18 +199,29 @@ def main() -> None:
                         secret = ensure_webhook_secret()
                     try:
                         await bot.set_webhook(
-                            url,
+                            wh_full,
                             drop_pending_updates=True,
                             secret_token=secret,
                         )
-                        logger.info("Webhook set: %s (secret token enabled)", url)
+                        webhook_ok = True
+                        logger.info("Webhook set: %s (secret token enabled)", wh_full)
                     except Exception:
-                        logger.exception("set_webhook failed")
-                else:
-                    try:
-                        await bot.delete_webhook(drop_pending_updates=True)
-                    except Exception:
-                        logger.exception("delete_webhook failed")
+                        logger.exception(
+                            "set_webhook failed for %s — falling back to long-polling "
+                            "(check WEBHOOK_URL is https origin-only and reachable)",
+                            wh_full,
+                        )
+                        try:
+                            await bot.delete_webhook(drop_pending_updates=True)
+                        except Exception:
+                            logger.exception("delete_webhook after set_webhook failure failed")
+
+                if not webhook_ok:
+                    if not use_webhook:
+                        try:
+                            await bot.delete_webhook(drop_pending_updates=True)
+                        except Exception:
+                            logger.exception("delete_webhook failed")
 
                     async def _poll():
                         logger.info("Starting long-polling…")
@@ -250,14 +282,19 @@ def main() -> None:
 
     api = create_api_app(lifespan=lifespan)
 
-    if bot is not None and dp is not None and settings.webhook_url.strip():
+    from app.services.setup_wizard import telegram_webhook_endpoint
+
+    _wh_base, _wh_path, _wh_full = telegram_webhook_endpoint(
+        settings.webhook_url, settings.webhook_path
+    )
+    if bot is not None and dp is not None and _wh_base:
         from fastapi.responses import JSONResponse
 
         from app.services.webhook_secret import ensure_webhook_secret
 
         webhook_secret = (settings.webhook_secret_token or "").strip() or ensure_webhook_secret()
 
-        @api.post(settings.webhook_path)
+        @api.post(_wh_path)
         async def telegram_webhook(request: Request):
             import hashlib
             import secrets as _secrets
@@ -269,6 +306,10 @@ def main() -> None:
             expected = hashlib.sha256(webhook_secret.encode("utf-8")).digest()
             got = hashlib.sha256(header.encode("utf-8")).digest()
             if not header or not _secrets.compare_digest(got, expected):
+                logger.warning(
+                    "Telegram webhook rejected (missing/invalid secret token) — "
+                    "if behind nginx, enable underscores_in_headers"
+                )
                 return JSONResponse({"ok": False}, status_code=403)
             if not content_length_ok(request.headers.get("content-length"), WEBHOOK_MAX_BODY_BYTES):
                 return JSONResponse({"ok": False}, status_code=413)

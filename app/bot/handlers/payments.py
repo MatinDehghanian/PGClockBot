@@ -244,71 +244,86 @@ async def stars_successful_payment(message: Message, session: AsyncSession, db_u
         pass
 
 
-@router.callback_query(F.data.startswith("payrev:ok:"))
-async def pay_approve(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+async def _payrev_load(
+    callback: CallbackQuery, session: AsyncSession, db_user: BotUser
+) -> Payment | None:
     payment_id = int(callback.data.split(":")[-1])
     payment = await session.get(Payment, payment_id)
     if not payment:
         await callback.answer("یافت نشد", show_alert=True)
-        return
+        return None
     if not await reseller_can_review_payment(session, db_user, payment):
         await callback.answer("دسترسی ندارید", show_alert=True)
+        return None
+    return payment
+
+
+async def _payrev_finish(callback: CallbackQuery, result) -> None:
+    await callback.answer(result.alert_fa, show_alert=True)
+    if not result.ok or not result.message_suffix or not callback.message:
         return
     try:
-        order = await approve_payment(session, payment, db_user.telegram_id)
-    except Exception as e:
-        await callback.answer(f"خطا: {user_safe_error(e)}", show_alert=True)
-        return
-    await callback.answer("تأیید شد ✅")
-    if callback.message:
-        try:
-            if callback.message.photo:
-                await callback.message.edit_caption(
-                    caption=(callback.message.caption or "") + "\n\n✅ تأیید دستی شد"
-                )
-            else:
-                await callback.message.edit_text(
-                    (callback.message.text or "") + "\n\n✅ تأیید دستی شد"
-                )
-        except Exception:
-            pass
-
-    user = await session.get(BotUser, payment.user_id)
-    if not user:
-        return
-    try:
-        await send_delivery_to_user(callback.bot, user.telegram_id, session, payment, order)
-    except Exception as send_exc:
-        if order is not None:
-            try:
-                from app.services.ux20 import note_delivery_send_failure
-
-                await note_delivery_send_failure(
-                    session, order=order, payment=payment, error=str(send_exc)
-                )
-            except Exception:
-                pass
-        return
-    try:
-        from app.services.notifications import notify_new_subscription, notify_wallet_topup_ok
-
-        if payment.is_wallet_topup:
-            await notify_wallet_topup_ok(callback.bot, session, payment, user.telegram_id)
-        elif order:
-            from app.db.models import Plan
-
-            plan = await session.get(Plan, order.plan_id) if order.plan_id else None
-            await notify_new_subscription(
-                callback.bot,
-                session,
-                order=order,
-                user_tg_id=user.telegram_id,
-                user_name=user.full_name or user.username,
-                plan_name=plan.name if plan else None,
-                needs_approval=False,
+        if callback.message.photo:
+            await callback.message.edit_caption(
+                caption=(callback.message.caption or "") + result.message_suffix
+            )
+        else:
+            await callback.message.edit_text(
+                (callback.message.text or "") + result.message_suffix
             )
     except Exception:
         pass
+
+
+@router.callback_query(F.data.startswith("payrev:ok:"))
+async def pay_approve(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    """Legacy + pending approve. Routes by diagnosis for old inline buttons."""
+    payment = await _payrev_load(callback, session, db_user)
+    if not payment:
+        return
+    from app.services.payment_review_actions import execute_payment_legacy_ok
+
+    result = await execute_payment_legacy_ok(
+        session,
+        payment,
+        reviewer_tg=int(db_user.telegram_id),
+        bot=callback.bot,
+    )
+    await _payrev_finish(callback, result)
+
+
+@router.callback_query(F.data.startswith("payrev:go:"))
+async def pay_resume(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    """Phase 1: resume incomplete APPROVED fulfill/credit only."""
+    payment = await _payrev_load(callback, session, db_user)
+    if not payment:
+        return
+    from app.services.payment_review_actions import execute_payment_resume
+
+    result = await execute_payment_resume(
+        session,
+        payment,
+        reviewer_tg=int(db_user.telegram_id),
+        bot=callback.bot,
+    )
+    await _payrev_finish(callback, result)
+
+
+@router.callback_query(F.data.startswith("payrev:send:"))
+async def pay_resend(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    """Phase 1: Telegram re-send only (no mint / no wallet credit)."""
+    payment = await _payrev_load(callback, session, db_user)
+    if not payment:
+        return
+    from app.services.payment_review_actions import execute_payment_resend
+
+    result = await execute_payment_resend(
+        session,
+        payment,
+        reviewer_tg=int(db_user.telegram_id),
+        bot=callback.bot,
+    )
+    await _payrev_finish(callback, result)
 
 
 @router.callback_query(F.data.startswith("payrev:no:"))

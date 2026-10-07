@@ -35,7 +35,8 @@ from app.db.session import SessionLocal
 from app.services.orders import (
     approve_payment,
     cancel_order,
-    deliver_order,
+    fulfill_paid_order,
+    is_mutation_order_note,
     manual_fulfill_unpaid_order,
     reject_order,
     reject_payment,
@@ -121,6 +122,59 @@ templates.env.globals["order_status_fa"] = order_status_fa
 templates.env.globals["ticket_status_fa"] = ticket_status_fa
 templates.env.globals["format_bytes"] = format_bytes
 templates.env.globals["format_bytes_ratio"] = format_bytes_ratio
+
+
+def render_panel_status(
+    request: Request,
+    *,
+    code: int,
+    title: str,
+    message: str,
+    ref: str | None = None,
+    primary_href: str | None = "/home",
+    primary_label: str = "بازگشت به داشبورد",
+    secondary_href: str | None = "/logout",
+    secondary_label: str = "خروج",
+    guide_heading: str | None = None,
+    guide_steps: list[dict] | None = None,
+    code_block: str | None = None,
+    guide_note: str | None = None,
+    footer: str | None = None,
+):
+    """Shared branded status page (404 / 403 / 500 / setup gate)."""
+    from app.version import __version__ as _ver
+
+    try:
+        from app.services.pwa import panel_display_name
+
+        pname = panel_display_name()
+    except Exception:
+        pname = "MrClockBot"
+    return templates.TemplateResponse(
+        request,
+        "panel_status.html",
+        {
+            "code": int(code),
+            "title": title,
+            "message": message,
+            "ref": ref,
+            "primary_href": primary_href or "",
+            "primary_label": primary_label,
+            "secondary_href": secondary_href or "",
+            "secondary_label": secondary_label,
+            "guide_heading": guide_heading or "",
+            "guide_steps": guide_steps or [],
+            "code_block": code_block or "",
+            "guide_note": guide_note or "",
+            "footer": footer
+            or "اگر مشکل ادامه داشت، از حساب خارج شوید و دوباره وارد شوید.",
+            "app_version": _ver,
+            "pwa_name": pname,
+        },
+        status_code=int(code),
+    )
+
+
 def _load_guide_topics() -> dict:
     """Populate Jinja globals so macros see help topics without ``with context``."""
     try:
@@ -791,23 +845,49 @@ def create_api_app(lifespan=None) -> FastAPI:
                             path="/",
                         )
                 return response
-            return HTMLResponse(
-                "<!DOCTYPE html><html lang='en'><head><meta charset='utf-8'/>"
-                "<meta name='viewport' content='width=device-width,initial-scale=1'/>"
-                "<title>Setup link required</title></head><body style='font-family:system-ui,sans-serif;"
-                "max-width:42rem;margin:3rem auto;padding:0 1rem;line-height:1.6;color:#18181b'>"
-                "<h1>First-run setup</h1>"
-                "<p>For security, internet access to the setup wizard requires the "
-                "<b>one-time Setup URL</b> from the install output "
-                "(valid up to 15 minutes; disabled after setup finishes).</p>"
-                "<p><b>On the server</b>, print it with:</p>"
-                "<p><code style='background:#f4f4f5;padding:6px 10px;border-radius:4px;display:block'>"
-                "bash pgclock.sh status</code></p>"
-                "<p style='font-size:14px;color:#71717a'>"
-                "Loopback (<code>127.0.0.1</code> / <code>::1</code>) works without the link. "
-                "Remote access needs the URL that includes <code>?gate=…</code>."
-                "</p></body></html>",
-                status_code=403,
+            return render_panel_status(
+                request,
+                code=403,
+                title="راه‌اندازی اولیه",
+                message=(
+                    "برای امنیت، دسترسی اینترنتی به ویزارد راه‌اندازی فقط با "
+                    "لینک یک‌بارمصرف نصب ممکن است (حدود ۱۵ دقیقه اعتبار؛ "
+                    "بعد از اتمام راه‌اندازی غیرفعال می‌شود)."
+                ),
+                primary_href="",
+                secondary_href="",
+                guide_heading="چطور توکن / لینک راه‌اندازی بگیرم؟",
+                guide_steps=[
+                    {
+                        "title": "۱. به سرور وصل شوید",
+                        "body": "با SSH به همان سروری که PGClockBot روی آن نصب است وارد شوید.",
+                    },
+                    {
+                        "title": "۲. وضعیت را چاپ کنید",
+                        "body": "این دستور لینک یک‌بارمصرف راه‌اندازی را نشان می‌دهد:",
+                    },
+                    {
+                        "title": "۳. لینک را در مرورگر باز کنید",
+                        "body": (
+                            "آدرسی که شامل پارامتر "
+                            "<code dir=\"ltr\">?gate=…</code> "
+                            "است را کپی کنید. همان مقدار "
+                            "<code dir=\"ltr\">gate</code> "
+                            "توکن شماست — آن را در نوار آدرس مرورگر باز کنید."
+                        ),
+                    },
+                ],
+                code_block="bash pgclock.sh status",
+                guide_note=(
+                    "از خود سرور با "
+                    "<code dir=\"ltr\">127.0.0.1</code> "
+                    "یا "
+                    "<code dir=\"ltr\">::1</code> "
+                    "بدون لینک هم باز می‌شود. دسترسی از راه دور حتماً به "
+                    "<code dir=\"ltr\">?gate=…</code> "
+                    "نیاز دارد."
+                ),
+                footer="بعد از اتمام راه‌اندازی، این لینک و توکن دیگر کار نمی‌کنند.",
             )
         return await call_next(request)
 
@@ -826,6 +906,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 def _csrf_reject(message: str, *, token_fail: bool = False):
                     # Panel AJAX clients expect JSON — HTML 403 made res.json() throw
                     # and only showed a generic failure.
+                    # token_fail marks double-submit mismatch (CSRF token rejected).
                     accept = (request.headers.get("accept") or "").lower()
                     ctype = (request.headers.get("content-type") or "").lower()
                     xrw = (request.headers.get("x-requested-with") or "").lower()
@@ -842,8 +923,20 @@ def create_api_app(lifespan=None) -> FastAPI:
                             {"ok": False, "error": message},
                             status_code=403,
                         )
-                    label = "CSRF token rejected" if token_fail else "CSRF rejected"
-                    return HTMLResponse(label, status_code=403)
+                    return render_panel_status(
+                        request,
+                        code=403,
+                        title="درخواست امنیتی رد شد",
+                        message=message,
+                        primary_href="/login",
+                        primary_label="صفحه ورود",
+                        secondary_href="/",
+                        secondary_label="تلاش دوباره",
+                        footer=(
+                            "صفحه را تازه کنید و دوباره ارسال کنید. "
+                            "اگر ادامه داشت، از حساب خارج شوید و دوباره وارد شوید."
+                        ),
+                    )
 
                 origin = request.headers.get("origin")
                 referer = request.headers.get("referer")
@@ -903,7 +996,15 @@ def create_api_app(lifespan=None) -> FastAPI:
         path = request.url.path
         if request.method == "POST" and path in {"/login", "/setup", "/setup/save", "/"}:
             if not content_length_ok(request.headers.get("content-length"), PUBLIC_FORM_MAX_BODY_BYTES):
-                return HTMLResponse("Request too large", status_code=413)
+                return render_panel_status(
+                    request,
+                    code=413,
+                    title="درخواست خیلی بزرگ است",
+                    message="حجم دادهٔ ارسالی از حد مجاز بیشتر است. صفحه را تازه کنید و دوباره تلاش کنید.",
+                    primary_href="/",
+                    primary_label="تلاش دوباره",
+                    secondary_href="",
+                )
         return await call_next(request)
 
     @app.middleware("http")
@@ -1056,30 +1157,16 @@ def create_api_app(lifespan=None) -> FastAPI:
         secondary_href: str = "/logout",
         secondary_label: str = "خروج",
     ):
-        from app.version import __version__ as _ver
-
-        try:
-            from app.services.pwa import panel_display_name
-
-            pname = panel_display_name()
-        except Exception:
-            pname = "MrClockBot"
-        return templates.TemplateResponse(
+        return render_panel_status(
             request,
-            "panel_status.html",
-            {
-                "code": code,
-                "title": title,
-                "message": message,
-                "ref": ref,
-                "primary_href": primary_href,
-                "primary_label": primary_label,
-                "secondary_href": secondary_href,
-                "secondary_label": secondary_label,
-                "app_version": _ver,
-                "pwa_name": pname,
-            },
-            status_code=code,
+            code=code,
+            title=title,
+            message=message,
+            ref=ref,
+            primary_href=primary_href,
+            primary_label=primary_label,
+            secondary_href=secondary_href,
+            secondary_label=secondary_label,
         )
 
     @app.exception_handler(StarletteHTTPException)
@@ -1114,6 +1201,40 @@ def create_api_app(lifespan=None) -> FastAPI:
                 primary_label="صفحه ورود",
                 secondary_href="/logout",
                 secondary_label="خروج",
+            )
+        if exc.status_code == 405:
+            # Usually a GET on a POST-only mutation URL (delete admin/plan).
+            safe_back = "/"
+            ref = (request.headers.get("referer") or "").strip()
+            if ref:
+                try:
+                    from urllib.parse import urlparse
+
+                    host = (request.headers.get("host") or "").split(":")[0].lower()
+                    parsed = urlparse(ref)
+                    ref_host = (parsed.hostname or "").lower()
+                    if parsed.scheme in {"http", "https"} and (
+                        not host or not ref_host or ref_host == host
+                    ):
+                        path = parsed.path or "/"
+                        if path.startswith("/") and not path.startswith("//"):
+                            safe_back = path + (
+                                ("?" + parsed.query) if parsed.query else ""
+                            )
+                except Exception:
+                    safe_back = "/"
+            return _status_page(
+                request,
+                code=405,
+                title="این عملیات از این آدرس ممکن نیست",
+                message=(
+                    "حذف ادمین یا پلن فقط با دکمهٔ حذف داخل پنل انجام می‌شود. "
+                    "به لیست برگردید و دوباره از همان دکمه اقدام کنید."
+                ),
+                primary_href=safe_back if safe_back != "/" else "/home",
+                primary_label="بازگشت",
+                secondary_href="/home",
+                secondary_label="داشبورد",
             )
         # Other HTTP errors → branded status without leaking details
         msg = "درخواست قابل انجام نیست."
@@ -1205,7 +1326,9 @@ def create_api_app(lifespan=None) -> FastAPI:
         get_db=get_db,
     )
     from app.api.bulk_pages import register_bulk_pages
+    from app.api.plan_catalog_extras import register_plan_catalog_extras
 
+    register_plan_catalog_extras(app, require_perm=require_perm, get_db=get_db)
     register_bulk_pages(
         app,
         require_admin=require_admin,
@@ -2420,6 +2543,39 @@ def create_api_app(lifespan=None) -> FastAPI:
             logging.getLogger(__name__).exception("gift codes load failed on /plans")
             gift_codes = []
 
+        plan_categories: list = []
+        plan_category_map: dict = {}
+        reseller_plan_category_map: dict = {}
+        category_linked_plans: dict = {}
+        service_addon_packs: list = []
+        try:
+            from app.services.plan_categories import (
+                category_map_for_plans,
+                category_plans_map,
+                list_categories,
+            )
+            from app.services.service_addons import list_packs
+
+            if is_platform_admin(staff) or rid:
+                plan_categories = await list_categories(session, staff)
+                plan_category_map = await category_map_for_plans(
+                    session, staff, sale_plans
+                )
+                if reseller_plans:
+                    reseller_plan_category_map = await category_map_for_plans(
+                        session, staff, reseller_plans
+                    )
+                category_linked_plans = await category_plans_map(
+                    session, staff, plan_categories
+                )
+                service_addon_packs = await list_packs(session, staff)
+        except Exception:
+            import logging
+
+            logging.getLogger(__name__).exception(
+                "plan categories/addons load failed on /plans"
+            )
+
         return render(
             request,
             "plans.html",
@@ -2440,17 +2596,29 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "feature_perms": feature_perms,
                 "pg_roles": pg_roles,
                 "gift_codes": gift_codes,
+                "plan_categories": plan_categories,
+                "plan_category_map": plan_category_map,
+                "reseller_plan_category_map": reseller_plan_category_map,
+                "category_linked_plans": category_linked_plans,
+                "service_addon_packs": service_addon_packs,
                 "pg_limit_snapshot": limit_snapshot,
                 "pg_limit_cards": limit_snapshot_cards(limit_snapshot),
                 "plan_limit_issues": plan_limit_issues,
                 "trial_limit_issue": trial_limit_issue,
                 "custom_limit_issue": custom_limit_msg,
                 "open_gifts": request.query_params.get("gifts") in {"1", "true", "yes"},
+                "open_categories": request.query_params.get("categories")
+                in {"1", "true", "yes"},
+                "open_addons": request.query_params.get("addons") in {"1", "true", "yes"},
                 "flash_err": request.query_params.get("err"),
                 "flash_ok": request.query_params.get("ok"),
                 "plan_style_options": __import__(
                     "app.services.button_styles", fromlist=["PLAN_BUTTON_STYLE_OPTIONS"]
                 ).PLAN_BUTTON_STYLE_OPTIONS,
+                "category_style_options": __import__(
+                    "app.services.button_styles",
+                    fromlist=["CATEGORY_BUTTON_STYLE_OPTIONS"],
+                ).CATEGORY_BUTTON_STYLE_OPTIONS,
             },
         )
 
@@ -2554,9 +2722,16 @@ def create_api_app(lifespan=None) -> FastAPI:
 
         from app.services.orders import parse_naming_form
         from app.services.button_styles import parse_plan_button_style_form
+        from app.services.plan_categories import resolve_category_for_plan_write
 
         uname_prefix, uname_suffix, uname_pattern = parse_naming_form(form)
         button_style = parse_plan_button_style_form(form)
+        try:
+            category_id = await resolve_category_for_plan_write(
+                session, staff, form.get("category_id")
+            )
+        except (ShopScopeError, ValueError) as e:
+            return RedirectResponse(f"/plans?err={quote(str(e))}", status_code=303)
 
         session.add(
             Plan(
@@ -2570,6 +2745,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 pg_username_suffix=uname_suffix,
                 pg_username_pattern=uname_pattern,
                 button_style=button_style,
+                category_id=category_id,
                 owner_reseller_id=owner_id,
                 description=description or None,
                 is_active=True,
@@ -2893,7 +3069,17 @@ def create_api_app(lifespan=None) -> FastAPI:
             values = {}
         else:
             values = await get_all_settings(session, reseller_id=rid)
-        ctx = await _plans_context(session, request, staff, {"plan": plan, "values": values})
+        from app.services.plan_categories import list_categories
+
+        cats = []
+        if is_platform_admin(staff) or rid:
+            cats = await list_categories(session, staff, active_only=False)
+        ctx = await _plans_context(
+            session,
+            request,
+            staff,
+            {"plan": plan, "values": values, "plan_categories": cats},
+        )
         from app.services.button_styles import PLAN_BUTTON_STYLE_OPTIONS
 
         ctx["plan_style_options"] = PLAN_BUTTON_STYLE_OPTIONS
@@ -2980,12 +3166,26 @@ def create_api_app(lifespan=None) -> FastAPI:
         plan.pg_group_ids = group_csv
         from app.services.orders import parse_naming_form
         from app.services.button_styles import parse_plan_button_style_form
+        from app.services.plan_categories import resolve_category_for_plan_write
+        from app.services.shop_scope import ShopScopeError
 
         uname_prefix, uname_suffix, uname_pattern = parse_naming_form(form)
         plan.pg_username_prefix = uname_prefix
         plan.pg_username_suffix = uname_suffix
         plan.pg_username_pattern = uname_pattern
         plan.button_style = parse_plan_button_style_form(form)
+        try:
+            plan.category_id = await resolve_category_for_plan_write(
+                session,
+                staff,
+                form.get("category_id"),
+                allow_inactive_id=plan.category_id,
+            )
+        except (ShopScopeError, ValueError) as e:
+            return RedirectResponse(
+                f"/plans/{plan_id}/edit?err={quote(str(e))}",
+                status_code=303,
+            )
         await session.commit()
         return RedirectResponse(
             f"/plans?ok={quote('پلن به‌روزرسانی شد')}",
@@ -3054,10 +3254,11 @@ def create_api_app(lifespan=None) -> FastAPI:
                 return _redirect_msg("/finance?tab=orders", err=e.message)
         if order.status == OrderStatus.DELIVERED.value:
             return _redirect_msg("/finance?tab=orders", ok="قبلاً تحویل شده")
-        # Already provisioned (status may have been tampered) — never re-deliver/notify
+        # Already provisioned (status may have been tampered) — never re-deliver/notify.
+        # Mutation orders (renew / reseller_app / svc_addon) keep service_id as the
+        # target to mutate — do not treat them as already-minted deliveries.
         note = (order.note or "").strip()
-        is_renew_or_app = note.startswith("renew:") or note.startswith("reseller_app:")
-        if order.service_id and not is_renew_or_app:
+        if order.service_id and not is_mutation_order_note(note):
             if order.status != OrderStatus.DELIVERED.value:
                 order.status = OrderStatus.DELIVERED.value
                 await session.commit()
@@ -3084,13 +3285,15 @@ def create_api_app(lifespan=None) -> FastAPI:
                 await _notify_order_user(session, payment, delivered or order)
             elif order.status == OrderStatus.PAID.value:
                 had_service = bool(order.service_id)
-                delivered = await deliver_order(session, order)
-                if payment and not had_service:
+                was_mutation = is_mutation_order_note(note)
+                delivered = await fulfill_paid_order(session, order)
+                if payment and (was_mutation or not had_service):
                     await _notify_order_user(session, payment, delivered)
             elif payment and payment.status == PaymentStatus.APPROVED.value and order.status != OrderStatus.DELIVERED.value:
                 had_service = bool(order.service_id)
-                delivered = await deliver_order(session, order)
-                if not had_service:
+                was_mutation = is_mutation_order_note(note)
+                delivered = await fulfill_paid_order(session, order)
+                if was_mutation or not had_service:
                     await _notify_order_user(session, payment, delivered)
             elif order.status in {
                 OrderStatus.PENDING.value,
@@ -3537,6 +3740,10 @@ def create_api_app(lifespan=None) -> FastAPI:
                     user.role = role
                     await session.commit()
                     info = {"telegram_id": user.telegram_id}
+                except Exception as e:
+                    from app.services.users import friendly_user_delete_error
+
+                    return _redirect_msg("/users", err=friendly_user_delete_error(e))
                 if role == Role.ADMIN.value:
                     user = await session.get(BotUser, user_id)
                     if user and user.role != Role.ADMIN.value:

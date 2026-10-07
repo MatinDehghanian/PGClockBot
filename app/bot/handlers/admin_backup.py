@@ -22,6 +22,7 @@ from app.bot.auth import is_platform_admin as _is_admin
 from app.bot.auth import require_bot_owner_handler
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser
+from app.services.redact import user_safe_error
 from app.services.backup import (
     create_backup,
     delete_backup,
@@ -76,8 +77,11 @@ def _hub_text(backups: list[dict]) -> str:
         "💾 <b>بکاپ / ریستور</b>",
         f"نسخه: <code>{local_version()}</code>",
         "",
-        "بکاپ کامل شامل دیتابیس، آپلودها، یوزر وب و (اختیاری) فایل .env است.",
-        "قبل از ریستور، بکاپ ایمنی خودکار ساخته می‌شود.",
+        "بکاپ کامل = دیتابیس کل پلتفرم (همه فروشگاه‌ها) + آپلودها + یوزر وب.",
+        "پیش‌فرض <b>بدون</b> <code>.env</code> است (مثل زمان‌بندی).",
+        "بکاپ با .env فقط بعد از تأیید امنیتی جداگانه — توکن/اسرار داخل فایل می‌رود.",
+        "حتی بدون .env، فایل ورود وب‌پنل در بکاپ هست.",
+        "قبل از ریستور، بکاپ ایمنی خودکار (با .env) ساخته می‌شود.",
         "",
     ]
     if not backups:
@@ -85,7 +89,7 @@ def _hub_text(backups: list[dict]) -> str:
     else:
         lines.append(f"تعداد: <b>{len(backups)}</b> (نمایش ۸ مورد اخیر)")
         for b in backups[:8]:
-            env = " · .env" if b.get("include_env") else ""
+            env = " · <b>شامل .env</b>" if b.get("include_env") else " · بدون .env"
             lines.append(
                 f"• <code>{b['id']}</code> — {b.get('size_human')} — v{b.get('app_version')}{env}"
             )
@@ -109,13 +113,60 @@ async def backup_hub(callback: CallbackQuery, db_user: BotUser, state: FSMContex
         )
 
 
+def _env_confirm_keyboard() -> InlineKeyboardMarkup:
+    return _kb(
+        [
+            [
+                InlineKeyboardButton(
+                    text="⚠️ بله — بکاپ با .env",
+                    callback_data="adm:backup:create:env:yes",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="انصراف",
+                    callback_data="adm:backup",
+                )
+            ],
+        ]
+    )
+
+
+@router.callback_query(F.data == "adm:backup:create:env")
+@require_bot_owner_handler
+async def backup_create_env_ask(callback: CallbackQuery, db_user: BotUser):
+    """Phase 2: with-.env path requires an explicit second confirm."""
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    await callback.answer()
+    text = (
+        "⚠️ <b>تأیید بکاپ با .env</b>\n\n"
+        "فایل <code>.env</code> شامل توکن ربات، رمزها و اسرار سرور است.\n"
+        "اگر این بکاپ به چت/دیسک ناامن برود، اسرار لو می‌روند.\n\n"
+        "ادامه می‌دهید؟"
+    )
+    if callback.message:
+        await safe_edit_text(
+            callback.message, text, reply_markup=_env_confirm_keyboard()
+        )
+
+
 @router.callback_query(F.data.startswith("adm:backup:create"))
 @require_bot_owner_handler
 async def backup_create(callback: CallbackQuery, db_user: BotUser):
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
         return
-    include_env = not callback.data.endswith(":noenv")
+    data = callback.data or ""
+    # Phase 2 defaults: plain create / :noenv → without .env.
+    # With-.env only after explicit :env:yes (confirm step).
+    if data == "adm:backup:create:env":
+        # Handled by backup_create_env_ask (more specific filter); belt-and-suspenders.
+        return await backup_create_env_ask(callback, db_user)
+    if data.endswith(":env") and not data.endswith(":env:yes"):
+        return await backup_create_env_ask(callback, db_user)
+    include_env = data.endswith(":env:yes")
     await callback.answer("در حال ساخت…")
     try:
         result = await asyncio.to_thread(
@@ -126,15 +177,15 @@ async def backup_create(callback: CallbackQuery, db_user: BotUser):
         )
     except Exception as e:
         if callback.message:
-            await callback.message.answer(f"❌ ساخت بکاپ ناموفق:\n{e}")
+            await callback.message.answer(f"❌ ساخت بکاپ ناموفق:\n{user_safe_error(e)}")
         return
     path = Path(result["path"])
     caption = (
         f"✅ بکاپ آماده\n"
         f"<code>{result['filename']}</code>\n"
         f"حجم: {result['size_human']}\n"
-        f"نسخه: {result.get('app_version')}\n"
-        f".env: {'بله' if result.get('include_env') else 'خیر'}"
+        f"نسخه: <code>{result.get('app_version')}</code>\n"
+        f".env: <b>{'شامل .env (اسرار)' if result.get('include_env') else 'بدون .env'}</b>"
     )
     if callback.message:
         try:
@@ -172,8 +223,8 @@ async def backup_item(callback: CallbackQuery, db_user: BotUser):
         f"<code>{b.get('filename') or path.name}</code>\n"
         f"شناسه: <code>{backup_id}</code>\n"
         f"حجم: {b.get('size_human', '—')}\n"
-        f"نسخه: {b.get('app_version', '—')}\n"
-        f".env: {'بله' if b.get('include_env') else 'خیر'}\n"
+        f"نسخه: <code>{b.get('app_version', '—')}</code>\n"
+        f".env: <b>{'شامل .env (توکن‌ها و اسرار)' if b.get('include_env') else 'بدون .env'}</b>\n"
         f"{b.get('note') or ''}"
     )
     if callback.message:
@@ -199,7 +250,9 @@ async def backup_download(callback: CallbackQuery, db_user: BotUser):
                 caption=f"⬇️ {path.name}",
             )
         except Exception as e:
-            await callback.message.answer(f"❌ ارسال ممکن نشد (حجم زیاد؟):\n{e}")
+            await callback.message.answer(
+                f"❌ ارسال ممکن نشد (حجم زیاد؟):\n{user_safe_error(e)}"
+            )
 
 
 @router.callback_query(F.data.startswith("adm:backup:del:"))
@@ -339,7 +392,7 @@ async def backup_upload_file(message: Message, db_user: BotUser, state: FSMConte
         )
     except Exception as e:
         await state.clear()
-        await message.answer(f"❌ آپلود ناموفق:\n{e}")
+        await message.answer(f"❌ آپلود ناموفق:\n{user_safe_error(e)}")
         return
     await state.clear()
     if not result.get("ok"):

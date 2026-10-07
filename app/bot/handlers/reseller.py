@@ -33,6 +33,7 @@ from app.services.resellers import (
 )
 from app.bot.tg_utils import safe_edit_text
 from app.services.users import get_all_settings
+from app.services.redact import user_safe_error
 
 router = Router(name="reseller")
 
@@ -156,7 +157,7 @@ async def res_creds(
         return
     await callback.answer()
     text = await format_reseller_access_card(session, profile)
-    # URL button is allowed (not a menu); nav via reply KB
+    # URL / renew buttons are allowed (not a shop-panel menu); nav via reply KB
     rows: list[list[InlineKeyboardButton]] = []
     if profile.bot_username:
         rows.append(
@@ -167,6 +168,16 @@ async def res_creds(
                 )
             ]
         )
+    try:
+        from app.services.pg_admin_subscription import is_subscription_plan
+
+        plan = getattr(profile, "plan", None)
+        if plan is not None and is_subscription_plan(plan):
+            rows.append(
+                [InlineKeyboardButton(text="🔄 تمدید سرویس", callback_data="res:renew")]
+            )
+    except Exception:
+        pass
     if callback.message:
         await safe_edit_text(
             callback.message,
@@ -518,9 +529,9 @@ async def res_user_message_send(
         await session.commit()
         await message.answer("پیام ارسال شد ✅")
     except ValueError as e:
-        await message.answer(str(e))
+        await message.answer(user_safe_error(e))
     except Exception as e:
-        await message.answer(f"خطا: {e}")
+        await message.answer(f"خطا: {user_safe_error(e)}")
 
 
 @router.callback_query(F.data.startswith("res:userrenew:"))
@@ -556,9 +567,9 @@ async def res_user_quick_renew(
         await session.commit()
         await callback.answer(f"تمدید شد: {label}"[:180], show_alert=True)
     except ValueError as e:
-        await callback.answer(str(e)[:160], show_alert=True)
+        await callback.answer(user_safe_error(e, limit=160), show_alert=True)
     except Exception as e:
-        await callback.answer(f"خطا: {e}"[:160], show_alert=True)
+        await callback.answer(user_safe_error(e, limit=160), show_alert=True)
 
 
 @router.callback_query(F.data.startswith("res:reports"))
@@ -1058,7 +1069,7 @@ async def resapply_buy(
     try:
         app, order = await create_application(session, user=db_user, plan=plan)
     except ValueError as e:
-        await callback.answer(str(e), show_alert=True)
+        await callback.answer(user_safe_error(e), show_alert=True)
         return
 
     await callback.answer()
@@ -1130,12 +1141,19 @@ async def _capacity_context(
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ):
-    owner_id, profile = await _actor(
-        session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
+    from app.services.reseller_access import load_reseller_capacity_actor
+    from app.services.reseller_capacity import load_reseller_plan
+
+    # Capacity (renew / extras / addons) is allowed on the platform bot for the
+    # shop owner — unlike the full shop panel which stays dedicated-bot only.
+    owner_id, profile = await load_reseller_capacity_actor(
+        session,
+        db_user,
+        is_reseller_bot=is_reseller_bot,
+        reseller_owner_id=reseller_owner_id,
     )
     if not owner_id or not profile:
         return None, None, None, None
-    from app.services.reseller_capacity import load_reseller_plan
 
     plan = await load_reseller_plan(session, profile)
     owner = await session.get(BotUser, int(owner_id))
@@ -1226,7 +1244,7 @@ async def res_renew_go(
             session, user=owner, profile=profile, plan=plan
         )
     except ValueError as e:
-        await callback.answer(str(e)[:180], show_alert=True)
+        await callback.answer(user_safe_error(e, limit=180), show_alert=True)
         return
     await callback.answer("تمدید شد")
     if callback.message:
@@ -1332,7 +1350,7 @@ async def res_buy_gb_go(
             session, user=owner, profile=profile, plan=plan, gb=gb
         )
     except ValueError as e:
-        await callback.answer(str(e)[:180], show_alert=True)
+        await callback.answer(user_safe_error(e, limit=180), show_alert=True)
         return
     await callback.answer("خرید شد")
     if callback.message:
@@ -1429,7 +1447,7 @@ async def res_buy_users_go(
             session, user=owner, profile=profile, plan=plan, count=n
         )
     except ValueError as e:
-        await callback.answer(str(e)[:180], show_alert=True)
+        await callback.answer(user_safe_error(e, limit=180), show_alert=True)
         return
     await callback.answer("خرید شد")
     if callback.message:
@@ -1453,10 +1471,16 @@ async def res_addons(
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ):
+    """Unified capacity hub: catalog packs + unit buy-extra when allowed."""
     from app.services.pg_admin_subscription import (
         get_or_create_subscription,
         is_subscription_plan,
         list_addon_plans,
+    )
+    from app.services.reseller_capacity import (
+        plan_allows_buy_extra,
+        plan_extra_gb_price,
+        plan_extra_user_price,
     )
 
     owner_id, profile, plan, owner = await _capacity_context(
@@ -1488,30 +1512,76 @@ async def res_addons(
             show_alert=True,
         )
         return
+
+    rows: list[list[InlineKeyboardButton]] = []
     addons = await list_addon_plans(session)
-    if not addons:
-        await callback.answer("بستهٔ اضافه فعالی تعریف نشده", show_alert=True)
-        return
-    rows = []
     for p in addons:
         kind = str(getattr(p, "plan_kind", "") or "")
         if kind == "addon_volume":
-            label = f"{p.name} — +{int(p.addon_gb or 0)} گیگ — {format_toman(p.price, get_settings().currency)}"
+            label = (
+                f"{p.name} — +{int(p.addon_gb or 0)} گیگ — "
+                f"{format_toman(p.price, get_settings().currency)}"
+            )
         else:
-            label = f"{p.name} — +{int(p.addon_users or 0)} کاربر — {format_toman(p.price, get_settings().currency)}"
+            label = (
+                f"{p.name} — +{int(p.addon_users or 0)} کاربر — "
+                f"{format_toman(p.price, get_settings().currency)}"
+            )
         rows.append(
-            [InlineKeyboardButton(text=label[:64], callback_data=f"res:addon:buy:{p.id}")]
+            [
+                InlineKeyboardButton(
+                    text=label[:64], callback_data=f"res:addon:buy:{p.id}"
+                )
+            ]
         )
+
+    allow_extra = plan_allows_buy_extra(plan)
+    if allow_extra:
+        gb_price = plan_extra_gb_price(plan)
+        user_price = plan_extra_user_price(plan)
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=(
+                        f"📦 حجم واحدی — "
+                        f"{format_toman(gb_price, get_settings().currency)}/گیگ"
+                    ),
+                    callback_data="res:buy_gb",
+                )
+            ]
+        )
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=(
+                        f"👤 کاربر واحدی — "
+                        f"{format_toman(user_price, get_settings().currency)}/کاربر"
+                    ),
+                    callback_data="res:buy_users",
+                )
+            ]
+        )
+
+    if not rows:
+        await callback.answer("بستهٔ اضافه فعالی تعریف نشده", show_alert=True)
+        return
+
     rows.append([InlineKeyboardButton(text="انصراف", callback_data="menu:home")])
+    body = (
+        "بستهٔ آماده از کاتالوگ، یا خرید واحدی (اگر پلن اجازه دهد).\n"
+        "با خرید بستهٔ آماده فقط ظرفیت اضافه می‌شود و تاریخ انقضا عوض نمی‌شود."
+    )
+    if allow_extra and not addons:
+        body = (
+            "هنوز بستهٔ آماده‌ای در کاتالوگ نیست — می‌توانید از خرید واحدی استفاده کنید.\n"
+            f"نرخ حجم: <b>{format_toman(plan_extra_gb_price(plan), get_settings().currency)}</b> / گیگ\n"
+            f"نرخ کاربر: <b>{format_toman(plan_extra_user_price(plan), get_settings().currency)}</b> / کاربر"
+        )
     await callback.answer()
     if callback.message:
         await safe_edit_text(
             callback.message,
-            format_message(
-                "📦 بسته‌های حجم / کاربر",
-                "با خرید بسته، فقط ظرفیت اضافه می‌شود و تاریخ انقضا عوض نمی‌شود.\n"
-                "در تمدید بعدی، مبلغ بر اساس مجموع ظرفیت جدید محاسبه می‌شود.",
-            ),
+            format_message("📦 بسته‌های حجم / کاربر", body),
             reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
         )
 
@@ -1566,7 +1636,7 @@ async def res_addon_buy(
             session, sub=sub, addon_plan=addon, payer=owner, charge_wallet=True
         )
     except ValueError as e:
-        await callback.answer(str(e)[:180], show_alert=True)
+        await callback.answer(user_safe_error(e, limit=180), show_alert=True)
         return
     await callback.answer("خرید شد")
     if callback.message:

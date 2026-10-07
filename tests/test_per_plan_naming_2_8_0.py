@@ -102,10 +102,12 @@ class PlansUiNamingTests(unittest.TestCase):
     def test_deliver_passes_plan(self):
         src = Path("app/services/orders.py").read_text(encoding="utf-8")
         self.assertIn("generate_pg_username(", src)
-        self.assertIn("user_id=order.user_id", src)
+        # ``{id}`` placeholder uses order id (matches UI / message_variables catalog)
+        self.assertIn("user_id=int(order.id)", src)
         self.assertIn("plan=plan", src)
         self.assertIn("reseller_id=order.reseller_id", src)
         self.assertIn("custom_plan_username_prefix", src)
+        self.assertIn("fallback_duration_days=plan_days", src)
 
 
 if __name__ == "__main__":

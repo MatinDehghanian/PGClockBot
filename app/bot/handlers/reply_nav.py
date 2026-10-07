@@ -20,6 +20,7 @@ from app.bot.menu_nav import restore_main_reply, user_has_services
 from app.db.models import BotUser, Order, Role, UserService
 from app.services.formatting import format_message
 from app.services.users import get_all_settings
+from app.services.redact import user_safe_error
 
 router = Router(name="reply_nav")
 
@@ -76,8 +77,14 @@ class ReplyMenuTextFilter(BaseFilter):
                 is_reseller_bot=is_reseller_bot,
                 reseller_owner_id=reseller_owner_id,
             )
+        elif show_creds and not is_reseller_bot:
+            from app.services.resellers import get_reseller_profile
+
+            profile = await get_reseller_profile(session, int(db_user.id))
+            if profile is not None and not profile.is_active:
+                profile = None
         can_add = False
-        if profile is not None:
+        if profile is not None and is_reseller_bot:
             from app.services.representative_unification import (
                 shop_bot_can_manage_representatives,
             )
@@ -241,12 +248,15 @@ async def open_shop_list(
 ) -> None:
     from app.bot.handlers.shop import (
         _record_shop_funnel,
+        _shop_category_menu,
         _shop_kind_flags,
+        _shop_picker_copy,
+        present_shop_kind_picker,
         shop_under_maintenance,
     )
 
-    ui, fixed_on, trial_on, custom_on, wholesale_on, *_rest = await _shop_kind_flags(
-        session, db_user
+    ui, fixed_on, trial_on, custom_on, wholesale_on, _plans, fixed_plans, _trial = (
+        await _shop_kind_flags(session, db_user)
     )
     maint = await shop_under_maintenance(session, ui)
     if maint:
@@ -269,32 +279,29 @@ async def open_shop_list(
         return
     await state.set_state(None)
     await state.update_data(_shop_custom=custom_on, _shop_wholesale=wholesale_on)
-    await nav.show_nav_keyboard(
+    cats, include_other = await _shop_category_menu(session, fixed_plans)
+    body, _cap = _shop_picker_copy(use_categories=bool(cats))
+    # Shop bubble carries inline kinds; lasting reply chrome is attached separately
+    # (never delete chrome — that clears the keyboard / 4-square menu on iOS).
+    if state is not None:
+        await nav.set_nav_level(state, nav.NAV_SHOP, push=push)
+    await present_shop_kind_picker(
         message,
-        session,
-        db_user,
-        nav.NAV_SHOP,
-        text=format_message(
-            "🛒 فروشگاه",
-            "ابتدا <b>نوع پلن</b> را از دکمه‌های زیر پیام انتخاب کنید.",
-        ),
-        state=state,
-        push=push,
-    )
-    await message.answer(
-        "📦 نوع پلن:",
-        reply_markup=kb.shop_kind_keyboard(
-            ui,
-            fixed_on=fixed_on,
-            trial_on=trial_on,
-            custom_on=custom_on,
-            wholesale_on=wholesale_on,
-        ),
+        ui=ui,
+        body=body,
+        fixed_on=fixed_on,
+        trial_on=trial_on,
+        custom_on=custom_on,
+        wholesale_on=wholesale_on,
+        categories=cats,
+        include_uncategorized=include_other,
+        mode="send",
     )
 
 
 async def open_services_list(message: Message, session: AsyncSession, db_user: BotUser) -> None:
     from app.bot.menu_nav import build_main_reply_keyboard
+    from app.bot.tg_utils import present_inline_with_reply_chrome
 
     ui = await get_all_settings(session)
     result = await session.execute(
@@ -313,8 +320,14 @@ async def open_services_list(message: Message, session: AsyncSession, db_user: B
         )
         await message.answer(text, reply_markup=main_kb, **send_kw)
         return
-    await message.answer("📦 <b>سرویس‌های شما</b>", reply_markup=main_kb)
-    await message.answer("یکی را انتخاب کنید:", reply_markup=kb.services_keyboard(services, ui))
+    # Inline list first; lasting main menu last (never leave inline as final message).
+    await present_inline_with_reply_chrome(
+        message,
+        text="📦 <b>سرویس‌های شما</b>\nیکی را انتخاب کنید:",
+        inline=kb.services_keyboard(services, ui),
+        reply=main_kb,
+        chrome_text="⌨️ منوی اصلی",
+    )
 
 
 async def open_wallet_home(
@@ -446,9 +459,15 @@ async def open_support_home(
             if url:
                 rows.append([InlineKeyboardButton(text=f"💬 گفتگو با {title}", url=url)])
         if rows:
+            from app.bot.tg_utils import attach_reply_keyboard
+
             await message.answer(
                 "ارتباط مستقیم:",
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+            )
+            # Re-affirm support reply chrome after inline (must be last).
+            await attach_reply_keyboard(
+                message, kb.support_reply_keyboard(ui), text="⌨️ پشتیبانی"
             )
 
 
@@ -487,13 +506,14 @@ async def open_support_list(
         ]
         for t in tickets[:20]
     ]
-    await message.answer(
-        "📋 تیکت‌های شما:",
-        reply_markup=kb.support_reply_keyboard(ui),
-    )
-    await message.answer(
-        "یکی را باز کنید:",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+    from app.bot.tg_utils import present_inline_with_reply_chrome
+
+    await present_inline_with_reply_chrome(
+        message,
+        text="📋 تیکت‌های شما — یکی را باز کنید:",
+        inline=InlineKeyboardMarkup(inline_keyboard=rows),
+        reply=kb.support_reply_keyboard(ui),
+        chrome_text="⌨️ پشتیبانی",
     )
 
 
@@ -545,8 +565,17 @@ async def open_admin_loyalty_hub(
     )
 
 
-async def open_reseller_apply(message: Message, session: AsyncSession, db_user: BotUser) -> None:
+async def open_reseller_apply(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext | None = None,
+    *,
+    push: bool = True,
+) -> None:
+    from app.bot.handlers.reseller import _resapply_mode_keyboard
     from app.bot.menu_nav import build_main_reply_keyboard
+    from app.bot.tg_utils import present_inline_with_reply_chrome
     from app.services.billing import BILLING_MODE_FIXED, BILLING_MODE_PAYG
     from app.services.resellers import list_active_reseller_plans
 
@@ -573,32 +602,21 @@ async def open_reseller_apply(message: Message, session: AsyncSession, db_user: 
             reply_markup=main_kb,
         )
         return
-    rows = [
-        [
-            InlineKeyboardButton(
-                text=f"📦 ثابت — {fixed_n} پلن",
-                callback_data="resapply:mode:fixed",
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                text=f"⚡ PAYG — {payg_n} پلن",
-                callback_data="resapply:mode:payg",
-            )
-        ],
-    ]
-    await message.answer(
-        format_message(
-            "🤝 درخواست نمایندگی",
-            "ابتدا <b>نوع پلن</b> را انتخاب کنید:\n"
-            "• <b>ثابت</b> — اشتراک با قیمت ثابت\n"
-            "• <b>PAYG</b> — پرداخت بر اساس مصرف ترافیک",
-        ),
-        reply_markup=main_kb,
+    text = format_message(
+        "🤝 درخواست نمایندگی",
+        "ابتدا <b>نوع پلن</b> را انتخاب کنید:\n"
+        "• <b>ثابت</b> — اشتراک با قیمت ثابت\n"
+        "• <b>PAYG</b> — پرداخت بر اساس مصرف ترافیک",
     )
-    await message.answer(
-        "نوع پلن:",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+    if state is not None:
+        await nav.set_nav_level(state, nav.NAV_RESELLER_APPLY, push=push)
+    # Inline modes on the main bubble; lasting apply chrome (back/home) — NEVER main menu.
+    await present_inline_with_reply_chrome(
+        message,
+        text=text,
+        inline=await _resapply_mode_keyboard(session, ui),
+        reply=kb.reseller_apply_reply_keyboard(ui),
+        chrome_text="⌨️ درخواست نمایندگی",
     )
 
 
@@ -663,9 +681,22 @@ async def open_reseller_creds(message: Message, session: AsyncSession, db_user: 
                 )
             ]
         )
+    try:
+        from app.services.pg_admin_subscription import is_subscription_plan
+
+        plan = getattr(profile, "plan", None)
+        if plan is not None and is_subscription_plan(plan):
+            rows.append(
+                [InlineKeyboardButton(text="🔄 تمدید سرویس", callback_data="res:renew")]
+            )
+    except Exception:
+        pass
     await message.answer(text, reply_markup=main_kb)
     if rows:
-        await message.answer("لینک ربات:", reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
+        await message.answer(
+            "لینک ربات / تمدید:",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+        )
 
 
 async def open_pg_home(
@@ -782,9 +813,14 @@ async def open_admin_resellers_hub(
         None, view="ops", label="📱 مینی‌اپ · نمایندگان / عملیات"
     )
     if mini:
+        from app.bot.tg_utils import attach_reply_keyboard
+
         await message.answer(
             "برای آمار و میانبر وب‌پنل، مینی‌اپ را باز کنید:",
             reply_markup=mini,
+        )
+        await attach_reply_keyboard(
+            message, kb.admin_resellers_reply_keyboard(), text="⌨️ نمایندگان"
         )
 
 
@@ -835,6 +871,8 @@ async def open_admin_backup_hub(
         message, session, db_user, is_reseller_bot=is_reseller_bot
     ):
         return
+    from app.bot.tg_utils import attach_reply_keyboard
+
     await nav.show_nav_keyboard(
         message,
         session,
@@ -848,6 +886,9 @@ async def open_admin_backup_hub(
     await message.answer(
         backup_h._hub_text(backups),
         reply_markup=kb.backup_files_keyboard(backups),
+    )
+    await attach_reply_keyboard(
+        message, kb.admin_backup_reply_keyboard(), text="⌨️ بکاپ"
     )
 
 
@@ -904,7 +945,7 @@ async def open_admin_plans_hub(
         text=(
             "💎 <b>پلن‌ها</b> (مثل وب‌پنل /plans)\n"
             "«پلن‌های کاربران» یا «پلن‌های نمایندگان» را از کیبورد پایین بزنید.\n"
-            "پلن‌ها اینلاین زیر پیام — افزودن از کیبورد."
+            "برچسب دسته و بسته حجم/زمان هم از همین کیبورد — مثل وب."
         ),
         state=state,
         push=push,
@@ -999,7 +1040,7 @@ async def open_reseller_plans_hub(
         text=(
             "💎 <b>پلن‌های فروش</b>\n"
             "ساخت از کیبورد؛ انتخاب پلن زیر پیام اینلاین است.\n"
-            "مدیریت کامل‌تر (تست/دلخواه) در وب‌پنل «پلن‌ها»."
+            "برچسب دسته و بسته حجم/زمان از کیبورد — مثل وب‌پنل."
         ),
         state=state,
         push=push,
@@ -1209,6 +1250,8 @@ _OWNER_ONLY_REPLY_ACTIONS = frozenset(
         kb.REPLY_ACTION_ADM_PLANS_AUD_USERS,
         kb.REPLY_ACTION_ADM_PLANS_AUD_RESELLERS,
         kb.REPLY_ACTION_ADM_PLANS_ADD,
+        kb.REPLY_ACTION_ADM_PLANS_CATEGORIES,
+        kb.REPLY_ACTION_ADM_PLANS_ADDONS,
         kb.REPLY_ACTION_ADM_PLANS_KIND_USERS_FIXED,
         kb.REPLY_ACTION_ADM_PLANS_KIND_USERS_CUSTOM,
         kb.REPLY_ACTION_ADM_PLANS_KIND_USERS_TRIAL,
@@ -1350,6 +1393,10 @@ async def _soft_admin(
             await backup_h.backup_create(cb, db_user, session=session)
         elif data == "adm:backup:create:noenv":
             await backup_h.backup_create(cb, db_user, session=session)
+        elif data == "adm:backup:create:env":
+            await backup_h.backup_create_env_ask(cb, db_user, session=session)
+        elif data == "adm:backup:create:env:yes":
+            await backup_h.backup_create(cb, db_user, session=session)
         elif data == "adm:backup:upload":
             await backup_h.backup_upload_ask(cb, db_user, state, session=session)
         elif data == "adm:broadcast":
@@ -1366,7 +1413,7 @@ async def _soft_admin(
             await bubble.edit_text("این بخش در دسترس نیست.")
     except Exception as e:
         try:
-            await bubble.edit_text(f"خطا: {e}")
+            await bubble.edit_text(f"خطا: {user_safe_error(e)}")
         except Exception:
             pass
 
@@ -1390,6 +1437,9 @@ async def handle_back(
         return
     if level == nav.NAV_SHOP:
         await open_shop_list(message, session, db_user, state, push=False)
+        return
+    if level == nav.NAV_RESELLER_APPLY:
+        await open_reseller_apply(message, session, db_user, state, push=False)
         return
     if level == nav.NAV_SUPPORT:
         await open_support_home(message, session, db_user, state, push=False)
@@ -1658,9 +1708,9 @@ async def _handle_pay_action(
             await shop_h.ask_discount(cb, state, session)
     except Exception as e:
         try:
-            await bubble.edit_text(f"خطا: {e}")
+            await bubble.edit_text(f"خطا: {user_safe_error(e)}")
         except Exception:
-            await message.answer(f"خطا: {e}")
+            await message.answer(f"خطا: {user_safe_error(e)}")
 
 
 async def _handle_topup_action(
@@ -1686,9 +1736,15 @@ async def _handle_topup_action(
         await wallet_h.wtop_choose_method(cb, session, state, db_user)
     except Exception as e:
         try:
-            await bubble.edit_text(f"خطا: {e}")
+            await bubble.edit_text(f"خطا: {user_safe_error(e)}")
         except Exception:
-            await message.answer(f"خطا: {e}")
+            await message.answer(f"خطا: {user_safe_error(e)}")
+
+
+# Capacity ops are allowed on the platform bot for the shop owner (renew/extras).
+_RESELLER_CAPACITY_ACTIONS = frozenset(
+    {"res_renew", "res_buy_gb", "res_buy_users", "res_addon_packs"}
+)
 
 
 async def _soft_reseller(
@@ -1704,20 +1760,35 @@ async def _soft_reseller(
     from app.bot.handlers import reseller as res_h
     from app.bot.handlers import reseller_plans as res_plans_h
     from app.bot.handlers import reseller_settings as res_st_h
-    from app.services.reseller_access import load_reseller_actor
+    from app.services.reseller_access import (
+        load_reseller_actor,
+        load_reseller_capacity_actor,
+    )
 
     if not is_reseller_bot:
-        await open_reseller_creds(message, session, db_user)
-        return
-    owner_id, profile = await load_reseller_actor(
-        session,
-        db_user,
-        is_reseller_bot=is_reseller_bot,
-        reseller_owner_id=reseller_owner_id,
-    )
-    if not owner_id or not profile:
-        await message.answer("دسترسی نماینده یافت نشد.")
-        return
+        if action not in _RESELLER_CAPACITY_ACTIONS:
+            await open_reseller_creds(message, session, db_user)
+            return
+        owner_id, profile = await load_reseller_capacity_actor(
+            session,
+            db_user,
+            is_reseller_bot=False,
+            reseller_owner_id=None,
+        )
+        if not owner_id or not profile:
+            await message.answer("دسترسی نماینده یافت نشد.")
+            return
+        # Fall through to capacity mapping below (no shop-panel gates).
+    else:
+        owner_id, profile = await load_reseller_actor(
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
+        if not owner_id or not profile:
+            await message.answer("دسترسی نماینده یافت نشد.")
+            return
 
     if action == kb.REPLY_ACTION_RES_ADD_REP:
         from app.bot.handlers.reseller_reps import start_add_representative
@@ -1776,9 +1847,33 @@ async def _soft_reseller(
             )
         except Exception as e:
             try:
-                await bubble.edit_text(f"خطا: {e}")
+                await bubble.edit_text(f"خطا: {user_safe_error(e)}")
             except Exception:
                 pass
+        return
+    if action == kb.REPLY_ACTION_RES_PLAN_CATEGORIES:
+        from app.bot.handlers.plan_catalog_manage import open_categories_manage
+
+        await open_categories_manage(
+            message,
+            session,
+            db_user,
+            state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
+        return
+    if action == kb.REPLY_ACTION_RES_PLAN_ADDONS:
+        from app.bot.handlers.plan_catalog_manage import open_addons_manage
+
+        await open_addons_manage(
+            message,
+            session,
+            db_user,
+            state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        )
         return
     if action.startswith("res_st_"):
         sec = action.replace("res_st_", "", 1)
@@ -1807,7 +1902,7 @@ async def _soft_reseller(
             )
         except Exception as e:
             try:
-                await bubble.edit_text(f"خطا: {e}")
+                await bubble.edit_text(f"خطا: {user_safe_error(e)}")
             except Exception:
                 pass
         return
@@ -1895,6 +1990,8 @@ async def reply_main_nav(
         kb.REPLY_ACTION_ADM_PLANS_AUD_USERS,
         kb.REPLY_ACTION_ADM_PLANS_AUD_RESELLERS,
         kb.REPLY_ACTION_ADM_PLANS_ADD,
+        kb.REPLY_ACTION_ADM_PLANS_CATEGORIES,
+        kb.REPLY_ACTION_ADM_PLANS_ADDONS,
         kb.REPLY_ACTION_ADM_PLANS_KIND_USERS_FIXED,
         kb.REPLY_ACTION_ADM_PLANS_KIND_USERS_CUSTOM,
         kb.REPLY_ACTION_ADM_PLANS_KIND_USERS_TRIAL,
@@ -1903,6 +2000,8 @@ async def reply_main_nav(
         kb.REPLY_ACTION_ADM_PLANS_KIND_RES_PAYG,
         "adm_plan_add",
         "res_plan_add",
+        kb.REPLY_ACTION_RES_PLAN_CATEGORIES,
+        kb.REPLY_ACTION_RES_PLAN_ADDONS,
         "backup_upload",
         # Keep nav stack when opening reseller sub-hubs / sections
         "res_settings",
@@ -1935,6 +2034,7 @@ async def reply_main_nav(
         kb.REPLY_ACTION_REV_NO,
         kb.REPLY_ACTION_SVC_LINK,
         kb.REPLY_ACTION_SVC_RENEW,
+        kb.REPLY_ACTION_SVC_ADDON,
         kb.REPLY_ACTION_SVC_REFRESH,
         kb.REPLY_ACTION_SVC_DELETE,
         # Keep admin hub stack when opening list screens / group hubs
@@ -2134,7 +2234,7 @@ async def reply_main_nav(
             reseller_owner_id=reseller_owner_id,
         )
     elif action == kb.REPLY_ACTION_RESELLER_APPLY:
-        await open_reseller_apply(message, session, db_user)
+        await open_reseller_apply(message, session, db_user, state)
     elif action == kb.REPLY_ACTION_RESELLER:
         await open_reseller_home(
             message,
@@ -2242,6 +2342,36 @@ async def reply_main_nav(
         from app.bot.handlers.admin_plans import send_add_plan_type_picker
 
         await send_add_plan_type_picker(message, session, db_user, state, aud)
+    elif action == kb.REPLY_ACTION_ADM_PLANS_CATEGORIES:
+        if not await _deny_unless_owner(
+            message, session, db_user, is_reseller_bot=is_reseller_bot
+        ):
+            return
+        from app.bot.handlers.plan_catalog_manage import open_categories_manage
+
+        await open_categories_manage(
+            message,
+            session,
+            db_user,
+            state,
+            is_reseller_bot=False,
+            reseller_owner_id=None,
+        )
+    elif action == kb.REPLY_ACTION_ADM_PLANS_ADDONS:
+        if not await _deny_unless_owner(
+            message, session, db_user, is_reseller_bot=is_reseller_bot
+        ):
+            return
+        from app.bot.handlers.plan_catalog_manage import open_addons_manage
+
+        await open_addons_manage(
+            message,
+            session,
+            db_user,
+            state,
+            is_reseller_bot=False,
+            reseller_owner_id=None,
+        )
     elif action in {
         kb.REPLY_ACTION_ADM_PLANS_KIND_USERS_FIXED,
         kb.REPLY_ACTION_ADM_PLANS_KIND_USERS_CUSTOM,
@@ -2338,10 +2468,26 @@ async def reply_main_nav(
             is_reseller_bot=is_reseller_bot,
         )
     elif action == "backup_create":
+        # Phase 2 default: without .env
         await _soft_admin(
-            message, session, db_user, "adm:backup:create", state, is_reseller_bot=is_reseller_bot
+            message,
+            session,
+            db_user,
+            "adm:backup:create:noenv",
+            state,
+            is_reseller_bot=is_reseller_bot,
+        )
+    elif action == "backup_create_env":
+        await _soft_admin(
+            message,
+            session,
+            db_user,
+            "adm:backup:create:env",
+            state,
+            is_reseller_bot=is_reseller_bot,
         )
     elif action == "backup_create_noenv":
+        # Legacy reply label — same as safe default
         await _soft_admin(
             message,
             session,
@@ -2535,6 +2681,7 @@ async def reply_main_nav(
     elif action in {
         kb.REPLY_ACTION_SVC_LINK,
         kb.REPLY_ACTION_SVC_RENEW,
+        kb.REPLY_ACTION_SVC_ADDON,
         kb.REPLY_ACTION_SVC_REFRESH,
         kb.REPLY_ACTION_SVC_DELETE,
     }:
@@ -2552,6 +2699,9 @@ async def reply_main_nav(
         elif action == kb.REPLY_ACTION_SVC_RENEW:
             cb_data = f"svc:renew:{int(svc_id)}"
             fn = svc_h.svc_renew
+        elif action == kb.REPLY_ACTION_SVC_ADDON:
+            cb_data = f"svc:addon:{int(svc_id)}"
+            fn = svc_h.svc_addon
         elif action == kb.REPLY_ACTION_SVC_DELETE:
             cb_data = f"svc:delask:{int(svc_id)}"
             fn = svc_h.svc_delete_ask

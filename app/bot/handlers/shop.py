@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -38,6 +40,7 @@ from app.services.users import get_all_settings, on
 from app.services.message_variables import DOMAIN_PAYMENT, render_message_template
 
 router = Router(name="shop")
+logger = logging.getLogger(__name__)
 
 
 async def _show_order_pay(message, session, db_user, order_id, state, text: str):
@@ -227,6 +230,87 @@ async def _shop_kind_flags(
     )
 
 
+async def _shop_category_menu(
+    session: AsyncSession, fixed_plans: list
+) -> tuple[list, bool]:
+    """Return (categories_for_buttons, include_uncategorized_other)."""
+    from app.services.plan_categories import (
+        shop_categories_for_menu,
+        uncategorized_fixed_plans,
+    )
+
+    cats = await shop_categories_for_menu(session, fixed_plans=fixed_plans)
+    other = bool(cats) and bool(uncategorized_fixed_plans(fixed_plans))
+    return cats, other
+
+
+def _shop_picker_copy(*, use_categories: bool) -> tuple[str, str]:
+    """(body_html, inline_caption) for the shop kind/category step."""
+    if use_categories:
+        return (
+            "ابتدا <b>دسته</b> را از دکمه‌های زیر پیام انتخاب کنید.",
+            "📁 دسته:",
+        )
+    return (
+        "ابتدا <b>نوع پلن</b> را از دکمه‌های زیر پیام انتخاب کنید.",
+        "📦 نوع پلن:",
+    )
+
+
+async def present_shop_kind_picker(
+    message: Message,
+    *,
+    ui: dict,
+    body: str,
+    fixed_on: bool,
+    trial_on: bool,
+    custom_on: bool,
+    wholesale_on: bool,
+    categories: list | None = None,
+    include_uncategorized: bool = False,
+    mode: str = "send",
+) -> None:
+    """Show shop kind/category picker with inline buttons on the shop bubble.
+
+    Telegram allows only one ``reply_markup`` per message, so ReplyKeyboard and
+    InlineKeyboard cannot share the shop bubble. Contract:
+
+    * ``mode="edit"`` — refresh an existing shop message (back from plan list).
+    * ``mode="send"`` — send shop text **with** the inline kind/category
+      keyboard, then attach shop reply-chrome (Home/Back) on a **lasting**
+      message via ``present_inline_with_reply_chrome``.
+
+    Never delete the reply-chrome message. On iOS/mobile, deleting the message
+    that set ``ReplyKeyboardMarkup`` drops the custom keyboard and the
+    input-field 4-square menu icon, leaving the system keyboard open.
+    Also never use ReplyKeyboard→Inline ``edit_reply_markup`` (Telegram
+    rejects that conversion and hides category buttons).
+    """
+    from app.bot.tg_utils import present_inline_with_reply_chrome
+
+    text = format_message("🛒 فروشگاه", body)
+    inline = kb.shop_kind_keyboard(
+        ui,
+        fixed_on=fixed_on,
+        trial_on=trial_on,
+        custom_on=custom_on,
+        wholesale_on=wholesale_on,
+        categories=categories,
+        include_uncategorized=include_uncategorized,
+    )
+    if mode == "edit":
+        await safe_edit_text(message, text, reply_markup=inline)
+        return
+
+    await present_inline_with_reply_chrome(
+        message,
+        text=text,
+        inline=inline,
+        reply=kb.shop_reply_keyboard(ui),
+        chrome_text="⌨️ منوی فروشگاه",
+    )
+
+
 @router.callback_query(F.data == "shop:list")
 async def shop_list(callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext):
     ui_gate = await get_all_settings(session)
@@ -234,8 +318,8 @@ async def shop_list(callback: CallbackQuery, session: AsyncSession, db_user: Bot
         return
     await callback.answer()
     await state.clear()
-    ui, fixed_on, trial_on, custom_on, wholesale_on, *_rest = await _shop_kind_flags(
-        session, db_user
+    ui, fixed_on, trial_on, custom_on, wholesale_on, _plans, fixed_plans, _trial = (
+        await _shop_kind_flags(session, db_user)
     )
     await _record_shop_funnel(session, db_user, "shop_open", ui=ui)
     if not any((fixed_on, trial_on, custom_on, wholesale_on)):
@@ -252,25 +336,21 @@ async def shop_list(callback: CallbackQuery, session: AsyncSession, db_user: Bot
                 text, reply_markup=kb.persistent_reply_keyboard(ui), **send_kw
             )
         return
+    cats, include_other = await _shop_category_menu(session, fixed_plans)
+    body, _cap = _shop_picker_copy(use_categories=bool(cats))
     if callback.message:
-        await safe_edit_text(
-            callback.message,
-            format_message(
-                "🛒 فروشگاه",
-                "ابتدا <b>نوع پلن</b> را انتخاب کنید (مثل وب‌پنل):",
-            ),
-            reply_markup=kb.shop_kind_keyboard(
-                ui,
-                fixed_on=fixed_on,
-                trial_on=trial_on,
-                custom_on=custom_on,
-                wholesale_on=wholesale_on,
-            ),
-        )
         await state.update_data(_shop_custom=custom_on, _shop_wholesale=wholesale_on)
-        await callback.message.answer(
-            "فروشگاه:",
-            reply_markup=kb.shop_reply_keyboard(ui),
+        await present_shop_kind_picker(
+            callback.message,
+            ui=ui,
+            body=body,
+            fixed_on=fixed_on,
+            trial_on=trial_on,
+            custom_on=custom_on,
+            wholesale_on=wholesale_on,
+            categories=cats,
+            include_uncategorized=include_other,
+            mode="edit",
         )
 
 
@@ -285,12 +365,91 @@ async def shop_kind_fixed(
     if not fixed_on:
         await callback.answer("پلن ثابت فعال نیست.", show_alert=True)
         return
+    # If shop uses categories, bounce to category picker (legacy callback safety).
+    cats, include_other = await _shop_category_menu(session, fixed_plans)
+    if cats:
+        body, _cap = _shop_picker_copy(use_categories=True)
+        _, _f, trial_on, custom_on, wholesale_on, *_r = await _shop_kind_flags(
+            session, db_user
+        )
+        if callback.message:
+            await safe_edit_text(
+                callback.message,
+                format_message("🛒 فروشگاه", body),
+                reply_markup=kb.shop_kind_keyboard(
+                    ui,
+                    fixed_on=True,
+                    trial_on=trial_on,
+                    custom_on=custom_on,
+                    wholesale_on=wholesale_on,
+                    categories=cats,
+                    include_uncategorized=include_other,
+                ),
+            )
+        return
+    from app.services.plan_categories import list_shop_categories
+
+    all_cats = await list_shop_categories(session, active_only=True)
+    cat_names = {int(c.id): c.name for c in all_cats}
     if callback.message:
         await safe_edit_text(
             callback.message,
             format_message("💎 پلن ثابت", "یکی از پلن‌ها را انتخاب کنید:"),
             reply_markup=kb.plans_keyboard(
                 fixed_plans,
+                ui,
+                back_callback="shop:list",
+                kind="fixed",
+                category_names=cat_names,
+            ),
+        )
+
+
+@router.callback_query(F.data.startswith("shop:cat:"))
+async def shop_category_pick(
+    callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext
+):
+    if await _answer_shop_maintenance(callback, session):
+        return
+    raw = (callback.data or "").split(":")[-1]
+    ui, fixed_on, *_rest, fixed_plans, _trial = await _shop_kind_flags(session, db_user)
+    if not fixed_on:
+        await callback.answer("پلن ثابت فعال نیست.", show_alert=True)
+        return
+    from app.services.plan_categories import (
+        category_matches_shop,
+        list_shop_categories,
+        plans_in_category,
+    )
+    from app.services.users import current_shop_reseller_id
+
+    if raw == "none":
+        cat_id = None
+        title = "📂 سایر"
+        plans = plans_in_category(fixed_plans, None)
+    else:
+        try:
+            cat_id = int(raw)
+        except ValueError:
+            await callback.answer("دسته نامعتبر است.", show_alert=True)
+            return
+        cats = await list_shop_categories(session, active_only=True)
+        cat = next((c for c in cats if int(c.id) == cat_id), None)
+        if not cat or not category_matches_shop(cat, current_shop_reseller_id()):
+            await callback.answer("دسته یافت نشد.", show_alert=True)
+            return
+        title = f"📁 {cat.name}"
+        plans = plans_in_category(fixed_plans, cat_id)
+    if not plans:
+        await callback.answer("پلنی در این دسته نیست.", show_alert=True)
+        return
+    await callback.answer()
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            format_message(title, "یکی از پلن‌ها را انتخاب کنید:"),
+            reply_markup=kb.plans_keyboard(
+                plans,
                 ui,
                 back_callback="shop:list",
                 kind="fixed",
@@ -439,7 +598,7 @@ async def custom_gb_entered(
     min_gb, max_gb, _, _, _, _ = _custom_bounds(ui)
     try:
         gb = int(float((message.text or "").replace(",", "").replace("٬", "").strip()))
-    except ValueError:
+    except (ValueError, OverflowError):
         await message.answer("عدد معتبر بفرستید")
         return
     if gb < min_gb or gb > max_gb:
@@ -610,7 +769,7 @@ async def _notify_new_order(bot, session, order, db_user, plan_name: str | None)
             plan_name=plan_name,
         )
     except Exception:
-        pass
+        logger.exception("notify_new_order failed order=%s", getattr(order, "id", None))
 
 
 @router.callback_query(F.data == "shop:custom:buy")
@@ -654,7 +813,7 @@ async def custom_buy(callback: CallbackQuery, session: AsyncSession, db_user: Bo
             reseller_id=db_user.reseller_id,
         )
     except ValueError as e:
-        await callback.answer(str(e), show_alert=True)
+        await callback.answer(user_safe_error(e), show_alert=True)
         return
     await state.clear()
     await callback.answer()
@@ -904,6 +1063,7 @@ async def wholesale_qty_entered(
     )
     # Leave cancel_reply; restore shop chrome so user is not stuck on «انصراف»
     from app.bot import menu_nav as nav
+    from app.bot.tg_utils import attach_reply_keyboard
 
     custom_on = on(ui.get("custom_plan_enabled"))
     wholesale_on = True
@@ -923,6 +1083,8 @@ async def wholesale_qty_entered(
         "تعداد را با دکمه‌ها تنظیم کنید:",
         reply_markup=kb.wholesale_qty_keyboard(qty, ui, plan_id=plan.id),
     )
+    # Inline qty must not be the final message — re-affirm lasting shop chrome.
+    await attach_reply_keyboard(message, kb.shop_reply_keyboard(ui), text="⌨️ منوی فروشگاه")
 
 
 @router.callback_query(F.data == "shop:wholesale:confirm")
@@ -1012,7 +1174,7 @@ async def wholesale_buy(
             reseller_id=db_user.reseller_id,
         )
     except ValueError as e:
-        await callback.answer(str(e), show_alert=True)
+        await callback.answer(user_safe_error(e), show_alert=True)
         return
     # Drop wholesale qty FSM; present_order_pay sets NAV_PAY + order id
     await state.set_state(None)
@@ -1100,7 +1262,7 @@ async def shop_buy(callback: CallbackQuery, session: AsyncSession, db_user: BotU
             reseller_id=db_user.reseller_id,
         )
     except ValueError as e:
-        await callback.answer(str(e), show_alert=True)
+        await callback.answer(user_safe_error(e), show_alert=True)
         return
 
     await callback.answer()
@@ -1220,7 +1382,7 @@ async def apply_loyalty_discount_btn(
     try:
         order = await apply_discount_to_order(session, order, ent.code)
     except ValueError as e:
-        await callback.answer(str(e)[:180], show_alert=True)
+        await callback.answer(user_safe_error(e, limit=180), show_alert=True)
         return
     await callback.answer("تخفیف اعمال شد ✅")
     if callback.message:
@@ -1276,7 +1438,7 @@ async def apply_discount_msg(
     try:
         order = await apply_discount_to_order(session, order, code_raw)
     except ValueError as e:
-        await message.answer(str(e))
+        await message.answer(user_safe_error(e))
         await present_order_pay(message, session, db_user, order.id, state=state)
         return
     await message.answer(
@@ -1306,7 +1468,7 @@ async def pay_wallet_cb(
     try:
         order = await pay_with_wallet(session, order, db_user)
     except ValueError as e:
-        await callback.answer(str(e), show_alert=True)
+        await callback.answer(user_safe_error(e), show_alert=True)
         return
     except Exception as e:
         await callback.answer(f"خطا در تحویل: {user_safe_error(e)}", show_alert=True)
@@ -1419,7 +1581,9 @@ async def pay_wallet_cb(
             needs_approval=False,
         )
     except Exception:
-        pass
+        logger.exception(
+            "notify_new_subscription failed order=%s", getattr(order, "id", None)
+        )
 
 
 async def _await_order_receipt(
@@ -1515,7 +1679,7 @@ async def pay_card_cb(
     try:
         payment = await start_card_payment(session, order, db_user.id)
     except ValueError as e:
-        await callback.answer(str(e), show_alert=True)
+        await callback.answer(user_safe_error(e), show_alert=True)
         return
     await callback.answer()
     amount = format_toman(order.amount, get_settings().currency)
@@ -1607,7 +1771,7 @@ async def pay_gateway_cb(
             session, order, db_user.id, PaymentMethod.GATEWAY.value
         )
     except ValueError as e:
-        await callback.answer(str(e), show_alert=True)
+        await callback.answer(user_safe_error(e), show_alert=True)
         return
     await callback.answer()
     amount = format_toman(order.amount, get_settings().currency)
@@ -1709,7 +1873,7 @@ async def pay_crypto_cb(
             session, order, db_user.id, PaymentMethod.CRYPTO.value
         )
     except ValueError as e:
-        await callback.answer(str(e), show_alert=True)
+        await callback.answer(user_safe_error(e), show_alert=True)
         return
     await callback.answer()
     amount = format_toman(order.amount, get_settings().currency)
@@ -1771,7 +1935,7 @@ async def pay_stars_cb(
             session, order, db_user.id, PaymentMethod.STARS.value
         )
     except ValueError as e:
-        await callback.answer(str(e), show_alert=True)
+        await callback.answer(user_safe_error(e), show_alert=True)
         return
     await callback.answer()
     try:
@@ -1848,7 +2012,7 @@ async def pay_psp_cb(
             description=f"سفارش #{order.id}",
         )
     except ValueError as e:
-        await callback.answer(str(e), show_alert=True)
+        await callback.answer(user_safe_error(e), show_alert=True)
         return
     await callback.answer()
     amount = format_toman(order.amount, get_settings().currency)

@@ -28,6 +28,8 @@ STYLE_ALIASES: dict[str, str] = {
     "adm_plans_kind_users_wholesale": "shop_kind_wholesale",
     "adm_plans_kind_res_fixed": "plan_res_fixed",
     "adm_plans_kind_res_payg": "plan_res_payg",
+    "adm_plans_kind_res_addon_vol": "plan_res_addon_vol",
+    "adm_plans_kind_res_addon_users": "plan_res_addon_users",
     "adm_plans_kind_users_trial": "shop_kind_trial",
     "adm_plan_add": "adm_plans_add",
     "adm_plan_custom": "shop_kind_custom",
@@ -84,9 +86,11 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "support_new", "label": "تیکت جدید", "group": "زیرمنوها", "default": "primary"},
     {"id": "svc_renew", "label": "تمدید سرویس", "group": "زیرمنوها", "default": "primary"},
     {"id": "svc_link", "label": "لینک و QR", "group": "زیرمنوها", "default": ""},
+    {"id": "svc_addon", "label": "حجم / زمان سرویس", "group": "زیرمنوها", "default": "primary"},
+    {"id": "svc_refresh", "label": "رفرش وضعیت سرویس", "group": "زیرمنوها", "default": ""},
+    {"id": "svc_delete", "label": "حذف سرویس", "group": "زیرمنوها", "default": "danger"},
     {"id": "wallet_tx", "label": "تراکنش‌های کیف پول", "group": "زیرمنوها", "default": ""},
     {"id": "support_list", "label": "تیکت‌های من", "group": "زیرمنوها", "default": ""},
-    {"id": "svc_refresh", "label": "رفرش وضعیت سرویس", "group": "زیرمنوها", "default": ""},
     {"id": "miniapp", "label": "مینی‌اپ (منوی اصلی)", "group": "زیرمنوها", "default": "primary"},
     # Shop flow (inline) — submenu plan rows inherit the matching kind color
     {
@@ -133,6 +137,18 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
         "group": "پلن نمایندگی",
         "default": "primary",
     },
+    {
+        "id": "plan_res_addon_vol",
+        "label": "بسته حجم نماینده — پیش‌فرض",
+        "group": "پلن نمایندگی",
+        "default": "primary",
+    },
+    {
+        "id": "plan_res_addon_users",
+        "label": "بسته کاربر نماینده — پیش‌فرض",
+        "group": "پلن نمایندگی",
+        "default": "primary",
+    },
     # Payment
     {"id": "pay_wallet", "label": "پرداخت با کیف پول", "group": "پرداخت", "default": "success"},
     {"id": "pay_card", "label": "کارت به کارت", "group": "پرداخت", "default": "primary"},
@@ -143,6 +159,7 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "pay_discount", "label": "کد تخفیف", "group": "پرداخت", "default": ""},
     {"id": "topup_card", "label": "شارژ — کارت", "group": "پرداخت", "default": "primary"},
     {"id": "topup_gateway", "label": "شارژ — درگاه", "group": "پرداخت", "default": "primary"},
+    {"id": "topup_psp", "label": "شارژ — درگاه آنلاین API", "group": "پرداخت", "default": "primary"},
     {"id": "topup_crypto", "label": "شارژ — رمزارز", "group": "پرداخت", "default": "primary"},
     # Customer loyalty sub
     {"id": "loy_referral", "label": "دعوت دوستان", "group": "باشگاه مشتریان", "default": "primary"},
@@ -156,6 +173,7 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "adm_hub_product", "label": "محصول و پاسارگارد", "group": "منوی ادمین", "default": "success"},
     {"id": "adm_hub_system", "label": "سیستم", "group": "منوی ادمین", "default": ""},
     {"id": "adm_dash", "label": "داشبورد ادمین", "group": "منوی ادمین", "default": "success"},
+    {"id": "adm_reports", "label": "گزارشات (ادمین)", "group": "منوی ادمین", "default": "success"},
     {"id": "adm_orders", "label": "سفارش‌ها (ادمین)", "group": "منوی ادمین", "default": "success"},
     {"id": "adm_payments", "label": "رسیدها (ادمین)", "group": "منوی ادمین", "default": "success"},
     {"id": "adm_tickets", "label": "تیکت‌ها (ادمین)", "group": "منوی ادمین", "default": "success"},
@@ -177,6 +195,8 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "adm_plans_aud_users", "label": "پلن‌های کاربران", "group": "منوی ادمین", "default": "primary"},
     {"id": "adm_plans_aud_resellers", "label": "پلن‌های نمایندگان", "group": "منوی ادمین", "default": "primary"},
     {"id": "adm_plans_add", "label": "افزودن پلن", "group": "منوی ادمین", "default": "primary"},
+    {"id": "adm_plans_categories", "label": "برچسب دسته (ادمین)", "group": "منوی ادمین", "default": ""},
+    {"id": "adm_plans_addons", "label": "بسته حجم/زمان (ادمین)", "group": "منوی ادمین", "default": "primary"},
     # Admin loyalty sub
     {"id": "adm_loy_overview", "label": "نمای کلی باشگاه", "group": "باشگاه ادمین", "default": "success"},
     {"id": "adm_loy_rules", "label": "قوانین امتیاز", "group": "باشگاه ادمین", "default": ""},
@@ -201,8 +221,9 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "adm_st_notify", "label": "تنظیمات: اعلان‌ها", "group": "تنظیمات ادمین", "default": ""},
     {"id": "adm_st_panel", "label": "تنظیمات: وب‌پنل", "group": "تنظیمات ادمین", "default": "primary"},
     # Backup sub
-    {"id": "backup_create", "label": "ساخت بکاپ کامل", "group": "بکاپ", "default": "primary"},
-    {"id": "backup_create_noenv", "label": "بکاپ بدون .env", "group": "بکاپ", "default": "primary"},
+    {"id": "backup_create", "label": "ساخت بکاپ (بدون .env)", "group": "بکاپ", "default": "primary"},
+    {"id": "backup_create_env", "label": "بکاپ + .env", "group": "بکاپ", "default": "danger"},
+    {"id": "backup_create_noenv", "label": "بکاپ بدون .env (قدیمی)", "group": "بکاپ", "default": "primary"},
     {"id": "backup_upload", "label": "آپلود فایل بکاپ", "group": "بکاپ", "default": ""},
     {"id": "backup_refresh", "label": "تازه‌سازی لیست بکاپ", "group": "بکاپ", "default": ""},
     # Broadcast audience
@@ -213,15 +234,20 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     # ── Reseller hub (shop bot / reseller panel) ────────────────────────────
     {"id": "res_dash", "label": "خانه نماینده", "group": "منوی نماینده", "default": "success"},
     {"id": "res_users", "label": "مشتریان نماینده", "group": "منوی نماینده", "default": "success"},
+    {"id": "res_add_rep", "label": "افزودن نماینده", "group": "منوی نماینده", "default": "primary"},
     {"id": "res_billing", "label": "کیف پول PAYG", "group": "منوی نماینده", "default": "success"},
+    {"id": "res_reports", "label": "گزارشات (نماینده)", "group": "منوی نماینده", "default": "success"},
     {"id": "res_stats", "label": "آمار", "group": "منوی نماینده", "default": "success"},
     {"id": "res_orders", "label": "سفارش‌ها (نماینده)", "group": "منوی نماینده", "default": "success"},
     {"id": "res_payments", "label": "رسیدها (نماینده)", "group": "منوی نماینده", "default": "success"},
     {"id": "res_plans", "label": "پلن‌های فروش", "group": "منوی نماینده", "default": "primary"},
     {"id": "res_plan_add", "label": "افزودن پلن نماینده", "group": "منوی نماینده", "default": "primary"},
+    {"id": "res_plan_categories", "label": "برچسب دسته (نماینده)", "group": "منوی نماینده", "default": ""},
+    {"id": "res_plan_addons", "label": "بسته حجم/زمان (نماینده)", "group": "منوی نماینده", "default": "primary"},
     {"id": "res_renew", "label": "تمدید ظرفیت نماینده", "group": "منوی نماینده", "default": "primary"},
     {"id": "res_buy_gb", "label": "خرید حجم نماینده", "group": "منوی نماینده", "default": "primary"},
     {"id": "res_buy_users", "label": "خرید کاربر نماینده", "group": "منوی نماینده", "default": "primary"},
+    {"id": "res_addon_packs", "label": "بسته‌های حجم/کاربر", "group": "منوی نماینده", "default": "primary"},
     {"id": "res_tickets", "label": "تیکت‌های مشتریان", "group": "منوی نماینده", "default": "success"},
     {"id": "res_loyalty", "label": "باشگاه مشتریان (نماینده)", "group": "منوی نماینده", "default": "success"},
     {"id": "res_settings", "label": "تنظیمات فروشگاه", "group": "منوی نماینده", "default": ""},
@@ -261,6 +287,12 @@ def normalize_style(raw: str | None) -> str:
 # Plan form: inherit sentinel (stored as NULL) + explicit Telegram colors.
 PLAN_BUTTON_STYLE_OPTIONS: list[tuple[str, str, str]] = [
     ("inherit", "ارث از نوع پلن", "default"),
+    *STYLE_OPTIONS,
+]
+
+# Category shop-menu buttons: inherit → shop_kind_fixed color.
+CATEGORY_BUTTON_STYLE_OPTIONS: list[tuple[str, str, str]] = [
+    ("inherit", "ارث از پلن ثابت", "default"),
     *STYLE_OPTIONS,
 ]
 
@@ -492,6 +524,8 @@ PLAN_KIND_STYLE_IDS: dict[str, str] = {
     "wholesale": "shop_kind_wholesale",
     "res_fixed": "plan_res_fixed",
     "payg": "plan_res_payg",
+    "addon_volume": "plan_res_addon_vol",
+    "addon_users": "plan_res_addon_users",
 }
 
 
@@ -502,6 +536,10 @@ def plan_kind_style_id(kind: str | None) -> str | None:
         k = "res_fixed"
     if k in {"resellers:payg", "reseller_payg"}:
         k = "payg"
+    if k in {"resellers:addon_volume", "reseller_addon_volume"}:
+        k = "addon_volume"
+    if k in {"resellers:addon_users", "reseller_addon_users"}:
+        k = "addon_users"
     return PLAN_KIND_STYLE_IDS.get(k)
 
 
@@ -515,8 +553,10 @@ def infer_reseller_plan_kind(plan: object | None) -> str:
     if plan is None:
         return "res_fixed"
     pk = (getattr(plan, "plan_kind", "") or "subscription").strip().lower()
-    if pk in {"addon_volume", "addon_users"}:
-        return "res_fixed"
+    if pk == "addon_volume":
+        return "addon_volume"
+    if pk == "addon_users":
+        return "addon_users"
     bm = (getattr(plan, "billing_mode", "") or "fixed").strip().lower()
     if bm == "payg":
         return "payg"
@@ -547,6 +587,15 @@ def resolve_plan_button_style(
     return style_or_none(ui, sid, fallback="primary")
 
 
+def resolve_category_button_style(ui: dict | None, category: object | None) -> str | None:
+    """Telegram style for a shop category menu button."""
+    stored = getattr(category, "button_style", None) if category is not None else None
+    if stored is not None:
+        explicit = normalize_style(stored)
+        return explicit or None
+    return style_or_none(ui, "shop_kind_fixed", fallback="primary")
+
+
 def resolve_custom_plan_button_style(ui: dict | None) -> str | None:
     raw = (ui or {}).get("custom_plan_button_style")
     if raw is not None and str(raw).strip() and str(raw).strip().lower() not in {
@@ -575,6 +624,8 @@ def catalog_item_allowed_for_reseller(item: dict[str, str]) -> bool:
         "reseller_creds",
         "plan_res_fixed",
         "plan_res_payg",
+        "plan_res_addon_vol",
+        "plan_res_addon_users",
         "miniapp",  # platform WebApp only
     }:
         return False

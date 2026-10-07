@@ -72,6 +72,12 @@ class DeleteSubmitStaticTests(unittest.TestCase):
         self.assertIn("body.append(pair[0]", body)
         self.assertIn("Preserve repeated keys", body)
         self.assertIn("Must NOT use display:none", body)
+        self.assertIn("Never location.assign() the POST action URL on failure", body)
+        self.assertIn("res.ok || res.redirected", body)
+        self.assertNotIn(
+            "if (res && res.url) {\n          window.location.assign(res.url);",
+            body,
+        )
 
     def test_confirm_success_uses_submit_form_post_not_native(self):
         js = JS.read_text(encoding="utf-8")
@@ -269,6 +275,88 @@ class DeleteSubmitRuntimeProof(unittest.TestCase):
         ).replace("__COLLECT__", collect).replace("__SUBMIT__", submit)
         payload = _run_node(script)
         self.assertTrue(payload.get("ok"), payload)
+
+    def test_failed_post_does_not_get_navigate_to_delete_url(self):
+        """Failed POST must not location.assign the POST-only delete action (405)."""
+        js_src = JS.read_text(encoding="utf-8")
+        collect = _fn_src(js_src, "collectFormFields")
+        submit = _fn_src(js_src, "submitFormPost")
+        script = textwrap.dedent(
+            """
+            const { JSDOM } = require('jsdom');
+            const dom = new JSDOM(`<!doctype html><html><body>
+              <meta name="csrf-token" content="tok-405" />
+              <form id="del" method="post" action="/pg/admins/bob/delete">
+                <input type="hidden" name="reason" value="" />
+                <button type="submit">حذف ادمین</button>
+              </form>
+            </body></html>`, { url: 'https://example.test/pg/admins' });
+            const { window } = dom;
+            const { document } = window;
+            function csrfToken(){ return 'tok-405'; }
+            __COLLECT__
+            __SUBMIT__
+            window.__assigned = null;
+            window.__reloaded = false;
+            window.__wrote = null;
+            window.Location.prototype.assign = function (u) {
+              window.__assigned = String(u);
+            };
+            window.Location.prototype.reload = function () {
+              window.__reloaded = true;
+            };
+            document.open = function(){};
+            document.write = function(html){ window.__wrote = String(html); };
+            document.close = function(){};
+            window.fetch = function(url, init){
+              return Promise.resolve({
+                ok: false,
+                redirected: false,
+                status: 403,
+                url: 'https://example.test/pg/admins/bob/delete',
+                text: function(){
+                  return Promise.resolve(
+                    '<html><body><h1>درخواست امنیتی رد شد</h1></body></html>'
+                  );
+                },
+              });
+            };
+            (async () => {
+              submitFormPost(document.getElementById('del'), {
+                reason: 'تست حذف',
+                confirm_reason: 'تست حذف',
+              });
+              await new Promise((r) => setTimeout(r, 40));
+              const out = {
+                assigned: window.__assigned,
+                reloaded: window.__reloaded,
+                wrote: window.__wrote,
+              };
+              out.ok = out.assigned === null
+                && typeof out.wrote === 'string'
+                && out.wrote.indexOf('درخواست امنیتی رد شد') >= 0;
+              process.stdout.write(JSON.stringify(out));
+            })();
+            """
+        ).replace("__COLLECT__", collect).replace("__SUBMIT__", submit)
+        payload = _run_node(script)
+        self.assertTrue(payload.get("ok"), payload)
+
+    def test_success_path_assigns_only_when_ok_or_redirected(self):
+        """Contract: happy-path navigation stays behind ok/redirected guard."""
+        body = _fn_src(JS.read_text(encoding="utf-8"), "submitFormPost")
+        self.assertIn("Never location.assign() the POST action URL on failure", body)
+        ok_guard = body.find("if (res.ok || res.redirected)")
+        self.assertGreater(ok_guard, 0)
+        assign_idx = body.find("window.location.assign(res.url)", ok_guard)
+        self.assertGreater(assign_idx, ok_guard)
+        # Failure HTML replay must not call assign(res.url)
+        fail_write = body.find("document.write(html)", assign_idx)
+        self.assertGreater(fail_write, assign_idx)
+        self.assertEqual(
+            body.find("window.location.assign(res.url)", fail_write),
+            -1,
+        )
 
 
 if __name__ == "__main__":

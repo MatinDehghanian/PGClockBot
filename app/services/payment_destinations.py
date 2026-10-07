@@ -282,6 +282,8 @@ def crypto_by_id(ui: dict[str, str], dest_id: str) -> dict[str, Any] | None:
 
 
 async def get_payment_cards(session, *, reseller_id: int | None = None) -> list[dict[str, Any]]:
+    from app.services.users import get_setting
+
     raw = await get_setting(session, KEY_CARDS, reseller_id=reseller_id)
     ui = enrich_payment_settings({KEY_CARDS: raw or "[]"})
     return parse_payment_cards(ui.get(KEY_CARDS))
@@ -293,6 +295,8 @@ async def save_payment_cards(
     *,
     reseller_id: int | None = None,
 ) -> list[dict[str, Any]]:
+    from app.services.users import set_setting
+
     cleaned = parse_payment_cards(json.dumps(items))
     payload = dump_payment_cards(cleaned)
     await set_setting(session, KEY_CARDS, payload, reseller_id=reseller_id)
@@ -306,6 +310,8 @@ async def save_payment_cards(
 
 
 async def get_payment_gateways(session, *, reseller_id: int | None = None) -> list[dict[str, Any]]:
+    from app.services.users import get_setting
+
     raw = await get_setting(session, KEY_GATEWAYS, reseller_id=reseller_id)
     ui = enrich_payment_settings({KEY_GATEWAYS: raw or "[]"})
     return parse_payment_gateways(ui.get(KEY_GATEWAYS))
@@ -317,6 +323,8 @@ async def save_payment_gateways(
     *,
     reseller_id: int | None = None,
 ) -> list[dict[str, Any]]:
+    from app.services.users import set_setting
+
     cleaned = parse_payment_gateways(json.dumps(items))
     payload = dump_payment_gateways(cleaned)
     await set_setting(session, KEY_GATEWAYS, payload, reseller_id=reseller_id)
@@ -332,6 +340,8 @@ async def save_payment_gateways(
 async def get_payment_crypto_wallets(
     session, *, reseller_id: int | None = None
 ) -> list[dict[str, Any]]:
+    from app.services.users import get_setting
+
     raw = await get_setting(session, KEY_CRYPTO, reseller_id=reseller_id)
     ui = enrich_payment_settings({KEY_CRYPTO: raw or "[]"})
     return parse_payment_crypto_wallets(ui.get(KEY_CRYPTO))
@@ -343,6 +353,8 @@ async def save_payment_crypto_wallets(
     *,
     reseller_id: int | None = None,
 ) -> list[dict[str, Any]]:
+    from app.services.users import set_setting
+
     cleaned = parse_payment_crypto_wallets(json.dumps(items))
     payload = dump_payment_crypto_wallets(cleaned)
     await set_setting(session, KEY_CRYPTO, payload, reseller_id=reseller_id)

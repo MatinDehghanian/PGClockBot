@@ -30,7 +30,10 @@ from app.services.formatting import (
     expire_remaining_days,
     format_bytes_ratio,
     format_expire_short,
+    hold_duration_from_info,
+    is_on_hold_status,
     status_label_plain,
+    time_remaining_label,
 )
 from app.services.miniapp_auth import (
     assert_mini_force_join,
@@ -108,6 +111,21 @@ def _traffic_pct(used, limit) -> int | None:
         return None
 
 
+def _service_sub_token(svc: UserService) -> str | None:
+    """Prefer stored token; fall back to extracting from subscription_url.
+
+    Older rows (or failed extract at mint time) may have a URL but a null
+    ``subscription_token`` — without this, Mini App enrichment shows blanks
+    and QR/status look broken even though the service exists.
+    """
+    token = (svc.subscription_token or "").strip()
+    if token:
+        return token
+    from app.services.pasarguard import extract_sub_token
+
+    return extract_sub_token(svc.subscription_url)
+
+
 async def _fetch_pg_info(subscription_token: str | None) -> dict:
     """Public /sub/{token}/info — uses the service token only (auth=False, no admin JWT)."""
     token = (subscription_token or "").strip()
@@ -154,14 +172,23 @@ def _serialize_service(svc: UserService, info: dict | None = None) -> dict:
     upstream_err = info.get("error") == "upstream_unavailable"
     used = info.get("used_traffic")
     limit = info.get("data_limit")
-    expire = info.get("expire")
+    expire = info.get("expire") if "expire" in info else info.get("expire_date")
     status_raw = (info.get("status") or "").strip() or None
-    days = expire_remaining_days(expire) if not upstream_err else None
+    hold_dur = hold_duration_from_info(info) if not upstream_err else None
+    days = (
+        expire_remaining_days(expire, status=status_raw, expire_duration=hold_dur)
+        if not upstream_err
+        else None
+    )
+    pending = bool(not upstream_err and is_on_hold_status(status_raw))
     # Never expose subscription_token — only the share URL the user already owns.
+    from app.services.pasarguard import absolutize_subscription_url
+
+    sub_url = absolutize_subscription_url(svc.subscription_url) or (svc.subscription_url or "")
     return {
         "id": svc.id,
         "username": svc.pg_username or "",
-        "subscription_url": svc.subscription_url or "",
+        "subscription_url": sub_url,
         "plan_id": svc.plan_id,
         "status": status_raw or "—",
         "status_fa": status_label_plain(status_raw)
@@ -171,8 +198,14 @@ def _serialize_service(svc: UserService, info: dict | None = None) -> dict:
         if not upstream_err
         else "—",
         "traffic_pct": _traffic_pct(used, limit) if not upstream_err else None,
-        "expire": format_expire_short(expire) if not upstream_err else "—",
+        "expire": format_expire_short(expire, status=status_raw, expire_duration=hold_dur)
+        if not upstream_err
+        else "—",
         "expire_days": days,
+        "expire_days_label": time_remaining_label(days_left=days, status=status_raw)
+        if not upstream_err
+        else "—",
+        "pending_start": pending,
         "online_at": format_expire_short(info.get("online_at"))
         if info.get("online_at") and not upstream_err
         else None,
@@ -183,12 +216,59 @@ def _serialize_service(svc: UserService, info: dict | None = None) -> dict:
 async def _enrich_services(services: list[UserService]) -> list[dict]:
     if not services:
         return []
-    infos = await asyncio.gather(
-        *[_fetch_pg_info(s.subscription_token) for s in services[:20]]
-    )
-    out = [_serialize_service(s, info) for s, info in zip(services[:20], infos)]
+    try:
+        infos = await asyncio.gather(
+            *[_fetch_pg_info(_service_sub_token(s)) for s in services[:20]]
+        )
+    except Exception:
+        log.exception("miniapp enrich gather failed; returning bare services")
+        infos = [{} for _ in services[:20]]
+    out: list[dict] = []
+    for s, info in zip(services[:20], infos):
+        try:
+            out.append(_serialize_service(s, info if isinstance(info, dict) else {}))
+        except Exception:
+            log.exception("miniapp serialize failed service=%s", getattr(s, "id", None))
+            out.append(
+                {
+                    "id": int(getattr(s, "id", 0) or 0),
+                    "username": getattr(s, "pg_username", None) or "",
+                    "subscription_url": getattr(s, "subscription_url", None) or "",
+                    "plan_id": getattr(s, "plan_id", None),
+                    "status": "—",
+                    "status_fa": "—",
+                    "traffic": "—",
+                    "traffic_pct": None,
+                    "expire": "—",
+                    "expire_days": None,
+                    "expire_days_label": "—",
+                    "pending_start": False,
+                    "online_at": None,
+                    "error": "upstream_unavailable",
+                }
+            )
     for s in services[20:]:
-        out.append(_serialize_service(s, {}))
+        try:
+            out.append(_serialize_service(s, {}))
+        except Exception:
+            out.append(
+                {
+                    "id": int(getattr(s, "id", 0) or 0),
+                    "username": getattr(s, "pg_username", None) or "",
+                    "subscription_url": getattr(s, "subscription_url", None) or "",
+                    "plan_id": getattr(s, "plan_id", None),
+                    "status": "—",
+                    "status_fa": "—",
+                    "traffic": "—",
+                    "traffic_pct": None,
+                    "expire": "—",
+                    "expire_days": None,
+                    "expire_days_label": "—",
+                    "pending_start": False,
+                    "online_at": None,
+                    "error": None,
+                }
+            )
     return out
 
 
@@ -230,8 +310,36 @@ async def _user_shop_payload(session: AsyncSession, user: BotUser) -> dict:
 
     ui = await get_all_settings(session)
     wallet_pay = on(ui.get("pay_wallet_enabled"))
-    enriched = await _enrich_services(services)
-    activity = await list_activity(session, user.id, limit=25)
+    try:
+        enriched = await _enrich_services(services)
+    except Exception:
+        log.exception("miniapp enrich failed user=%s", user.id)
+        # Still list local rows — never hide owned services because PG enrich failed.
+        enriched = [
+            {
+                "id": int(s.id),
+                "username": s.pg_username or "",
+                "subscription_url": s.subscription_url or "",
+                "plan_id": s.plan_id,
+                "status": "—",
+                "status_fa": "—",
+                "traffic": "—",
+                "traffic_pct": None,
+                "expire": "—",
+                "expire_days": None,
+                "expire_days_label": "—",
+                "pending_start": False,
+                "online_at": None,
+                "error": "upstream_unavailable",
+            }
+            for s in services
+        ]
+    try:
+        activity = await list_activity(session, user.id, limit=25)
+    except Exception:
+        await rollback_quiet(session)
+        log.exception("miniapp activity failed user=%s", user.id)
+        activity = []
     return {
         "wallet": int(user.wallet_balance or 0),
         "wallet_pay_enabled": wallet_pay,
@@ -423,7 +531,7 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
         user = await load_mini_user(session, request)
         _require_commerce(user)
         svc = _owned_service_or_404(await session.get(UserService, service_id), user)
-        info = await _fetch_pg_info(svc.subscription_token)
+        info = await _fetch_pg_info(_service_sub_token(svc))
         # Never return raw PG payload — allowlisted summary only
         return _no_store({"service": _serialize_service(svc, info)})
 
@@ -431,12 +539,15 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
     async def mini_service_qr(
         service_id: int, request: Request, session: AsyncSession = Depends(get_db)
     ):
+        from app.services.pasarguard import absolutize_subscription_url
         from app.services.qrcode_gen import make_subscription_qr
 
         user = await load_mini_user(session, request)
         _require_commerce(user)
         svc = _owned_service_or_404(await session.get(UserService, service_id), user)
-        url = (svc.subscription_url or "").strip()
+        url = absolutize_subscription_url(svc.subscription_url) or (
+            (svc.subscription_url or "").strip()
+        )
         if not url:
             raise HTTPException(404, "no subscription url")
         ui = await get_all_settings(session)

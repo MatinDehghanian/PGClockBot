@@ -765,6 +765,7 @@ DEFAULT_SETTINGS = {
     "btn_pay_discount": "🏷 کد تخفیف",
     "btn_cancel": "❌ انصراف",
     "btn_renew": "🔄 تمدید",
+    "btn_svc_addon": "➕ حجم / زمان",
     "btn_sub_link": "🔗 لینک و QR",
     "show_guide": "0",
     "show_faq": "0",
@@ -930,7 +931,7 @@ SETTING_GROUPS = {
         ("empty_services_text", "وقتی سرویسی ندارد", "textarea", "پیام بخش سرویس‌های من اگر لیست خالی باشد"),
         ("shop_empty_text", "وقتی پلنی نیست", "textarea", "پیام فروشگاه اگر پلن فعالی نباشد"),
         ("delivery_title", "عنوان پیام تحویل سرویس", "text", "مثلاً: ✅ سرویس آماده است"),
-        ("purchase_success_text", "متن موفقیت خرید", "textarea", "متغیرها: {order_id} {plan_name} — فهرست: /message-variables"),
+        ("purchase_success_text", "متن موفقیت خرید", "textarea", "متغیرها: {order_id} {plan_name} {plan_type} — فهرست: /message-variables"),
         ("wallet_success_title", "عنوان موفقیت شارژ کیف پول", "text", "عنوان پیام بعد از تأیید شارژ"),
         ("wallet_success_text", "متن موفقیت شارژ کیف پول", "textarea", "متغیرها: {amount} {payment_id}"),
         ("payment_ok_title", "عنوان تأیید پرداخت", "text", "عنوان پیام وقتی پرداخت غیر از شارژ کیف پول تأیید می‌شود"),
@@ -977,6 +978,7 @@ SETTING_GROUPS = {
         ("btn_back", "دکمه بازگشت", "text", "زیر پیام‌های انتخابی (اینلاین)"),
         ("btn_cancel", "انصراف", "text", ""),
         ("btn_renew", "تمدید", "text", ""),
+        ("btn_svc_addon", "حجم / زمان", "text", "خرید افزونه روی سرویس فعلی"),
         ("btn_sub_link", "لینک و QR", "text", ""),
     ],
     "نمایش منو": [
@@ -1145,7 +1147,7 @@ SETTING_GROUPS = {
         ("pay_card_enabled", "کارت به کارت", "toggle", ""),
         ("pay_gateway_enabled", "درگاه پرداخت (لینک + رسید)", "toggle", "لینک درگاه خارجی + ارسال رسید — روش قبلی حفظ می‌شود"),
         ("pay_psp_enabled", "درگاه آنلاین API", "toggle", "درگاه واقعی request→verify (Mock بدون مرچنت / زرین‌پال با مرچنت)"),
-        ("pay_card_auto_enabled", "تأیید خودکار کارت", "toggle", "وب‌هوک امضادار از سرویس تأیید کارت — کنار رسید دستی"),
+        ("pay_card_auto_enabled", "تأیید خودکار کارت به کارت", "toggle", "وب‌هوک امضادار از سرویس تأیید کارت — کنار رسید دستی"),
         ("pay_crypto_enabled", "رمزارز", "toggle", ""),
         ("pay_stars_enabled", "استارز تلگرام", "toggle", "پرداخت درون‌برنامه‌ای با ⭐"),
         ("pay_discount_enabled", "کد تخفیف", "toggle", "نمایش دکمه کد تخفیف هنگام پرداخت"),
@@ -1242,7 +1244,7 @@ SETTING_GROUPS = {
         ),
         ("btn_pay_psp", "متن دکمه درگاه آنلاین", "text", ""),
     ],
-    "تأیید خودکار کارت": [
+    "تأیید خودکار کارت به کارت": [
         (
             "card_auto_provider",
             "نام ارائه‌دهنده",
@@ -1372,9 +1374,9 @@ TAB_SETTING_GROUPS: dict[str, list[str]] = {
     "payment": [
         "روش‌های پرداخت",
         "کارت به کارت",
+        "تأیید خودکار کارت به کارت",
         "درگاه پرداخت",
         "درگاه آنلاین API",
-        "تأیید خودکار کارت",
         "رمزارز",
         "استارز تلگرام",
         "متن دکمه‌های پرداخت",
@@ -1810,6 +1812,16 @@ async def delete_bot_user(
             update(Order).where(Order.plan_id.in_(plan_ids)).values(plan_id=None)
         )
         await session.execute(delete(Plan).where(Plan.id.in_(plan_ids)))
+    # Shop catalog labels / add-on packs (FK owner_reseller_id → bot_users, no CASCADE).
+    # PAYG shops often have these; without cleanup DELETE bot_users raises IntegrityError.
+    from app.db.models import PlanCategory, ServiceAddonPack
+
+    await session.execute(
+        delete(PlanCategory).where(PlanCategory.owner_reseller_id == user_id)
+    )
+    await session.execute(
+        delete(ServiceAddonPack).where(ServiceAddonPack.owner_reseller_id == user_id)
+    )
     panel_ticket_ids = list(
         (
             await session.execute(

@@ -137,7 +137,8 @@ class ResellerMenuBuyExtraTests(unittest.TestCase):
         profile = MagicMock(billing_mode="fixed", plan=fixed_plan)
         with patch("app.services.authz.shop_feature_allowed", return_value=True):
             labels = [t for _, t in _reseller_submenu_entries(profile)]
-        self.assertIn("📦 خرید حجم اضافه", labels)
+        self.assertIn("📦 بسته‌های حجم/کاربر", labels)
+        self.assertNotIn("📦 خرید حجم اضافه", labels)
 
         payg_plan = MagicMock(
             allow_buy_extra=True,
@@ -150,6 +151,7 @@ class ResellerMenuBuyExtraTests(unittest.TestCase):
             labels2 = [t for _, t in _reseller_submenu_entries(profile)]
         self.assertNotIn("📦 خرید حجم اضافه", labels2)
         self.assertNotIn("👤 خرید کاربر اضافه", labels2)
+        self.assertIn("📦 بسته‌های حجم/کاربر", labels2)
 
 
 class FormatAddonDetailTests(unittest.TestCase):

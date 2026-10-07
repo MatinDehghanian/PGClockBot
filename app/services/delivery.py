@@ -14,7 +14,7 @@ from app.db.models import Payment, UserService
 from app.services.formatting import format_message, format_toman, info_block, kv_line, service_card, copyable
 from app.bot import keyboards as kb
 from app.config import get_settings
-from app.services.pasarguard import get_pg
+from app.services.pasarguard import absolutize_subscription_url, get_pg
 from app.services.qrcode_gen import make_subscription_qr
 from app.services.message_variables import DOMAIN_ORDER, DOMAIN_WALLET, render_message_template
 from app.services.users import get_all_settings, on
@@ -32,6 +32,50 @@ def _plan_name(order) -> str:
     return ""
 
 
+def _plan_type_label(order) -> str:
+    """Persian plan-kind label for delivery messages (user or reseller)."""
+    note = (getattr(order, "note", None) or "").strip()
+    if note.startswith("svc_addon:"):
+        return "بسته حجم/زمان"
+    if note.startswith("renew:"):
+        return "تمدید"
+    if note.startswith("reseller_app:") or note.startswith("reseller_renew:"):
+        return "اشتراک نمایندگی"
+    if note.startswith("wholesale:") or note == "wholesale":
+        return "فروش عمده"
+    if note == "custom" or note.startswith("custom:"):
+        return "دلخواه"
+    try:
+        plan = getattr(order, "plan", None)
+        if plan is not None and bool(getattr(plan, "is_trial", False)):
+            return "تست"
+        # ResellerPlan billing_mode
+        bm = (getattr(plan, "billing_mode", None) or "").strip().lower()
+        if bm == "payg":
+            return "PAYG"
+        pk = (getattr(plan, "plan_kind", None) or "").strip().lower()
+        if pk in {"addon_volume", "addon_users"}:
+            return "بسته نماینده"
+        if pk == "subscription" or bm == "fixed":
+            return "اشتراک ثابت"
+    except Exception:
+        pass
+    return "ثابت"
+
+
+def _plan_delivery_line(order) -> str | None:
+    """Always-shown plan type (+ name) line for delivery cards."""
+    kind = _plan_type_label(order)
+    name = (_plan_name(order) or "").strip()
+    if name and kind:
+        return kv_line("💎", "نوع پلن", f"<b>{kind}</b> — {name}")
+    if name:
+        return kv_line("💎", "پلن", name)
+    if kind:
+        return kv_line("💎", "نوع پلن", f"<b>{kind}</b>")
+    return None
+
+
 def _rendered_purchase_success_body(ui: dict[str, str], order) -> str:
     from app.services.rich_text import rich_plain_text
 
@@ -44,6 +88,7 @@ def _rendered_purchase_success_body(ui: dict[str, str], order) -> str:
             domain=DOMAIN_ORDER,
             order_id=order.id,
             plan_name=_plan_name(order),
+            plan_type=_plan_type_label(order),
             shop_title=rich_plain_text(ui.get("shop_title")) or "",
             url=getattr(order, "subscription_url", None) or "",
         ).strip()
@@ -66,6 +111,7 @@ def _subscription_success_outbound(ui: dict[str, str], order) -> tuple[str, dict
         domain=DOMAIN_ORDER,
         order_id=order.id,
         plan_name=_plan_name(order),
+        plan_type=_plan_type_label(order),
         shop_title=rich_plain_text(ui.get("shop_title")) or "",
         url=getattr(order, "subscription_url", None) or "",
     )
@@ -100,6 +146,14 @@ async def build_delivery_content(
     sub_url = None
     sub_info: dict | None = None
 
+    # Ensure plan is available for نوع پلن / {plan_name} even if caller didn't load it.
+    if order is not None and getattr(order, "plan", None) is None:
+        plan_id = getattr(order, "plan_id", None)
+        if plan_id:
+            from app.db.models import Plan
+
+            order.plan = await session.get(Plan, int(plan_id))
+
     if order and order.service_id:
         from app.services.orders import order_quantity
 
@@ -107,6 +161,10 @@ async def build_delivery_content(
         svc = await session.get(UserService, order.service_id)
         success_text, send_kw = _subscription_success_outbound(ui, order)
         detail_parts: list[str] = []
+
+        plan_line = _plan_delivery_line(order)
+        if plan_line:
+            detail_parts.append(plan_line)
 
         if qty > 1:
             detail_parts.append(f"📦 تعداد سرویس تحویل‌شده: <b>{qty}</b>")
@@ -121,9 +179,10 @@ async def build_delivery_content(
                 lines = []
                 for i, s in enumerate(siblings, 1):
                     uname = s.pg_username or f"#{s.id}"
-                    if s.subscription_url and on(ui.get("show_sub_link_in_text", "1")):
+                    sib_url = absolutize_subscription_url(s.subscription_url) or s.subscription_url
+                    if sib_url and on(ui.get("show_sub_link_in_text", "1")):
                         lines.append(
-                            f"{i}. {copyable(uname)}\n{copyable(s.subscription_url)}"
+                            f"{i}. {copyable(uname)}\n{copyable(sib_url)}"
                         )
                     else:
                         lines.append(f"{i}. {copyable(uname)}")
@@ -169,7 +228,7 @@ async def build_delivery_content(
             except Exception:
                 if include_details and svc.pg_username:
                     detail_parts.append(f"👤 {copyable(svc.pg_username)}")
-            sub_url = svc.subscription_url
+            sub_url = absolutize_subscription_url(svc.subscription_url) or svc.subscription_url
             if include_details and sub_url and on(ui.get("show_sub_link_in_text", "1")):
                 detail_parts.append(
                     info_block(
@@ -304,6 +363,53 @@ async def send_delivery_to_user(
     shop_rid = getattr(order, "reseller_id", None) if order is not None else None
     ui = await get_all_settings(session, reseller_id=shop_rid)
     reply_kb = await _buyer_reply_markup(session, payment, order)
+    if order and order.note and str(order.note).startswith("svc_addon:"):
+        import html as html_mod
+
+        from app.db.models import ServiceAddonPack
+        from app.services.service_addons import (
+            format_amount_label,
+            kind_label,
+            parse_addon_note,
+        )
+
+        parsed = parse_addon_note(order.note)
+        pack_name = "افزونه"
+        detail = ""
+        if parsed:
+            pack_id, _svc_id, snap_kind, snap_amount = parsed
+            pack = await session.get(ServiceAddonPack, pack_id)
+            if pack:
+                pack_name = pack.name
+            use_kind = snap_kind or (pack.kind if pack else None)
+            use_amount = (
+                snap_amount
+                if snap_amount is not None
+                else (float(pack.amount) if pack else None)
+            )
+            if use_kind and use_amount is not None:
+                detail = f"{kind_label(use_kind)}: +{format_amount_label(use_kind, use_amount)}"
+        text = format_message(
+            "✅ افزونه اعمال شد",
+            "\n".join(
+                [
+                    f"سفارش #{order.id}",
+                    f"بسته: {html_mod.escape(pack_name)}",
+                    html_mod.escape(detail) if detail else "",
+                    "به سرویس قبلی شما اضافه شد.",
+                ]
+            ).strip(),
+        )
+        try:
+            await bot.send_message(
+                chat_id, text, reply_markup=reply_kb, parse_mode="HTML"
+            )
+        except Exception:
+            try:
+                await bot.send_message(chat_id, text, parse_mode="HTML")
+            except Exception:
+                pass
+        return text
     if order and order.note and str(order.note).startswith("reseller_app:"):
         from app.db.models import BotUser, ResellerApplicationStatus
         from app.services.formatting import format_user_label

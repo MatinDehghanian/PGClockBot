@@ -156,6 +156,14 @@ _VARS: tuple[MessageVar, ...] = (
         html_escape=True,
     ),
     MessageVar(
+        key="plan_type",
+        title_fa="نوع پلن",
+        description_fa="نوع سفارش: ثابت، تست، دلخواه، فروش عمده، تمدید، بسته حجم/زمان، …",
+        example="ثابت",
+        domains=frozenset({DOMAIN_ORDER}),
+        html_escape=True,
+    ),
+    MessageVar(
         key="amount",
         title_fa="مبلغ",
         description_fa="مبلغ فرمت‌شده با واحد پول پنل (مثلاً ۵۰٬۰۰۰ تومان).",

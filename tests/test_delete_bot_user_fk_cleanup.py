@@ -158,12 +158,22 @@ class DeleteBotUserSourceGuards(unittest.TestCase):
             "RewardRedemption",
             "LoyaltyDiscountEntitlement",
             "OrgPrincipal",
+            "PlanCategory",
+            "ServiceAddonPack",
         ):
             self.assertIn(needle, block, msg=f"missing cleanup for {needle}")
         # Order: loyalty cleanup before UserService delete
         self.assertLess(
             block.find("delete(TermsAcceptance)"),
             block.find("delete(UserService)"),
+        )
+        self.assertLess(
+            block.find("delete(PlanCategory)"),
+            block.find("session.delete(user)"),
+        )
+        self.assertLess(
+            block.find("delete(ServiceAddonPack)"),
+            block.find("session.delete(user)"),
         )
 
 

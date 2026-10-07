@@ -165,6 +165,61 @@ def _migrate_sqlite_legacy(sync_conn) -> None:
         sync_conn.execute(sql_text("ALTER TABLE plans ADD COLUMN pg_username_suffix VARCHAR(64)"))
     if "pg_username_pattern" not in cols:
         sync_conn.execute(sql_text("ALTER TABLE plans ADD COLUMN pg_username_pattern VARCHAR(255)"))
+    if "category_id" not in cols:
+        sync_conn.execute(sql_text("ALTER TABLE plans ADD COLUMN category_id INTEGER"))
+
+    if not insp.has_table("plan_categories"):
+        sync_conn.execute(
+            sql_text(
+                """
+                CREATE TABLE plan_categories (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name VARCHAR(128) NOT NULL,
+                    description VARCHAR(255),
+                    audience VARCHAR(16) DEFAULT 'users' NOT NULL,
+                    owner_reseller_id INTEGER,
+                    is_active BOOLEAN DEFAULT 1 NOT NULL,
+                    sort_order INTEGER DEFAULT 0 NOT NULL,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    FOREIGN KEY(owner_reseller_id) REFERENCES bot_users (id)
+                )
+                """
+            )
+        )
+    elif insp.has_table("plan_categories"):
+        cat_cols = {c["name"] for c in insp.get_columns("plan_categories")}
+        if "audience" not in cat_cols:
+            sync_conn.execute(
+                sql_text(
+                    "ALTER TABLE plan_categories ADD COLUMN audience VARCHAR(16) DEFAULT 'users' NOT NULL"
+                )
+            )
+        if "button_style" not in cat_cols:
+            sync_conn.execute(
+                sql_text(
+                    "ALTER TABLE plan_categories ADD COLUMN button_style VARCHAR(16)"
+                )
+            )
+    if not insp.has_table("service_addon_packs"):
+        sync_conn.execute(
+            sql_text(
+                """
+                CREATE TABLE service_addon_packs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name VARCHAR(128) NOT NULL,
+                    description VARCHAR(255),
+                    kind VARCHAR(16) NOT NULL,
+                    amount FLOAT NOT NULL,
+                    price INTEGER NOT NULL,
+                    owner_reseller_id INTEGER,
+                    is_active BOOLEAN DEFAULT 1 NOT NULL,
+                    sort_order INTEGER DEFAULT 0 NOT NULL,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    FOREIGN KEY(owner_reseller_id) REFERENCES bot_users (id)
+                )
+                """
+            )
+        )
 
     if insp.has_table("reseller_profiles"):
         rcols = {c["name"] for c in insp.get_columns("reseller_profiles")}
@@ -249,6 +304,10 @@ def _migrate_sqlite_legacy(sync_conn) -> None:
                 sync_conn.execute(
                     sql_text(f"ALTER TABLE reseller_plans ADD COLUMN {col} {typ}")
                 )
+        if "category_id" not in pcols:
+            sync_conn.execute(
+                sql_text("ALTER TABLE reseller_plans ADD COLUMN category_id INTEGER")
+            )
 
     if not insp.has_table("pg_admin_subscriptions"):
         sync_conn.execute(

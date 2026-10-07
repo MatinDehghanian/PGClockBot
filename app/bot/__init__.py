@@ -107,6 +107,7 @@ def create_dispatcher() -> Dispatcher:
         admin_settings,
         loyalty,
         payments,
+        plan_catalog_manage,
         reply_nav,
         reseller,
         reseller_plans,
@@ -135,6 +136,7 @@ def create_dispatcher() -> Dispatcher:
     dp.include_router(reseller.router)
     dp.include_router(reseller_reps.router)
     dp.include_router(reseller_plans.router)
+    dp.include_router(plan_catalog_manage.router)
     dp.include_router(reseller_settings.router)
     dp.include_router(admin_settings.router)
     dp.include_router(admin_backup.router)

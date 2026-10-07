@@ -23,6 +23,7 @@ REPLY_ACTION_SHOP_CUSTOM = "shop_custom"
 REPLY_ACTION_SHOP_WHOLESALE = "shop_wholesale"
 REPLY_ACTION_SVC_LINK = "svc_link"
 REPLY_ACTION_SVC_RENEW = "svc_renew"
+REPLY_ACTION_SVC_ADDON = "svc_addon"
 REPLY_ACTION_SVC_REFRESH = "svc_refresh"
 REPLY_ACTION_SVC_DELETE = "svc_delete"
 REPLY_ACTION_REV_OK = "rev_ok"
@@ -116,12 +117,22 @@ def _reply_markup(
     *,
     placeholder: str = "از منوی پایین انتخاب کنید…",
 ) -> ReplyKeyboardMarkup:
-    """Standard reply keyboard — persistent so Telegram shows the 4-square menu icon."""
+    """Standard reply keyboard for bot menus.
+
+    ``is_persistent=False`` (Telegram default): on Android the system back key
+    can hide the custom keyboard first, then leave the chat to the dialog list.
+    With ``is_persistent=True`` clients keep the keyboard forced open, so back
+    often appears broken (cannot reach message list). The 4-square menu icon
+    still reopens the keyboard after hide.
+
+    Lasting chrome (never delete the ReplyKeyboard carrier) remains required so
+    iOS does not drop the menu — that is independent of ``is_persistent``.
+    """
     return ReplyKeyboardMarkup(
         keyboard=rows or [[_kb(_home_label(), action=REPLY_ACTION_HOME)]],
         resize_keyboard=True,
         one_time_keyboard=False,
-        is_persistent=True,
+        is_persistent=False,
         input_field_placeholder=placeholder,
     )
 
@@ -132,6 +143,7 @@ def _reply_user_entries(
     has_services: bool,
     ui: dict | None,
     show_reseller_creds: bool = False,
+    profile=None,
 ) -> list[tuple[str, str]]:
     """Ordered (action_key, button_text) for the customer/reseller reply keyboard."""
     entries: list[tuple[str, str]] = []
@@ -161,6 +173,8 @@ def _reply_user_entries(
             entries.append((REPLY_ACTION_ADMIN_PG, _t(ui, "btn_adm_pg")))
     elif show_reseller_creds:
         entries.append((REPLY_ACTION_CREDS, _t(ui, "btn_reseller_creds")))
+        # Platform bot: shop owner can renew / buy capacity without opening shop panel
+        entries.extend(_reseller_capacity_entries(profile))
         entries.append((REPLY_ACTION_ADMIN_PG, _t(ui, "btn_adm_pg")))
     if role == Role.ADMIN.value:
         entries.append((REPLY_ACTION_ADMIN, _t(ui, "btn_admin")))
@@ -305,9 +319,10 @@ def _admin_settings_submenu_entries(ui: dict | None = None) -> list[tuple[str, s
 
 def _admin_backup_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]]:
     _ = ui
+    # Phase 2: default create is without .env; with-.env is a separate confirm path.
     return [
-        ("backup_create", "🆕 ساخت بکاپ کامل"),
-        ("backup_create_noenv", "🆕 بکاپ بدون .env"),
+        ("backup_create", "🆕 ساخت بکاپ"),
+        ("backup_create_env", "🆕 بکاپ + .env"),
         ("backup_upload", "📤 آپلود فایل بکاپ"),
         ("backup_refresh", "🔄 تازه‌سازی لیست"),
     ]
@@ -335,14 +350,18 @@ def _admin_plans_audience_entries(ui: dict | None = None) -> list[tuple[str, str
     return [
         (REPLY_ACTION_ADM_PLANS_AUD_USERS, "📦 پلن‌های کاربران"),
         (REPLY_ACTION_ADM_PLANS_AUD_RESELLERS, "🤝 پلن‌های نمایندگان"),
+        (REPLY_ACTION_ADM_PLANS_CATEGORIES, "🏷 برچسب دسته"),
+        (REPLY_ACTION_ADM_PLANS_ADDONS, "⏱ بسته حجم/زمان"),
     ]
 
 
 def _admin_plans_list_entries(ui: dict | None = None) -> list[tuple[str, str]]:
-    """Reply keyboard on audience list screen — add plan only (types via inline picker)."""
+    """Reply keyboard on audience list screen — add plan + catalog extras (web parity)."""
     _ = ui
     return [
         (REPLY_ACTION_ADM_PLANS_ADD, "➕ افزودن پلن"),
+        (REPLY_ACTION_ADM_PLANS_CATEGORIES, "🏷 برچسب دسته"),
+        (REPLY_ACTION_ADM_PLANS_ADDONS, "⏱ بسته حجم/زمان"),
     ]
 
 
@@ -372,6 +391,8 @@ def _admin_plans_kind_entries(audience: str, ui: dict | None = None) -> list[tup
 REPLY_ACTION_ADM_PLANS_AUD_USERS = "adm_plans_aud_users"
 REPLY_ACTION_ADM_PLANS_AUD_RESELLERS = "adm_plans_aud_resellers"
 REPLY_ACTION_ADM_PLANS_ADD = "adm_plans_add"
+REPLY_ACTION_ADM_PLANS_CATEGORIES = "adm_plans_categories"
+REPLY_ACTION_ADM_PLANS_ADDONS = "adm_plans_addons"
 REPLY_ACTION_ADM_PLANS_KIND_USERS_FIXED = "adm_plans_kind_users_fixed"
 REPLY_ACTION_ADM_PLANS_KIND_USERS_CUSTOM = "adm_plans_kind_users_custom"
 REPLY_ACTION_ADM_PLANS_KIND_USERS_TRIAL = "adm_plans_kind_users_trial"
@@ -380,12 +401,16 @@ REPLY_ACTION_ADM_PLANS_KIND_RES_FIXED = "adm_plans_kind_res_fixed"
 REPLY_ACTION_ADM_PLANS_KIND_RES_PAYG = "adm_plans_kind_res_payg"
 REPLY_ACTION_ADM_PLANS_KIND_RES_ADDON_VOL = "adm_plans_kind_res_addon_vol"
 REPLY_ACTION_ADM_PLANS_KIND_RES_ADDON_USERS = "adm_plans_kind_res_addon_users"
+REPLY_ACTION_RES_PLAN_CATEGORIES = "res_plan_categories"
+REPLY_ACTION_RES_PLAN_ADDONS = "res_plan_addons"
 
 
 def _reseller_plans_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]]:
     _ = ui
     return [
         ("res_plan_add", "➕ پلن جدید"),
+        (REPLY_ACTION_RES_PLAN_CATEGORIES, "🏷 برچسب دسته"),
+        (REPLY_ACTION_RES_PLAN_ADDONS, "⏱ بسته حجم/زمان"),
     ]
 
 
@@ -462,6 +487,34 @@ def _admin_loyalty_submenu_entries(ui: dict | None = None, *, include_tiers: boo
     return entries
 
 
+def _reseller_capacity_entries(profile=None) -> list[tuple[str, str]]:
+    """Renew + unified volume/user packs hub — shop bot and main-bot shop owner.
+
+    Unit buy-extra (GB/users) and catalog addon packs share one reply button
+    («بسته‌های حجم/کاربر») so the hub is not cluttered with three similar entries.
+    """
+    if profile is None:
+        return []
+    entries: list[tuple[str, str]] = []
+    try:
+        from app.services.pg_admin_subscription import is_subscription_plan
+        from app.services.reseller_capacity import plan_allows_buy_extra
+
+        plan = getattr(profile, "plan", None)
+        if plan is not None and is_subscription_plan(plan):
+            # One hub: catalog packs + unit buy-extra (when plan allows).
+            entries.append(("res_addon_packs", "📦 بسته‌های حجم/کاربر"))
+            entries.append(("res_renew", "🔄 تمدید سرویس"))
+        elif plan is not None and plan_allows_buy_extra(plan):
+            # Subscription check failed closed above; still expose unit extras
+            # only when allow_buy_extra is set (rare non-subscription edge).
+            entries.append(("res_addon_packs", "📦 بسته‌های حجم/کاربر"))
+    except Exception:
+        # Fail closed — do not expose capacity without a verified subscription plan
+        pass
+    return entries
+
+
 def _reseller_submenu_entries(
     profile=None, *, can_add_representative: bool = False
 ) -> list[tuple[str, str]]:
@@ -484,23 +537,7 @@ def _reseller_submenu_entries(
             entries.append(("res_billing", "💰 کیف پول PAYG"))
     except Exception:
         pass
-    # Capacity: buy extra volume/users when plan allows; otherwise renew only
-    try:
-        from app.services.pg_admin_subscription import is_subscription_plan
-        from app.services.reseller_capacity import plan_allows_buy_extra
-
-        plan = getattr(profile, "plan", None)
-        if plan is not None and plan_allows_buy_extra(plan):
-            entries.append(("res_buy_gb", "📦 خرید حجم اضافه"))
-            entries.append(("res_buy_users", "👤 خرید کاربر اضافه"))
-        # Addon catalog: only resellers who already hold a subscription plan
-        if plan is not None and is_subscription_plan(plan):
-            entries.append(("res_addon_packs", "📦 بسته‌های حجم/کاربر"))
-        if plan is not None and is_subscription_plan(plan):
-            entries.append(("res_renew", "🔄 تمدید سرویس"))
-    except Exception:
-        # Fail closed — do not expose addon packs without a verified subscription plan
-        pass
+    entries.extend(_reseller_capacity_entries(profile))
     if shop_feature_allowed(key="orders", profile=profile) or shop_feature_allowed(
         key="payments", profile=profile
     ):
@@ -628,6 +665,7 @@ def main_reply_keyboard(
     ui: dict | None = None,
     as_user: bool = False,
     show_reseller_creds: bool = False,
+    profile=None,
     pg_features: frozenset[str] | set[str] | None = None,
     can_manage_representatives: bool = True,
 ) -> ReplyKeyboardMarkup:
@@ -647,6 +685,7 @@ def main_reply_keyboard(
             has_services=has_services,
             ui=ui,
             show_reseller_creds=False if as_user else show_reseller_creds,
+            profile=None if as_user else profile,
         )
         rows = _pack_reply_rows(entries, ui, footer=home_footer)
     return _reply_markup(rows, placeholder="از منوی پایین انتخاب کنید…")
@@ -933,6 +972,7 @@ def reply_action_map(
             has_services=has_services,
             ui=ui,
             show_reseller_creds=show_reseller_creds,
+            profile=profile if (show_reseller_creds and not is_reseller_bot) else None,
         ):
             mapping[(text or "").strip()] = key
         # L1 on the platform bot: register migrated PG submenu labels (not overview).
@@ -941,6 +981,9 @@ def reply_action_map(
                 {"pg_users", "pg_nodes", "pg_templates", "pg_groups"}
             )
             for key, text in _pg_submenu_entries(ui, features=l1_pg):
+                mapping[(text or "").strip()] = key
+            # Capacity labels (renew / extras) — also registered via _reply_user_entries
+            for key, text in _reseller_capacity_entries(profile):
                 mapping[(text or "").strip()] = key
         # Preview escape on main bot only
         if role == Role.ADMIN.value and as_user and not is_reseller_bot:
@@ -1045,15 +1088,37 @@ def _shop_submenu_entries(
         )
     return entries
 
+def submenu_chrome_reply_keyboard(
+    ui: dict | None = None,
+    *,
+    placeholder: str = "از کیبورد پایین بازگردید…",
+) -> ReplyKeyboardMarkup:
+    """Back + Home only — for screens whose choices live on inline keyboards."""
+    rows = _pack_reply_rows([], ui, footer_row=_submenu_footer(ui))
+    return _reply_markup(rows, placeholder=placeholder)
+
+
 def shop_reply_keyboard(ui: dict | None = None) -> ReplyKeyboardMarkup:
     """Shop nav chrome — plan kind + lists are inline under the message."""
-    rows = _pack_reply_rows([], ui, footer_row=_submenu_footer(ui))
-    return _reply_markup(rows, placeholder="فروشگاه — نوع پلن را از زیر پیام انتخاب کنید…")
+    return submenu_chrome_reply_keyboard(
+        ui,
+        placeholder="فروشگاه — نوع پلن را از زیر پیام انتخاب کنید…",
+    )
+
+
+def reseller_apply_reply_keyboard(ui: dict | None = None) -> ReplyKeyboardMarkup:
+    """Reseller-apply chrome — plan mode/list are inline under the message."""
+    return submenu_chrome_reply_keyboard(
+        ui,
+        placeholder="درخواست نمایندگی — نوع پلن را از زیر پیام انتخاب کنید…",
+    )
+
 
 def _service_action_entries(ui: dict | None = None) -> list[tuple[str, str]]:
     return [
         (REPLY_ACTION_SVC_LINK, _t(ui, "btn_sub_link")),
         (REPLY_ACTION_SVC_RENEW, _t(ui, "btn_renew")),
+        (REPLY_ACTION_SVC_ADDON, _t(ui, "btn_svc_addon") or "➕ حجم / زمان"),
         (REPLY_ACTION_SVC_REFRESH, "♻️ رفرش وضعیت"),
         (REPLY_ACTION_SVC_DELETE, "🗑 حذف سرویس"),
     ]

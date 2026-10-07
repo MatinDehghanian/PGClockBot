@@ -967,6 +967,70 @@ async def notify_auto_approve(
     )
 
 
+async def notify_approved_delivery_stuck(
+    bot: Bot,
+    session: AsyncSession,
+    payment: Payment,
+    user_tg_id: int | None,
+    *,
+    error: str = "",
+) -> None:
+    """Payment is APPROVED but delivery/send failed — resume or resend only.
+
+    Phase 1: button is ``payrev:go`` (ادامه تحویل) or ``payrev:send`` (ارسال
+    مجدد پیام) from diagnosis — never reject, never a false approve claim.
+    """
+    from app.bot import keyboards as kb
+    from app.db.models import Order
+    from app.services.payment_review_diag import diagnose_payment_review
+
+    settings = get_settings()
+    user = await session.get(BotUser, payment.user_id) if payment.user_id else None
+    user_label = format_user_label(user, telegram_id=user_tg_id)
+    order = (
+        await session.get(Order, int(payment.order_id)) if payment.order_id else None
+    )
+    diag = await diagnose_payment_review(session, payment, order=order)
+    action = diag.preferred_action
+    if action not in {"resume", "resend"}:
+        # Fallback: incomplete work → resume; otherwise Telegram resend.
+        action = "resend" if diag.has_service else "resume"
+    err = (error or "").strip()
+    if len(err) > 180:
+        err = err[:177] + "…"
+    action_hint = (
+        "فقط پیام تحویل دوباره ارسال می‌شود — تأیید یا ساخت سرویس جدید نیست."
+        if action == "resend"
+        else "پرداخت دوباره‌تأیید نمی‌شود — فقط تحویل/شارژ ناقص ادامه می‌یابد."
+    )
+    lines = [
+        kv_line("🧾", "پرداخت", f"#{payment.id}"),
+        kv_line("💰", "مبلغ", format_toman(payment.amount, settings.currency)),
+        kv_line("👤", "کاربر", user_label),
+        kv_line("✅", "وضعیت پرداخت", "تأیید شده"),
+        kv_line("⚠️", "تشخیص", diag.label_fa),
+    ]
+    if payment.order_id:
+        lines.append(kv_line("🛒", "سفارش", f"#{payment.order_id}"))
+    if err:
+        lines.append(kv_line("📝", "خطا", err))
+    text = format_message(
+        "⚠️ تحویل پس از تأیید ناقص ماند",
+        info_block(lines) + f"\n\n{action_hint}",
+    )
+    markup = kb.payment_action_markup(int(payment.id), action=action)
+    await _dispatch_dual_notify(
+        bot,
+        session,
+        "notify_pending_approval",
+        text,
+        markup=markup,
+        photo=payment.receipt_file_id,
+        payment=payment,
+        shop=not payment.is_wallet_topup,
+    )
+
+
 def build_qr_caption(
     *,
     sub_url: str,
@@ -1033,10 +1097,13 @@ def build_qr_caption(
         )
         lines.append(f"📦 حجم: {vol}" if rich else f"📦 حجم: <b>{vol}</b>")
     if exp is not None or info is not None:
+        from app.services.formatting import hold_duration_from_info
+
+        status = info.get("status") if isinstance(info, dict) else None
+        hold_dur = hold_duration_from_info(info) if isinstance(info, dict) else None
+        exp_label = format_expire(exp, status=status, expire_duration=hold_dur)
         lines.append(
-            f"⏱ زمان: {format_expire(exp)}"
-            if rich
-            else f"⏱ زمان: <b>{format_expire(exp)}</b>"
+            f"⏱ زمان: {exp_label}" if rich else f"⏱ زمان: <b>{exp_label}</b>"
         )
     # Honor panel toggle «نمایش لینک در کپشن QR» (same as delivery text path)
     from app.services.formatting import copyable

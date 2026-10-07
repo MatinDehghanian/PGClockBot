@@ -79,7 +79,7 @@
           </span>
         </td>
         <td class="mono muted col-hide-sm" dir="ltr" data-sort-value="{{ days_left if days_left is not none else '' }}">
-          {% if u.get('expire') %}{{ u.get('expire') | expire }}{% elif u.get('expire_date') %}{{ u.get('expire_date') | expire }}{% else %}—{% endif %}
+          {% if u.get('_expire_text') %}{{ u.get('_expire_text') }}{% elif u.get('expire') %}{{ u.get('expire') | expire }}{% elif u.get('expire_date') %}{{ u.get('expire_date') | expire }}{% else %}—{% endif %}
         </td>
         {% if is_admin %}
         {% set adm = u.get('admin') %}

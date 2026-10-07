@@ -46,6 +46,8 @@ async def support_home(callback: CallbackQuery, session: AsyncSession):
         title="🎧 پشتیبانی",
     )
     if callback.message:
+        from app.bot.tg_utils import attach_reply_keyboard
+
         await safe_edit_text(callback.message, text, reply_markup=None, **send_kw)
         await callback.message.answer("پشتیبانی:", reply_markup=kb.support_reply_keyboard(ui))
         if contacts:
@@ -59,6 +61,9 @@ async def support_home(callback: CallbackQuery, session: AsyncSession):
                 await callback.message.answer(
                     "ارتباط مستقیم:",
                     reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+                )
+                await attach_reply_keyboard(
+                    callback.message, kb.support_reply_keyboard(ui), text="⌨️ پشتیبانی"
                 )
 
 

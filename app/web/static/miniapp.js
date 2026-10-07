@@ -23,6 +23,77 @@
   let currency = "تومان";
   let activeView = "home";
   let busy = false;
+  let backBound = false;
+
+  function homeViewId() {
+    if (state && state.nav && state.nav.length) return state.nav[0].id;
+    return "home";
+  }
+
+  function hasOpenOverlay() {
+    return !!(
+      document.querySelector(".qr-box:not([hidden])") ||
+      document.querySelector(".renew-sheet:not([hidden])")
+    );
+  }
+
+  function closeOpenOverlays() {
+    let closed = false;
+    document.querySelectorAll(".qr-box:not([hidden])").forEach((box) => {
+      box.hidden = true;
+      box.classList.remove("is-ready", "is-loading");
+      box.textContent = "";
+      const id = box.getAttribute("data-qr-box");
+      const trigger = id && document.querySelector(`[data-qr="${id}"]`);
+      if (trigger) trigger.textContent = "نمایش QR";
+      closed = true;
+    });
+    document.querySelectorAll(".renew-sheet:not([hidden])").forEach((host) => {
+      host.hidden = true;
+      host.innerHTML = "";
+      closed = true;
+    });
+    return closed;
+  }
+
+  /**
+   * Android/iOS system back only navigates *inside* a Mini App when
+   * Telegram.WebApp.BackButton is visible. Without show()+onClick, the OS
+   * back key closes the WebApp (or appears to "do nothing" for in-app nav).
+   * Chat bots cannot intercept hardware back — only this WebApp API can.
+   */
+  function syncTelegramBackButton() {
+    if (!tg || !tg.BackButton) return;
+    const show = hasOpenOverlay() || activeView !== homeViewId();
+    try {
+      if (show) tg.BackButton.show();
+      else tg.BackButton.hide();
+    } catch (_) {}
+  }
+
+  function onTelegramBack() {
+    if (closeOpenOverlays()) {
+      syncTelegramBackButton();
+      return;
+    }
+    if (activeView !== homeViewId()) {
+      setView(homeViewId());
+      return;
+    }
+    syncTelegramBackButton();
+  }
+
+  function bindTelegramBackButton() {
+    if (!tg || !tg.BackButton || backBound) return;
+    backBound = true;
+    try {
+      tg.BackButton.onClick(onTelegramBack);
+    } catch (_) {
+      try {
+        tg.onEvent("backButtonClicked", onTelegramBack);
+      } catch (__) {}
+    }
+  }
 
   const ICONS = {
     home: '<svg viewBox="0 0 24 24"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1z"/></svg>',
@@ -108,7 +179,11 @@
   }
 
   function setView(id) {
-    activeView = id || "home";
+    const next = id || "home";
+    if (next !== activeView) {
+      closeOpenOverlays();
+    }
+    activeView = next;
     if (location.hash.replace(/^#/, "") !== activeView) {
       history.replaceState(null, "", "#" + activeView);
     }
@@ -118,6 +193,7 @@
     document.querySelectorAll(".ma-nav button").forEach((btn) => {
       btn.classList.toggle("active", btn.dataset.view === activeView);
     });
+    syncTelegramBackButton();
   }
 
   function openPanelPath(path) {
@@ -137,6 +213,24 @@
     if (s === "limited" || s === "disabled") return "warn";
     if (s === "expired") return "danger";
     return "";
+  }
+
+  function isOnHoldStatus(status) {
+    const s = String(status || "")
+      .toLowerCase()
+      .replace(/-/g, "_");
+    return s === "on_hold" || s === "onhold";
+  }
+
+  /** Remaining-time label — never map on_hold + null days to «نامحدود». */
+  function expireDaysLabel(s, { withUnit } = {}) {
+    if (s && s.expire_days_label) return String(s.expire_days_label);
+    if (s && s.expire_days != null) {
+      const n = num(s.expire_days);
+      return withUnit ? n + " روز" : n;
+    }
+    if (s && (s.pending_start || isOnHoldStatus(s.status))) return "پس از اتصال";
+    return "نامحدود";
   }
 
   function meterClass(pct) {
@@ -248,9 +342,9 @@
       ${meter}
       <div class="meta-grid">
         <div class="meta"><small>انقضا</small><strong>${esc(s.expire || "—")}</strong></div>
-        <div class="meta"><small>روز باقیمانده</small><strong>${
-          s.expire_days == null ? "نامحدود" : esc(num(s.expire_days))
-        }</strong></div>
+        <div class="meta"><small>روز باقیمانده</small><strong>${esc(
+          expireDaysLabel(s)
+        )}</strong></div>
       </div>
       ${
         s.online_at
@@ -274,11 +368,7 @@
         <strong dir="ltr">${esc(s.username || "—")}</strong>
         <div class="svc-peek-meta">
           <span>${esc(s.traffic || "—")}</span>
-          <span>${
-            s.expire_days == null
-              ? "نامحدود"
-              : esc(num(s.expire_days)) + " روز"
-          }</span>
+          <span>${esc(expireDaysLabel(s, { withUnit: true }))}</span>
         </div>
       </div>
       <span class="badge ${statusClass(s.status)}">${esc(s.status_fa || s.status || "—")}</span>
@@ -510,12 +600,14 @@
       box.classList.remove("is-ready", "is-loading");
       box.textContent = "";
       if (trigger) trigger.textContent = "نمایش QR";
+      syncTelegramBackButton();
       return;
     }
     box.hidden = false;
     box.classList.add("is-loading");
     box.classList.remove("is-ready");
     box.textContent = "در حال ساخت QR…";
+    syncTelegramBackButton();
     try {
       const data = await api("/api/mini/service/" + serviceId + "/qr");
       box.textContent = "";
@@ -541,6 +633,7 @@
       err.textContent = String(e.message || e);
       box.appendChild(err);
     }
+    syncTelegramBackButton();
   }
 
   function showRenew(serviceId) {
@@ -553,6 +646,7 @@
     if (!host.hidden) {
       host.hidden = true;
       host.innerHTML = "";
+      syncTelegramBackButton();
       return;
     }
     const c = (state && state.customer) || {};
@@ -566,6 +660,7 @@
           )
         : '<p class="muted">پرداخت کیف پول غیرفعال است</p>');
     bindActions(host);
+    syncTelegramBackButton();
   }
 
   async function doBuy(planId) {
@@ -709,10 +804,12 @@
   }
 
   async function load() {
+    bindTelegramBackButton();
     root.innerHTML =
       '<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>';
     try {
       await reload();
+      syncTelegramBackButton();
     } catch (e) {
       root.textContent = "";
       const err = document.createElement("div");
@@ -724,6 +821,7 @@
       err.appendChild(document.createTextNode(String(e.message || e)));
       root.appendChild(err);
       navEl.innerHTML = "";
+      syncTelegramBackButton();
     }
   }
 
