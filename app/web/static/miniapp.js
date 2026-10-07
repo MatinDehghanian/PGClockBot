@@ -1,4 +1,4 @@
-/* Telegram Mini App — mobile UX: buy/renew, service details, QR, wallet */
+/* Telegram Mini App — mobile UX: buy/renew/addons, service details, QR, wallet */
 (function () {
   "use strict";
 
@@ -33,7 +33,7 @@
   function hasOpenOverlay() {
     return !!(
       document.querySelector(".qr-box:not([hidden])") ||
-      document.querySelector(".renew-sheet:not([hidden])")
+      document.querySelector(".renew-sheet:not([hidden]), .addon-sheet:not([hidden])")
     );
   }
 
@@ -48,7 +48,7 @@
       if (trigger) trigger.textContent = "نمایش QR";
       closed = true;
     });
-    document.querySelectorAll(".renew-sheet:not([hidden])").forEach((host) => {
+    document.querySelectorAll(".renew-sheet:not([hidden]), .addon-sheet:not([hidden])").forEach((host) => {
       host.hidden = true;
       host.innerHTML = "";
       closed = true;
@@ -357,9 +357,14 @@
         <button type="button" class="btn ghost sm" data-qr="${Number(s.id) || 0}">نمایش QR</button>
         <button type="button" class="btn secondary sm" data-open-url="${url}">باز کردن لینک</button>
         <button type="button" class="btn sm" data-renew="${Number(s.id) || 0}">تمدید</button>
+        ${s.addons_allowed ? `
+          <button type="button" class="btn secondary sm" data-addons="${Number(s.id)}" data-addon-kind="volume">افزایش حجم</button>
+          <button type="button" class="btn secondary sm" data-addons="${Number(s.id)}" data-addon-kind="duration">افزایش زمان</button>
+        ` : ""}
       </div>
       <div class="qr-box" data-qr-box="${Number(s.id) || 0}" hidden></div>
       <div class="renew-sheet" data-renew-host="${Number(s.id) || 0}" hidden></div>
+      <div class="addon-sheet" data-addon-host="${Number(s.id) || 0}" hidden></div>
     </article>`;
   }
 
@@ -437,7 +442,7 @@
         <button type="button" class="btn ghost sm" data-goto="wallet">تراکنش‌ها</button>
         <button type="button" class="btn sm" data-goto="shop">خرید سرویس</button>
       </div>
-      <p class="hint">شارژ کیف پول از ربات انجام می‌شود؛ خرید و تمدید این‌جا با موجودی کیف پول است.</p>
+      <p class="hint">شارژ کیف پول از ربات انجام می‌شود؛ خرید، تمدید و افزایش حجم و زمان این‌جا با موجودی کیف پول است.</p>
     </div>`;
   }
 
@@ -461,7 +466,7 @@
         </div>`,
       services: `
         <div class="card"><h3>سرویس‌ها</h3>
-          <p class="hint">جزئیات، QR، کپی لینک و تمدید زیر هر سرویس</p>
+          <p class="hint">جزئیات، QR، تمدید و افزایش حجم و زمان زیر هر سرویس</p>
         </div>
         ${
           services.length
@@ -590,6 +595,16 @@
         )
       );
     });
+    scope.querySelectorAll("[data-addons]").forEach((btn) => {
+      btn.addEventListener("click", () => showAddons(
+        Number(btn.getAttribute("data-addons")), btn.getAttribute("data-addon-kind")
+      ));
+    });
+    scope.querySelectorAll("[data-do-addon]").forEach((btn) => {
+      btn.addEventListener("click", () => doAddon(
+        Number(btn.getAttribute("data-do-addon")), Number(btn.getAttribute("data-pack"))
+      ));
+    });
   }
 
   async function showQr(serviceId) {
@@ -662,6 +677,82 @@
         : '<p class="muted">پرداخت کیف پول غیرفعال است</p>');
     bindActions(host);
     syncTelegramBackButton();
+  }
+
+  const addonPacks = new Map();
+
+  async function showAddons(serviceId, kind) {
+    const host = document.querySelector(`[data-addon-host="${serviceId}"]`);
+    if (!host) return;
+    if (!host.hidden && host.dataset.kind === kind) {
+      host.hidden = true;
+      host.textContent = "";
+      syncTelegramBackButton();
+      return;
+    }
+    closeOpenOverlays();
+    host.hidden = false;
+    host.dataset.kind = kind;
+    host.textContent = "در حال دریافت بسته‌ها…";
+    syncTelegramBackButton();
+    const c = (state && state.customer) || {};
+    if (!c.wallet_pay_enabled) {
+      host.textContent = "پرداخت با کیف پول غیرفعال است";
+      return;
+    }
+    try {
+      const data = await api("/api/mini/service/" + serviceId + "/addons");
+      if (host.hidden || host.dataset.kind !== kind || !host.isConnected) return;
+      const packs = (data.packs || []).filter((p) => p.kind === kind);
+      addonPacks.set(serviceId, packs);
+      const label = kind === "volume" ? "افزایش حجم" : "افزایش زمان";
+      host.innerHTML = `<h3>${label}</h3><p class="hint">بسته پس از پرداخت به همین سرویس اضافه می‌شود.</p>` +
+        (packs.length ? packs.map((p) => `<div class="plan-row">
+          <div class="plan-meta"><strong>${esc(p.name)}</strong>
+            <div class="muted">+${esc(p.amount_label)}</div>
+            ${p.description ? `<p class="hint">${esc(p.description)}</p>` : ""}
+          </div>
+          <div class="addon-price"><div class="price">${esc(money(p.price))}</div>
+            <button type="button" class="btn sm" data-do-addon="${serviceId}" data-pack="${Number(p.id)}">خرید بسته</button>
+          </div>
+        </div>`).join("") : '<p class="muted">بسته‌ای برای خرید فعال نیست</p>');
+      bindActions(host);
+    } catch (e) {
+      if (!host.hidden && host.dataset.kind === kind && host.isConnected) {
+        host.textContent = String(e.message || e);
+      }
+    }
+  }
+
+  async function doAddon(serviceId, packId) {
+    if (busy) return;
+    const c = (state && state.customer) || {};
+    if (!(state && state.commerce_allowed) || !c.wallet_pay_enabled) {
+      toast("پرداخت با کیف پول مجاز نیست", "err");
+      return;
+    }
+    const pack = (addonPacks.get(serviceId) || []).find((p) => p.id === packId);
+    const svc = (c.services || []).find((s) => s.id === serviceId);
+    if (!pack || !svc) return;
+    busy = true;
+    try {
+      const label = pack.kind === "volume" ? "افزایش حجم" : "افزایش زمان";
+      const message = `${label} سرویس «${svc.username}» با بسته «${pack.name}» (+${pack.amount_label}) به مبلغ ${money(pack.price)} از کیف پول؟`;
+      const ok = tg && tg.showConfirm
+        ? await new Promise((resolve) => tg.showConfirm(message, resolve))
+        : window.confirm(message);
+      if (!ok) return;
+      const res = await api("/api/mini/addon", {
+        method: "POST", body: { service_id: serviceId, pack_id: packId },
+      });
+      toast(res.message || "بسته اضافه شد", "ok");
+      await reload();
+      setView("services");
+    } catch (e) {
+      toast(String(e.message || e), "err");
+    } finally {
+      busy = false;
+    }
   }
 
   async function doBuy(planId) {
