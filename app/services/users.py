@@ -439,14 +439,19 @@ async def get_or_create_user(
             await session.refresh(user)
         return user
 
-    referred_by_id = None
-    if referred_by_code:
-        ref = await session.execute(
-            select(BotUser).where(BotUser.referral_code == referred_by_code.upper())
-        )
-        referrer = ref.scalar_one_or_none()
-        if referrer and referrer.telegram_id != telegram_id:
-            referred_by_id = referrer.id
+    from app.services.referral_registration import ReferralRequired, find_registration_referrer
+
+    referrer = await find_registration_referrer(
+        session,
+        referred_by_code,
+        telegram_id=telegram_id,
+        reseller_owner_id=reseller_owner_id,
+    )
+    referred_by_id = referrer.id if referrer else None
+    if not is_admin:
+        ui = await get_all_settings(session, reseller_id=reseller_owner_id)
+        if on(ui.get("referral_required")) and referred_by_id is None:
+            raise ReferralRequired(ui, invalid=bool(referred_by_code))
 
     assign_reseller = None
     if reseller_owner_id and not is_admin:
@@ -660,6 +665,13 @@ DEFAULT_SETTINGS = {
     "terms_buy_reseller_reaccept": "1",
     "trial_enabled": "0",
     "referral_bonus": "0",
+    "referral_required": "0",
+    "referral_required_text": (
+        "برای ثبت‌نام در این فروشگاه، داشتن کد معرف الزامی است.\n\n"
+        "از دوستی که عضو همین فروشگاه است بخواهید کد یا لینک دعوت خود را از بخش "
+        "«باشگاه مشتریان ← دعوت دوستان» برای شما بفرستد.\n\n"
+        "کد معرف را در همین گفتگو ارسال کنید یا از لینک دعوت او وارد ربات شوید."
+    ),
     "loyalty_enabled": "1",
     "points_to_wallet_rate": "100",
     "lucky_wheel_enabled": "0",
@@ -940,6 +952,8 @@ SETTING_GROUPS = {
         ("support_text", "متن صفحه پشتیبانی", "textarea", "بالای دکمه/فرم پشتیبانی در ربات نمایش داده می‌شود"),
     ],
     "متن دعوت دوستان": [
+        ("referral_required", "معرف اجباری هنگام ثبت‌نام", "toggle", "کاربر جدید برای ثبت‌نام باید کد معرف معتبر وارد کند. کاربران قبلی نیاز به ثبت معرف ندارند."),
+        ("referral_required_text", "پیام دریافت معرف اجباری", "textarea", "پیامی که پیش از ثبت‌نام برای کاربر بدون معرف نمایش داده می‌شود."),
         ("referral_text", "متن دعوت دوستان", "textarea", "متغیرها: {code} {link} — فهرست: /message-variables"),
     ],
     "متن دکمه‌های منو": [
@@ -1275,7 +1289,7 @@ SETTING_GROUPS = {
             "pg_username_pattern",
             "الگوی نام",
             "text",
-            "متغیرها: {prefix} {random} {suffix} {id} — پیش‌فرض: {prefix}_{random}{suffix}",
+            "متغیرها: {prefix} {random} {suffix} {id} {plan_volume} {plan_unit} {username} — پیش‌فرض: {prefix}_{random}{suffix}",
         ),
     ],
     "کانال اجباری": [

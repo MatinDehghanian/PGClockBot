@@ -123,6 +123,10 @@ SECTIONS: dict[str, dict] = {
                 ("purchase_success_text", "موفقیت خرید", "textarea"),
                 ("payment_reject_text", "رد پرداخت", "textarea"),
             ]),
+            ("referral", "معرف هنگام ثبت‌نام", [
+                ("referral_required", "معرف اجباری", "toggle"),
+                ("referral_required_text", "پیام دریافت معرف", "textarea"),
+            ]),
             *shop_button_subs(include_platform=True),
         ],
     },

@@ -178,19 +178,32 @@ def _random_alnum(length: int = 8) -> str:
     return "".join(secrets.choice(alphabet) for _ in range(length))
 
 
+def _sanitize_naming_username(raw: str | None, *, fallback: str) -> str:
+    """Strip @ and keep characters safe for Pasarguard usernames."""
+    cleaned = "".join(
+        ch for ch in (raw or "").strip().lstrip("@") if ch.isalnum() or ch in "._-"
+    )
+    return cleaned or fallback
+
+
 def _random_username(
     prefix: str = "clk",
     suffix: str = "",
     pattern: str | None = None,
     *,
     user_id: str | int | None = None,
+    username: str | None = None,
+    plan_volume: str = "unlimited",
+    plan_unit: str = "GB",
 ) -> str:
     """Build a PG username from prefix/suffix or an optional pattern.
 
-    Pattern placeholders: ``{prefix}``, ``{random}`` (8 alnum), ``{suffix}``, ``{id}``.
+    Pattern placeholders come from the shared naming-domain catalog.
 
     ``user_id`` fills ``{id}``. For order delivery callers pass ``order.id``
-    (matches UI / message_variables catalog: شناسه سفارش).
+    (matches UI / message_variables catalog: شناسه سفارش).  That value must
+    not be used as a ``BotUser`` primary key — pass ``buyer_id`` / ``user``
+    separately for ``{username}``.
     """
     random_part = _random_alnum(8)
     id_part = "" if user_id is None else str(user_id)
@@ -206,6 +219,9 @@ def _random_username(
             random=random_part,
             suffix=suffix,
             id=id_part,
+            username=_sanitize_naming_username(username, fallback=id_part),
+            plan_volume=plan_volume,
+            plan_unit=plan_unit,
             html=False,
         ).strip()
         if built and "{" not in built:
@@ -274,13 +290,20 @@ async def generate_pg_username(
     session: AsyncSession,
     *,
     user_id: int | None = None,
+    buyer_id: int | None = None,
     plan: object | None = None,
     plan_prefix: str | None = None,
     plan_suffix: str | None = None,
     plan_pattern: str | None = None,
     reseller_id: int | None = None,
+    user: BotUser | None = None,
 ) -> str:
-    """Generate a Pasarguard username using plan overrides when set, else globals."""
+    """Generate a Pasarguard username using plan overrides when set, else globals.
+
+    ``user_id`` fills ``{id}`` (order id on delivery; bot-user id on manual
+    assign).  ``buyer_id`` / ``user`` resolve ``{username}`` — never look up
+    ``BotUser`` by the naming ``{id}`` value when ``buyer_id`` is set.
+    """
     from app.services.users import get_all_settings
 
     ui = await get_all_settings(session, reseller_id=reseller_id)
@@ -292,11 +315,22 @@ async def generate_pg_username(
         plan_suffix=plan_suffix,
         plan_pattern=plan_pattern,
     )
+    # Prefer explicit buyer PK / preloaded buyer; fall back to user_id only when
+    # buyer_id is omitted (manual-assign path where user_id is BotUser.id).
+    if user is None and "{username}" in pattern:
+        lookup_pk = buyer_id if buyer_id is not None else user_id
+        if lookup_pk is not None:
+            user = await session.get(BotUser, lookup_pk)
+    volume = getattr(plan, "data_limit_gb", None)
+    fallback_id = "" if user_id is None else str(user_id)
+    tg_fallback = str(getattr(user, "telegram_id", None) or fallback_id)
     return _random_username(
         prefix=prefix,
         suffix=suffix,
         pattern=pattern,
         user_id=user_id,
+        username=getattr(user, "username", None) or tg_fallback,
+        plan_volume=f"{volume:g}" if volume is not None and volume > 0 else "unlimited",
     )
 
 
@@ -1922,12 +1956,14 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
         services: list[UserService] = []
 
         async def _create_one(index: int) -> UserService:
-            # ``{id}`` in naming pattern = order id (catalog / UI copy), not bot_user.id.
+            # ``{id}`` = order id (catalog); ``buyer_id`` resolves ``{username}``.
             username = await generate_pg_username(
                 session,
                 user_id=int(order.id),
+                buyer_id=int(order.user_id),
                 plan=plan,
                 reseller_id=order.reseller_id,
+                user=order.user,
             )
             note = f"PGClockBot order #{order.id}"
             if qty > 1:

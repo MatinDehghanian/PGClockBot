@@ -5,11 +5,18 @@ import logging
 from typing import Any, Awaitable, Callable, Dict
 
 from aiogram import BaseMiddleware, Bot
-from aiogram.types import CallbackQuery, Message, TelegramObject, Update
+from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove, TelegramObject, Update
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
+from app.db.models import BotUser
 from app.db.session import SessionLocal
+from app.services.referral_registration import (
+    ReferralRequired,
+    normalize_referral_code,
+    referral_required_outbound,
+)
 from app.services.reseller_bots import lookup_reseller_by_bot_token
 from app.services.users import (
     get_or_create_user,
@@ -578,6 +585,17 @@ class UserMiddleware(BaseMiddleware):
                 payload = _extract_start_payload(event)
                 if payload and payload.startswith("ref_"):
                     referred_by_code = payload[4:].strip()
+                registration_message = event.message if isinstance(event, Update) else event
+                typed_code = False
+                if isinstance(registration_message, Message):
+                    text = (registration_message.text or "").strip()
+                    if text and not text.startswith("/"):
+                        referred_by_code = text
+                        # Only a new account's code entry should open the welcome flow.
+                        if normalize_referral_code(text):
+                            typed_code = await session.scalar(
+                                select(BotUser.id).where(BotUser.telegram_id == tg_user.id)
+                            ) is None
                 try:
                     user = await get_or_create_user(
                         session,
@@ -587,6 +605,17 @@ class UserMiddleware(BaseMiddleware):
                         referred_by_code=referred_by_code,
                         reseller_owner_id=reseller_owner_id,
                     )
+                except ReferralRequired as exc:
+                    msg = _reply_message(event)
+                    if msg:
+                        text, kwargs = referral_required_outbound(exc.ui, invalid=exc.invalid)
+                        await msg.answer(text, reply_markup=ReplyKeyboardRemove(), **kwargs)
+                    cq = event.callback_query if isinstance(event, Update) else (
+                        event if isinstance(event, CallbackQuery) else None
+                    )
+                    if cq is not None:
+                        await cq.answer("برای ثبت‌نام، کد معرف معتبر لازم است.", show_alert=True)
+                    return None
                 except Exception:
                     logger.exception("Failed to load/create bot user tg_id=%s", tg_user.id)
                     msg = _reply_message(event)
@@ -612,6 +641,20 @@ class UserMiddleware(BaseMiddleware):
                             await cq.answer("دسترسی شما مسدود شده است.", show_alert=True)
                         except Exception:
                             pass
+                    return None
+                if typed_code and user.referred_by_id:
+                    from aiogram.filters.command import CommandObject
+                    from app.bot.handlers.start import cmd_start
+
+                    await cmd_start(
+                        registration_message,
+                        CommandObject(command="start", args=f"ref_{normalize_referral_code(referred_by_code)}"),
+                        session,
+                        user,
+                        data["state"],
+                        is_reseller_bot=is_reseller_bot,
+                        reseller_owner_id=reseller_owner_id,
+                    )
                     return None
             return await handler(event, data)
         finally:
