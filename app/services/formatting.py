@@ -530,7 +530,7 @@ def parse_expire_duration_seconds(value: Any) -> int | None:
         return None
     try:
         n = int(float(value))
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return None
     return n if n > 0 else None
 
@@ -547,11 +547,7 @@ def on_hold_expire_duration_seconds(info: dict[str, Any] | None) -> int | None:
     exp_raw = info["expire"] if "expire" in info else info.get("expire_date")
     if not _expire_raw_unset(exp_raw):
         return None
-    for key in ("expire_duration", "on_hold_expire_duration", "hold_expire_duration"):
-        dur = parse_expire_duration_seconds(info.get(key))
-        if dur is not None:
-            return dur
-    return None
+    return hold_duration_from_info(info)
 
 
 def format_expire_duration_days(seconds: int | None) -> str:
@@ -586,8 +582,8 @@ def format_expire_short(
         if is_on_hold_status(status):
             dur = parse_expire_duration_seconds(expire_duration)
             if dur is not None:
-                return f"{format_expire_duration_days(dur)} · در انتظار"
-            return "در انتظار"
+                return f"{format_expire_duration_days(dur)} · در انتظار اتصال"
+            return "در انتظار اتصال"
         return "—"
     remaining = dt - datetime.now(timezone.utc)
     if remaining.total_seconds() <= 0:
@@ -618,13 +614,17 @@ def expire_remaining_days(
     return max(1, int((remaining.total_seconds() + 86399) // 86400))
 
 
-def hold_duration_from_info(info: Mapping[str, Any] | dict | None) -> Any:
-    """Pick expire_duration-like field from a PasarGuard user/info dict."""
-    if not isinstance(info, dict):
+def hold_duration_from_info(info: Mapping[str, Any] | None) -> int | None:
+    """Read PG's pending duration in seconds, with legacy field fallbacks.
+
+    A null/zero/invalid alias must not hide a positive duration from another field.
+    """
+    if not isinstance(info, Mapping):
         return None
-    for key in ("expire_duration", "on_hold_expire_duration", "hold_expire_duration"):
-        if info.get(key) is not None:
-            return info.get(key)
+    for key in ("on_hold_expire_duration", "expire_duration", "hold_expire_duration"):
+        duration = parse_expire_duration_seconds(info.get(key))
+        if duration is not None:
+            return duration
     return None
 
 
@@ -635,7 +635,8 @@ def time_remaining_label(
 ) -> str:
     """UI label for remaining time — never map on_hold + null days to «نامحدود»."""
     if days_left is not None:
-        return f"{int(days_left)} روز"
+        label = f"{int(days_left)} روز"
+        return f"{label} (پس از اتصال)" if is_on_hold_status(status) else label
     if is_on_hold_status(status):
         return "پس از اتصال"
     return "نامحدود"
@@ -679,7 +680,7 @@ STATUS_FA = {
     "disabled": "🔴 غیرفعال",
     "limited": "🟠 اتمام حجم",
     "expired": "⚫ منقضی",
-    "on_hold": "🟡 در انتظار",
+    "on_hold": "🟡 در انتظار اتصال",
 }
 
 # Web panel badges — no Telegram emoji dots
@@ -688,19 +689,23 @@ STATUS_FA_PLAIN = {
     "disabled": "غیرفعال",
     "limited": "اتمام حجم",
     "expired": "منقضی",
-    "on_hold": "در انتظار",
+    "on_hold": "در انتظار اتصال",
 }
 
 
 def status_label(status: str | None) -> str:
     if not status:
         return "نامشخص"
+    if is_on_hold_status(status):
+        return STATUS_FA["on_hold"]
     return STATUS_FA.get(status.lower(), status)
 
 
 def status_label_plain(status: str | None) -> str:
     if not status:
         return "نامشخص"
+    if is_on_hold_status(status):
+        return STATUS_FA_PLAIN["on_hold"]
     return STATUS_FA_PLAIN.get(status.lower(), status)
 
 
@@ -725,8 +730,7 @@ def service_card(info: dict, currency_note: str = "") -> str:
     expire = format_expire(
         expire_raw,
         status=status_raw,
-        expire_duration=info.get("expire_duration")
-        or info.get("on_hold_expire_duration"),
+        expire_duration=hold_duration_from_info(info),
     )
     bar = progress_bar(float(used), float(limit) if limit else None)
     lines = [

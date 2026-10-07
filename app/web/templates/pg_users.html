@@ -65,6 +65,8 @@
         <td data-sort-value="{{ '0' if disabled else '1' }}">
           {% if disabled %}
           <span class="badge warn">غیرفعال</span>
+          {% elif u.get('status') == 'on_hold' %}
+          <span class="badge warn">در انتظار اتصال</span>
           {% else %}
           <span class="badge active">{{ u.get('status') or 'فعال' }}</span>
           {% endif %}

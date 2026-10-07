@@ -1089,6 +1089,11 @@ def build_qr_caption(
         from app.services.formatting import copyable
 
         lines.append(f"👤 {uname}" if rich else f"👤 {copyable(uname)}")
+    if isinstance(info, dict) and info.get("status"):
+        from app.services.formatting import status_label_plain
+
+        label = status_label_plain(info["status"])
+        lines.append(f"📶 وضعیت: {label}" if rich else f"📶 وضعیت: <b>{label}</b>")
     if used is not None or limit is not None:
         vol = (
             format_bytes_ratio(used, limit, joiner=" از ")

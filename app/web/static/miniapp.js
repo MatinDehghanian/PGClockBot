@@ -209,8 +209,8 @@
 
   function statusClass(status) {
     const s = String(status || "").toLowerCase();
-    if (s === "active" || s === "on_hold") return "ok";
-    if (s === "limited" || s === "disabled") return "warn";
+    if (s === "active") return "ok";
+    if (s === "limited" || s === "disabled" || isOnHoldStatus(s)) return "warn";
     if (s === "expired") return "danger";
     return "";
   }
@@ -230,6 +230,7 @@
       return withUnit ? n + " روز" : n;
     }
     if (s && (s.pending_start || isOnHoldStatus(s.status))) return "پس از اتصال";
+    if (!s || s.error || !s.status || s.status === "—") return "—";
     return "نامحدود";
   }
 
@@ -342,7 +343,7 @@
       ${meter}
       <div class="meta-grid">
         <div class="meta"><small>انقضا</small><strong>${esc(s.expire || "—")}</strong></div>
-        <div class="meta"><small>روز باقیمانده</small><strong>${esc(
+        <div class="meta"><small>${s.pending_start || isOnHoldStatus(s.status) ? "مدت پس از اتصال" : "روز باقیمانده"}</small><strong>${esc(
           expireDaysLabel(s)
         )}</strong></div>
       </div>

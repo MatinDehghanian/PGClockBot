@@ -130,9 +130,10 @@ async def _fetch_pg_info(subscription_token: str | None) -> dict:
     """Public /sub/{token}/info — uses the service token only (auth=False, no admin JWT)."""
     token = (subscription_token or "").strip()
     if not token:
-        return {}
+        return {"error": "upstream_unavailable"}
     try:
-        return await asyncio.wait_for(get_pg().subscription_info(token), timeout=5.0)
+        info = await asyncio.wait_for(get_pg().subscription_info(token), timeout=5.0)
+        return info if isinstance(info, dict) and info else {"error": "upstream_unavailable"}
     except Exception:
         return {"error": "upstream_unavailable"}
 
@@ -169,7 +170,7 @@ def _safe_client_message(exc: BaseException, *, fallback: str) -> str:
 def _serialize_service(svc: UserService, info: dict | None = None) -> dict:
     info = info or {}
     # Only our sentinel may appear as ``error`` — never raw upstream strings.
-    upstream_err = info.get("error") == "upstream_unavailable"
+    upstream_err = not info or info.get("error") == "upstream_unavailable"
     used = info.get("used_traffic")
     limit = info.get("data_limit")
     expire = info.get("expire") if "expire" in info else info.get("expire_date")
@@ -181,6 +182,11 @@ def _serialize_service(svc: UserService, info: dict | None = None) -> dict:
         else None
     )
     pending = bool(not upstream_err and is_on_hold_status(status_raw))
+    # Omitted fields are unknown; explicit null/zero limits can mean unlimited.
+    volume_known = not upstream_err and "data_limit" in info
+    time_known = not upstream_err and (
+        "expire" in info or "expire_date" in info or pending
+    )
     # Never expose subscription_token — only the share URL the user already owns.
     from app.services.pasarguard import absolutize_subscription_url
 
@@ -195,15 +201,15 @@ def _serialize_service(svc: UserService, info: dict | None = None) -> dict:
         if status_raw
         else ("—" if not info or upstream_err else "نامشخص"),
         "traffic": format_bytes_ratio(used, limit, joiner=" از ")
-        if not upstream_err
+        if volume_known
         else "—",
-        "traffic_pct": _traffic_pct(used, limit) if not upstream_err else None,
+        "traffic_pct": _traffic_pct(used, limit) if volume_known else None,
         "expire": format_expire_short(expire, status=status_raw, expire_duration=hold_dur)
         if not upstream_err
         else "—",
         "expire_days": days,
         "expire_days_label": time_remaining_label(days_left=days, status=status_raw)
-        if not upstream_err
+        if time_known
         else "—",
         "pending_start": pending,
         "online_at": format_expire_short(info.get("online_at"))
