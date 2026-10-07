@@ -153,6 +153,102 @@ class MiniAppServicesResilienceTests(unittest.IsolatedAsyncioTestCase):
         self.assertGreaterEqual(int(out["expire_days"]), 10)
         self.assertNotEqual(out["expire"], "—")
         self.assertIn("انتظار", out["expire"])
+        self.assertTrue(out["pending_start"])
+        self.assertNotIn("نامحدود", out["expire_days_label"])
+        self.assertIn("روز", out["expire_days_label"])
+
+    def test_serialize_on_hold_without_duration_not_unlimited(self):
+        from app.api.miniapp_pages import _serialize_service
+
+        svc = SimpleNamespace(
+            id=2,
+            pg_username="hold2",
+            subscription_url="https://pg.example/sub/y",
+            plan_id=3,
+        )
+        out = _serialize_service(
+            svc,
+            {
+                "status": "on_hold",
+                "expire": 0,
+                "used_traffic": 0,
+                "data_limit": 0,
+            },
+        )
+        self.assertIsNone(out["expire_days"])
+        self.assertTrue(out["pending_start"])
+        self.assertEqual(out["expire_days_label"], "پس از اتصال")
+        self.assertNotEqual(out["expire_days_label"], "نامحدود")
+
+
+class OnHoldDisplayLabelTests(unittest.TestCase):
+    def test_time_remaining_label_on_hold(self):
+        from app.services.formatting import pg_expire_fields, time_remaining_label
+
+        self.assertEqual(
+            time_remaining_label(days_left=None, status="on_hold"),
+            "پس از اتصال",
+        )
+        self.assertEqual(
+            time_remaining_label(days_left=12, status="on_hold"),
+            "12 روز",
+        )
+        self.assertEqual(
+            time_remaining_label(days_left=None, status="active"),
+            "نامحدود",
+        )
+        fields = pg_expire_fields(
+            {
+                "status": "on_hold",
+                "expire": 0,
+                "expire_duration": 7 * 86400,
+            }
+        )
+        self.assertEqual(fields["days_left"], 7)
+        self.assertTrue(fields["pending_start"])
+        self.assertNotIn("نامحدود", fields["time_label"])
+        self.assertNotIn("نامحدود", fields["expire_text"])
+
+    def test_snapshot_time_label_on_hold(self):
+        from app.services.bot_user_admin import ServiceSnapshot, snapshot_telegram_lines
+
+        svc = SimpleNamespace(id=3, plan=SimpleNamespace(name="پلن"))
+        snap = ServiceSnapshot(
+            service=svc,
+            pg={"status": "on_hold", "expire": 0},
+            status_fa="در انتظار",
+            used_text="0",
+            limit_text="—",
+            volume_text="—",
+            remain_gb_text="—",
+            days_left=None,
+            expire_text="در انتظار",
+            subscription_url=None,
+            error=None,
+        )
+        self.assertEqual(snap.time_label, "پس از اتصال")
+        text = snapshot_telegram_lines(snap)
+        self.assertIn("پس از اتصال", text)
+        self.assertNotIn("نامحدود", text)
+
+    def test_ui_sources_not_map_null_days_to_unlimited(self):
+        js = (ROOT / "app/web/static/miniapp.js").read_text(encoding="utf-8")
+        self.assertIn("expireDaysLabel", js)
+        self.assertIn("isOnHoldStatus", js)
+        self.assertNotIn('s.expire_days == null ? "نامحدود"', js)
+        html = (ROOT / "app/web/templates/_user_edit_body.html").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("s.time_label", html)
+        self.assertNotIn(
+            "s.days_left is none %}نامحدود",
+            html,
+        )
+        svc_src = (ROOT / "app/bot/handlers/services.py").read_text(encoding="utf-8")
+        self.assertIn("hold_duration_from_info", svc_src)
+        self.assertIn("status=sub_info.get('status')", svc_src)
+        pg_src = (ROOT / "app/api/pg_pages.py").read_text(encoding="utf-8")
+        self.assertIn("pg_expire_fields", pg_src)
 
 
 if __name__ == "__main__":

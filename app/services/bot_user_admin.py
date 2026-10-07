@@ -25,6 +25,7 @@ from app.services.formatting import (
     is_on_hold_status,
     on_hold_expire_duration_seconds,
     status_label_plain,
+    time_remaining_label,
 )
 from app.services.pasarguard import (
     absolutize_subscription_url,
@@ -57,6 +58,12 @@ class ServiceSnapshot:
     expire_text: str
     subscription_url: str | None
     error: str | None = None
+
+    @property
+    def time_label(self) -> str:
+        """Remaining-time label — never «نامحدود» for on_hold + null days."""
+        status = (self.pg or {}).get("status") if self.pg else None
+        return time_remaining_label(days_left=self.days_left, status=status)
 
 
 def assert_staff_pg_user_action(staff: dict | None, action: str) -> None:
@@ -926,18 +933,11 @@ async def detach_local_services_for_pg_user(
 def snapshot_telegram_lines(snap: ServiceSnapshot) -> str:
     svc = snap.service
     plan_name = svc.plan.name if svc.plan else "—"
-    if snap.days_left is None:
-        if is_on_hold_status((snap.pg or {}).get("status") if snap.pg else None):
-            days = "پس از اتصال"
-        else:
-            days = "نامحدود"
-    else:
-        days = f"{snap.days_left} روز"
     lines = [
         f"📦 سرویس #{svc.id} · {plan_name}",
         f"وضعیت: {snap.status_fa}",
         f"حجم: {snap.volume_text} (مانده {snap.remain_gb_text})",
-        f"زمان: {snap.expire_text} · مانده {days}",
+        f"زمان: {snap.expire_text} · مانده {snap.time_label}",
     ]
     if snap.subscription_url:
         lines.append(f"لینک: {snap.subscription_url}")

@@ -215,6 +215,24 @@
     return "";
   }
 
+  function isOnHoldStatus(status) {
+    const s = String(status || "")
+      .toLowerCase()
+      .replace(/-/g, "_");
+    return s === "on_hold" || s === "onhold";
+  }
+
+  /** Remaining-time label — never map on_hold + null days to «نامحدود». */
+  function expireDaysLabel(s, { withUnit } = {}) {
+    if (s && s.expire_days_label) return String(s.expire_days_label);
+    if (s && s.expire_days != null) {
+      const n = num(s.expire_days);
+      return withUnit ? n + " روز" : n;
+    }
+    if (s && (s.pending_start || isOnHoldStatus(s.status))) return "پس از اتصال";
+    return "نامحدود";
+  }
+
   function meterClass(pct) {
     if (pct == null) return "";
     if (pct >= 90) return "danger";
@@ -324,9 +342,9 @@
       ${meter}
       <div class="meta-grid">
         <div class="meta"><small>انقضا</small><strong>${esc(s.expire || "—")}</strong></div>
-        <div class="meta"><small>روز باقیمانده</small><strong>${
-          s.expire_days == null ? "نامحدود" : esc(num(s.expire_days))
-        }</strong></div>
+        <div class="meta"><small>روز باقیمانده</small><strong>${esc(
+          expireDaysLabel(s)
+        )}</strong></div>
       </div>
       ${
         s.online_at
@@ -350,11 +368,7 @@
         <strong dir="ltr">${esc(s.username || "—")}</strong>
         <div class="svc-peek-meta">
           <span>${esc(s.traffic || "—")}</span>
-          <span>${
-            s.expire_days == null
-              ? "نامحدود"
-              : esc(num(s.expire_days)) + " روز"
-          }</span>
+          <span>${esc(expireDaysLabel(s, { withUnit: true }))}</span>
         </div>
       </div>
       <span class="badge ${statusClass(s.status)}">${esc(s.status_fa || s.status || "—")}</span>

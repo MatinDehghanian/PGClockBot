@@ -30,7 +30,10 @@ from app.services.formatting import (
     expire_remaining_days,
     format_bytes_ratio,
     format_expire_short,
+    hold_duration_from_info,
+    is_on_hold_status,
     status_label_plain,
+    time_remaining_label,
 )
 from app.services.miniapp_auth import (
     assert_mini_force_join,
@@ -171,17 +174,13 @@ def _serialize_service(svc: UserService, info: dict | None = None) -> dict:
     limit = info.get("data_limit")
     expire = info.get("expire") if "expire" in info else info.get("expire_date")
     status_raw = (info.get("status") or "").strip() or None
-    hold_dur = None
-    if not upstream_err and status_raw:
-        for key in ("expire_duration", "on_hold_expire_duration", "hold_expire_duration"):
-            if info.get(key) is not None:
-                hold_dur = info.get(key)
-                break
+    hold_dur = hold_duration_from_info(info) if not upstream_err else None
     days = (
         expire_remaining_days(expire, status=status_raw, expire_duration=hold_dur)
         if not upstream_err
         else None
     )
+    pending = bool(not upstream_err and is_on_hold_status(status_raw))
     # Never expose subscription_token — only the share URL the user already owns.
     from app.services.pasarguard import absolutize_subscription_url
 
@@ -203,6 +202,10 @@ def _serialize_service(svc: UserService, info: dict | None = None) -> dict:
         if not upstream_err
         else "—",
         "expire_days": days,
+        "expire_days_label": time_remaining_label(days_left=days, status=status_raw)
+        if not upstream_err
+        else "—",
+        "pending_start": pending,
         "online_at": format_expire_short(info.get("online_at"))
         if info.get("online_at") and not upstream_err
         else None,
@@ -238,6 +241,8 @@ async def _enrich_services(services: list[UserService]) -> list[dict]:
                     "traffic_pct": None,
                     "expire": "—",
                     "expire_days": None,
+                    "expire_days_label": "—",
+                    "pending_start": False,
                     "online_at": None,
                     "error": "upstream_unavailable",
                 }
@@ -258,6 +263,8 @@ async def _enrich_services(services: list[UserService]) -> list[dict]:
                     "traffic_pct": None,
                     "expire": "—",
                     "expire_days": None,
+                    "expire_days_label": "—",
+                    "pending_start": False,
                     "online_at": None,
                     "error": None,
                 }
@@ -320,6 +327,8 @@ async def _user_shop_payload(session: AsyncSession, user: BotUser) -> dict:
                 "traffic_pct": None,
                 "expire": "—",
                 "expire_days": None,
+                "expire_days_label": "—",
+                "pending_start": False,
                 "online_at": None,
                 "error": "upstream_unavailable",
             }
