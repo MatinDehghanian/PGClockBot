@@ -2,7 +2,7 @@
 
 Security invariants (must not regress):
 - initData HMAC uses the **platform** bot token only (shop bots never host this app).
-- Every service/QR/buy/renew action is scoped to ``BotUser`` from initData — no cross-user IDs.
+- Every service/QR/buy/renew/addon action is scoped to ``BotUser`` from initData — no cross-user IDs.
 - Subscription info uses the service's own ``subscription_token`` with ``auth=False``
   (never Owner/reseller PG admin credentials for another tenant).
 - Platform **admin/owner** gets ops overview only — **no** shop buy/renew/wallet commerce.
@@ -97,6 +97,23 @@ def _owned_service_or_404(svc: UserService | None, user: BotUser) -> UserService
     """Fail closed: service must belong to the authenticated Mini App user."""
     if not svc or int(svc.bot_user_id) != int(user.id):
         raise HTTPException(404)
+    return svc
+
+
+def _addons_allowed(user: BotUser, svc: UserService) -> bool:
+    return (
+        user.reseller_id is None
+        and bool(svc.pg_user_id)
+        and (svc.remark or "").strip() != "linked"
+    )
+
+
+async def _addon_service(
+    session: AsyncSession, user: BotUser, service_id: int
+) -> UserService:
+    svc = _owned_service_or_404(await session.get(UserService, service_id), user)
+    if not _addons_allowed(user, svc):
+        raise HTTPException(400, "خرید بسته برای این سرویس در مینی‌اپ ممکن نیست")
     return svc
 
 
@@ -334,6 +351,8 @@ async def _user_shop_payload(session: AsyncSession, user: BotUser) -> dict:
             }
             for s in services
         ]
+    for row, svc in zip(enriched, services):
+        row["addons_allowed"] = _addons_allowed(user, svc)
     try:
         activity = await list_activity(session, user.id, limit=25)
     except Exception:
@@ -568,6 +587,103 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
             )
         b64 = base64.b64encode(data).decode("ascii")
         return _no_store({"png_base64": b64, "url": url})
+
+    @app.get("/api/mini/service/{service_id}/addons")
+    async def mini_service_addons(
+        service_id: int, request: Request, session: AsyncSession = Depends(get_db)
+    ):
+        from app.services.service_addons import amount_label, list_packs
+
+        user = await load_mini_user(session, request)
+        _require_commerce(user)
+        await _addon_service(session, user, service_id)
+        # Explicit platform scope, independent of any shop-bot ContextVar.
+        packs = await list_packs(session, None, active_only=True)
+        return _no_store(
+            {
+                "packs": [
+                    {
+                        "id": p.id,
+                        "name": p.name,
+                        "kind": p.kind,
+                        "amount_label": amount_label(p),
+                        "description": p.description or "",
+                        "price": int(p.price or 0),
+                    }
+                    for p in packs
+                ]
+            }
+        )
+
+    @app.post("/api/mini/addon")
+    async def mini_addon(request: Request, session: AsyncSession = Depends(get_db)):
+        from app.db.models import ServiceAddonPack
+        from app.services.orders import pay_with_wallet
+        from app.services.service_addons import (
+            create_addon_order,
+            kind_label,
+            pack_matches_shop,
+        )
+
+        user = await load_mini_user(session, request)
+        await _require_commerce_ready(session, user)
+        user_id = int(user.id)
+        try:
+            body = await request.json()
+            service_id = int(body.get("service_id"))
+            pack_id = int(body.get("pack_id"))
+        except (AttributeError, TypeError, ValueError):
+            raise HTTPException(400, "سرویس و بسته را انتخاب کنید")
+        ui = await get_all_settings(session)
+        if not on(ui.get("pay_wallet_enabled")):
+            raise HTTPException(403, "پرداخت با کیف پول غیرفعال است")
+        svc = await _addon_service(session, user, service_id)
+        pack = await session.get(ServiceAddonPack, pack_id)
+        if not pack_matches_shop(pack, None):
+            raise HTTPException(400, "بسته یافت نشد")
+        await session.refresh(user)
+        if int(pack.price or 0) > int(user.wallet_balance or 0):
+            raise HTTPException(400, "موجودی کیف پول کافی نیست")
+        try:
+            order = await create_addon_order(
+                session, user_id=user.id, service=svc, pack=pack
+            )
+            order = await pay_with_wallet(session, order, user)
+            await session.refresh(user)
+        except ValueError as exc:
+            await rollback_quiet(session)
+            raise HTTPException(
+                400, _safe_client_message(exc, fallback="افزایش حجم یا زمان ناموفق")
+            ) from exc
+        except Exception:
+            await rollback_quiet(session)
+            log.exception("mini addon failed user=%s svc=%s", user_id, service_id)
+            raise HTTPException(500, "افزایش حجم یا زمان ناموفق")
+        order_id = int(order.id)
+        response = _no_store(
+            {
+                "ok": True,
+                "order_id": order_id,
+                "wallet": int(user.wallet_balance or 0),
+                "message": f"افزایش {kind_label(pack.kind)} با موفقیت انجام شد",
+            }
+        )
+        # Notification failures must not turn a completed purchase into an error.
+        try:
+            from app.services.notifications import notify_new_subscription
+            from app.services.reseller_bots import open_notify_bot_for_user
+
+            bot, should_close = await open_notify_bot_for_user(session, user)
+            try:
+                await notify_new_subscription(
+                    bot, session, order=order, user_tg_id=user.telegram_id
+                )
+            finally:
+                if should_close:
+                    await bot.session.close()
+        except Exception:
+            log.exception("mini addon notification failed order=%s", order_id)
+        return response
 
     @app.post("/api/mini/buy")
     async def mini_buy(request: Request, session: AsyncSession = Depends(get_db)):

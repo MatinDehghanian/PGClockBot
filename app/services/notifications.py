@@ -594,13 +594,19 @@ async def notify_new_subscription(
         kv_line("👤", "کاربر", user_name or "—"),
         kv_line("💰", "مبلغ", format_toman(order.amount, settings.currency)),
     ]
-    if plan_name:
+    addon_details = await _addon_order_detail_lines(session, order)
+    if addon_details:
+        kind, details = addon_details
+        lines.append(kv_line("📦", "نوع", kind))
+        lines.extend(details)
+    elif plan_name:
         lines.append(kv_line("💎", "پلن", plan_name))
-    if order.payment_method:
+    if order.payment_method and not addon_details:
         method = "کیف پول" if order.payment_method == "wallet" else "کارت به کارت"
         lines.append(kv_line("💳", "پرداخت", method))
     lines.append(kv_line("📌", "وضعیت", "نیاز به تأیید" if needs_approval else "تحویل‌شده"))
-    text = format_message("🆕 اشتراک جدید", info_block(lines))
+    title = f"➕ {addon_details[0]}" if addon_details else "🆕 اشتراک جدید"
+    text = format_message(title, info_block(lines))
     markup = _approval_markup(order_id=order.id) if needs_approval else None
     await _dispatch_dual_notify(
         bot,
@@ -659,6 +665,72 @@ async def notify_pending_approval(
     )
 
 
+async def _addon_order_detail_lines(
+    session: AsyncSession, order: Order
+) -> tuple[str, list[str]] | None:
+    """Describe the purchased entitlement from its snapshot, including its service."""
+    import html as html_mod
+
+    from app.db.models import ServiceAddonPack, UserService
+    from app.services.service_addons import (
+        format_amount_label,
+        kind_label,
+        parse_addon_note,
+    )
+
+    note = (order.note or "").strip()
+    if not note.startswith("svc_addon:"):
+        return None
+    parsed = parse_addon_note(note)
+    pack = None
+    kind = amount = None
+    service_id = order.service_id
+    pack_id = None
+    if parsed:
+        pack_id, note_service_id, kind, amount = parsed
+        pack = await session.get(ServiceAddonPack, pack_id)
+        if pack and pack.owner_reseller_id != order.reseller_id:
+            pack = None
+        # A mismatched note must never disclose an unrelated service.
+        if service_id != note_service_id:
+            service_id = None
+        if pack:
+            kind = kind or pack.kind
+            amount = amount if amount is not None else pack.amount
+    label = (
+        f"افزایش {kind_label(kind)}"
+        if kind in {"volume", "duration"}
+        else "افزایش حجم یا زمان"
+    )
+    lines = [kv_line("📝", "بابت", label + " سرویس")]
+    pack_name = pack.name if pack else (f"#{pack_id}" if pack_id else "—")
+    lines.append(kv_line("📦", "بسته", html_mod.escape(pack_name)))
+    if kind in {"volume", "duration"} and amount is not None:
+        lines.append(kv_line("➕", "مقدار افزایش", format_amount_label(kind, amount)))
+    svc = await session.get(UserService, service_id) if service_id else None
+    if svc and svc.bot_user_id != order.user_id:
+        svc = None
+    service_name = (svc.pg_username if svc else None) or (
+        f"#{service_id}" if service_id else "—"
+    )
+    lines.append(kv_line("🔗", "سرویس", html_mod.escape(service_name)))
+    if order.payment_method:
+        methods = {
+            "wallet": "کیف پول",
+            "card": "کارت به کارت",
+            "gateway": "درگاه",
+            "crypto": "رمزارز",
+            "stars": "استارز",
+        }
+        lines.append(
+            kv_line(
+                "💳", "روش",
+                html_mod.escape(methods.get(order.payment_method, order.payment_method)),
+            )
+        )
+    return label, lines
+
+
 async def _pending_order_detail_lines(
     session: AsyncSession,
     order: Order | None,
@@ -670,6 +742,10 @@ async def _pending_order_detail_lines(
 
     if order is None:
         return "خرید اشتراک", [kv_line("📝", "بابت", "رسید خرید — جزئیات سفارش در دسترس نیست")]
+
+    addon_details = await _addon_order_detail_lines(session, order)
+    if addon_details:
+        return addon_details
 
     note = (order.note or "").strip()
     qty = order_quantity(order)
@@ -786,7 +862,12 @@ async def notify_new_order(
         kv_line("👤", "کاربر", user_name or "—"),
         kv_line("💰", "مبلغ", format_toman(order.amount, settings.currency)),
     ]
-    if plan_name:
+    addon_details = await _addon_order_detail_lines(session, order)
+    if addon_details:
+        kind, details = addon_details
+        lines.append(kv_line("📦", "نوع", kind))
+        lines.extend(details)
+    elif plan_name:
         lines.append(kv_line("💎", "پلن", plan_name))
     text = format_message("🛒 سفارش جدید", info_block(lines))
     await _dispatch_dual_notify(
