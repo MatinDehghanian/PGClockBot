@@ -121,6 +121,27 @@ class TemplateVariableSpecsTests(unittest.TestCase):
                 self.assertIn("future_plan_value", specs[key])
                 self.assertIn("future_alias", specs[key])
 
+    def test_naming_buyer_and_volume_vars_in_catalog_specs_and_page(self):
+        naming = {"plan_volume", "plan_unit", "username", "id", "prefix", "random", "suffix"}
+        self.assertTrue(naming <= variables.allowed_keys_for_domain(variables.DOMAIN_NAMING))
+        for key in ("pg_username_pattern", "custom_plan_username_pattern"):
+            self.assertTrue(naming <= set(self.specs[key]))
+        groups = {g["domain"]: g for g in variables.catalog_groups()}
+        self.assertIn(variables.DOMAIN_NAMING, groups)
+        page_keys = {item["key"] for item in groups[variables.DOMAIN_NAMING]["vars"]}
+        self.assertTrue({"plan_volume", "plan_unit", "username"} <= page_keys)
+        # Caption chips on naming textareas must accept the new tokens as valid.
+        built = variables.render_message_template(
+            "{username}_{plan_volume}{plan_unit}_{id}",
+            domain=variables.DOMAIN_NAMING,
+            username="ali",
+            plan_volume="30",
+            plan_unit="GB",
+            id="1024",
+            html=False,
+        )
+        self.assertEqual(built, "ali_30GB_1024")
+
 
 class TemplateVariablePanelTests(unittest.TestCase):
     def setUp(self):
