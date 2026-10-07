@@ -2243,12 +2243,12 @@ def order_review(order_id: int, ui: dict | None = None) -> InlineKeyboardMarkup:
 
 
 def payment_review(payment_id: int, ui: dict | None = None) -> InlineKeyboardMarkup:
-    """Message-scoped approve/reject (notifications). No nav chrome."""
+    """Pending payment: approve (ok) + reject. No nav chrome."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 _ikb(
-                    "🟢✅ تأیید دستی",
+                    "🟢✅ تأیید",
                     callback_data=f"payrev:ok:{payment_id}",
                     style=_style(ui, "confirm", fallback="success"),
                 ),
@@ -2260,6 +2260,50 @@ def payment_review(payment_id: int, ui: dict | None = None) -> InlineKeyboardMar
             ]
         ]
     )
+
+
+def payment_resume(payment_id: int, ui: dict | None = None) -> InlineKeyboardMarkup:
+    """APPROVED but fulfill/credit incomplete — resume only (never reject)."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                _ikb(
+                    "♻️ ادامه تحویل",
+                    callback_data=f"payrev:go:{payment_id}",
+                    style=_style(ui, "confirm", fallback="success"),
+                ),
+            ]
+        ]
+    )
+
+
+def payment_resend(payment_id: int, ui: dict | None = None) -> InlineKeyboardMarkup:
+    """Service ready; Telegram send failed — resend message only."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                _ikb(
+                    "📤 ارسال مجدد پیام",
+                    callback_data=f"payrev:send:{payment_id}",
+                    style=_style(ui, "confirm", fallback="success"),
+                ),
+            ]
+        ]
+    )
+
+
+def payment_action_markup(
+    payment_id: int,
+    *,
+    action: str,
+    ui: dict | None = None,
+) -> InlineKeyboardMarkup:
+    """Build Phase 1 markup for ``approve`` / ``resume`` / ``resend``."""
+    if action == "resume":
+        return payment_resume(payment_id, ui)
+    if action == "resend":
+        return payment_resend(payment_id, ui)
+    return payment_review(payment_id, ui)
 
 
 def reseller_app_review(

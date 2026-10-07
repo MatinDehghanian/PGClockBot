@@ -4,6 +4,9 @@ Phase 0: classify state precisely so admins see the real situation
 (approve vs resume fulfill vs Telegram resend vs truly complete)
 instead of a misleading «قبلاً تأیید شده».
 
+Phase 1: map each kind to exactly one preferred action verb:
+  ``approve`` (payrev:ok) / ``resume`` (payrev:go) / ``resend`` (payrev:send).
+
 Security invariants (read-only classifier; callers decide actions):
 - Never invent a second approve claim.
 - ``approved_resend`` means service/credit already exists — only Telegram
@@ -48,6 +51,31 @@ PaymentReviewKind = Literal[
     "unapprovable",
 ]
 
+# Phase 1 action verbs — one preferred tool per diagnosis.
+PaymentReviewAction = Literal["approve", "resume", "resend", "none"]
+
+# Callback path segment after ``payrev:`` for each action.
+ACTION_CALLBACK_VERB: dict[PaymentReviewAction, str] = {
+    "approve": "ok",
+    "resume": "go",
+    "resend": "send",
+    "none": "",
+}
+
+ACTION_LABEL_FA: dict[PaymentReviewAction, str] = {
+    "approve": "تأیید پرداخت",
+    "resume": "ادامه تحویل",
+    "resend": "ارسال مجدد پیام",
+    "none": "—",
+}
+
+ACTION_BTN_FA: dict[PaymentReviewAction, str] = {
+    "approve": "🟢✅ تأیید",
+    "resume": "♻️ ادامه تحویل",
+    "resend": "📤 ارسال مجدد پیام",
+    "none": "—",
+}
+
 
 @dataclass(frozen=True)
 class PaymentReviewDiagnosis:
@@ -62,7 +90,6 @@ class PaymentReviewDiagnosis:
     is_wallet_topup: bool
     has_open_delivery_failure: bool
     wallet_credited: bool | None
-    # Action hints (Phase 0 messaging; Phase 1 may split buttons)
     can_claim_approve: bool
     can_resume_fulfill: bool
     can_resend_telegram: bool
@@ -71,10 +98,62 @@ class PaymentReviewDiagnosis:
     detail_fa: str
     log_code: str
 
+    @property
+    def preferred_action(self) -> PaymentReviewAction:
+        if self.can_claim_approve:
+            return "approve"
+        if self.can_resume_fulfill:
+            return "resume"
+        if self.can_resend_telegram:
+            return "resend"
+        return "none"
+
+    @property
+    def action_label_fa(self) -> str:
+        return ACTION_LABEL_FA[self.preferred_action]
+
+    @property
+    def action_btn_fa(self) -> str:
+        return ACTION_BTN_FA[self.preferred_action]
+
+    @property
+    def callback_verb(self) -> str:
+        return ACTION_CALLBACK_VERB[self.preferred_action]
+
+    def callback_data(self, payment_id: int | None = None) -> str | None:
+        """``payrev:{ok|go|send}:{id}`` or None when no action."""
+        verb = self.callback_verb
+        pid = payment_id if payment_id is not None else self.payment_id
+        if not verb or pid is None:
+            return None
+        return f"payrev:{verb}:{int(pid)}"
+
+    def allows_action(self, action: PaymentReviewAction) -> bool:
+        if action == "approve":
+            return self.can_claim_approve
+        if action == "resume":
+            return self.can_resume_fulfill
+        if action == "resend":
+            return self.can_resend_telegram
+        return False
+
+    def wrong_tool_alert(self, attempted: PaymentReviewAction) -> str:
+        """Alert when admin presses a button that does not match diagnosis."""
+        if self.preferred_action == "none":
+            return self.alert_fa
+        if attempted == self.preferred_action:
+            return self.alert_fa
+        wanted = self.action_label_fa
+        return (
+            f"این دکمه برای «{ACTION_LABEL_FA[attempted]}» است؛ "
+            f"وضعیت فعلی نیاز به «{wanted}» دارد."
+        )
+
     def as_log_extra(self) -> dict:
         return {
             "payrev_kind": self.kind,
             "payrev_code": self.log_code,
+            "payrev_action": self.preferred_action,
             "payment_id": self.payment_id,
             "payment_status": self.payment_status,
             "order_id": self.order_id,

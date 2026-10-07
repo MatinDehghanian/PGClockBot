@@ -212,12 +212,13 @@ class NotifyStuckMarkupTests(unittest.TestCase):
     def test_stuck_notify_has_retry_not_reject(self):
         src = open("app/services/notifications.py", encoding="utf-8").read()
         self.assertIn("notify_approved_delivery_stuck", src)
-        self.assertIn("تلاش مجدد تحویل", src)
-        # Reject must not appear in the stuck helper body
+        # Phase 1: go/send via payment_action_markup — never reject
         start = src.index("async def notify_approved_delivery_stuck")
-        end = src.index("\nasync def ", start + 1)
+        end = src.index("\ndef build_qr_caption", start)
         body = src[start:end]
-        self.assertIn("payrev:ok:", body)
+        self.assertIn("payment_action_markup", body)
+        self.assertIn("diagnose_payment_review", body)
+        self.assertNotIn("payrev:ok:", body)
         self.assertNotIn("payrev:no:", body)
 
 

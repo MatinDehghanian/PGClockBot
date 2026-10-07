@@ -74,9 +74,26 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
                 f"/finance?tab=delivery&err={quote(e.message)}", status_code=303
             )
         try:
+            from app.db.models import Payment
+            from app.services.payment_review_diag import diagnose_order_delivery
+
+            pay = (
+                await session.execute(
+                    select(Payment)
+                    .where(Payment.order_id == int(order_id))
+                    .order_by(Payment.id.desc())
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+            diag = await diagnose_order_delivery(session, order, payment=pay)
             await retry_delivery(session, int(order_id))
+            ok_msg = (
+                "پیام تحویل دوباره ارسال شد"
+                if diag.preferred_action == "resend"
+                else "تحویل ادامه یافت"
+            )
             return RedirectResponse(
-                f"/finance?tab=delivery&ok={quote('تحویل دوباره انجام شد')}",
+                f"/finance?tab=delivery&ok={quote(ok_msg)}",
                 status_code=303,
             )
         except Exception as exc:

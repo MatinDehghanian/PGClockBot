@@ -975,24 +975,40 @@ async def notify_approved_delivery_stuck(
     *,
     error: str = "",
 ) -> None:
-    """Payment is APPROVED but delivery/send failed — retry only (never reject).
+    """Payment is APPROVED but delivery/send failed — resume or resend only.
 
-    Reuses ``payrev:ok`` which resumes incomplete approve/delivery safely.
+    Phase 1: button is ``payrev:go`` (ادامه تحویل) or ``payrev:send`` (ارسال
+    مجدد پیام) from diagnosis — never reject, never a false approve claim.
     """
-    from app.services.button_styles import style_kwargs
+    from app.bot import keyboards as kb
+    from app.db.models import Order
+    from app.services.payment_review_diag import diagnose_payment_review
 
     settings = get_settings()
     user = await session.get(BotUser, payment.user_id) if payment.user_id else None
     user_label = format_user_label(user, telegram_id=user_tg_id)
+    order = (
+        await session.get(Order, int(payment.order_id)) if payment.order_id else None
+    )
+    diag = await diagnose_payment_review(session, payment, order=order)
+    action = diag.preferred_action
+    if action not in {"resume", "resend"}:
+        # Fallback: incomplete work → resume; otherwise Telegram resend.
+        action = "resend" if diag.has_service else "resume"
     err = (error or "").strip()
     if len(err) > 180:
         err = err[:177] + "…"
+    action_hint = (
+        "فقط پیام تحویل دوباره ارسال می‌شود — تأیید یا ساخت سرویس جدید نیست."
+        if action == "resend"
+        else "پرداخت دوباره‌تأیید نمی‌شود — فقط تحویل/شارژ ناقص ادامه می‌یابد."
+    )
     lines = [
         kv_line("🧾", "پرداخت", f"#{payment.id}"),
         kv_line("💰", "مبلغ", format_toman(payment.amount, settings.currency)),
         kv_line("👤", "کاربر", user_label),
         kv_line("✅", "وضعیت پرداخت", "تأیید شده"),
-        kv_line("⚠️", "تحویل", "ناکامل / گیرکرده"),
+        kv_line("⚠️", "تشخیص", diag.label_fa),
     ]
     if payment.order_id:
         lines.append(kv_line("🛒", "سفارش", f"#{payment.order_id}"))
@@ -1000,20 +1016,9 @@ async def notify_approved_delivery_stuck(
         lines.append(kv_line("📝", "خطا", err))
     text = format_message(
         "⚠️ تحویل پس از تأیید ناقص ماند",
-        info_block(lines)
-        + "\n\nپرداخت دوباره‌تأیید نمی‌شود — فقط تحویل را ادامه دهید.",
+        info_block(lines) + f"\n\n{action_hint}",
     )
-    markup = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="♻️ تلاش مجدد تحویل",
-                    callback_data=f"payrev:ok:{int(payment.id)}",
-                    **style_kwargs(None, "confirm", fallback="success"),
-                )
-            ]
-        ]
-    )
+    markup = kb.payment_action_markup(int(payment.id), action=action)
     await _dispatch_dual_notify(
         bot,
         session,
