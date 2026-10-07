@@ -254,12 +254,15 @@ async def pay_approve(callback: CallbackQuery, session: AsyncSession, db_user: B
     if not await reseller_can_review_payment(session, db_user, payment):
         await callback.answer("دسترسی ندارید", show_alert=True)
         return
+    was_already_approved = payment.status == PaymentStatus.APPROVED.value
     try:
         order = await approve_payment(session, payment, db_user.telegram_id)
     except Exception as e:
         await callback.answer(f"خطا: {user_safe_error(e)}", show_alert=True)
         return
-    await callback.answer("تأیید شد ✅")
+    await callback.answer(
+        "تحویل ادامه یافت ✅" if was_already_approved else "تأیید شد ✅"
+    )
     if callback.message:
         try:
             if callback.message.photo:

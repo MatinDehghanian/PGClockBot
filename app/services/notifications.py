@@ -967,6 +967,65 @@ async def notify_auto_approve(
     )
 
 
+async def notify_approved_delivery_stuck(
+    bot: Bot,
+    session: AsyncSession,
+    payment: Payment,
+    user_tg_id: int | None,
+    *,
+    error: str = "",
+) -> None:
+    """Payment is APPROVED but delivery/send failed — retry only (never reject).
+
+    Reuses ``payrev:ok`` which resumes incomplete approve/delivery safely.
+    """
+    from app.services.button_styles import style_kwargs
+
+    settings = get_settings()
+    user = await session.get(BotUser, payment.user_id) if payment.user_id else None
+    user_label = format_user_label(user, telegram_id=user_tg_id)
+    err = (error or "").strip()
+    if len(err) > 180:
+        err = err[:177] + "…"
+    lines = [
+        kv_line("🧾", "پرداخت", f"#{payment.id}"),
+        kv_line("💰", "مبلغ", format_toman(payment.amount, settings.currency)),
+        kv_line("👤", "کاربر", user_label),
+        kv_line("✅", "وضعیت پرداخت", "تأیید شده"),
+        kv_line("⚠️", "تحویل", "ناکامل / گیرکرده"),
+    ]
+    if payment.order_id:
+        lines.append(kv_line("🛒", "سفارش", f"#{payment.order_id}"))
+    if err:
+        lines.append(kv_line("📝", "خطا", err))
+    text = format_message(
+        "⚠️ تحویل پس از تأیید ناقص ماند",
+        info_block(lines)
+        + "\n\nپرداخت دوباره‌تأیید نمی‌شود — فقط تحویل را ادامه دهید.",
+    )
+    markup = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="♻️ تلاش مجدد تحویل",
+                    callback_data=f"payrev:ok:{int(payment.id)}",
+                    **style_kwargs(None, "confirm", fallback="success"),
+                )
+            ]
+        ]
+    )
+    await _dispatch_dual_notify(
+        bot,
+        session,
+        "notify_pending_approval",
+        text,
+        markup=markup,
+        photo=payment.receipt_file_id,
+        payment=payment,
+        shop=not payment.is_wallet_topup,
+    )
+
+
 def build_qr_caption(
     *,
     sub_url: str,
