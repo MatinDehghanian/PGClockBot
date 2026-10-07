@@ -104,6 +104,8 @@ class PlansUiNamingTests(unittest.TestCase):
         self.assertIn("generate_pg_username(", src)
         # ``{id}`` placeholder uses order id (matches UI / message_variables catalog)
         self.assertIn("user_id=int(order.id)", src)
+        # ``{username}`` must resolve via buyer PK, never via order.id
+        self.assertIn("buyer_id=int(order.user_id)", src)
         self.assertIn("plan=plan", src)
         self.assertIn("reseller_id=order.reseller_id", src)
         self.assertIn("custom_plan_username_prefix", src)

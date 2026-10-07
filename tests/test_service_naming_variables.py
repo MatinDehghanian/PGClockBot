@@ -52,6 +52,31 @@ class NamingContextTests(unittest.IsolatedAsyncioTestCase):
         settings.assert_awaited_once_with(session, reseller_id=42)
         session.get.assert_awaited_once_with(BotUser, 7)
 
+    async def test_buyer_id_lookup_ignores_naming_id(self):
+        """Delivery passes order.id as user_id; BotUser must be loaded by buyer_id."""
+        settings = AsyncMock(
+            return_value={"pg_username_pattern": "{id}_{username}_{random}"}
+        )
+        session = AsyncMock()
+        session.get.return_value = SimpleNamespace(username="real_buyer", telegram_id=9001)
+        with patch("app.services.users.get_all_settings", settings), patch(
+            "app.services.orders._random_alnum", return_value="a1b2c3d4"
+        ):
+            name = await generate_pg_username(
+                session,
+                user_id=999,  # order id — must NOT be used for BotUser.get
+                buyer_id=7,
+                plan=SimpleNamespace(data_limit_gb=10),
+            )
+        self.assertEqual(name, "999_real_buyer_a1b2c3d4")
+        session.get.assert_awaited_once_with(BotUser, 7)
+
+    async def test_unsafe_username_chars_are_stripped(self):
+        self.assertEqual(
+            await self.name(username="ali user!@#"),
+            "vip_aliuser_30GB_a1b2c3d4",
+        )
+
     async def test_legacy_pattern_does_not_query_user(self):
         session = AsyncMock()
         with patch("app.services.users.get_all_settings", AsyncMock(return_value={})), patch(
@@ -97,3 +122,46 @@ class DeliveryNamingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(pg.create_user_from_template.call_args.args[0]["username"], "buyer_30GB_a1b2c3d4")
         service = await self.session.get(UserService, delivered.service_id)
         self.assertEqual(service.pg_username, "buyer_30GB_a1b2c3d4")
+
+    async def test_deliver_order_id_placeholder_is_order_not_buyer(self):
+        """When order.id != buyer.id, {id} stays order id and {username} stays buyer."""
+        from app.services.orders import deliver_order
+
+        # Pad Order PK so it diverges from BotUser.id (both tables start at 1).
+        for _ in range(3):
+            self.session.add(
+                Order(
+                    user_id=self.user.id,
+                    plan_id=self.platform.id,
+                    amount=1,
+                    status=OrderStatus.CANCELLED.value,
+                )
+            )
+        await self.session.commit()
+
+        self.platform.pg_username_pattern = "{id}_{username}_{random}"
+        order = Order(
+            user_id=self.user.id,
+            plan_id=self.platform.id,
+            amount=100,
+            status=OrderStatus.PAID.value,
+        )
+        self.session.add(order)
+        await self.session.commit()
+        self.assertNotEqual(order.id, self.user.id)
+
+        pg = SimpleNamespace(
+            create_user_from_template=AsyncMock(
+                return_value={"id": 456, "subscription_url": "https://example.com/sub/x"}
+            )
+        )
+        with (
+            patch("app.services.orders.get_pg", return_value=pg),
+            patch("app.services.users.get_all_settings", AsyncMock(return_value={})),
+            patch("app.services.orders._random_alnum", return_value="a1b2c3d4"),
+        ):
+            delivered = await deliver_order(self.session, order)
+
+        expected = f"{order.id}_buyer_a1b2c3d4"
+        self.assertEqual(delivered.status, OrderStatus.DELIVERED.value)
+        self.assertEqual(pg.create_user_from_template.call_args.args[0]["username"], expected)
