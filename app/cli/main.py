@@ -36,7 +36,16 @@ def build_parser() -> argparse.ArgumentParser:
 
     bak = sub.add_parser("backup", help="Create a full backup archive")
     bak.add_argument("--note", default="cli", help="Backup note")
-    bak.add_argument("--no-env", action="store_true", help="Exclude .env from archive")
+    bak.add_argument(
+        "--with-env",
+        action="store_true",
+        help="Include .env (tokens/secrets) — opt-in; default excludes .env",
+    )
+    bak.add_argument(
+        "--no-env",
+        action="store_true",
+        help="Deprecated alias: exclude .env (already the default)",
+    )
     bak.add_argument("--list", action="store_true", help="List backups only")
 
     rst = sub.add_parser("restore", help="Restore from a backup id")
@@ -112,7 +121,11 @@ def main(argv: list[str] | None = None) -> int:
 
             if args.list:
                 return cmd_backup_list(ctx)
-            return cmd_backup(ctx, note=args.note, include_env=not args.no_env)
+            return cmd_backup(
+                ctx,
+                note=args.note,
+                include_env=bool(args.with_env) and not bool(args.no_env),
+            )
         if cmd == "restore":
             from app.cli.backup_cmds import cmd_restore
 

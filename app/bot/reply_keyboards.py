@@ -309,9 +309,10 @@ def _admin_settings_submenu_entries(ui: dict | None = None) -> list[tuple[str, s
 
 def _admin_backup_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]]:
     _ = ui
+    # Phase 2: default create is without .env; with-.env is a separate confirm path.
     return [
-        ("backup_create", "🆕 ساخت بکاپ کامل"),
-        ("backup_create_noenv", "🆕 بکاپ بدون .env"),
+        ("backup_create", "🆕 ساخت بکاپ"),
+        ("backup_create_env", "🆕 بکاپ + .env"),
         ("backup_upload", "📤 آپلود فایل بکاپ"),
         ("backup_refresh", "🔄 تازه‌سازی لیست"),
     ]

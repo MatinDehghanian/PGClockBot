@@ -355,10 +355,15 @@ def validate_backup_archive(zip_path: Path) -> tuple[bool, str, dict[str, Any] |
 def create_backup(
     *,
     note: str = "",
-    include_env: bool = True,
+    include_env: bool = False,
     created_by: str = "panel",
 ) -> dict[str, Any]:
-    """Create a full backup ZIP under data/backups/. Thread-safe. Engine-aware."""
+    """Create a full backup ZIP under data/backups/. Thread-safe. Engine-aware.
+
+    Phase 2 default: ``include_env=False`` (no tokens/secrets in the archive).
+    Callers that need ``.env`` (safety-before-restore, baseline, explicit admin
+    confirm) must pass ``include_env=True``.
+    """
     with _lock:
         ensure_backup_dir()
         DATA_DIR.mkdir(parents=True, exist_ok=True)

@@ -78,9 +78,10 @@ def _hub_text(backups: list[dict]) -> str:
         f"نسخه: <code>{local_version()}</code>",
         "",
         "بکاپ کامل = دیتابیس کل پلتفرم (همه فروشگاه‌ها) + آپلودها + یوزر وب.",
-        "فایل <code>.env</code> (توکن/اسرار) اختیاری است — در لیست با برچسب مشخص می‌شود.",
-        "بکاپ دستی پیش‌فرض با .env؛ زمان‌بندی‌شده پیش‌فرض بدون .env.",
-        "قبل از ریستور، بکاپ ایمنی خودکار ساخته می‌شود.",
+        "پیش‌فرض <b>بدون</b> <code>.env</code> است (مثل زمان‌بندی).",
+        "بکاپ با .env فقط بعد از تأیید امنیتی جداگانه — توکن/اسرار داخل فایل می‌رود.",
+        "حتی بدون .env، فایل ورود وب‌پنل در بکاپ هست.",
+        "قبل از ریستور، بکاپ ایمنی خودکار (با .env) ساخته می‌شود.",
         "",
     ]
     if not backups:
@@ -112,13 +113,60 @@ async def backup_hub(callback: CallbackQuery, db_user: BotUser, state: FSMContex
         )
 
 
+def _env_confirm_keyboard() -> InlineKeyboardMarkup:
+    return _kb(
+        [
+            [
+                InlineKeyboardButton(
+                    text="⚠️ بله — بکاپ با .env",
+                    callback_data="adm:backup:create:env:yes",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="انصراف",
+                    callback_data="adm:backup",
+                )
+            ],
+        ]
+    )
+
+
+@router.callback_query(F.data == "adm:backup:create:env")
+@require_bot_owner_handler
+async def backup_create_env_ask(callback: CallbackQuery, db_user: BotUser):
+    """Phase 2: with-.env path requires an explicit second confirm."""
+    if not _is_admin(db_user):
+        await callback.answer("ادمین نیستید", show_alert=True)
+        return
+    await callback.answer()
+    text = (
+        "⚠️ <b>تأیید بکاپ با .env</b>\n\n"
+        "فایل <code>.env</code> شامل توکن ربات، رمزها و اسرار سرور است.\n"
+        "اگر این بکاپ به چت/دیسک ناامن برود، اسرار لو می‌روند.\n\n"
+        "ادامه می‌دهید؟"
+    )
+    if callback.message:
+        await safe_edit_text(
+            callback.message, text, reply_markup=_env_confirm_keyboard()
+        )
+
+
 @router.callback_query(F.data.startswith("adm:backup:create"))
 @require_bot_owner_handler
 async def backup_create(callback: CallbackQuery, db_user: BotUser):
     if not _is_admin(db_user):
         await callback.answer("ادمین نیستید", show_alert=True)
         return
-    include_env = not callback.data.endswith(":noenv")
+    data = callback.data or ""
+    # Phase 2 defaults: plain create / :noenv → without .env.
+    # With-.env only after explicit :env:yes (confirm step).
+    if data == "adm:backup:create:env":
+        # Handled by backup_create_env_ask (more specific filter); belt-and-suspenders.
+        return await backup_create_env_ask(callback, db_user)
+    if data.endswith(":env") and not data.endswith(":env:yes"):
+        return await backup_create_env_ask(callback, db_user)
+    include_env = data.endswith(":env:yes")
     await callback.answer("در حال ساخت…")
     try:
         result = await asyncio.to_thread(
