@@ -264,6 +264,8 @@ def register_finance_pages(app, *, render, require_staff, get_db):
             "stuck_order_ids": set(),
             "stuck_only_order_ids": [],
             "orders_by_id": {},
+            "delivery_diag_by_order": {},
+            "delivery_payments_by_order": {},
             "pager": None,
             "flash_ok": request.query_params.get("ok")
             or ("ذخیره شد." if request.query_params.get("saved") == "1" else None),
@@ -573,6 +575,9 @@ def register_finance_pages(app, *, render, require_staff, get_db):
                 ctx["flash_err"] = ctx["flash_err"] or "محدوده فروشگاه مشخص نیست"
                 return render(request, "finance.html", ctx)
             try:
+                from app.db.models import Payment
+                from app.services.payment_review_diag import diagnose_order_delivery
+
                 failures = await list_open_delivery_failures(session, reseller_id=rid)
                 stuck = await list_stuck_paid_orders(session, reseller_id=rid, limit=100)
                 failure_oids = {int(f.order_id) for f in failures}
@@ -589,6 +594,33 @@ def register_finance_pages(app, *, render, require_staff, get_db):
                         orders_by_id[int(o.id)] = o
                 for o in stuck:
                     orders_by_id.setdefault(int(o.id), o)
+
+                payments_by_order: dict[int, Payment] = {}
+                if order_ids:
+                    for p in (
+                        await session.execute(
+                            select(Payment)
+                            .where(Payment.order_id.in_(order_ids))
+                            .order_by(Payment.id.desc())
+                        )
+                    ).scalars().all():
+                        oid = int(p.order_id) if p.order_id else 0
+                        if oid and oid not in payments_by_order:
+                            payments_by_order[oid] = p
+
+                diag_by_order: dict[int, object] = {}
+                for oid, o in orders_by_id.items():
+                    try:
+                        diag_by_order[int(oid)] = await diagnose_order_delivery(
+                            session,
+                            o,
+                            payment=payments_by_order.get(int(oid)),
+                        )
+                    except Exception:
+                        logger.debug(
+                            "delivery diagnosis failed order=%s", oid, exc_info=True
+                        )
+
                 ctx["delivery_failures"] = failures
                 ctx["stuck_paid_orders"] = stuck
                 ctx["stuck_order_ids"] = {int(o.id) for o in stuck}
@@ -596,6 +628,8 @@ def register_finance_pages(app, *, render, require_staff, get_db):
                 ctx["stuck_only_order_ids"] = sorted(
                     {int(o.id) for o in stuck} - failure_oids, reverse=True
                 )
+                ctx["delivery_diag_by_order"] = diag_by_order
+                ctx["delivery_payments_by_order"] = payments_by_order
             except Exception:
                 logger.exception("delivery failures tab failed")
                 await rollback_quiet(session)
@@ -604,6 +638,8 @@ def register_finance_pages(app, *, render, require_staff, get_db):
                 ctx["stuck_order_ids"] = set()
                 ctx["stuck_only_order_ids"] = []
                 ctx["orders_by_id"] = {}
+                ctx["delivery_diag_by_order"] = {}
+                ctx["delivery_payments_by_order"] = {}
 
         return render(request, "finance.html", ctx)
 
