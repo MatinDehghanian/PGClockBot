@@ -117,12 +117,22 @@ def _reply_markup(
     *,
     placeholder: str = "از منوی پایین انتخاب کنید…",
 ) -> ReplyKeyboardMarkup:
-    """Standard reply keyboard — persistent so Telegram shows the 4-square menu icon."""
+    """Standard reply keyboard for bot menus.
+
+    ``is_persistent=False`` (Telegram default): on Android the system back key
+    can hide the custom keyboard first, then leave the chat to the dialog list.
+    With ``is_persistent=True`` clients keep the keyboard forced open, so back
+    often appears broken (cannot reach message list). The 4-square menu icon
+    still reopens the keyboard after hide.
+
+    Lasting chrome (never delete the ReplyKeyboard carrier) remains required so
+    iOS does not drop the menu — that is independent of ``is_persistent``.
+    """
     return ReplyKeyboardMarkup(
         keyboard=rows or [[_kb(_home_label(), action=REPLY_ACTION_HOME)]],
         resize_keyboard=True,
         one_time_keyboard=False,
-        is_persistent=True,
+        is_persistent=False,
         input_field_placeholder=placeholder,
     )
 

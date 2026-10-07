@@ -63,9 +63,10 @@ class DualKeyboardContractSourceGuards(unittest.TestCase):
         shop = shop_reply_keyboard({})
         apply = reseller_apply_reply_keyboard({})
         base = submenu_chrome_reply_keyboard({})
-        self.assertTrue(shop.is_persistent)
-        self.assertTrue(apply.is_persistent)
-        self.assertTrue(base.is_persistent)
+        # Not forced-open: Android back can dismiss KB then leave the chat.
+        self.assertFalse(shop.is_persistent)
+        self.assertFalse(apply.is_persistent)
+        self.assertFalse(base.is_persistent)
         # Only back+home footer rows
         self.assertEqual(len(shop.keyboard), 1)
         self.assertEqual(len(apply.keyboard), 1)

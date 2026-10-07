@@ -17,7 +17,7 @@ from app.bot.keyboards import (
 
 
 class BotLoyaltyMenuTests(unittest.TestCase):
-    def test_reply_keyboard_is_persistent(self):
+    def test_reply_keyboard_not_force_persistent(self):
         ui = {
             "menu_layout": "compact",
             "menu_order": "shop,loyalty",
@@ -33,7 +33,7 @@ class BotLoyaltyMenuTests(unittest.TestCase):
             admin_loyalty_reply_keyboard(ui, include_tiers=True),
             admin_loyalty_reply_keyboard(ui, include_tiers=False),
         ):
-            self.assertTrue(kb.is_persistent)
+            self.assertFalse(kb.is_persistent)
 
     def test_customer_loyalty_submenu_in_action_map(self):
         ui = {
