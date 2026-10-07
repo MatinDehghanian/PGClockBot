@@ -5,7 +5,7 @@ from typing import Any, Optional
 
 import httpx
 
-from app.config import get_settings, pg_api_base_candidates
+from app.config import get_settings, normalize_pg_subscription_path, pg_api_base_candidates
 from app.services.security_policy import UnsafePgUrlError, assert_safe_pg_base_url
 
 logger = logging.getLogger(__name__)
@@ -344,6 +344,8 @@ class PasarGuardClient:
         path: str,
         *,
         auth: bool = True,
+        use_cache: bool = True,
+        resolve_api_base: bool = True,
         **kwargs: Any,
     ) -> Any:
         from app.services.pg_read_cache import cache_get, cache_put, invalidate_ident
@@ -352,14 +354,14 @@ class PasarGuardClient:
         ident = self._read_cache_ident()
         if method_u != "GET":
             invalidate_ident(ident)
-        else:
+        elif use_cache:
             cached = cache_get(ident, path, kwargs.get("params"))
             if cached is not None:
                 return cached
         headers = kwargs.pop("headers", {})
         if auth:
             headers.update(await self._headers())
-        else:
+        elif resolve_api_base:
             await self._ensure_api_base()
         resp = await self._client.request(method, path, headers=headers, **kwargs)
         if resp.status_code == 401 and auth:
@@ -379,7 +381,7 @@ class PasarGuardClient:
             payload = resp.json()
         else:
             payload = resp.text
-        if method_u == "GET":
+        if method_u == "GET" and use_cache:
             cache_put(ident, path, kwargs.get("params"), payload)
         return payload
 
@@ -763,11 +765,35 @@ class PasarGuardClient:
     async def reconnect_all_nodes(self) -> Any:
         return await self.request("POST", "/api/nodes/reconnect")
 
-    async def subscription_info(self, token: str) -> dict:
-        return await self.request("GET", f"/sub/{token}/info", auth=False)
+    def _subscription_endpoint(self, token: str, suffix: str, subscription_url: str | None) -> str:
+        from urllib.parse import quote, urlsplit, urlunsplit
 
-    async def subscription_usage(self, token: str) -> Any:
-        return await self.request("GET", f"/sub/{token}/usage", auth=False)
+        # Use a path from the stored link when available; never dial its host.
+        # Customer-supplied links cannot redirect a panel client to another origin.
+        configured = normalize_pg_subscription_path(getattr(self.settings, "pg_subscription_path", "/sub"))
+        prefix = subscription_path_from_url(subscription_url) or configured
+        origin = urlsplit(self.base_url)
+        if origin.scheme not in {"http", "https"} or not origin.netloc:
+            raise PasarGuardError("آدرس پاسارگارد تنظیم نشده است")
+        if not token or any(char in token for char in "/?#\\"):
+            raise PasarGuardError("توکن اشتراک نامعتبر است")
+        path = f"{prefix}/{quote(token, safe='')}/{suffix}"
+        return urlunsplit((origin.scheme, origin.netloc, path, "", ""))
+
+    async def subscription_info(self, token: str, *, subscription_url: str | None = None) -> dict:
+        # Public route is independent of a dashboard/API base path. Fresh reads
+        # also make the user's refresh action bypass the short PG GET cache.
+        return await self.request(
+            "GET", self._subscription_endpoint(token, "info", subscription_url),
+            auth=False, use_cache=False, resolve_api_base=False,
+            headers={"Accept": "application/json"},
+        )
+
+    async def subscription_usage(self, token: str, *, subscription_url: str | None = None) -> Any:
+        return await self.request(
+            "GET", self._subscription_endpoint(token, "usage", subscription_url),
+            auth=False, use_cache=False, resolve_api_base=False,
+        )
 
 
 def as_any_list(data: Any, *keys: str) -> list:
@@ -1088,15 +1114,43 @@ def public_pg_sub_origin() -> str:
     return urlunparse((parsed.scheme, parsed.netloc, "", "", "", "")).rstrip("/")
 
 
-def extract_sub_token(subscription_url: str | None) -> str | None:
+def _subscription_link_parts(subscription_url: str | None) -> tuple[str, str] | None:
+    from urllib.parse import unquote, urlsplit
+
     if not subscription_url:
         return None
-    url = subscription_url.rstrip("/")
-    parts = url.split("/sub/")
-    if len(parts) < 2:
+    raw = subscription_url.strip()
+    try:
+        parsed = urlsplit(raw)
+    except ValueError:
         return None
-    token = parts[-1].split("?")[0].strip("/")
-    return token or None
+    if parsed.scheme not in {"", "http", "https"} or (not parsed.scheme and not raw.startswith("/")):
+        return None
+    path = parsed.path.rstrip("/")
+    if path.rsplit("/", 1)[-1] in {"info", "usage", "raw", "apps"}:
+        path = path.rsplit("/", 1)[0]
+    prefix, _, raw_token = path.rpartition("/")
+    if not prefix or not raw_token:
+        return None
+    try:
+        prefix = normalize_pg_subscription_path(prefix)
+    except ValueError:
+        return None
+    token = unquote(raw_token)
+    if not token or any(char.isspace() or char in "/?#\\" for char in token):
+        return None
+    return prefix, token
+
+
+def subscription_path_from_url(subscription_url: str | None) -> str | None:
+    parts = _subscription_link_parts(subscription_url)
+    return parts[0] if parts else None
+
+
+def extract_sub_token(subscription_url: str | None) -> str | None:
+    """Read a service token from default or custom subscription paths."""
+    parts = _subscription_link_parts(subscription_url)
+    return parts[1] if parts else None
 
 
 def _sanitize_subscription_url(raw: str) -> str | None:
@@ -1164,7 +1218,7 @@ def user_subscription_url(user: dict | None) -> str | None:
                     return cleaned
     if isinstance(links, list):
         for item in links:
-            if isinstance(item, str) and ("/sub/" in item or item.startswith("http")):
+            if isinstance(item, str) and (extract_sub_token(item) or item.startswith("http")):
                 cleaned = absolutize_subscription_url(item)
                 if cleaned:
                     return cleaned
@@ -1184,7 +1238,7 @@ def user_subscription_url(user: dict | None) -> str | None:
     if isinstance(token, str) and token.strip():
         origin = public_pg_sub_origin()
         if origin:
-            return f"{origin}/sub/{token.strip()}"
+            return f"{origin}{get_settings().pg_subscription_path}/{token.strip()}"
     return None
 
 

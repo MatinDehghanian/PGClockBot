@@ -17,6 +17,7 @@ from app.services.orders import get_plan, list_active_plans
 from app.services.pasarguard import get_pg
 from app.services.users import get_all_settings
 from app.services.redact import user_safe_error
+from app.services.service_live_info import fetch_live_service_info
 
 router = Router(name="services")
 
@@ -73,13 +74,9 @@ async def svc_view(
         await callback.answer("یافت نشد", show_alert=True)
         return
     await callback.answer()
-    text = format_message("📦 سرویس", f"🔹 <b>{svc.pg_username}</b>")
-    if svc.subscription_token:
-        try:
-            info = await get_pg().subscription_info(svc.subscription_token)
-            text = format_message("📦 سرویس شما", service_card(info))
-        except Exception as e:
-            text = format_message("📦 سرویس", f"🔹 <b>{svc.pg_username}</b>\n\nخطا در دریافت وضعیت: {e}")
+    info = await fetch_live_service_info(svc, client_factory=get_pg)
+    info.setdefault("username", svc.pg_username)
+    text = format_message("📦 سرویس شما", service_card(info))
     if callback.message:
         await safe_edit_text(callback.message, text, reply_markup=None)
         await callback.message.answer(
@@ -106,12 +103,7 @@ async def svc_link(callback: CallbackQuery, session: AsyncSession, db_user: BotU
         return
     await callback.answer()
     url = svc.subscription_url or ""
-    sub_info = None
-    if svc.subscription_token:
-        try:
-            sub_info = await get_pg().subscription_info(svc.subscription_token)
-        except Exception:
-            sub_info = None
+    sub_info = await fetch_live_service_info(svc, client_factory=get_pg)
     parts = ["🔗 لینک و QR اشتراک"]
     if url and on(ui.get("show_sub_link_in_text", "1")):
         from app.services.formatting import copyable
@@ -119,27 +111,8 @@ async def svc_link(callback: CallbackQuery, session: AsyncSession, db_user: BotU
         parts.append(copyable(url))
     elif not url:
         parts.append("لینک موجود نیست.")
-    if isinstance(sub_info, dict):
-        from app.services.formatting import (
-            copyable,
-            format_bytes_ratio,
-            format_expire,
-            hold_duration_from_info,
-            status_label,
-        )
-
-        if svc.pg_username:
-            parts.append(f"👤 {copyable(svc.pg_username)}")
-        parts.append(f"📶 وضعیت: <b>{status_label(sub_info.get('status'))}</b>")
-        parts.append(
-            f"📦 حجم: <b>{format_bytes_ratio(sub_info.get('used_traffic'), sub_info.get('data_limit'), joiner=' از ')}</b>"
-        )
-        expire_raw = (
-            sub_info["expire"] if "expire" in sub_info else sub_info.get("expire_date")
-        )
-        parts.append(
-            f"⏱ زمان: <b>{format_expire(expire_raw, status=sub_info.get('status'), expire_duration=hold_duration_from_info(sub_info))}</b>"
-        )
+    sub_info.setdefault("username", svc.pg_username)
+    parts.append(service_card(sub_info))
     text = format_message("📱 اشتراک", "\n\n".join(parts))
     if callback.message:
         try:
@@ -152,7 +125,7 @@ async def svc_link(callback: CallbackQuery, session: AsyncSession, db_user: BotU
             db_user.telegram_id,
             url,
             ui,
-            info=sub_info if isinstance(sub_info, dict) else None,
+            info=sub_info if not sub_info.get("error") else None,
             username=svc.pg_username,
         )
 

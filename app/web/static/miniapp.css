@@ -525,3 +525,6 @@ body {
     transition: none !important;
   }
 }
+
+.svc-info-error { margin-top: var(--space-1); font-size: 12px; line-height: 1.65; overflow-wrap: anywhere; }
+.svc-error-code { display: block; margin-top: 4px; }

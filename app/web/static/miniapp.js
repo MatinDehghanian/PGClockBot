@@ -323,6 +323,12 @@
       .join("");
   }
 
+  function serviceInfoErrorHtml(s) {
+    if (!s.error) return "";
+    return `<div class="error svc-info-error" role="status">⚠ ${esc(s.error_message || "دریافت اطلاعات سرویس ناموفق بود؛ دوباره تلاش کنید.")}
+      ${s.error_code ? `<small class="svc-error-code" dir="ltr">${esc(s.error_code)}</small>` : ""}</div>`;
+  }
+
   function serviceCardHtml(s) {
     const pct = s.traffic_pct;
     const meter =
@@ -352,7 +358,10 @@
           ? `<p class="hint">آخرین آنلاین: ${esc(s.online_at)}</p>`
           : ""
       }
+      ${serviceInfoErrorHtml(s)}
+      ${s.info_fetched_at ? `<p class="hint">آخرین دریافت از پنل: ${esc(new Date(s.info_fetched_at).toLocaleTimeString("fa-IR"))}</p>` : ""}
       <div class="svc-actions">
+        <button type="button" class="btn ghost sm" data-refresh-service="${Number(s.id) || 0}">به‌روزرسانی اطلاعات</button>
         <button type="button" class="btn ghost sm" data-copy="${url}">کپی لینک</button>
         <button type="button" class="btn ghost sm" data-qr="${Number(s.id) || 0}">نمایش QR</button>
         <button type="button" class="btn secondary sm" data-open-url="${url}">باز کردن لینک</button>
@@ -376,6 +385,8 @@
           <span>${esc(s.traffic || "—")}</span>
           <span>${esc(expireDaysLabel(s, { withUnit: true }))}</span>
         </div>
+        ${serviceInfoErrorHtml(s)}
+        ${s.error ? `<button type="button" class="btn ghost sm" data-refresh-service="${Number(s.id) || 0}">تلاش مجدد</button>` : ""}
       </div>
       <span class="badge ${statusClass(s.status)}">${esc(s.status_fa || s.status || "—")}</span>
     </div>`;
@@ -556,7 +567,43 @@
     return "";
   }
 
+  const refreshingServices = new Set();
+
+  async function refreshService(serviceId, button) {
+    if (refreshingServices.has(serviceId)) return;
+    refreshingServices.add(serviceId);
+    button.disabled = true;
+    const idle = button.textContent;
+    button.textContent = "در حال دریافت…";
+    try {
+      const result = await api("/api/mini/service/" + serviceId);
+      if (!result.service) throw new Error("missing_service_info");
+      const services = (state && state.customer && state.customer.services) || [];
+      const index = services.findIndex((s) => Number(s.id) === serviceId);
+      if (index >= 0 && result.service) {
+        services[index] = { ...services[index], ...result.service };
+        mount(state);
+      }
+      if (result.service && result.service.error) {
+        toast(result.service.error_message || "دریافت اطلاعات سرویس ناموفق بود", "err");
+      } else {
+        toast("اطلاعات سرویس به‌روز شد");
+      }
+    } catch (_) {
+      toast("دریافت اطلاعات سرویس ناموفق بود؛ دوباره تلاش کنید.", "err");
+    } finally {
+      refreshingServices.delete(serviceId);
+      if (button.isConnected) {
+        button.disabled = false;
+        button.textContent = idle;
+      }
+    }
+  }
+
   function bindActions(scope) {
+    scope.querySelectorAll("[data-refresh-service]").forEach((btn) => {
+      btn.addEventListener("click", () => refreshService(Number(btn.dataset.refreshService), btn));
+    });
     scope.querySelectorAll("[data-path]").forEach((btn) => {
       btn.addEventListener("click", () => openPanelPath(btn.getAttribute("data-path")));
     });

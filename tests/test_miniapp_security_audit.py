@@ -183,7 +183,9 @@ class MiniAppSerializeLeakTests(unittest.TestCase):
         out = _serialize_service(
             svc, {"error": "Connection refused to 10.0.0.5:443", "status": "active"}
         )
-        self.assertIsNone(out["error"])
+        self.assertEqual(out["error"], "incomplete_response")
+        self.assertNotIn("10.0.0.5", str(out))
+        self.assertNotIn("Connection refused", str(out))
         out2 = _serialize_service(svc, {"error": "upstream_unavailable"})
         self.assertEqual(out2["error"], "upstream_unavailable")
 

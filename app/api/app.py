@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.config import DATA_DIR, get_settings, normalize_pg_base_url
+from app.config import DATA_DIR, get_settings, normalize_pg_base_url, normalize_pg_subscription_path
 from app.db.models import (
     BotUser,
     Order,
@@ -1642,6 +1642,7 @@ def create_api_app(lifespan=None) -> FastAPI:
     async def setup_other(
         request: Request,
         pg_base_url: str = Form(...),
+        pg_subscription_path: str = Form("/sub"),
         pg_username: str = Form(""),
         pg_password: str = Form(""),
         web_port: str = Form("9000"),
@@ -1658,6 +1659,10 @@ def create_api_app(lifespan=None) -> FastAPI:
                 return JSONResponse({"ok": False, "error": "راه‌اندازی قبلاً کامل شده است"}, status_code=400)
             return RedirectResponse("/", status_code=303)
         begin_setup()
+        try:
+            sub_path = normalize_pg_subscription_path(pg_subscription_path)
+        except ValueError as exc:
+            return await fail(str(exc))
         base = normalize_pg_base_url((pg_base_url or "").strip())
         if not base:
             return await fail("آدرس پاسارگارد الزامی است.")
@@ -1708,6 +1713,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         update_env_keys(
             {
                 "PG_BASE_URL": base,
+                "PG_SUBSCRIPTION_PATH": sub_path,
                 "PG_USERNAME": (pg_username or "").strip(),
                 "PG_PASSWORD": (pg_password or "").strip(),
                 "WEB_PORT": str(port_n),
@@ -4293,6 +4299,14 @@ def create_api_app(lifespan=None) -> FastAPI:
             ctx["backup_schedule_groups"] = {
                 name: SETTING_GROUPS[name] for name in names if name in SETTING_GROUPS
             }
+        elif tab == "pasarguard":
+            from app.services.setup_wizard import current_setup_values
+
+            current = current_setup_values()
+            ctx["env_values"] = {key: current.get(key, "") for key in (
+                "PG_BASE_URL", "PG_SUBSCRIPTION_PATH", "PG_USERNAME"
+            )}
+            ctx["pg_has_password"] = bool(current.get("PG_PASSWORD"))
         elif tab == "bot":
             from app.services.setup_wizard import current_setup_values
 
@@ -4400,6 +4414,54 @@ def create_api_app(lifespan=None) -> FastAPI:
 
         tab = (request.query_params.get("tab") or "welcome").strip()
         form = await request.form()
+
+        if tab == "pasarguard":
+            from fastapi.responses import JSONResponse
+
+            from app.services.pasarguard import reset_pg
+            from app.services.pg_access import clear_platform_pg_capability_cache, resolve_platform_pg_capabilities
+            from app.services.setup_wizard import current_setup_values
+
+            ajax = str(form.get("ajax") or "") == "1"
+            action = str(form.get("action") or "save")
+
+            def pg_result(ok: bool, message: str, *, code: int = 200):
+                if ajax:
+                    return JSONResponse({"ok": ok, "message" if ok else "error": message}, status_code=code)
+                return RedirectResponse("/settings?tab=pasarguard&" + ("ok=" if ok else "err=") + quote(message), status_code=303)
+
+            if action not in {"save", "test"}:
+                return pg_result(False, "عملیات نامعتبر است", code=400)
+            current = current_setup_values()
+            try:
+                base = assert_safe_pg_base_url(str(form.get("PG_BASE_URL") or ""))
+                sub_path = normalize_pg_subscription_path(str(form.get("PG_SUBSCRIPTION_PATH") or "/sub"))
+            except (ValueError, UnsafePgUrlError) as exc:
+                return pg_result(False, str(exc), code=400)
+            username = str(form.get("PG_USERNAME") or "").strip()
+            password = str(form.get("PG_PASSWORD") or "").strip() or current.get("PG_PASSWORD", "")
+            if not username or not password:
+                return pg_result(False, "نام کاربری و رمز پاسارگارد الزامی است؛ رمز خالی، رمز فعلی را حفظ می‌کند", code=400)
+            if action == "test":
+                import asyncio
+
+                try:
+                    caps = await asyncio.wait_for(resolve_platform_pg_capabilities(
+                        username=username, password=password, base_url=base, use_cache=False,
+                    ), timeout=8.0)
+                except Exception:
+                    return pg_result(False, "پنل در زمان مقرر پاسخ نداد؛ آدرس و اتصال پنل را بررسی کنید", code=502)
+                if not caps.get("ok"):
+                    return pg_result(False, "اتصال پاسارگارد ناموفق بود؛ آدرس، نام کاربری و رمز پنل را بررسی کنید", code=400)
+                return pg_result(True, f"اتصال پاسارگارد موفق است؛ مسیر سابسکریپشن: {sub_path}/")
+            update_env_keys({
+                "PG_BASE_URL": base, "PG_SUBSCRIPTION_PATH": sub_path,
+                "PG_USERNAME": username, "PG_PASSWORD": password,
+            })
+            get_settings.cache_clear()
+            reset_pg()
+            clear_platform_pg_capability_cache()
+            return pg_result(True, "تنظیمات اتصال پاسارگارد ذخیره و اعمال شد")
 
         if tab == "ssl":
             from app.services.ssl_certs import (
@@ -4532,6 +4594,12 @@ def create_api_app(lifespan=None) -> FastAPI:
             webhook_url_raw = str(form.get("WEBHOOK_URL") or "").strip()
             webhook_path_raw = str(form.get("WEBHOOK_PATH") or "").strip()
             current = current_setup_values()
+            try:
+                pg_sub_path = normalize_pg_subscription_path(
+                    str(form.get("PG_SUBSCRIPTION_PATH") or current.get("PG_SUBSCRIPTION_PATH") or "/sub")
+                )
+            except ValueError as exc:
+                return _bot_err(str(exc))
             if not token:
                 token = (current.get("BOT_TOKEN") or "").strip()
             if not pg_pass:
@@ -4566,6 +4634,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "BOT_USERNAME": uname,
                 "ADMIN_IDS": admin_ids_norm,
                 "PG_BASE_URL": pg_base,
+                "PG_SUBSCRIPTION_PATH": pg_sub_path,
                 "PG_USERNAME": pg_user,
                 "PG_PASSWORD": pg_pass,
                 "WEB_PORT": str(port_n),
@@ -4585,6 +4654,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "BOT_USERNAME": str(current.get("BOT_USERNAME") or "").strip().lstrip("@"),
                 "ADMIN_IDS": current_admin_ids,
                 "PG_BASE_URL": normalize_pg_base_url(str(current.get("PG_BASE_URL") or "").strip()),
+                "PG_SUBSCRIPTION_PATH": normalize_pg_subscription_path(current.get("PG_SUBSCRIPTION_PATH")),
                 "PG_USERNAME": str(current.get("PG_USERNAME") or "").strip(),
                 "PG_PASSWORD": str(current.get("PG_PASSWORD") or "").strip(),
                 "WEB_PORT": str(current.get("WEB_PORT") or "9000").strip(),

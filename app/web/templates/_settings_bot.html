@@ -170,6 +170,12 @@
           <small class="muted">مسیرهایی مثل <code dir="ltr">/dashboard</code> فقط UI هستند و باعث خطای ۴۰۵ می‌شوند</small>
         </label>
       </div>
+      <div class="setting-item full">
+        <label>مسیر سابسکریپشن
+          <input name="PG_SUBSCRIPTION_PATH" value="{{ env_values.get('PG_SUBSCRIPTION_PATH','/sub') }}" dir="ltr" placeholder="/sub/" maxlength="128" autocomplete="off" autocapitalize="off" spellcheck="false" />
+          <small class="muted">مسیر لینک اشتراک در پاسارگارد؛ پیش‌فرض <code dir="ltr">/sub/</code>. اگر لینک شما با <code dir="ltr">/apilog/</code> شروع می‌شود، همان مسیر را وارد کنید. آدرس دامنه و توکن را وارد نکنید.</small>
+        </label>
+      </div>
       <div class="setting-item">
         <label>نام کاربری
           <input name="PG_USERNAME" value="{{ env_values.get('PG_USERNAME','') }}" dir="ltr" required autocomplete="off" autocapitalize="off" spellcheck="false" />
