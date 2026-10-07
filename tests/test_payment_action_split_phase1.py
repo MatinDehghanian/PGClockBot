@@ -1,15 +1,15 @@
-"""Phase 0 — payment review diagnosis (shared bot + web)."""
+"""Phase 1 — separate approve / resume / resend payment-review actions."""
 
 from __future__ import annotations
 
 import unittest
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 
-class PaymentReviewDiagTests(unittest.IsolatedAsyncioTestCase):
+class Phase1DiagActionMappingTests(unittest.IsolatedAsyncioTestCase):
     async def _session(self):
         from app.db.models import Base
 
@@ -19,13 +19,13 @@ class PaymentReviewDiagTests(unittest.IsolatedAsyncioTestCase):
         Session = async_sessionmaker(engine, expire_on_commit=False)
         return engine, Session
 
-    async def test_pending_is_claimable(self):
+    async def test_pending_prefers_approve_callback(self):
         from app.db.models import BotUser, Payment, PaymentMethod, PaymentStatus, Role
         from app.services.payment_review_diag import diagnose_payment_review
 
         engine, Session = await self._session()
         async with Session() as session:
-            user = BotUser(telegram_id=8001, referral_code="D8001", role=Role.USER.value)
+            user = BotUser(telegram_id=9101, referral_code="A9101", role=Role.USER.value)
             session.add(user)
             await session.flush()
             pay = Payment(
@@ -39,12 +39,14 @@ class PaymentReviewDiagTests(unittest.IsolatedAsyncioTestCase):
             await session.commit()
             await session.refresh(pay)
             diag = await diagnose_payment_review(session, pay)
-            self.assertEqual(diag.kind, "pending")
-            self.assertTrue(diag.can_claim_approve)
-            self.assertFalse(diag.can_resume_fulfill)
+            self.assertEqual(diag.preferred_action, "approve")
+            self.assertEqual(diag.callback_data(), f"payrev:ok:{pay.id}")
+            self.assertTrue(diag.allows_action("approve"))
+            self.assertFalse(diag.allows_action("resume"))
+            self.assertFalse(diag.allows_action("resend"))
         await engine.dispose()
 
-    async def test_approved_paid_incomplete_is_fulfill(self):
+    async def test_fulfill_prefers_resume_go(self):
         from app.db.models import (
             BotUser,
             Order,
@@ -59,7 +61,7 @@ class PaymentReviewDiagTests(unittest.IsolatedAsyncioTestCase):
 
         engine, Session = await self._session()
         async with Session() as session:
-            user = BotUser(telegram_id=8002, referral_code="D8002", role=Role.USER.value)
+            user = BotUser(telegram_id=9102, referral_code="A9102", role=Role.USER.value)
             plan = Plan(name="P", price=10000, data_limit_gb=10, duration_days=30)
             session.add_all([user, plan])
             await session.flush()
@@ -85,13 +87,13 @@ class PaymentReviewDiagTests(unittest.IsolatedAsyncioTestCase):
             await session.refresh(pay)
             await session.refresh(order)
             diag = await diagnose_payment_review(session, pay, order=order)
-            self.assertEqual(diag.kind, "approved_fulfill")
-            self.assertTrue(diag.can_resume_fulfill)
-            self.assertFalse(diag.can_resend_telegram)
-            self.assertIn("تحویل", diag.label_fa)
+            self.assertEqual(diag.preferred_action, "resume")
+            self.assertEqual(diag.callback_data(), f"payrev:go:{pay.id}")
+            self.assertEqual(diag.action_label_fa, "ادامه تحویل")
+            self.assertIn("تأیید پرداخت", diag.wrong_tool_alert("approve"))
         await engine.dispose()
 
-    async def test_delivered_with_open_failure_is_resend(self):
+    async def test_resend_prefers_send(self):
         from app.db.models import (
             BotUser,
             DeliveryFailure,
@@ -108,15 +110,15 @@ class PaymentReviewDiagTests(unittest.IsolatedAsyncioTestCase):
 
         engine, Session = await self._session()
         async with Session() as session:
-            user = BotUser(telegram_id=8003, referral_code="D8003", role=Role.USER.value)
+            user = BotUser(telegram_id=9103, referral_code="A9103", role=Role.USER.value)
             plan = Plan(name="P3", price=5000, data_limit_gb=5, duration_days=30)
             session.add_all([user, plan])
             await session.flush()
             svc = UserService(
                 bot_user_id=user.id,
                 plan_id=plan.id,
-                pg_username="u8003",
-                remark="order:x",
+                pg_username="u9103",
+                remark="order:z",
             )
             session.add(svc)
             await session.flush()
@@ -145,22 +147,21 @@ class PaymentReviewDiagTests(unittest.IsolatedAsyncioTestCase):
                 DeliveryFailure(
                     order_id=order.id,
                     payment_id=pay.id,
-                    error="telegram send failed",
-                    attempts=2,
+                    error="tg fail",
+                    attempts=1,
                 )
             )
             await session.commit()
             await session.refresh(pay)
             await session.refresh(order)
             diag = await diagnose_payment_review(session, pay, order=order)
-            self.assertEqual(diag.kind, "approved_resend")
-            self.assertTrue(diag.can_resend_telegram)
-            self.assertFalse(diag.can_resume_fulfill)
-            self.assertFalse(diag.can_claim_approve)
-            self.assertIn("تلگرام", diag.label_fa)
+            self.assertEqual(diag.preferred_action, "resend")
+            self.assertEqual(diag.callback_data(), f"payrev:send:{pay.id}")
+            self.assertFalse(diag.allows_action("approve"))
+            self.assertFalse(diag.allows_action("resume"))
         await engine.dispose()
 
-    async def test_fully_complete_without_failure(self):
+    async def test_resend_action_refuses_when_complete(self):
         from app.db.models import (
             BotUser,
             Order,
@@ -172,19 +173,19 @@ class PaymentReviewDiagTests(unittest.IsolatedAsyncioTestCase):
             Role,
             UserService,
         )
-        from app.services.payment_review_diag import diagnose_payment_review
+        from app.services.payment_review_actions import execute_payment_resend
 
         engine, Session = await self._session()
         async with Session() as session:
-            user = BotUser(telegram_id=8004, referral_code="D8004", role=Role.USER.value)
+            user = BotUser(telegram_id=9104, referral_code="A9104", role=Role.USER.value)
             plan = Plan(name="P4", price=5000, data_limit_gb=5, duration_days=30)
             session.add_all([user, plan])
             await session.flush()
             svc = UserService(
                 bot_user_id=user.id,
                 plan_id=plan.id,
-                pg_username="u8004",
-                remark="order:y",
+                pg_username="u9104",
+                remark="order:w",
             )
             session.add(svc)
             await session.flush()
@@ -209,106 +210,124 @@ class PaymentReviewDiagTests(unittest.IsolatedAsyncioTestCase):
             session.add(pay)
             await session.commit()
             await session.refresh(pay)
-            diag = await diagnose_payment_review(session, pay, order=order)
-            self.assertEqual(diag.kind, "approved_complete")
-            self.assertIn("تحویل شده", diag.alert_fa)
+
+            bot = MagicMock()
+            result = await execute_payment_resend(
+                session, pay, reviewer_tg=1, bot=bot
+            )
+            self.assertFalse(result.ok)
+            self.assertEqual(result.error, "wrong_tool")
+            self.assertEqual(result.diag.kind, "approved_complete")
         await engine.dispose()
 
-    async def test_wallet_resume_vs_done(self):
+    async def test_resume_action_calls_approve_payment(self):
         from app.db.models import (
             BotUser,
+            Order,
+            OrderStatus,
             Payment,
             PaymentMethod,
             PaymentStatus,
+            Plan,
             Role,
-            WalletTransaction,
         )
-        from app.services.orders import _wallet_topup_credit_reason
-        from app.services.payment_review_diag import diagnose_payment_review
+        from app.services import payment_review_actions as pra
 
         engine, Session = await self._session()
         async with Session() as session:
-            user = BotUser(
-                telegram_id=8005,
-                referral_code="D8005",
-                role=Role.USER.value,
-                wallet_balance=0,
+            user = BotUser(telegram_id=9105, referral_code="A9105", role=Role.USER.value)
+            plan = Plan(name="P5", price=8000, data_limit_gb=8, duration_days=30)
+            session.add_all([user, plan])
+            await session.flush()
+            order = Order(
+                user_id=user.id,
+                plan_id=plan.id,
+                amount=8000,
+                status=OrderStatus.PAID.value,
+                payment_method=PaymentMethod.CARD.value,
             )
-            session.add(user)
+            session.add(order)
             await session.flush()
             pay = Payment(
+                order_id=order.id,
                 user_id=user.id,
-                amount=12000,
+                amount=8000,
                 method=PaymentMethod.CARD.value,
                 status=PaymentStatus.APPROVED.value,
-                is_wallet_topup=True,
                 reviewed_by=1,
             )
             session.add(pay)
             await session.commit()
             await session.refresh(pay)
+            await session.refresh(order)
 
-            diag = await diagnose_payment_review(session, pay)
-            self.assertEqual(diag.kind, "approved_wallet_resume")
-            self.assertTrue(diag.can_resume_fulfill)
-
-            session.add(
-                WalletTransaction(
-                    user_id=user.id,
-                    amount=12000,
-                    reason=_wallet_topup_credit_reason(int(pay.id)),
-                    balance_after=12000,
-                )
+            delivered = Order(
+                id=order.id,
+                user_id=user.id,
+                plan_id=plan.id,
+                amount=8000,
+                status=OrderStatus.DELIVERED.value,
+                payment_method=PaymentMethod.CARD.value,
+                service_id=1,
             )
-            await session.commit()
-            diag2 = await diagnose_payment_review(session, pay)
-            self.assertEqual(diag2.kind, "approved_wallet_done")
-            self.assertFalse(diag2.can_resume_fulfill)
+            bot = MagicMock()
+            with patch.object(
+                pra, "approve_payment", new=AsyncMock(return_value=delivered)
+            ) as ap, patch.object(
+                pra, "_deliver_and_notify", new=AsyncMock(return_value=None)
+            ):
+                result = await pra.execute_payment_resume(
+                    session, pay, reviewer_tg=42, bot=bot
+                )
+            ap.assert_awaited_once()
+            self.assertTrue(result.ok)
+            self.assertEqual(result.action, "resume")
+            self.assertIn("ادامه", result.alert_fa)
         await engine.dispose()
 
 
-class PayrevHandlerWiringTests(unittest.TestCase):
-    def test_handler_uses_diagnosis_and_resend_path(self):
+class Phase1WiringStaticTests(unittest.TestCase):
+    def test_handlers_register_go_and_send(self):
         src = Path("app/bot/handlers/payments.py").read_text(encoding="utf-8")
-        # Phase 1: dedicated go/send + legacy ok router
-        self.assertIn("execute_payment_legacy_ok", src)
+        self.assertIn('F.data.startswith("payrev:go:")', src)
+        self.assertIn('F.data.startswith("payrev:send:")', src)
+        self.assertIn("execute_payment_resume", src)
         self.assertIn("execute_payment_resend", src)
-        self.assertIn("payrev:send:", src)
-        actions = Path("app/services/payment_review_actions.py").read_text(encoding="utf-8")
-        self.assertIn("پیام تحویل دوباره ارسال شد", actions)
-        self.assertIn("diagnose_payment_review", actions)
+        self.assertIn("execute_payment_legacy_ok", src)
 
-    def test_finance_delivery_surfaces_diag(self):
-        pages = Path("app/api/finance_pages.py").read_text(encoding="utf-8")
+    def test_keyboards_split_actions(self):
+        from app.bot.keyboards import payment_action_markup, payment_resend, payment_resume, payment_review
+
+        ok = payment_review(7)
+        self.assertEqual(ok.inline_keyboard[0][0].callback_data, "payrev:ok:7")
+        self.assertEqual(ok.inline_keyboard[0][1].callback_data, "payrev:no:7")
+
+        go = payment_resume(8)
+        self.assertEqual(go.inline_keyboard[0][0].callback_data, "payrev:go:8")
+        self.assertEqual(len(go.inline_keyboard[0]), 1)
+
+        send = payment_resend(9)
+        self.assertEqual(send.inline_keyboard[0][0].callback_data, "payrev:send:9")
+
+        via = payment_action_markup(10, action="resend")
+        self.assertEqual(via.inline_keyboard[0][0].callback_data, "payrev:send:10")
+
+    def test_stuck_notify_uses_go_or_send_not_ok(self):
+        src = Path("app/services/notifications.py").read_text(encoding="utf-8")
+        start = src.index("async def notify_approved_delivery_stuck")
+        end = src.index("\ndef build_qr_caption", start)
+        body = src[start:end]
+        self.assertIn("payment_action_markup", body)
+        self.assertIn("diagnose_payment_review", body)
+        self.assertNotIn("payrev:ok:", body)
+        self.assertNotIn("payrev:no:", body)
+
+    def test_finance_delivery_labels_split(self):
         tpl = Path("app/web/templates/finance.html").read_text(encoding="utf-8")
-        self.assertIn("diagnose_order_delivery", pages)
-        self.assertIn("delivery_diag_by_order", pages)
-        self.assertIn("delivery_diag_by_order", tpl)
-        self.assertIn("تشخیص", tpl)
-
-    def test_backup_env_clarity_bot_and_web(self):
-        bot = Path("app/bot/handlers/admin_backup.py").read_text(encoding="utf-8")
-        web = Path("app/web/templates/_settings_backup.html").read_text(encoding="utf-8")
-        self.assertIn("شامل .env", bot)
-        self.assertIn("بدون .env", bot)
-        self.assertIn("همه فروشگاه‌ها", bot)
-        self.assertIn("شامل .env", web)
-        self.assertIn("بدون .env", web)
-        self.assertIn("همه فروشگاه‌ها", web)
-
-
-class PayrevResendPathTests(unittest.TestCase):
-    """approved_resend must resend Telegram — never call approve_payment."""
-
-    def test_resend_path_skips_approve_payment(self):
-        src = Path("app/services/payment_review_actions.py").read_text(encoding="utf-8")
-        start = src.index("async def execute_payment_resend")
-        end = src.index("\nasync def execute_payment_legacy_ok", start)
-        block = src[start:end]
-        self.assertIn("send_delivery_to_user", block)
-        self.assertNotIn("approve_payment(", block)
-        self.assertIn("resolve_delivery_failure", block)
-        self.assertIn('allows_action("resend")', block)
+        self.assertIn("action_label_fa", tpl)
+        self.assertIn("ارسال مجدد پیام", tpl)
+        self.assertIn("ادامه تحویل", tpl)
+        self.assertIn("preferred_action", tpl)
 
 
 if __name__ == "__main__":
