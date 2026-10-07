@@ -77,7 +77,9 @@ def _hub_text(backups: list[dict]) -> str:
         "💾 <b>بکاپ / ریستور</b>",
         f"نسخه: <code>{local_version()}</code>",
         "",
-        "بکاپ کامل شامل دیتابیس، آپلودها، یوزر وب و (اختیاری) فایل .env است.",
+        "بکاپ کامل = دیتابیس کل پلتفرم (همه فروشگاه‌ها) + آپلودها + یوزر وب.",
+        "فایل <code>.env</code> (توکن/اسرار) اختیاری است — در لیست با برچسب مشخص می‌شود.",
+        "بکاپ دستی پیش‌فرض با .env؛ زمان‌بندی‌شده پیش‌فرض بدون .env.",
         "قبل از ریستور، بکاپ ایمنی خودکار ساخته می‌شود.",
         "",
     ]
@@ -86,7 +88,7 @@ def _hub_text(backups: list[dict]) -> str:
     else:
         lines.append(f"تعداد: <b>{len(backups)}</b> (نمایش ۸ مورد اخیر)")
         for b in backups[:8]:
-            env = " · .env" if b.get("include_env") else ""
+            env = " · <b>شامل .env</b>" if b.get("include_env") else " · بدون .env"
             lines.append(
                 f"• <code>{b['id']}</code> — {b.get('size_human')} — v{b.get('app_version')}{env}"
             )
@@ -134,8 +136,8 @@ async def backup_create(callback: CallbackQuery, db_user: BotUser):
         f"✅ بکاپ آماده\n"
         f"<code>{result['filename']}</code>\n"
         f"حجم: {result['size_human']}\n"
-        f"نسخه: {result.get('app_version')}\n"
-        f".env: {'بله' if result.get('include_env') else 'خیر'}"
+        f"نسخه: <code>{result.get('app_version')}</code>\n"
+        f".env: <b>{'شامل .env (اسرار)' if result.get('include_env') else 'بدون .env'}</b>"
     )
     if callback.message:
         try:
@@ -173,8 +175,8 @@ async def backup_item(callback: CallbackQuery, db_user: BotUser):
         f"<code>{b.get('filename') or path.name}</code>\n"
         f"شناسه: <code>{backup_id}</code>\n"
         f"حجم: {b.get('size_human', '—')}\n"
-        f"نسخه: {b.get('app_version', '—')}\n"
-        f".env: {'بله' if b.get('include_env') else 'خیر'}\n"
+        f"نسخه: <code>{b.get('app_version', '—')}</code>\n"
+        f".env: <b>{'شامل .env (توکن‌ها و اسرار)' if b.get('include_env') else 'بدون .env'}</b>\n"
         f"{b.get('note') or ''}"
     )
     if callback.message:

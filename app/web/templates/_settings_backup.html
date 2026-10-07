@@ -48,7 +48,8 @@
   <div class="card settings-card">
     <h2>بکاپ کامل اطلاعات</h2>
     <p class="muted update-card-caption">
-      آرشیو ZIP شامل دیتابیس، آپلودها، یوزر وب‌پنل و (اختیاری) فایل <code dir="ltr">.env</code> است.
+      آرشیو ZIP شامل دیتابیس کامل پلتفرم (همه فروشگاه‌ها)، آپلودها، یوزر وب‌پنل و در صورت روشن بودن سوییچ، فایل <code dir="ltr">.env</code> (توکن‌ها و اسرار) است.
+      بکاپ زمان‌بندی‌شده به‌صورت پیش‌فرض <strong>بدون</strong> <code dir="ltr">.env</code> است؛ بکاپ دستی پیش‌فرض با <code dir="ltr">.env</code> است.
       قبل از هر ریستور، یک بکاپ ایمنی خودکار ساخته می‌شود.
     </p>
     <div class="update-meta">
@@ -174,9 +175,13 @@
         {% endif %}
         <small class="muted" style="display:block">
           {{ b.created_at }} · {{ b.size_human }} · v{{ b.app_version }}
-          {% if b.include_env %} · شامل .env{% endif %}
           {% if b.note %} · {{ b.note }}{% endif %}
         </small>
+        {% if b.include_env %}
+        <span class="badge warn badge-inline" title="این بکاپ فایل .env (توکن‌ها و اسرار) را دارد">شامل .env</span>
+        {% else %}
+        <span class="badge neutral badge-inline" title="فایل .env داخل این بکاپ نیست">بدون .env</span>
+        {% endif %}
         {% if b.sha256 %}<small class="mono muted" dir="ltr">sha256: {{ b.sha256[:16] }}…</small>{% endif %}
       </div>
       <div style="display:flex;flex-wrap:wrap;gap: var(--space-1);align-items:center">
