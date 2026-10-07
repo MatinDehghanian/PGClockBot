@@ -16,6 +16,9 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.2.15": [
+        "رفع فوری: صفحه مدیریت مالی (سفارشات / پرداخت‌ها) دیگر خطای HTTP 500 نمی‌دهد — باگ import محلی Payment بعد از تشخیص تحویل",
+    ],
     "0.2.14": [
         "پرداخت گیرکرده: تشخیص وضعیت واقعی + دکمه‌های جدا برای تأیید / ادامه تحویل / ارسال مجدد پیام (دکمه‌های قدیمی هم سازگار می‌مانند)",
         "بکاپ: پیش‌فرض بدون .env؛ بکاپ با اسرار فقط بعد از تأیید دوم (امن‌تر برای ارسال تلگرام و بکاپ دستی)",

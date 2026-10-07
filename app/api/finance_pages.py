@@ -575,7 +575,6 @@ def register_finance_pages(app, *, render, require_staff, get_db):
                 ctx["flash_err"] = ctx["flash_err"] or "محدوده فروشگاه مشخص نیست"
                 return render(request, "finance.html", ctx)
             try:
-                from app.db.models import Payment
                 from app.services.payment_review_diag import diagnose_order_delivery
 
                 failures = await list_open_delivery_failures(session, reseller_id=rid)
