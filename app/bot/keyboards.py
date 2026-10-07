@@ -931,14 +931,14 @@ def admin_plan_kind_keyboard(
                 _ikb(
                     "📦 بسته حجم",
                     callback_data="adm:plans:kind:resellers:addon_volume",
-                    style=_style(ui, "plan_res_fixed", fallback="primary"),
+                    style=_style(ui, "plan_res_addon_vol", fallback="primary"),
                 )
             ],
             [
                 _ikb(
                     "👤 بسته کاربر",
                     callback_data="adm:plans:kind:resellers:addon_users",
-                    style=_style(ui, "plan_res_fixed", fallback="primary"),
+                    style=_style(ui, "plan_res_addon_users", fallback="primary"),
                 )
             ],
             [back],
