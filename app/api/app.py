@@ -77,6 +77,7 @@ from app.services.security_policy import (
     request_host_allowed,
 )
 from app.services.updates import local_version
+from app.services.message_variables import template_variable_specs
 from app.services.users import (
     SETTINGS_DOMAIN_REDIRECTS,
     SETTING_GROUPS,
@@ -122,6 +123,7 @@ templates.env.globals["order_status_fa"] = order_status_fa
 templates.env.globals["ticket_status_fa"] = ticket_status_fa
 templates.env.globals["format_bytes"] = format_bytes
 templates.env.globals["format_bytes_ratio"] = format_bytes_ratio
+templates.env.globals["template_variable_specs"] = template_variable_specs
 
 
 def render_panel_status(
