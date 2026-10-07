@@ -315,6 +315,7 @@ MESSAGE_RICH_KEYS = frozenset(
         "payment_ok_title",
         "support_text",
         "referral_text",
+        "referral_required_text",
         "force_join_msg",
         "qr_caption",
         "payment_reject_text",

@@ -158,7 +158,7 @@ class DomainSettingGroupsTests(unittest.TestCase):
         self.assertNotIn("support_text", msg_keys)
         self.assertNotIn("referral_text", msg_keys)
         self.assertEqual(keys_for_tab("supports"), {"support_text"})
-        self.assertEqual(keys_for_tab("loyalty"), {"referral_text"})
+        self.assertEqual(keys_for_tab("loyalty"), {"referral_text", "referral_required", "referral_required_text"})
         self.assertIn("روش‌های پرداخت", TAB_SETTING_GROUPS["payment"])
 
     def test_preview_js_drops_moved_message_fields(self):
