@@ -70,8 +70,11 @@ class MiniAppAddonTests(unittest.IsolatedAsyncioTestCase):
         await self.session.close()
         await self.engine.dispose()
 
-    async def buy(self, pack_id=1, service_id=10):
-        return await self.client.post("/api/mini/addon", json={"service_id": service_id, "pack_id": pack_id})
+    async def buy(self, pack_id=1, service_id=10, kind=None):
+        body = {"service_id": service_id, "pack_id": pack_id}
+        if kind is not None:
+            body["kind"] = kind
+        return await self.client.post("/api/mini/addon", json=body)
 
     async def assert_no_purchase(self):
         self.assertEqual(await self.session.scalar(select(func.count(Order.id))), 0)
@@ -87,6 +90,30 @@ class MiniAppAddonTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual({p["id"] for p in packs}, {1, 2})
         self.assertEqual({p["amount_label"] for p in packs}, {"2.5 گیگ", "7 روز"})
 
+    async def test_catalog_filters_the_selected_kind_on_the_server(self):
+        for kind, pack_id, amount in [("volume", 1, "2.5 گیگ"), ("duration", 2, "7 روز")]:
+            with self.subTest(kind=kind):
+                response = await self.client.get(f"/api/mini/service/10/addons?kind={kind}")
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.json()["kind"], kind)
+                packs = response.json()["packs"]
+                self.assertEqual([p["id"] for p in packs], [pack_id])
+                self.assertEqual(packs[0]["kind"], kind)
+                self.assertEqual(packs[0]["amount_label"], amount)
+
+    async def test_catalog_rejects_an_unknown_kind(self):
+        response = await self.client.get("/api/mini/service/10/addons?kind=unknown")
+        self.assertEqual(response.status_code, 422)
+
+    async def test_checkout_rejects_the_opposite_kind_before_debit(self):
+        for kind, pack_id in [("volume", 2), ("duration", 1), ("unknown", 1)]:
+            with self.subTest(kind=kind):
+                response = await self.client.post("/api/mini/addon", json={
+                    "service_id": 10, "pack_id": pack_id, "kind": kind,
+                })
+                self.assertEqual(response.status_code, 400)
+                await self.assert_no_purchase()
+
     async def test_service_payload_marks_only_eligible_owned_services(self):
         linked = UserService(id=11, bot_user_id=1, pg_user_id=111, pg_username="linked", remark="linked")
         unconnected = UserService(id=12, bot_user_id=1, pg_username="unconnected")
@@ -100,7 +127,7 @@ class MiniAppAddonTests(unittest.IsolatedAsyncioTestCase):
     async def test_volume_and_duration_use_real_wallet_checkout_and_notify(self):
         for pack, balance in [(self.volume, 9000), (self.duration, 7000)]:
             with self.subTest(kind=pack.kind):
-                response = await self.buy(pack.id)
+                response = await self.buy(pack.id, kind=pack.kind)
                 self.assertEqual(response.status_code, 200, response.text)
                 self.assertEqual(response.json()["wallet"], balance)
                 order = await self.session.get(Order, response.json()["order_id"])

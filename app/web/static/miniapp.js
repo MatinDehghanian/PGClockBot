@@ -680,8 +680,10 @@
   }
 
   const addonPacks = new Map();
+  let addonRequestId = 0;
 
   async function showAddons(serviceId, kind) {
+    if (kind !== "volume" && kind !== "duration") return;
     const host = document.querySelector(`[data-addon-host="${serviceId}"]`);
     if (!host) return;
     if (!host.hidden && host.dataset.kind === kind) {
@@ -691,8 +693,11 @@
       return;
     }
     closeOpenOverlays();
+    addonPacks.delete(serviceId);
+    const requestId = String(++addonRequestId);
     host.hidden = false;
     host.dataset.kind = kind;
+    host.dataset.requestId = requestId;
     host.textContent = "در حال دریافت بسته‌ها…";
     syncTelegramBackButton();
     const c = (state && state.customer) || {};
@@ -701,8 +706,9 @@
       return;
     }
     try {
-      const data = await api("/api/mini/service/" + serviceId + "/addons");
-      if (host.hidden || host.dataset.kind !== kind || !host.isConnected) return;
+      const data = await api("/api/mini/service/" + serviceId + "/addons?kind=" + encodeURIComponent(kind));
+      if (host.hidden || host.dataset.requestId !== requestId || !host.isConnected) return;
+      if (data.kind && data.kind !== kind) throw new Error("نوع بسته‌ها با بخش انتخاب‌شده مطابقت ندارد؛ دوباره تلاش کنید");
       const packs = (data.packs || []).filter((p) => p.kind === kind);
       addonPacks.set(serviceId, packs);
       const label = kind === "volume" ? "افزایش حجم" : "افزایش زمان";
@@ -718,7 +724,7 @@
         </div>`).join("") : '<p class="muted">بسته‌ای برای خرید فعال نیست</p>');
       bindActions(host);
     } catch (e) {
-      if (!host.hidden && host.dataset.kind === kind && host.isConnected) {
+      if (!host.hidden && host.dataset.requestId === requestId && host.isConnected) {
         host.textContent = String(e.message || e);
       }
     }
@@ -733,7 +739,8 @@
     }
     const pack = (addonPacks.get(serviceId) || []).find((p) => p.id === packId);
     const svc = (c.services || []).find((s) => s.id === serviceId);
-    if (!pack || !svc) return;
+    const host = document.querySelector(`[data-addon-host="${serviceId}"]`);
+    if (!pack || !svc || !host || host.hidden || pack.kind !== host.dataset.kind) return;
     busy = true;
     try {
       const label = pack.kind === "volume" ? "افزایش حجم" : "افزایش زمان";
@@ -743,7 +750,7 @@
         : window.confirm(message);
       if (!ok) return;
       const res = await api("/api/mini/addon", {
-        method: "POST", body: { service_id: serviceId, pack_id: packId },
+        method: "POST", body: { service_id: serviceId, pack_id: packId, kind: pack.kind },
       });
       toast(res.message || "بسته اضافه شد", "ok");
       await reload();
