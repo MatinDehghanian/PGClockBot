@@ -15,6 +15,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.2.30": [
+        "رفع خطای دکمه کد تخفیف روی کیبورد پرداخت (ارسال درست کاربر به prompt)",
+        "هم‌تراز شدن نوع کد هدیه/تخفیف در فرم پلن‌ها با انتخاب واقعی دراپ‌داون",
+    ],
     "0.2.29": [
         "پیش‌نمایش تمدید با انتقال حجم/زمان باقی‌مانده (بات + مینی‌اپ؛ کلید یکبارمصرف)",
         "درخواست لغو سرویس با بازپرداخت کیف‌پول همان فروشگاه؛ صفحه بررسی اپراتور",
