@@ -119,6 +119,15 @@ templates.env.filters["expire"] = format_expire_short
 templates.env.filters["order_status"] = order_status_fa
 templates.env.filters["ticket_status"] = ticket_status_fa
 templates.env.globals["app_version"] = local_version()
+try:
+    from app.services.update_channel import channel_context as _channel_context_boot
+
+    _ch_boot = _channel_context_boot()
+    templates.env.globals["update_channel"] = _ch_boot["channel"]
+    templates.env.globals["update_channel_label"] = _ch_boot["channel_label"]
+except Exception:
+    templates.env.globals["update_channel"] = "main"
+    templates.env.globals["update_channel_label"] = "پایدار"
 templates.env.globals["order_status_fa"] = order_status_fa
 templates.env.globals["ticket_status_fa"] = ticket_status_fa
 templates.env.globals["format_bytes"] = format_bytes
@@ -215,6 +224,16 @@ def render(request: Request, name: str, context: dict | None = None, status_code
     ctx.setdefault("flash_err", None)
     ctx.setdefault("open_edit", None)
     ctx.setdefault("app_version", local_version())
+    if "update_channel" not in ctx or "update_channel_label" not in ctx:
+        try:
+            from app.services.update_channel import channel_context
+
+            ch = channel_context()
+            ctx.setdefault("update_channel", ch["channel"])
+            ctx.setdefault("update_channel_label", ch["channel_label"])
+        except Exception:
+            ctx.setdefault("update_channel", "main")
+            ctx.setdefault("update_channel_label", "پایدار")
     try:
         from app.services.csrf import ensure_csrf_token
 
@@ -3952,12 +3971,46 @@ def create_api_app(lifespan=None) -> FastAPI:
                 return {"ok": False, "error": "عملیات در حال اجراست", "status": st}
         return {"ok": True, "status": clear_idle_status()}
 
+    @app.post("/update/channel")
+    async def update_channel_set(
+        request: Request,
+        staff: dict = Depends(require_admin),
+    ):
+        """Persist UPDATE_CHANNEL (main|dev) and return fresh update-tab context."""
+        from app.services.panel_update import update_page_context
+        from app.services.update_channel import normalize_channel, set_update_channel
+        from app.services.updates import clear_update_cache
+
+        body = {}
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        raw = (body or {}).get("channel")
+        if raw is None or str(raw).strip() == "":
+            return {"ok": False, "error": "کانال آپدیت مشخص نشده"}
+        channel = set_update_channel(raw)
+        clear_update_cache()
+        ctx = await update_page_context(force_check=True)
+        return {
+            "ok": True,
+            "channel": channel,
+            "channel_label": ctx.get("update_channel_label"),
+            "channels": ctx.get("update_channels"),
+            "update_info": ctx.get("update_info"),
+            "migration_preflight": ctx.get("migration_preflight"),
+            "can_start_update": ctx.get("can_start_update"),
+            "local_version": ctx.get("local_version"),
+            "normalized": normalize_channel(raw),
+        }
+
     @app.post("/update/start")
     async def update_start(
         request: Request,
         staff: dict = Depends(require_admin),
     ):
         from app.services.panel_update import clear_idle_status, start_update
+        from app.services.update_channel import get_update_channel, migration_preflight
         from app.services.updates import check_github_update, clear_update_cache, is_newer
 
         body = {}
@@ -3966,9 +4019,18 @@ def create_api_app(lifespan=None) -> FastAPI:
         except Exception:
             body = {}
         clear_update_cache()
-        info = await check_github_update(force=True)
+        channel = get_update_channel()
+        info = await check_github_update(force=True, channel=channel)
         target = (body or {}).get("target") or info.get("remote_version")
         force = bool((body or {}).get("force"))
+        preflight = await migration_preflight(channel, force=True)
+        if preflight.get("blocked"):
+            return {
+                "ok": False,
+                "error": preflight.get("message") or "مایگریشن کانال مقصد ناسازگار است",
+                "info": info,
+                "migration_preflight": preflight,
+            }
         # Retry after error may force; otherwise require a real newer remote.
         if not info.get("update_available") and not force:
             from app.services.panel_update import read_status

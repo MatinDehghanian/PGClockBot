@@ -146,6 +146,8 @@ class Settings(BaseSettings):
 
     currency: str = Field(default="تومان", alias="CURRENCY")
     default_locale: str = Field(default="fa", alias="DEFAULT_LOCALE")
+    # Panel update channel: main (stable) or dev — persisted in .env
+    update_channel: str = Field(default="main", alias="UPDATE_CHANNEL")
 
     allow_settlement_mock: bool = Field(default=False, alias="ALLOW_SETTLEMENT_MOCK")
 
@@ -169,11 +171,19 @@ class Settings(BaseSettings):
         "currency",
         "default_locale",
         "database_url",
+        "update_channel",
         mode="before",
     )
     @classmethod
     def strip_wrap_quotes(cls, value: object) -> str:
         return _clean_str(value)
+
+    @field_validator("update_channel", mode="after")
+    @classmethod
+    def normalize_update_channel(cls, value: str) -> str:
+        from app.services.update_channel import normalize_channel
+
+        return normalize_channel(value)
 
     @field_validator("trust_proxy", "allow_settlement_mock", mode="before")
     @classmethod
