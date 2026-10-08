@@ -664,6 +664,12 @@ DEFAULT_SETTINGS = {
     "terms_buy_reseller_btn": "موافقم",
     "terms_buy_reseller_reaccept": "1",
     "trial_enabled": "0",
+    "trial_require_contact": "0",
+    "trial_require_iran_phone": "0",
+    "receipt_dup_policy": "warn",
+    "connection_guides": "[]",
+    "btn_guides": "📘 آموزش اتصال",
+    "btn_guide_open_link": "🔗 باز کردن لینک اشتراک",
     "referral_bonus": "0",
     "referral_required": "0",
     "referral_required_text": (
@@ -901,8 +907,8 @@ SETTINGS_TABS: list[tuple[str, str]] = [
     ("links", "لینک‌های سریع"),
     ("qr", "QR اشتراک"),
     ("naming", "نام‌گذاری سرویس"),
-    ("forcejoin", "کانال اجباری"),
-    ("terms", "قوانین"),
+    ("limits", "محدودیت"),
+    ("guides", "آموزش اتصال"),
     ("notifications", "نوتیفیکیشن"),
     ("daily_report", "گزارش روزانه"),
     ("bot", "ربات و اتصال"),
@@ -917,6 +923,9 @@ SETTINGS_DOMAIN_REDIRECTS: dict[str, str] = {
     "supports": "/tickets?supports=1",
     "loyalty": "/loyalty?settings=referral",
     "reseller": "/resellers",
+    # Merged into «محدودیت»
+    "forcejoin": "/settings?tab=limits",
+    "terms": "/settings?tab=limits",
 }
 
 # Web-panel settings (sidebar under dashboard — not bot settings tabs)
@@ -965,6 +974,55 @@ SETTING_GROUPS = {
             "پیام دریافت معرف",
             "textarea",
             "پیامی که قبل از ثبت‌نام به کاربر بدون معرف نشان داده می‌شود.",
+        ),
+    ],
+    "اکانت تست": [
+        (
+            "trial_require_contact",
+            "تأیید شماره تماس برای تست",
+            "toggle",
+            "قبل از دریافت اکانت تست، دکمه اشتراک‌گذاری شماره (Contact) الزامی است. فقط شماره متعلق به همان اکانت تلگرام پذیرفته می‌شود.",
+        ),
+        (
+            "trial_require_iran_phone",
+            "فقط شماره ایران برای تست",
+            "toggle",
+            "همراه با تأیید تماس: فقط موبایل ایران (+۹۸) پذیرفته می‌شود. شماره خام ذخیره یا لاگ نمی‌شود.",
+        ),
+    ],
+    "ضدتقلب رسید": [
+        (
+            "receipt_dup_policy",
+            "رسید تکراری",
+            "select",
+            "اگر همان تصویر رسید برای پرداخت دیگری دیده شود",
+            [("warn", "هشدار به بررسی‌کننده"), ("block", "رد کردن آپلود")],
+        ),
+    ],
+    "آموزش اتصال": [
+        (
+            "btn_guides",
+            "متن دکمه فهرست آموزش",
+            "text",
+            "دکمه اینلاین روی پیام تحویل و صفحه سرویس",
+        ),
+        (
+            "btn_guide_open_link",
+            "متن دکمه لینک اشتراک",
+            "text",
+            "وقتی آموزش deep-link فعال باشد",
+        ),
+        (
+            "btn_style_guides",
+            "رنگ دکمه فهرست آموزش",
+            "btn_color",
+            "همان رنگ‌بندی تلگرام",
+        ),
+        (
+            "connection_guides",
+            "آموزش‌ها (دکمه‌ها)",
+            "connection_guides",
+            "برای هر آموزش عنوان، متن، مخاطب (کاربر/نماینده)، رنگ و لینک اشتراک جدا تعریف کنید.",
         ),
     ],
     "متن دعوت دوستان": [
@@ -1400,7 +1458,6 @@ TAB_SETTING_GROUPS: dict[str, list[str]] = {
     "colors": ["رنگ دکمه‌ها"],
     "qr": ["QR اشتراک"],
     "payment": [
-        "معرف اجباری",
         "روش‌های پرداخت",
         "کارت به کارت",
         "تأیید خودکار کارت به کارت",
@@ -1415,6 +1472,17 @@ TAB_SETTING_GROUPS: dict[str, list[str]] = {
     "supports": ["متن پشتیبانی ربات"],
     "loyalty": ["متن دعوت دوستان"],
     "naming": ["نام‌گذاری سرویس در پاسارگارد"],
+    "limits": [
+        "معرف اجباری",
+        "اکانت تست",
+        "ضدتقلب رسید",
+        "کانال اجباری",
+        "قوانین ورود به ربات",
+        "قوانین خرید پلن کاربر",
+        "قوانین خرید پلن نماینده",
+    ],
+    "guides": ["آموزش اتصال"],
+    # Legacy aliases — redirected to limits
     "forcejoin": ["کانال اجباری"],
     "terms": ["قوانین ورود به ربات", "قوانین خرید پلن کاربر", "قوانین خرید پلن نماینده"],
     "billing": ["مدیریت PAYG"],

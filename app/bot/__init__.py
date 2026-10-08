@@ -130,6 +130,9 @@ def create_dispatcher() -> Dispatcher:
     dp.include_router(shop.router)
     dp.include_router(wallet.router)
     dp.include_router(services.router)
+    from app.bot.handlers import guides
+
+    dp.include_router(guides.router)
     dp.include_router(support.router)
     dp.include_router(ticket_actions.router)
     dp.include_router(payments.router)

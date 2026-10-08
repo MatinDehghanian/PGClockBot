@@ -211,6 +211,22 @@ async def svc_view(
         await nav.set_nav_level(state, nav.NAV_SERVICE, push=True)
 
 
+@router.callback_query(F.data.startswith("guide:svc:"))
+async def svc_guide(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    from app.bot.handlers.guides import show_guides_list
+
+    try:
+        svc_id = int((callback.data or "").split(":")[-1])
+    except (TypeError, ValueError):
+        await callback.answer("نامعتبر", show_alert=True)
+        return
+    svc = await session.get(UserService, svc_id)
+    if not svc or svc.bot_user_id != db_user.id:
+        await callback.answer("یافت نشد", show_alert=True)
+        return
+    await show_guides_list(callback, session, db_user, svc_id=svc_id)
+
+
 @router.callback_query(F.data.startswith("svc:link:"))
 async def svc_link(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     from app.services.delivery import send_subscription_qr_photo

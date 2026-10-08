@@ -38,6 +38,8 @@ TABLE_ORDER: tuple[str, ...] = (
     "settings",
     "wallet_transactions",
     "trial_claims",
+    "charge_code_redemptions",
+    "payment_receipt_fingerprints",
 )
 
 CRITICAL_TABLES = (

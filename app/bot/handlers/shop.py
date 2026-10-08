@@ -124,6 +124,7 @@ class ShopStates(StatesGroup):
     custom_gb_input = State()
     custom_days_input = State()
     wholesale_qty_input = State()
+    trial_contact = State()
 
 
 def _custom_bounds(ui: dict) -> tuple[int, int, int, int, int, int]:
@@ -1245,6 +1246,83 @@ async def shop_plan(callback: CallbackQuery, session: AsyncSession, db_user: Bot
         await safe_edit_text(callback.message, text, reply_markup=kb.plan_actions(plan.id, ui))
 
 
+async def _complete_shop_buy(
+    *,
+    callback: CallbackQuery | None,
+    message: Message | None,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+    ui: dict,
+    plan,
+    plan_id: int,
+    trial_phone_hash: str | None = None,
+    trial_telegram_id: int | None = None,
+) -> None:
+    try:
+        order = await create_order(
+            session,
+            user_id=db_user.id,
+            plan_id=plan_id,
+            reseller_id=db_user.reseller_id,
+            trial_phone_hash=trial_phone_hash,
+            trial_telegram_id=trial_telegram_id,
+        )
+    except ValueError as e:
+        if callback is not None:
+            await callback.answer(user_safe_error(e), show_alert=True)
+        elif message is not None:
+            await message.answer(format_message("⚠️ تست", user_safe_error(e)))
+        return
+
+    if callback is not None:
+        await callback.answer()
+    await _record_shop_funnel(
+        session, db_user, "pay_start", ui=ui, plan_id=plan_id, order_id=order.id
+    )
+
+    # Free / trial: deliver immediately
+    if order.amount <= 0:
+        from app.services.orders import deliver_order, revert_failed_free_delivery
+
+        await mark_order_free_paid(session, order, db_user.id)
+        try:
+            order = await deliver_order(session, order)
+        except Exception as e:
+            try:
+                await revert_failed_free_delivery(session, order)
+            except Exception:
+                pass
+            err = format_message("❌ خطا در تحویل", user_safe_error(e))
+            if callback is not None and callback.message:
+                await safe_edit_text(callback.message, err, reply_markup=kb.back_home(ui))
+            elif message is not None:
+                await message.answer(err, reply_markup=kb.back_home(ui))
+            return
+        ok = format_message("✅ فعال شد", f"سفارش #{order.id} تحویل شد.")
+        if callback is not None and callback.message:
+            await safe_edit_text(callback.message, ok, reply_markup=kb.back_home(ui))
+        elif message is not None:
+            await message.answer(ok, reply_markup=kb.back_home(ui))
+        try:
+            bot = callback.bot if callback is not None else message.bot
+            await send_delivery_to_user(bot, db_user.telegram_id, session, None, order)
+        except Exception:
+            pass
+        return
+
+    text = format_message(
+        f"🧾 سفارش #{order.id}",
+        f"{kv_line('💰', 'مبلغ قابل پرداخت', f'<b>{format_toman(order.amount, get_settings().currency)}</b>')}\n\n"
+        "روش پرداخت را انتخاب کنید:",
+    )
+    msg = callback.message if callback is not None else message
+    if msg is not None:
+        await _show_order_pay(msg, session, db_user, order.id, state, text)
+    bot = callback.bot if callback is not None else message.bot
+    await _notify_new_order(bot, session, order, db_user, plan.name if plan else None)
+
+
 @router.callback_query(F.data.startswith("shop:buy:"))
 async def shop_buy(callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext,
     reseller_owner_id: int | None = None,
@@ -1273,59 +1351,127 @@ async def shop_buy(callback: CallbackQuery, session: AsyncSession, db_user: BotU
         await callback.answer("هیچ روش پرداختی فعال نیست", show_alert=True)
         return
 
+    if plan.is_trial and on(ui.get("trial_require_contact")):
+        from aiogram.types import KeyboardButton, ReplyKeyboardMarkup
+
+        await callback.answer()
+        await state.set_state(ShopStates.trial_contact)
+        await state.update_data(trial_plan_id=plan_id)
+        iran_note = (
+            "\nفقط شماره موبایل ایران (+۹۸) پذیرفته می‌شود."
+            if on(ui.get("trial_require_iran_phone"))
+            else ""
+        )
+        kb_contact = ReplyKeyboardMarkup(
+            keyboard=[
+                [KeyboardButton(text="📱 ارسال شماره تماس", request_contact=True)],
+                [KeyboardButton(text="❌ انصراف")],
+            ],
+            resize_keyboard=True,
+            one_time_keyboard=True,
+        )
+        if callback.message:
+            await callback.message.answer(
+                format_message(
+                    "🎁 اکانت تست",
+                    "برای دریافت تست، شماره تماس خودتان را از دکمه زیر ارسال کنید."
+                    + iran_note
+                    + "\n\nشماره خام ذخیره نمی‌شود.",
+                ),
+                reply_markup=kb_contact,
+            )
+        return
+
+    await _complete_shop_buy(
+        callback=callback,
+        message=None,
+        session=session,
+        db_user=db_user,
+        state=state,
+        ui=ui,
+        plan=plan,
+        plan_id=plan_id,
+    )
+
+
+@router.message(ShopStates.trial_contact, F.contact)
+async def shop_trial_contact(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+):
+    ui = await get_all_settings(session)
+    contact = message.contact
+    if not contact or not message.from_user:
+        await message.answer("لطفاً از دکمه «ارسال شماره تماس» استفاده کنید.")
+        return
+    if contact.user_id is None or int(contact.user_id) != int(message.from_user.id):
+        await message.answer(
+            format_message(
+                "⛔ شماره نامعتبر",
+                "فقط شماره متعلق به همین اکانت تلگرام پذیرفته می‌شود.",
+            )
+        )
+        return
+    data = await state.get_data()
+    plan_id = int(data.get("trial_plan_id") or 0)
+    plan = await get_catalog_plan(session, plan_id) if plan_id else None
+    if not plan or not plan.is_trial:
+        await state.clear()
+        await message.answer("پلن تست یافت نشد.", reply_markup=kb.back_home(ui))
+        return
+    require_iran = on(ui.get("trial_require_iran_phone"))
     try:
-        order = await create_order(
-            session,
-            user_id=db_user.id,
-            plan_id=plan_id,
-            reseller_id=db_user.reseller_id,
+        from app.config import get_settings as _gs
+        from app.services.trial_contact import hash_trial_phone
+
+        phone_hash = hash_trial_phone(
+            contact.phone_number or "",
+            secret=_gs().web_secret,
+            require_iran=require_iran,
         )
     except ValueError as e:
-        await callback.answer(user_safe_error(e), show_alert=True)
+        await message.answer(format_message("⚠️ شماره", user_safe_error(e)))
         return
-
-    await callback.answer()
-    await _record_shop_funnel(
-        session, db_user, "pay_start", ui=ui, plan_id=plan_id, order_id=order.id
+    await state.clear()
+    await _complete_shop_buy(
+        callback=None,
+        message=message,
+        session=session,
+        db_user=db_user,
+        state=state,
+        ui=ui,
+        plan=plan,
+        plan_id=plan_id,
+        trial_phone_hash=phone_hash,
+        trial_telegram_id=int(message.from_user.id),
     )
 
-    # Free / trial: deliver immediately
-    if order.amount <= 0:
-        from app.services.orders import deliver_order, revert_failed_free_delivery
 
-        await mark_order_free_paid(session, order, db_user.id)
-        try:
-            order = await deliver_order(session, order)
-        except Exception as e:
-            try:
-                await revert_failed_free_delivery(session, order)
-            except Exception:
-                pass
-            if callback.message:
-                await safe_edit_text(callback.message, 
-                    format_message("❌ خطا در تحویل", user_safe_error(e)),
-                    reply_markup=kb.back_home(ui),
-                )
-            return
-        if callback.message:
-            await safe_edit_text(callback.message, 
-                format_message("✅ فعال شد", f"سفارش #{order.id} تحویل شد."),
-                reply_markup=kb.back_home(ui),
-            )
-        try:
-            await send_delivery_to_user(callback.bot, db_user.telegram_id, session, None, order)
-        except Exception:
-            pass
+@router.message(ShopStates.trial_contact)
+async def shop_trial_contact_cancel(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+):
+    ui = await get_all_settings(session)
+    if kb.is_cancel_text(message.text) or kb.is_home_text(message.text, ui) or (message.text or "").strip() in {
+        "❌ انصراف",
+        "انصراف",
+    }:
+        from app.bot.menu_nav import restore_main_reply
+
+        await restore_main_reply(
+            message,
+            session,
+            db_user,
+            text="لغو شد.",
+            state=state,
+        )
         return
-
-    text = format_message(
-        f"🧾 سفارش #{order.id}",
-        f"{kv_line('💰', 'مبلغ قابل پرداخت', f'<b>{format_toman(order.amount, get_settings().currency)}</b>')}\n\n"
-        "روش پرداخت را انتخاب کنید:",
-    )
-    if callback.message:
-        await _show_order_pay(callback.message, session, db_user, order.id, state, text)
-    await _notify_new_order(callback.bot, session, order, db_user, plan.name if plan else None)
+    await message.answer("لطفاً از دکمه «ارسال شماره تماس» استفاده کنید یا انصراف بزنید.")
 
 
 @router.callback_query(F.data.startswith("pay:discount:"))

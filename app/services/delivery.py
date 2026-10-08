@@ -547,6 +547,29 @@ async def send_delivery_to_user(
             except Exception:
                 logger.debug("delivery detail_text send failed", exc_info=True)
 
+    # Inline «آموزش اتصال» on subscription deliveries (user or reseller audience).
+    if payload.get("is_subscription") and notify_ok:
+        try:
+            from app.bot.handlers.guides import delivery_guides_keyboard
+            from app.db.models import BotUser
+            from app.services.connection_guides import get_connection_guides, guides_for_audience
+
+            buyer_id = getattr(order, "user_id", None) if order is not None else None
+            audience = "user"
+            if buyer_id:
+                buyer = await session.get(BotUser, int(buyer_id))
+                if buyer and (getattr(buyer, "role", None) or "").lower() == "reseller":
+                    audience = "reseller"
+            if guides_for_audience(await get_connection_guides(session, reseller_id=shop_rid), audience):
+                await bot.send_message(
+                    chat_id,
+                    "برای راه‌اندازی، آموزش اتصال را ببینید:",
+                    reply_markup=delivery_guides_keyboard(ui, audience=audience),
+                    parse_mode="HTML",
+                )
+        except Exception:
+            logger.debug("delivery guides button failed", exc_info=True)
+
     qr_sent = False
     if sub_url and not skip_qr:
         qr_sent = await send_subscription_qr_photo(

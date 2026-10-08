@@ -3233,6 +3233,163 @@
       });
     })();
 
+    /* Connection guides editor (تنظیمات ← آموزش اتصال) */
+    (function () {
+      function uid() {
+        return Math.random().toString(16).slice(2, 10) + Math.random().toString(16).slice(2, 6);
+      }
+      function parseJson(raw) {
+        try {
+          const data = JSON.parse(raw || '[]');
+          return Array.isArray(data) ? data : [];
+        } catch (_) {
+          return [];
+        }
+      }
+      function esc(v) {
+        return String(v == null ? '' : v)
+          .replace(/&/g, '&amp;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;');
+      }
+      function styleSelectHtml(cur) {
+        const val = cur == null ? 'primary' : String(cur);
+        const tone = !val ? 'default' : val;
+        const opts = [
+          ['', 'سفید', 'default'],
+          ['primary', 'آبی', 'primary'],
+          ['success', 'سبز', 'success'],
+          ['danger', 'قرمز', 'danger'],
+        ];
+        let html =
+          '<div class="plan-color-field item-color-field pay-dest-color">' +
+            '<div class="btn-color-card plan-color-card">' +
+              '<span class="btn-color-label">رنگ دکمه</span>' +
+              '<select class="btn-color-select guides-style" data-tone="' + tone + '" aria-label="رنگ دکمه">' ;
+        opts.forEach(function (o) {
+          html +=
+            '<option value="' + o[0] + '" data-tone="' + o[2] + '"' +
+            (val === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
+        });
+        html += '</select></div></div>';
+        return html;
+      }
+      function rowHtml(item) {
+        const id = (item && item.id) || uid();
+        const enabled = !item || item.enabled === undefined || item.enabled === null
+          ? true
+          : !!item.enabled;
+        const audience = (item && item.audience) === 'reseller' ? 'reseller' : 'user';
+        const deep = !!(item && item.deep_link);
+        const style = item && item.style != null ? item.style : (item && item.button_style != null ? item.button_style : 'primary');
+        return (
+          '<div class="pay-dest-row" data-guides-row data-guides-id="' + esc(id) + '">' +
+            '<div class="pay-dest-fields supports-fields-grid">' +
+              '<label>عنوان دکمه<input type="text" class="guides-title" maxlength="64" value="' + esc(item && item.title) + '" placeholder="مثلاً V2Box" autocomplete="off" /></label>' +
+              '<label>مخاطب<select class="guides-audience">' +
+                '<option value="user"' + (audience === 'user' ? ' selected' : '') + '>کاربران</option>' +
+                '<option value="reseller"' + (audience === 'reseller' ? ' selected' : '') + '>نمایندگان</option>' +
+              '</select></label>' +
+              '<label>ترتیب<input type="number" class="guides-sort" dir="ltr" value="' + esc(item && item.sort != null ? item.sort : 0) + '" /></label>' +
+              '<label class="support-enabled supports-enabled-field">' +
+                '<span>فعال</span>' +
+                '<span class="ui-switch">' +
+                  '<input type="checkbox" class="guides-enabled" value="1"' + (enabled ? ' checked' : '') + ' />' +
+                  '<span class="ui-switch-track" aria-hidden="true"></span>' +
+                '</span>' +
+              '</label>' +
+              '<label class="support-enabled supports-enabled-field">' +
+                '<span>دکمه لینک اشتراک</span>' +
+                '<span class="ui-switch">' +
+                  '<input type="checkbox" class="guides-deeplink" value="1"' + (deep ? ' checked' : '') + ' />' +
+                  '<span class="ui-switch-track" aria-hidden="true"></span>' +
+                '</span>' +
+              '</label>' +
+              styleSelectHtml(style) +
+              '<label class="full">متن آموزش<textarea class="guides-body" rows="4" maxlength="4000" placeholder="مراحل اتصال…">' + esc(item && (item.body || item.text)) + '</textarea></label>' +
+            '</div>' +
+            '<button type="button" class="btn btn-danger btn-sm guides-remove pay-dest-remove-btn">حذف</button>' +
+          '</div>'
+        );
+      }
+      function addBtnHtml() {
+        return '<button type="button" class="pay-dest-add-row" data-guides-add><span aria-hidden="true">+</span><span>افزودن آموزش</span></button>';
+      }
+      function sync(root) {
+        const hidden = root.querySelector('[data-guides-json]');
+        const list = root.querySelector('[data-guides-list]');
+        if (!hidden || !list) return;
+        const entries = [];
+        list.querySelectorAll('[data-guides-row]').forEach((row, idx) => {
+          const rowId = row.getAttribute('data-guides-id') || uid();
+          row.setAttribute('data-guides-id', rowId);
+          const title = String((row.querySelector('.guides-title') || {}).value || '').trim();
+          const body = String((row.querySelector('.guides-body') || {}).value || '').trim();
+          if (!title && !body) return;
+          let sort = idx;
+          try {
+            sort = parseInt(String((row.querySelector('.guides-sort') || {}).value || idx), 10);
+            if (Number.isNaN(sort)) sort = idx;
+          } catch (_) { sort = idx; }
+          const en = row.querySelector('.guides-enabled');
+          const dl = row.querySelector('.guides-deeplink');
+          const aud = row.querySelector('.guides-audience');
+          const styleSel = row.querySelector('.guides-style');
+          entries.push({
+            id: rowId,
+            title: title,
+            body: body,
+            audience: aud && aud.value === 'reseller' ? 'reseller' : 'user',
+            sort: sort,
+            enabled: !!(en && en.checked),
+            deep_link: !!(dl && dl.checked),
+            style: styleSel ? styleSel.value : 'primary',
+          });
+        });
+        hidden.value = JSON.stringify(entries);
+      }
+      function render(root, items) {
+        const list = root.querySelector('[data-guides-list]');
+        if (!list) return;
+        const rows = (items && items.length ? items : [{}]).map((item) => rowHtml(item)).join('');
+        list.innerHTML = rows + addBtnHtml();
+        sync(root);
+      }
+      document.querySelectorAll('[data-guides-editor]').forEach((root) => {
+        const hidden = root.querySelector('[data-guides-json]');
+        render(root, parseJson(hidden ? hidden.value : '[]'));
+        root.addEventListener('click', (e) => {
+          if (e.target.closest('[data-guides-add]')) {
+            e.preventDefault();
+            const list = root.querySelector('[data-guides-list]');
+            const add = list && list.querySelector('[data-guides-add]');
+            const html = rowHtml({});
+            if (add) add.insertAdjacentHTML('beforebegin', html);
+            else if (list) list.insertAdjacentHTML('afterbegin', html);
+            sync(root);
+            return;
+          }
+          if (e.target.closest('.guides-remove')) {
+            e.preventDefault();
+            const row = e.target.closest('[data-guides-row]');
+            const list = root.querySelector('[data-guides-list]');
+            if (row && list) {
+              row.remove();
+              if (!list.querySelector('[data-guides-row]')) {
+                const add = list.querySelector('[data-guides-add]');
+                if (add) add.insertAdjacentHTML('beforebegin', rowHtml({}));
+              }
+              sync(root);
+            }
+          }
+        });
+        root.addEventListener('input', () => sync(root));
+        root.addEventListener('change', () => sync(root));
+      });
+    })();
+
     /* Colors tab — section sub-tabs */
     (function () {
       const root = document.querySelector('[data-colors-subtabs]');

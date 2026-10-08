@@ -683,12 +683,13 @@ PY
 }
 
 setup_wizard_url() {
-  # Always emit a one-time setup URL (http://IP:PORT/?gate=…) when the
-  # setup_complete.flag file is absent. Do NOT call is_setup_complete() here —
-  # that helper can auto-create the flag from leftover .env credentials and
-  # then return an empty URL (install looked "done" with no link printed).
+  # Emit setup URL when setup_complete.flag is absent. Do NOT call
+  # is_setup_complete() here — that helper can auto-create the flag from
+  # leftover .env credentials and then return an empty URL.
   #
-  # Optional $1 = base URL override (use the same IP as the SUCCESS banner).
+  # Optional $1 = base URL override (use the same IP/scheme as the SUCCESS banner).
+  # Reuses ensure_setup_gate_token() so status/menu calls do not invalidate the
+  # previously printed one-time link before TTL expiry.
   if [[ -f data/setup_complete.flag ]]; then
     return 0
   fi
@@ -696,6 +697,9 @@ setup_wizard_url() {
   port="$(env_get WEB_PORT "${WEB_PORT:-9000}")"
   ip="$(detect_server_ip)"
   base="${1:-}"
+  if [[ -z "$base" ]]; then
+    base="$(panel_public_base_url)"
+  fi
   if [[ -z "$base" ]]; then
     base="http://${ip}:${port}"
   fi
@@ -715,7 +719,7 @@ from app.services.setup_wizard import (
     SETUP_ENTRY_FILE,
     SETUP_FLAG,
     build_setup_entry_url,
-    create_setup_gate_session,
+    ensure_setup_gate_token,
     _ensure_data_dir,
 )
 
@@ -723,7 +727,9 @@ if SETUP_FLAG.exists():
     raise SystemExit(0)
 
 base = """${base}""".rstrip("/")
-token = create_setup_gate_session()
+token = ensure_setup_gate_token()
+if not token:
+    raise SystemExit(0)
 url = build_setup_entry_url(base, token=token)
 _ensure_data_dir()
 SETUP_ENTRY_FILE.write_text(url + chr(10), encoding="utf-8")
@@ -1977,7 +1983,7 @@ PY
   fi
   if [[ ! -f data/setup_complete.flag ]]; then
     local setup_url
-    setup_url="$(setup_wizard_url)"
+    setup_url="$(setup_wizard_url "$(panel_public_base_url)/")"
     if [[ -n "$setup_url" ]]; then
       echo -e "  Setup URL:  ${B}${setup_url}${N}"
       echo -e "  (valid 15 min — disabled after setup or login)"
@@ -1986,6 +1992,22 @@ PY
   info "If browser fails but local health is OK: open Cloud Firewall TCP ${port} (Hetzner/AWS)"
   print_success "Status check"
   return 0
+}
+
+cmd_doctor() {
+  # Prefer global CLI when present; fall back to venv module.
+  if command -v pgclock >/dev/null 2>&1; then
+    pgclock doctor "$@" || true
+    return 0
+  fi
+  local py="$PY"
+  if [[ ! -x "$py" ]]; then
+    py="${SCRIPT_DIR}/.venv/bin/python"
+  fi
+  if [[ ! -x "$py" ]]; then
+    py="${SYSTEM_PY:-python3}"
+  fi
+  (cd "$SCRIPT_DIR" && PYTHONPATH="$SCRIPT_DIR${PYTHONPATH:+:$PYTHONPATH}" "$py" -m app.cli doctor "$@") || true
 }
 
 cmd_help() {
@@ -2001,12 +2023,13 @@ cmd_help() {
     bash pgclock.sh web             Web panel tools
     bash pgclock.sh service         systemd controls
     bash pgclock.sh status          Quick status
+    bash pgclock.sh doctor          Read-only diagnostics (OK/WARN/FAIL)
     bash pgclock.sh uninstall       Remove service / data
     bash pgclock.sh help            This help
 
   Global CLI (after install):
     pgclock status|start|stop|restart|logs|health
-    pgclock backup|restore|migrate|doctor
+    pgclock backup|restore|migrate|doctor [--json]
     sudo bash scripts/install_global_cli.sh
 
   One-liner (clone OR update existing folder, then menu):
@@ -2059,7 +2082,8 @@ show_menu() {
     printf '  %s4)%s Web panel      URL, password reset, health\n' "$B" "$N"
     printf '  %s5)%s Service        Status / restart / logs\n' "$B" "$N"
     printf '  %s6)%s Status         Quick health overview\n' "$B" "$N"
-    printf '  %s7)%s Uninstall      Remove EVERYTHING (full wipe)\n' "$B" "$N"
+    printf '  %s7)%s Doctor         Read-only diagnostics (OK/WARN/FAIL)\n' "$B" "$N"
+    printf '  %s8)%s Uninstall      Remove EVERYTHING (full wipe)\n' "$B" "$N"
     printf '  %s0)%s Exit\n' "$B" "$N"
     echo ""
   } > /dev/tty
@@ -2077,7 +2101,8 @@ run_menu() {
       4|web)       cmd_web_panel ;;
       5|service)   cmd_service ;;
       6|status)    cmd_status ; pause ;;
-      7|uninstall) cmd_uninstall ; pause ;;
+      7|doctor)    cmd_doctor ; pause ;;
+      8|uninstall) cmd_uninstall ; pause ;;
       0|exit|q|quit)
         echo ""
         ok "Bye."
@@ -2103,6 +2128,7 @@ dispatch() {
     web|panel|web-panel) cmd_web_panel ;;
     service|svc)   cmd_service ;;
     status|s)      cmd_status ;;
+    doctor|d)      cmd_doctor ;;
     uninstall|remove) cmd_uninstall ;;
     help|-h|--help) cmd_help ;;
     *)

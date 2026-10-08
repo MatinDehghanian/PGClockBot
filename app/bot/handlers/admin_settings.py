@@ -136,10 +136,6 @@ SECTIONS: dict[str, dict] = {
     "pay": {
         "title": "پرداخت",
         "subs": [
-            ("referral", "معرف اجباری", [
-                ("referral_required", "معرف اجباری", "toggle"),
-                ("referral_required_text", "پیام دریافت معرف", "textarea"),
-            ]),
             ("methods", "روش‌های فعال", [
                 ("pay_wallet_enabled", "کیف پول", "toggle"),
                 ("pay_card_enabled", "کارت به کارت", "toggle"),
@@ -207,6 +203,22 @@ SECTIONS: dict[str, dict] = {
                 ("show_sub_link_in_text", "لینک در کپشن", "toggle"),
                 ("qr_caption", "کپشن QR", "textarea"),
             ]),
+        ],
+    },
+    "limits": {
+        "title": "محدودیت",
+        "subs": [
+            ("referral", "معرف اجباری", [
+                ("referral_required", "معرف اجباری", "toggle"),
+                ("referral_required_text", "پیام دریافت معرف", "textarea"),
+            ]),
+            ("trial_gate", "اکانت تست", [
+                ("trial_require_contact", "تأیید شماره تماس", "toggle"),
+                ("trial_require_iran_phone", "فقط شماره ایران", "toggle"),
+            ]),
+            ("receipt_dup", "ضدتقلب رسید", [
+                ("receipt_dup_policy", "رسید تکراری (warn/block)", "text"),
+            ]),
             ("force", "کانال اجباری", [
                 ("force_join_enabled", "فعال", "toggle"),
                 ("force_join_channel", "کانال‌ها (هر خط یکی)", "text"),
@@ -227,6 +239,18 @@ SECTIONS: dict[str, dict] = {
                 ("terms_buy_reseller_text", "متن قوانین خرید نماینده", "textarea"),
                 ("terms_buy_reseller_btn", "دکمه موافقت خرید نماینده", "text"),
                 ("terms_buy_reseller_reaccept", "پذیرش مجدد خرید نماینده", "toggle"),
+            ]),
+        ],
+    },
+    "guides": {
+        "title": "آموزش اتصال",
+        "subs": [
+            ("labels", "متن دکمه‌ها", [
+                ("btn_guides", "دکمه فهرست آموزش", "text"),
+                ("btn_guide_open_link", "دکمه لینک اشتراک", "text"),
+            ]),
+            ("hint", "ویرایش آموزش‌ها", [
+                ("connection_guides", "JSON آموزش‌ها (از وب‌پنل)", "textarea"),
             ]),
         ],
     },
@@ -251,7 +275,7 @@ SECTIONS: dict[str, dict] = {
 }
 
 # Reply-keyboard hub only — deep «service» stays reachable via plans callbacks.
-HUB_ORDER = ["shop", "menu", "pay", "support", "access", "notify"]
+HUB_ORDER = ["shop", "menu", "pay", "support", "access", "limits", "guides", "notify"]
 
 
 CUSTOM_PRICE: list[Field] = [
@@ -301,7 +325,14 @@ FIELDS = _field_lookup()
 NOTIFY_KEYS: frozenset[str] = frozenset(key for key, *_ in NOTIFY_PREFS)
 
 # Extra toggles rendered outside SECTIONS field lists
-EXTRA_TOGGLE_KEYS: frozenset[str] = frozenset({"custom_plan_enabled", "trial_enabled"}) | NOTIFY_KEYS
+EXTRA_TOGGLE_KEYS: frozenset[str] = frozenset(
+    {
+        "custom_plan_enabled",
+        "trial_enabled",
+        "trial_require_contact",
+        "trial_require_iran_phone",
+    }
+) | NOTIFY_KEYS
 
 
 def _is_toggleable_setting_key(key: str) -> bool:
@@ -994,6 +1025,21 @@ async def settings_edit_save(
         from app.services.users import normalize_force_join_channel_value
 
         text = normalize_force_join_channel_value(text)
+    elif key == "receipt_dup_policy":
+        from app.services.receipt_fingerprints import normalize_dup_policy
+
+        text = normalize_dup_policy(text)
+    elif key == "connection_guides":
+        import json as _json
+
+        from app.services.connection_guides import serialize_connection_guides
+
+        try:
+            parsed = _json.loads(text) if text else []
+        except _json.JSONDecodeError:
+            await message.answer("JSON نامعتبر است. از وب‌پنل → آموزش اتصال ویرایش کنید.")
+            return
+        text = serialize_connection_guides(parsed if isinstance(parsed, list) else [])
         await set_setting(session, key, text)
     else:
         from app.services.rich_text import pack_setting_from_message

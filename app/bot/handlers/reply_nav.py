@@ -2057,6 +2057,8 @@ async def reply_main_nav(
         "res_st_pay",
         "res_st_support",
         "res_st_access",
+        "res_st_limits",
+        "res_st_guides",
         "res_st_bot",
         "res_st_notify",
         kb.REPLY_ACTION_RES_ST_PANEL,
@@ -2064,6 +2066,7 @@ async def reply_main_nav(
         kb.REPLY_ACTION_REV_OK,
         kb.REPLY_ACTION_REV_NO,
         kb.REPLY_ACTION_SVC_LINK,
+        kb.REPLY_ACTION_SVC_GUIDE,
         kb.REPLY_ACTION_SVC_RENEW,
         kb.REPLY_ACTION_SVC_ADDON,
         kb.REPLY_ACTION_SVC_AUTO,
@@ -2717,6 +2720,7 @@ async def reply_main_nav(
         )
     elif action in {
         kb.REPLY_ACTION_SVC_LINK,
+        kb.REPLY_ACTION_SVC_GUIDE,
         kb.REPLY_ACTION_SVC_RENEW,
         kb.REPLY_ACTION_SVC_ADDON,
         kb.REPLY_ACTION_SVC_AUTO,
@@ -2734,6 +2738,9 @@ async def reply_main_nav(
         if action == kb.REPLY_ACTION_SVC_LINK:
             cb_data = f"svc:link:{int(svc_id)}"
             fn = svc_h.svc_link
+        elif action == kb.REPLY_ACTION_SVC_GUIDE:
+            cb_data = f"guide:svc:{int(svc_id)}"
+            fn = svc_h.svc_guide
         elif action == kb.REPLY_ACTION_SVC_RENEW:
             cb_data = f"svc:renew:{int(svc_id)}"
             fn = svc_h.svc_renew

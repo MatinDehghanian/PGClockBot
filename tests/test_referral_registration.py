@@ -246,22 +246,22 @@ class ReferralRegistrationTests(unittest.IsolatedAsyncioTestCase):
             ):
                 save = next(route.endpoint for route in app.routes if getattr(route, "path", None) == path and "POST" in route.methods)
                 for enabled in (True, False):
-                    # Required-referral lives on the payment settings tab (finance modal).
-                    pay_form = {
+                    # Required-referral lives on the limits settings tab.
+                    limits_form = {
                         "s_referral_required_text": f"Instructions for {path}",
                     }
                     if enabled:
-                        pay_form["s_referral_required"] = "1"
-                    pay_body = urlencode(pay_form).encode()
+                        limits_form["s_referral_required"] = "1"
+                    limits_body = urlencode(limits_form).encode()
 
-                    async def receive_pay(body=pay_body):
+                    async def receive_limits(body=limits_body):
                         return {"type": "http.request", "body": body, "more_body": False}
 
-                    pay_request = Request({
-                        "type": "http", "method": "POST", "path": path, "query_string": b"tab=payment",
+                    limits_request = Request({
+                        "type": "http", "method": "POST", "path": path, "query_string": b"tab=limits",
                         "headers": [(b"content-type", b"application/x-www-form-urlencoded")],
-                    }, receive_pay)
-                    response = await save(request=pay_request, staff=staff, session=self.session)
+                    }, receive_limits)
+                    response = await save(request=limits_request, staff=staff, session=self.session)
                     self.assertEqual(response.status_code, 303)
                     ui = await get_all_settings(self.session, reseller_id=scope)
                     self.assertEqual(ui["referral_required"], "1" if enabled else "0")

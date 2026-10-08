@@ -27,6 +27,7 @@ REPLY_ACTION_SVC_ADDON = "svc_addon"
 REPLY_ACTION_SVC_AUTO = "svc_auto"
 REPLY_ACTION_SVC_REFRESH = "svc_refresh"
 REPLY_ACTION_SVC_DELETE = "svc_delete"
+REPLY_ACTION_SVC_GUIDE = "svc_guide"
 REPLY_ACTION_REV_OK = "rev_ok"
 REPLY_ACTION_REV_NO = "rev_no"
 BTN_REV_OK = "🟢✅ تأیید"
@@ -313,6 +314,8 @@ def _admin_settings_submenu_entries(ui: dict | None = None) -> list[tuple[str, s
         ("adm_st_pay", "پرداخت"),
         ("adm_st_support", "پشتیبان‌ها"),
         ("adm_st_access", "دسترسی"),
+        ("adm_st_limits", "محدودیت"),
+        ("adm_st_guides", "آموزش اتصال"),
         ("adm_st_notify", "اعلان‌ها"),
         (REPLY_ACTION_ADM_ST_PANEL, "🌐 وب‌پنل"),
     ]
@@ -424,6 +427,8 @@ def _reseller_settings_submenu_entries(ui: dict | None = None) -> list[tuple[str
         ("res_st_pay", "پرداخت"),
         ("res_st_support", "پشتیبان‌ها"),
         ("res_st_access", "دسترسی"),
+        ("res_st_limits", "محدودیت"),
+        ("res_st_guides", "آموزش اتصال"),
         ("res_st_notify", "اعلان‌ها"),
         ("res_st_bot", "ربات"),
         (REPLY_ACTION_RES_ST_PANEL, "🌐 وب‌پنل"),
@@ -1118,6 +1123,7 @@ def reseller_apply_reply_keyboard(ui: dict | None = None) -> ReplyKeyboardMarkup
 def _service_action_entries(ui: dict | None = None) -> list[tuple[str, str]]:
     return [
         (REPLY_ACTION_SVC_LINK, _t(ui, "btn_sub_link")),
+        (REPLY_ACTION_SVC_GUIDE, _t(ui, "btn_guides") or "📘 آموزش اتصال"),
         (REPLY_ACTION_SVC_RENEW, _t(ui, "btn_renew")),
         (REPLY_ACTION_SVC_ADDON, _t(ui, "btn_svc_addon") or "➕ حجم / زمان"),
         (REPLY_ACTION_SVC_AUTO, "⚙️ تنظیمات خودکار"),
