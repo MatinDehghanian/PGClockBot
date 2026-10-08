@@ -1,10 +1,6 @@
 """App version — bump when releasing so the panel can detect updates."""
 
-<<<<<<< HEAD
-__version__ = "0.2.23"
-=======
-__version__ = "0.2.24"
->>>>>>> origin/main
+__version__ = "0.2.25"
 
 # GitHub repo used for update checks
 GITHUB_REPO = "Mrclocks/PGClockBot"
