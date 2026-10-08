@@ -120,14 +120,14 @@ templates.env.filters["order_status"] = order_status_fa
 templates.env.filters["ticket_status"] = ticket_status_fa
 templates.env.globals["app_version"] = local_version()
 try:
-    from app.services.update_channel import channel_context as _channel_context_boot
+    from app.services.update_channel import badge_context as _badge_context_boot
 
-    _ch_boot = _channel_context_boot()
-    templates.env.globals["update_channel"] = _ch_boot["channel"]
-    templates.env.globals["update_channel_label"] = _ch_boot["channel_label"]
+    _badge_boot = _badge_context_boot()
+    templates.env.globals["deployed_channel"] = _badge_boot["deployed_channel"]
+    templates.env.globals["deployed_channel_label"] = _badge_boot["deployed_channel_label"]
 except Exception:
-    templates.env.globals["update_channel"] = "main"
-    templates.env.globals["update_channel_label"] = "پایدار"
+    templates.env.globals["deployed_channel"] = "main"
+    templates.env.globals["deployed_channel_label"] = "پایدار"
 templates.env.globals["order_status_fa"] = order_status_fa
 templates.env.globals["ticket_status_fa"] = ticket_status_fa
 templates.env.globals["format_bytes"] = format_bytes
@@ -224,16 +224,16 @@ def render(request: Request, name: str, context: dict | None = None, status_code
     ctx.setdefault("flash_err", None)
     ctx.setdefault("open_edit", None)
     ctx.setdefault("app_version", local_version())
-    if "update_channel" not in ctx or "update_channel_label" not in ctx:
+    if "deployed_channel" not in ctx or "deployed_channel_label" not in ctx:
         try:
-            from app.services.update_channel import channel_context
+            from app.services.update_channel import badge_context
 
-            ch = channel_context()
-            ctx.setdefault("update_channel", ch["channel"])
-            ctx.setdefault("update_channel_label", ch["channel_label"])
+            badge = badge_context()
+            ctx.setdefault("deployed_channel", badge["deployed_channel"])
+            ctx.setdefault("deployed_channel_label", badge["deployed_channel_label"])
         except Exception:
-            ctx.setdefault("update_channel", "main")
-            ctx.setdefault("update_channel_label", "پایدار")
+            ctx.setdefault("deployed_channel", "main")
+            ctx.setdefault("deployed_channel_label", "پایدار")
     try:
         from app.services.csrf import ensure_csrf_token
 
@@ -3992,11 +3992,14 @@ def create_api_app(lifespan=None) -> FastAPI:
         channel = set_update_channel(raw)
         clear_update_cache()
         # Always re-check GitHub for the newly selected channel tip.
+        # Header badge stays on DEPLOYED_CHANNEL until an update is applied.
         ctx = await update_page_context(force_check=True)
         return {
             "ok": True,
             "channel": channel,
             "channel_label": ctx.get("update_channel_label"),
+            "deployed_channel": ctx.get("deployed_channel"),
+            "deployed_channel_label": ctx.get("deployed_channel_label"),
             "channels": ctx.get("update_channels"),
             "update_info": ctx.get("update_info"),
             "migration_preflight": ctx.get("migration_preflight"),

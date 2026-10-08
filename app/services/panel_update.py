@@ -656,6 +656,12 @@ def _do_update(target_version: str | None) -> None:
             _set_step("pull", "اعمال فایل‌ها…")
             _append_log("کد از آرشیو گیت‌هاب اعمال شد")
 
+        from app.services.update_channel import set_deployed_channel
+
+        # Code tip is now this channel — badge follows DEPLOYED_CHANNEL after restart.
+        set_deployed_channel(channel)
+        _append_log(f"کانال نصب‌شده: {channel_label_fa(channel)}")
+
         _set_step("deps", "نصب پکیج‌های پایتون…")
         code, out = _pip_install()
         if code != 0:
@@ -897,6 +903,12 @@ def _do_rollback_to_version(version: str) -> None:
             _update_via_archive(root, ref=tag)
             _set_step("pull", "اعمال فایل‌ها…")
             _append_log(f"کد از آرشیو {tag} اعمال شد")
+
+        from app.services.update_channel import set_deployed_channel
+
+        # Published release tags track the stable channel.
+        set_deployed_channel("main")
+        _append_log("کانال نصب‌شده: پایدار (main)")
 
         _set_step("deps", "نصب دوباره وابستگی‌ها…")
         code, out = _pip_install()
@@ -1153,6 +1165,7 @@ async def update_page_context(*, force_check: bool = False) -> dict[str, Any]:
         fetch_remote_release_notes,
     )
     from app.services.update_channel import (
+        badge_context,
         channel_context,
         get_update_channel,
         migration_preflight,
@@ -1178,6 +1191,7 @@ async def update_page_context(*, force_check: bool = False) -> dict[str, Any]:
     rollback_versions = await fetch_recent_versions(limit=3, force=force_check)
     preflight = await migration_preflight(channel, force=force_check)
     ch_ctx = channel_context(channel)
+    badge = badge_context()
     can_start = bool(info.get("update_available")) and not bool(preflight.get("blocked"))
     changelog = changelog_for_update_page(
         local=local, remote=remote, remote_notes=remote_notes
@@ -1213,6 +1227,8 @@ async def update_page_context(*, force_check: bool = False) -> dict[str, Any]:
         "update_channel": ch_ctx["channel"],
         "update_channel_label": ch_label,
         "update_channels": ch_ctx["channels"],
+        "deployed_channel": badge["deployed_channel"],
+        "deployed_channel_label": badge["deployed_channel_label"],
         "migration_preflight": preflight,
         "can_start_update": can_start,
         "channel_check_message": check_message,
