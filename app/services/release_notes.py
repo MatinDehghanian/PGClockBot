@@ -15,6 +15,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.2.26": [
+        "کد هدیه: انقضا، تخفیف درصدی، سقف هر کاربر و قوانین نوع خرید",
+        "مایگریشن 0037_gift_code_rules بعد از 0036_limits (بدون collision با #556)",
+        "redeem کیف‌پول روی charge_code_uses؛ once-per-user وقتی سقف کاربر خالی است",
+    ],
     "0.2.25": [
         "بج هدر کانال نصب‌شدهٔ فعلی را نشان می‌دهد (نه فقط انتخاب لیست آپدیت)",
         "فاصله بج تا نسخه برابر فاصله نقطه وضعیت تا نسخه شد",

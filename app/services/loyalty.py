@@ -1419,6 +1419,9 @@ async def release_loyalty_discount_for_order(session: AsyncSession, order: Order
 
 async def consume_loyalty_discount_for_order(session: AsyncSession, order: Order) -> None:
     """Mark reserved loyalty discount consumed after successful payment/delivery."""
+    from app.services.gift_codes import consume_gift_discount
+
+    await consume_gift_discount(session, order)
     code = (order.discount_code or "").strip().upper()
     if not code.startswith("LOY"):
         return

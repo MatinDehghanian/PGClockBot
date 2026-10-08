@@ -553,13 +553,12 @@ async def redeem_charge_code(
 ) -> tuple[ChargeCode, int]:
     """Credit wallet from a gift/charge code. Returns (code_row, new_balance).
 
-    Records ``charge_code_redemptions`` in the same transaction so each user can
-    redeem a given code at most once (UNIQUE code_id+user_id). IntegrityError →
-    rollback and «already used».
+    Uses ``charge_code_uses`` (gift rules) for expiry / caps / concurrency.
+    When ``max_uses_per_user`` is unset, wallet redeem stays once-per-user
+    (same hardening as the former ``charge_code_redemptions`` unique).
     """
-    from sqlalchemy.exc import IntegrityError
-
-    from app.db.models import ChargeCodeRedemption
+    from app.db.models import ChargeCodeUse
+    from app.services.gift_codes import claim_use
     from app.services.users import current_shop_reseller_id
     from app.services.wallet import credit_wallet
 
@@ -575,47 +574,30 @@ async def redeem_charge_code(
     shop_rid = current_shop_reseller_id()
     user_rid = int(shop_rid) if shop_rid is not None else None
     code_rid = int(row.reseller_id) if row.reseller_id else None
-    if code_rid != user_rid:
-        raise ValueError("این کد برای فروشگاه شما نیست")
-    if row.max_uses is not None and int(row.used_count or 0) >= int(row.max_uses):
-        raise ValueError("سقف استفاده از کد پر شده")
-    amount = int(row.amount or 0)
-    if amount <= 0:
-        raise ValueError("مبلغ کد نامعتبر است")
-
-    # Per-user redemption + use consume in one savepoint so IntegrityError /
-    # exhausted uses never leave a half-applied outer session.
-    try:
-        async with session.begin_nested():
-            session.add(ChargeCodeRedemption(code_id=int(row.id), user_id=int(user.id)))
-            await session.flush()
-            claim = await session.execute(
-                update(ChargeCode)
-                .where(
-                    ChargeCode.id == row.id,
-                    ChargeCode.is_active.is_(True),
-                    or_(
-                        ChargeCode.max_uses.is_(None),
-                        ChargeCode.used_count < ChargeCode.max_uses,
-                    ),
+    async with session.begin_nested():
+        # Default once-per-user when no explicit per-user cap (limits hardening).
+        if row.max_uses_per_user is None:
+            prior = (
+                await session.execute(
+                    select(func.count(ChargeCodeUse.id)).where(
+                        ChargeCodeUse.charge_code_id == row.id,
+                        ChargeCodeUse.user_id == user.id,
+                        ChargeCodeUse.status.in_(("reserved", "consumed")),
+                    )
                 )
-                .values(used_count=ChargeCode.used_count + 1)
-                .execution_options(synchronize_session=False)
-            )
-            if claim.rowcount != 1:
-                raise ValueError("کد قابل استفاده نیست")
-    except IntegrityError as exc:
-        raise ValueError("این کد را قبلاً استفاده کرده‌اید") from exc
-    # Shop codes credit the isolated shop purse; platform codes credit main purse.
-    await credit_wallet(
-        session,
-        user,
-        amount,
-        f"کد هدیه {row.code}",
-        shop_id=code_rid,
-        commit=False,
-    )
-    await session.flush()
+            ).scalar_one()
+            if int(prior or 0) >= 1:
+                raise ValueError("این کد را قبلاً استفاده کرده‌اید")
+        await claim_use(session, row, user_id=user.id, shop_id=user_rid, kind="wallet")
+        amount = int(row.amount or 0)
+        if amount <= 0:
+            raise ValueError("مبلغ کد نامعتبر است")
+        # Credit and usage record commit together, or both roll back.
+        await credit_wallet(
+            session, user, amount, f"کد هدیه {row.code}", shop_id=code_rid, commit=False
+        )
+        session.add(ChargeCodeUse(charge_code_id=row.id, user_id=user.id, status="consumed"))
+        await session.flush()
     await session.refresh(row)
     await session.refresh(user)
     from app.services.wallet import get_wallet_balance
@@ -632,44 +614,28 @@ MAX_CHARGE_CODE_USES = 1000
 async def create_charge_code(
     session: AsyncSession,
     *,
-    amount: int,
+    amount: int = 0,
     max_uses: int | None = 1,
     reseller_id: int | None = None,
     note: str | None = None,
     code: str | None = None,
+    kind: str = "wallet",
+    percent: int = 0,
+    max_discount_toman: int | None = None,
+    expires_at: datetime | None = None,
+    max_uses_per_user: int | None = None,
+    first_purchase_only: bool = False,
+    purchase_types: str | list[str] | None = None,
 ) -> ChargeCode:
-    amount = int(amount)
-    if amount <= 0:
-        raise ValueError("مبلغ باید بزرگ‌تر از صفر باشد")
-    if amount > MAX_CHARGE_CODE_AMOUNT:
-        raise ValueError(f"سقف مبلغ کد هدیه {MAX_CHARGE_CODE_AMOUNT:,} تومان است")
-    if max_uses is not None:
-        max_uses = int(max_uses)
-        if max_uses <= 0:
-            raise ValueError("تعداد استفاده باید بزرگ‌تر از صفر باشد")
-        if max_uses > MAX_CHARGE_CODE_USES:
-            raise ValueError(f"سقف تعداد استفاده {MAX_CHARGE_CODE_USES} است")
-    raw = normalize_charge_code(code) if code else generate_charge_code()
-    if not raw:
-        raise ValueError("کد نامعتبر است")
-    exists = (
-        await session.execute(select(ChargeCode.id).where(ChargeCode.code == raw))
-    ).scalar_one_or_none()
-    if exists:
-        raise ValueError("این کد از قبل وجود دارد")
-    row = ChargeCode(
-        code=raw,
-        amount=amount,
-        max_uses=int(max_uses) if max_uses is not None else None,
-        used_count=0,
-        is_active=True,
-        reseller_id=int(reseller_id) if reseller_id else None,
-        note=(note or "").strip()[:255] or None,
+    from app.services.gift_codes import create_gift_code
+
+    return await create_gift_code(
+        session, amount=amount, max_uses=max_uses, reseller_id=reseller_id,
+        note=note, code=code, kind=kind, percent=percent,
+        max_discount_toman=max_discount_toman, expires_at=expires_at,
+        max_uses_per_user=max_uses_per_user, first_purchase_only=first_purchase_only,
+        purchase_types=purchase_types,
     )
-    session.add(row)
-    await session.commit()
-    await session.refresh(row)
-    return row
 
 
 async def record_funnel_event(
