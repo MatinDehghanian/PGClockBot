@@ -67,7 +67,7 @@ async def execute_payment_approve(
             error="wrong_tool",
         )
     try:
-        order = await approve_payment(session, payment, reviewer_tg)
+        order = await approve_payment(session, payment, reviewer_tg, bot=bot)
     except Exception as exc:
         fresh = await session.get(Payment, int(payment.id))
         post, _ = await _load_diag(session, fresh) if fresh else (diag, None)
@@ -126,7 +126,7 @@ async def execute_payment_resume(
             error="wrong_tool",
         )
     try:
-        order = await approve_payment(session, payment, reviewer_tg)
+        order = await approve_payment(session, payment, reviewer_tg, bot=bot)
     except Exception as exc:
         fresh = await session.get(Payment, int(payment.id))
         post, _ = await _load_diag(session, fresh) if fresh else (diag, None)

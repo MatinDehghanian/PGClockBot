@@ -255,21 +255,35 @@ async def _payrev_load(
     if not await reseller_can_review_payment(session, db_user, payment):
         await callback.answer("دسترسی ندارید", show_alert=True)
         return None
+    if callback.message and callback.data.split(":")[1] in {"ok", "no"}:
+        from app.services.payment_review_messages import remember_review_message
+        from app.services.orders import _sync_payment_review_messages
+
+        await remember_review_message(session, payment_id, callback.bot, callback.message)
+        await session.commit()
+        await _sync_payment_review_messages(session, payment_id, bot=callback.bot)
     return payment
 
 
 async def _payrev_finish(callback: CallbackQuery, result) -> None:
     await callback.answer(result.alert_fa, show_alert=True)
-    if not result.ok or not result.message_suffix or not callback.message:
+    # Approval cards are edited together from their stored references. Recovery
+    # cards still finish locally after resume/resend, preserving their old flow.
+    if (
+        callback.data.split(":")[1] not in {"go", "send"}
+        or not result.ok or not result.message_suffix or not callback.message
+    ):
         return
     try:
         if callback.message.photo:
             await callback.message.edit_caption(
-                caption=(callback.message.caption or "") + result.message_suffix
+                caption=(callback.message.html_caption or "") + result.message_suffix,
+                reply_markup=None,
             )
         else:
             await callback.message.edit_text(
-                (callback.message.text or "") + result.message_suffix
+                (callback.message.html_text or "") + result.message_suffix,
+                reply_markup=None,
             )
     except Exception:
         pass
@@ -328,28 +342,19 @@ async def pay_resend(callback: CallbackQuery, session: AsyncSession, db_user: Bo
 
 @router.callback_query(F.data.startswith("payrev:no:"))
 async def pay_reject(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
-    payment_id = int(callback.data.split(":")[-1])
-    payment = await session.get(Payment, payment_id)
+    payment = await _payrev_load(callback, session, db_user)
     if not payment:
-        await callback.answer("یافت نشد", show_alert=True)
         return
-    if not await reseller_can_review_payment(session, db_user, payment):
-        await callback.answer("دسترسی ندارید", show_alert=True)
+    try:
+        await reject_payment(
+            session, payment, db_user.telegram_id, "rejected", bot=callback.bot
+        )
+    except ValueError as exc:
+        from app.services.redact import user_safe_error
+
+        await callback.answer(user_safe_error(exc), show_alert=True)
         return
-    await reject_payment(session, payment, db_user.telegram_id, "rejected")
     await callback.answer("رد شد")
-    if callback.message:
-        try:
-            if callback.message.photo:
-                await callback.message.edit_caption(
-                    caption=(callback.message.caption or "") + "\n\n❌ رد شد"
-                )
-            else:
-                await callback.message.edit_text(
-                    (callback.message.text or "") + "\n\n❌ رد شد"
-                )
-        except Exception:
-            pass
     user = await session.get(BotUser, payment.user_id)
     ui = await get_all_settings(session)
     if user:

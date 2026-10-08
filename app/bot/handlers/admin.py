@@ -571,7 +571,9 @@ async def adm_order_view(callback: CallbackQuery, session: AsyncSession, db_user
         await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
 
 
-async def _approve_order_bot(session: AsyncSession, order: Order, bot) -> str:
+async def _approve_order_bot(
+    session: AsyncSession, order: Order, bot, *, reviewer_tg: int = 0
+) -> str:
     pay = (
         await session.execute(
             select(Payment).where(Payment.order_id == order.id).order_by(Payment.id.desc()).limit(1)
@@ -581,7 +583,7 @@ async def _approve_order_bot(session: AsyncSession, order: Order, bot) -> str:
         return "قبلاً تحویل شده"
     delivered = None
     if pay and pay.status == PaymentStatus.PENDING.value:
-        delivered = await approve_payment(session, pay, reviewer_tg=0)
+        delivered = await approve_payment(session, pay, reviewer_tg=reviewer_tg, bot=bot)
         try:
             from app.services.delivery import send_delivery_to_user
 
@@ -670,7 +672,9 @@ async def order_approve_cb(callback: CallbackQuery, session: AsyncSession, db_us
         )
         return
     try:
-        msg = await _approve_order_bot(session, order, callback.bot)
+        msg = await _approve_order_bot(
+            session, order, callback.bot, reviewer_tg=int(db_user.telegram_id)
+        )
         await callback.answer(msg, show_alert=True)
     except Exception as e:
         await callback.answer(user_safe_error(e), show_alert=True)
@@ -707,7 +711,9 @@ async def order_reject_cb(callback: CallbackQuery, session: AsyncSession, db_use
         )
     ).scalar_one_or_none()
     if pay and pay.status == PaymentStatus.PENDING.value:
-        await reject_payment(session, pay, reviewer_tg=db_user.telegram_id, note="bot reject")
+        await reject_payment(
+            session, pay, reviewer_tg=db_user.telegram_id, note="bot reject", bot=callback.bot
+        )
         user = await session.get(BotUser, pay.user_id)
         if user:
             try:
