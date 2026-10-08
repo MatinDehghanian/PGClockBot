@@ -10,7 +10,6 @@ from typing import Any
 import httpx
 
 from app.services.updates import _parse_ver, is_newer, local_version
-from app.version import GITHUB_RELEASE_NOTES_URL
 
 logger = logging.getLogger(__name__)
 
@@ -213,9 +212,13 @@ RELEASE_NOTES_FA: dict[str, list[str]] = {
     ],
 }
 
-_REMOTE_NOTES_CACHE: dict[str, Any] = {"at": 0.0, "data": None, "ok": False}
+_REMOTE_NOTES_CACHE: dict[str, Any] = {"at": 0.0, "data": None, "ok": False, "channel": ""}
 _REMOTE_NOTES_TTL_OK = 300.0
 _REMOTE_NOTES_TTL_FAIL = 30.0
+
+
+def clear_remote_notes_cache() -> None:
+    _REMOTE_NOTES_CACHE.update({"at": 0.0, "data": None, "ok": False, "channel": ""})
 
 
 def notes_for_version(version: str | None, source: dict[str, list[str]] | None = None) -> list[str]:
@@ -272,14 +275,22 @@ async def fetch_remote_release_notes(
     *,
     timeout: float = 4.0,
     force: bool = False,
+    channel: str | None = None,
 ) -> dict[str, list[str]] | None:
-    """Download RELEASE_NOTES_FA from GitHub main (cached)."""
+    """Download RELEASE_NOTES_FA from the active update channel (cached)."""
+    from app.services.update_channel import (
+        channel_branch,
+        github_release_notes_url,
+    )
+
+    ch = channel_branch(channel)
     now = time.monotonic()
     cached = _REMOTE_NOTES_CACHE.get("data")
     ttl = _REMOTE_NOTES_TTL_OK if _REMOTE_NOTES_CACHE.get("ok") else _REMOTE_NOTES_TTL_FAIL
     if (
         not force
         and isinstance(cached, dict)
+        and _REMOTE_NOTES_CACHE.get("channel") == ch
         and (now - float(_REMOTE_NOTES_CACHE["at"])) < ttl
     ):
         return dict(cached)
@@ -287,7 +298,7 @@ async def fetch_remote_release_notes(
     try:
         async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
             resp = await client.get(
-                GITHUB_RELEASE_NOTES_URL,
+                github_release_notes_url(channel=ch),
                 headers={
                     "User-Agent": "PGClockBot-Panel",
                     "Cache-Control": "no-cache",
@@ -300,11 +311,20 @@ async def fetch_remote_release_notes(
             parsed = parse_release_notes_source(resp.text or "")
             if not parsed:
                 raise RuntimeError("empty release notes")
-            _REMOTE_NOTES_CACHE.update({"at": now, "data": dict(parsed), "ok": True})
+            _REMOTE_NOTES_CACHE.update(
+                {"at": now, "data": dict(parsed), "ok": True, "channel": ch}
+            )
             return dict(parsed)
     except Exception as e:
-        logger.debug("remote release notes fetch failed: %s", e)
-        _REMOTE_NOTES_CACHE.update({"at": now, "data": cached if isinstance(cached, dict) else None, "ok": False})
+        logger.debug("remote release notes fetch failed (%s): %s", ch, e)
+        _REMOTE_NOTES_CACHE.update(
+            {
+                "at": now,
+                "data": cached if isinstance(cached, dict) else None,
+                "ok": False,
+                "channel": ch,
+            }
+        )
         return dict(cached) if isinstance(cached, dict) else None
 
 

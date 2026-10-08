@@ -592,11 +592,17 @@ def _do_update(target_version: str | None) -> None:
             shutil.copy2(env_path, bak)
             _append_log(f"پشتیبان env: {bak.name}")
 
+        from app.services.update_channel import channel_branch, channel_label_fa, get_update_channel
+
+        channel = get_update_channel()
+        branch = channel_branch(channel)
+        _append_log(f"کانال آپدیت: {channel_label_fa(channel)} ({branch})")
+
         use_git = bool(git and (root / ".git").exists())
         if use_git:
-            _set_step("fetch", "git fetch…")
+            _set_step("fetch", f"git fetch origin {branch}…")
             code, out = _run(
-                [git, "fetch", "--no-tags", "--prune", "origin", "main"],
+                [git, "fetch", "--no-tags", "--prune", "origin", branch],
                 cwd=root,
                 timeout=120,
             )
@@ -606,18 +612,23 @@ def _do_update(target_version: str | None) -> None:
                 _append_log(f"git fetch ناموفق — سوییچ به zip: {(out or '')[:160]}")
                 use_git = False
             else:
-                _set_step("pull", "دریافت کد (origin/main)…")
-                # Always deploy main channel — update check compares against main/VERSION.
+                remote_ref = f"origin/{branch}"
+                _set_step("pull", f"دریافت کد ({remote_ref})…")
+                # Deploy the configured update channel (main=stable / dev).
                 code, out = _run(
-                    [git, "checkout", "-f", "-B", "main", "origin/main"],
+                    [git, "checkout", "-f", "-B", branch, remote_ref],
                     cwd=root,
                     timeout=120,
                 )
                 if code != 0:
-                    _append_log(f"checkout main ناموفق — سوییچ به zip: {(out or '')[:160]}")
+                    _append_log(
+                        f"checkout {branch} ناموفق — سوییچ به zip: {(out or '')[:160]}"
+                    )
                     use_git = False
                 else:
-                    code2, out2 = _run([git, "reset", "--hard", "origin/main"], cwd=root, timeout=120)
+                    code2, out2 = _run(
+                        [git, "reset", "--hard", remote_ref], cwd=root, timeout=120
+                    )
                     if code2 != 0:
                         _append_log(f"reset ناموفق — سوییچ به zip: {(out2 or '')[:160]}")
                         use_git = False
@@ -635,13 +646,13 @@ def _do_update(target_version: str | None) -> None:
                             cwd=root,
                             timeout=60,
                         )
-                        _append_log("کد با origin/main همگام شد")
+                        _append_log(f"کد با {remote_ref} همگام شد")
                         if out2:
                             _append_log(out2.splitlines()[-1][:200])
 
         if not use_git:
             _set_step("fetch", "دانلود نسخه جدید…")
-            _update_via_archive(root)
+            _update_via_archive(root, ref=branch)
             _set_step("pull", "اعمال فایل‌ها…")
             _append_log("کد از آرشیو گیت‌هاب اعمال شد")
 
@@ -1141,9 +1152,15 @@ async def update_page_context(*, force_check: bool = False) -> dict[str, Any]:
         changelog_for_update_page,
         fetch_remote_release_notes,
     )
+    from app.services.update_channel import (
+        channel_context,
+        get_update_channel,
+        migration_preflight,
+    )
     from app.services.updates import fetch_recent_versions, is_newer
 
-    info = await check_github_update(force=force_check)
+    channel = get_update_channel()
+    info = await check_github_update(force=force_check, channel=channel)
     status = resolve_stale_update_status()
     awaiting = bool(status.get("awaiting_restart"))
     show_ops = bool(
@@ -1155,8 +1172,33 @@ async def update_page_context(*, force_check: bool = False) -> dict[str, Any]:
     remote = info.get("remote_version") if isinstance(info, dict) else None
     remote_notes = None
     if remote and is_newer(str(remote), local):
-        remote_notes = await fetch_remote_release_notes(force=force_check)
+        remote_notes = await fetch_remote_release_notes(
+            force=force_check, channel=channel
+        )
     rollback_versions = await fetch_recent_versions(limit=3, force=force_check)
+    preflight = await migration_preflight(channel, force=force_check)
+    ch_ctx = channel_context(channel)
+    can_start = bool(info.get("update_available")) and not bool(preflight.get("blocked"))
+    changelog = changelog_for_update_page(
+        local=local, remote=remote, remote_notes=remote_notes
+    )
+    ch_label = ch_ctx["channel_label"]
+    if preflight.get("blocked"):
+        check_message = str(preflight.get("message") or preflight.get("label") or "")
+        check_tone = "err"
+    elif info.get("update_available") and remote:
+        check_message = (
+            f"برای کانال {ch_label} آپدیت جدید هست: {local} → {remote}"
+        )
+        check_tone = "warn"
+    elif info.get("checked"):
+        check_message = (
+            f"برای کانال {ch_label} آپدیت جدیدی نیست — روی آخرین نسخه هستید."
+        )
+        check_tone = "ok"
+    else:
+        check_message = str(info.get("label") or "بررسی آپدیت ناموفق")
+        check_tone = "warn"
     return {
         "update_info": info,
         "update": info,  # sidebar badge on settings tab
@@ -1167,7 +1209,12 @@ async def update_page_context(*, force_check: bool = False) -> dict[str, Any]:
         "rollback_versions": rollback_versions,
         "can_rollback": bool(rollback_versions),
         "show_ops": show_ops,
-        "changelog": changelog_for_update_page(
-            local=local, remote=remote, remote_notes=remote_notes
-        ),
+        "changelog": changelog,
+        "update_channel": ch_ctx["channel"],
+        "update_channel_label": ch_label,
+        "update_channels": ch_ctx["channels"],
+        "migration_preflight": preflight,
+        "can_start_update": can_start,
+        "channel_check_message": check_message,
+        "channel_check_tone": check_tone,
     }

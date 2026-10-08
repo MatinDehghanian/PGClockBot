@@ -74,6 +74,7 @@
           <span class="topbar-version" dir="ltr">
             <span class="brand-ver-dot {% if update and update.update_available %}brand-ver-dot-warn{% else %}brand-ver-dot-ok{% endif %}" aria-hidden="true"></span>
             v{{ app_version }}
+            <span class="channel-badge channel-badge-{{ update_channel|default('main') }}" title="کانال آپدیت">{{ update_channel_label|default('پایدار') }}</span>
           </span>
         </div>
       </a>
@@ -91,6 +92,7 @@
           <span class="brand-ver-line" dir="ltr">
             <span class="brand-ver-dot {% if update and update.update_available %}brand-ver-dot-warn{% else %}brand-ver-dot-ok{% endif %}" aria-hidden="true"></span>
             v{{ app_version }}
+            <span class="channel-badge channel-badge-{{ update_channel|default('main') }}" title="کانال آپدیت">{{ update_channel_label|default('پایدار') }}</span>
           </span>
         </div>
       </a>

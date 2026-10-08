@@ -3554,6 +3554,16 @@ const root = document.getElementById('upd-root');
   const ops = document.getElementById('upd-ops');
   const rollbackBtn = document.getElementById('rollback-start');
   const rollbackSelect = document.getElementById('rollback-version');
+  const channelSelect = document.getElementById('upd-channel');
+  const migrationFlash = document.getElementById('upd-migration-flash');
+  const versionFlash = document.getElementById('upd-version-flash');
+  const remoteVerEl = document.getElementById('upd-remote-ver');
+  const localVerEl = document.getElementById('upd-local-ver');
+  const localBox = document.getElementById('upd-local-box');
+  const remoteBox = document.getElementById('upd-remote-box');
+  const changelogRoot = document.getElementById('upd-changelog');
+  const changelogBlocks = document.getElementById('upd-changelog-blocks');
+  const changelogTitle = document.getElementById('upd-changelog-title');
   let timer = null;
   let waitingRestart = false;
   let sawDown = false;
@@ -3563,9 +3573,11 @@ const root = document.getElementById('upd-root');
   let expectedVersion = '';
   const RESTART_MSG = 'سرویس در حال راه‌اندازی مجدد است — ممکن است چند دقیقه طول بکشد. از صفحه خارج نشوید و رفرش نکنید.';
   const STAY_WARN = 'لطفاً تا پایان عملیات از این صفحه خارج نشوید و صفحه را رفرش نکنید.';
-  const targetRemote = (root && root.dataset.remote) || '';
+  let targetRemote = (root && root.dataset.remote) || '';
   let canStart = root && root.dataset.canStart === '1';
+  let migrationBlocked = root && root.dataset.migrationBlocked === '1';
   let blockLeave = false;
+  let channelBusy = false;
 
   function csrfToken(){
     const meta = document.querySelector('meta[name="csrf-token"]');
@@ -3618,6 +3630,9 @@ const root = document.getElementById('upd-root');
       if (busy) {
         startBtn.disabled = true;
         startBtn.textContent = label || 'در حال اجرا…';
+      } else if (migrationBlocked) {
+        startBtn.disabled = true;
+        startBtn.textContent = 'آپدیت بلاک شد';
       } else {
         const retry = label === 'تلاش دوباره';
         startBtn.disabled = !canStart && !retry;
@@ -3626,7 +3641,117 @@ const root = document.getElementById('upd-root');
     }
     if (rollbackBtn) rollbackBtn.disabled = !!busy;
     if (rollbackSelect) rollbackSelect.disabled = !!busy;
+    if (channelSelect) channelSelect.disabled = !!busy || channelBusy;
     if (busy) setBlockLeave(true);
+  }
+
+  function syncChannelBadges(channel, label){
+    const text = label || (channel === 'dev' ? 'توسعه' : 'پایدار');
+    document.querySelectorAll('.channel-badge').forEach((el) => {
+      el.textContent = text;
+      el.classList.remove('channel-badge-main', 'channel-badge-dev');
+      el.classList.add(channel === 'dev' ? 'channel-badge-dev' : 'channel-badge-main');
+    });
+    if (root) root.dataset.channel = channel || 'main';
+  }
+
+  function escHtml(s){
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function setMetaTone(available){
+    if (localBox) {
+      localBox.classList.toggle('update-meta-err', !!available);
+      localBox.classList.toggle('update-meta-ok', !available);
+    }
+    if (remoteBox) {
+      remoteBox.classList.toggle('update-meta-ok', !!available);
+      remoteBox.classList.toggle('update-meta-err', false);
+    }
+  }
+
+  function renderChangelog(cl){
+    if (!changelogRoot || !changelogBlocks) return;
+    const has = !!(cl && cl.has_notes && (cl.blocks || []).length);
+    changelogRoot.hidden = !has;
+    if (changelogTitle && cl && cl.title) changelogTitle.textContent = cl.title;
+    if (!has) {
+      changelogBlocks.innerHTML = '';
+      return;
+    }
+    changelogBlocks.innerHTML = (cl.blocks || []).map(function (block) {
+      const notes = (block.notes || []).map(function (n) {
+        return '<li>' + escHtml(n) + '</li>';
+      }).join('');
+      return (
+        '<div class="update-changelog-block">' +
+          '<strong class="update-changelog-ver" dir="ltr">v' + escHtml(block.version) + '</strong>' +
+          '<ul class="update-changelog-list">' + notes + '</ul>' +
+        '</div>'
+      );
+    }).join('');
+  }
+
+  function applyChannelPayload(data){
+    const info = (data && data.update_info) || {};
+    const pre = (data && data.migration_preflight) || {};
+    const chLabel = data.channel_label || info.channel_label || (data.channel === 'dev' ? 'توسعه' : 'پایدار');
+    const checkMsg = data.channel_check_message || info.label || '';
+    const checkTone = data.channel_check_tone || (info.update_available ? 'warn' : (info.checked ? 'ok' : 'warn'));
+    targetRemote = info.remote_version || '';
+    if (root) root.dataset.remote = targetRemote;
+    migrationBlocked = !!pre.blocked;
+    if (root) root.dataset.migrationBlocked = migrationBlocked ? '1' : '0';
+    canStart = !!data.can_start_update && !migrationBlocked;
+    if (root) root.dataset.canStart = canStart ? '1' : '0';
+    if (localVerEl && data.local_version) {
+      localVerEl.textContent = 'v' + data.local_version;
+    }
+    if (remoteVerEl) {
+      remoteVerEl.textContent = targetRemote ? ('v' + targetRemote) : '—';
+    }
+    setMetaTone(!!info.update_available && !migrationBlocked);
+    if (migrationFlash) {
+      if (pre.blocked) {
+        migrationFlash.hidden = false;
+        migrationFlash.className = 'flash err';
+        migrationFlash.textContent = pre.message || pre.label || '';
+      } else if (pre.tone === 'warn' && pre.message) {
+        migrationFlash.hidden = false;
+        migrationFlash.className = 'flash warn';
+        migrationFlash.textContent = pre.message;
+      } else {
+        migrationFlash.hidden = true;
+        migrationFlash.textContent = '';
+      }
+    }
+    if (versionFlash && root.dataset.showOps !== '1') {
+      versionFlash.hidden = false;
+      versionFlash.className = 'flash ' + (checkTone === 'ok' ? 'ok' : (checkTone === 'err' ? 'err' : 'warn'));
+      if (checkMsg) {
+        versionFlash.textContent = checkMsg;
+      } else if (info.update_available && !migrationBlocked) {
+        versionFlash.textContent = 'برای کانال ' + chLabel + ' آپدیت جدید هست: ' +
+          (info.version || data.local_version || '') + ' → ' + (info.remote_version || '');
+      } else if (info.checked && !info.update_available) {
+        versionFlash.textContent = 'برای کانال ' + chLabel + ' آپدیت جدیدی نیست — روی آخرین نسخه هستید.';
+      } else {
+        versionFlash.textContent = info.label || ('بررسی آپدیت کانال ' + chLabel + ' ناموفق');
+      }
+    }
+    if (stateEl && root.dataset.showOps !== '1') {
+      if (migrationBlocked) stateEl.textContent = pre.label || 'مایگریشن ناسازگار';
+      else if (info.update_available) stateEl.textContent = 'آپدیت کانال ' + chLabel + ' آماده است';
+      else if (info.checked) stateEl.textContent = 'آخرین نسخه کانال ' + chLabel;
+      else stateEl.textContent = info.label || '';
+    }
+    renderChangelog(data.changelog);
+    syncChannelBadges(data.channel || (channelSelect && channelSelect.value), chLabel);
+    setBusy(false);
   }
 
   function markRestartUi(extra){
@@ -3857,11 +3982,66 @@ const root = document.getElementById('upd-root');
   }
 
   if (startBtn) startBtn.addEventListener('click', () => {
+    if (migrationBlocked) return;
     beginUpdate(/تلاش دوباره/.test(startBtn.textContent || ''));
   });
   if (refreshBtn) refreshBtn.addEventListener('click', () => {
     location.href = '/settings?tab=update&force=1';
   });
+  if (channelSelect) {
+    channelSelect.addEventListener('change', async () => {
+      const next = (channelSelect.value || 'main').trim();
+      const prev = (root && root.dataset.channel) || 'main';
+      if (!next || next === prev) return;
+      const nextLabel = next === 'dev' ? 'توسعه' : 'پایدار';
+      channelBusy = true;
+      channelSelect.disabled = true;
+      if (startBtn) {
+        startBtn.disabled = true;
+        startBtn.textContent = 'در حال بررسی…';
+      }
+      if (stateEl) stateEl.textContent = 'در حال بررسی آپدیت کانال ' + nextLabel + '…';
+      if (versionFlash) {
+        versionFlash.hidden = false;
+        versionFlash.className = 'flash warn';
+        versionFlash.textContent = 'کانال به «' + nextLabel + '» تغییر کرد — در حال بررسی آپدیت این کانال…';
+      }
+      try {
+        const tok = csrfToken();
+        const res = await fetch('/update/channel', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: updateFetchHeaders(),
+          body: JSON.stringify({ channel: next, csrf_token: tok || undefined }),
+        });
+        const data = await readUpdateResponse(res);
+        if (!data.ok) {
+          channelSelect.value = prev;
+          if (versionFlash) {
+            versionFlash.hidden = false;
+            versionFlash.className = 'flash err';
+            versionFlash.textContent = data.error || 'تغییر کانال ممکن نشد';
+          }
+          if (stateEl) stateEl.textContent = data.error || 'تغییر کانال ممکن نشد';
+          setBusy(false);
+          return;
+        }
+        applyChannelPayload(data);
+      } catch (_) {
+        channelSelect.value = prev;
+        if (versionFlash) {
+          versionFlash.hidden = false;
+          versionFlash.className = 'flash err';
+          versionFlash.textContent = 'خطا در بررسی آپدیت کانال — اتصال یا نشست را بررسی کنید';
+        }
+        if (stateEl) stateEl.textContent = 'خطا در تغییر کانال — اتصال یا نشست را بررسی کنید';
+        setBusy(false);
+      } finally {
+        channelBusy = false;
+        channelSelect.disabled = false;
+      }
+    });
+  }
 
   if (rollbackBtn && rollbackSelect) {
     rollbackBtn.addEventListener('click', async () => {
