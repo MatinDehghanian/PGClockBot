@@ -15,6 +15,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.2.24": [
+        "بج هدر کانال نصب‌شدهٔ فعلی را نشان می‌دهد (نه فقط انتخاب لیست آپدیت)",
+        "فاصله بج تا نسخه برابر فاصله نقطه وضعیت تا نسخه شد",
+        "ریستور: restore/pre-v0.2.24-v0.2.22",
+    ],
     "0.2.22": [
         "کانال آپدیت پایدار/توسعه در تب آپدیت پنل (UPDATE_CHANNEL)",
         "با عوض کردن کانال، تیپ همان کانال از گیت‌هاب خودکار بررسی می‌شود",
