@@ -11,17 +11,22 @@ from app.version import (
     GITHUB_RELEASES_API,
     GITHUB_REPO_URL,
     GITHUB_TAGS_API,
-    GITHUB_VERSION_URL,
     __version__,
 )
 
 logger = logging.getLogger(__name__)
 
-_CACHE: dict[str, Any] = {"at": 0.0, "data": None, "ok": False}
+_CACHE: dict[str, Any] = {"at": 0.0, "data": None, "ok": False, "channel": ""}
 _CACHE_TTL_OK = 300.0  # successful checks
 _CACHE_TTL_FAIL = 30.0  # failed checks — retry soon
 _RELEASES_CACHE: dict[str, Any] = {"at": 0.0, "data": None, "ok": False}
 _VER_RE = re.compile(r"^v?\d+(\.\d+)*([.-][A-Za-z0-9]+)*$")
+
+
+def _active_channel() -> str:
+    from app.services.update_channel import get_update_channel
+
+    return get_update_channel()
 
 
 def local_version() -> str:
@@ -73,12 +78,18 @@ def _valid_version(value: str | None) -> bool:
 
 async def _fetch_remote_version_candidates(
     client: httpx.AsyncClient,
+    *,
+    channel: str | None = None,
 ) -> list[str]:
-    """Collect version strings from VERSION file and latest GitHub release.
+    """Collect version strings from the channel VERSION file (+ releases on main).
 
     Always cache-busts the raw VERSION URL (CDN max-age is 300s). Releases API
-    is a fallback when raw.githubusercontent.com is blocked or stale.
+    is a fallback on the stable channel when raw.githubusercontent.com is blocked
+    or stale. Dev channel uses the branch VERSION only (releases track main).
     """
+    from app.services.update_channel import github_version_url, normalize_channel
+
+    ch = normalize_channel(channel if channel is not None else _active_channel())
     found: list[str] = []
     bust = {"_": str(int(time.time()))}
     headers = {
@@ -86,40 +97,53 @@ async def _fetch_remote_version_candidates(
         "Cache-Control": "no-cache",
         "Pragma": "no-cache",
     }
+    version_url = github_version_url(channel=ch)
     try:
-        resp = await client.get(GITHUB_VERSION_URL, headers=headers, params=bust)
+        resp = await client.get(version_url, headers=headers, params=bust)
         if resp.status_code == 200:
             remote = (resp.text or "").strip().splitlines()[0].strip()
             if _valid_version(remote):
                 found.append(remote.lstrip("vV"))
     except Exception as e:
-        logger.debug("github VERSION fetch failed: %s", e)
+        logger.debug("github VERSION fetch failed (%s): %s", ch, e)
 
-    try:
-        resp = await client.get(GITHUB_RELEASES_API + "/latest", headers=_github_headers())
-        if resp.status_code == 200:
-            payload = resp.json()
-            tag = normalize_version_tag(
-                (payload or {}).get("tag_name") or (payload or {}).get("name")
+    if ch == "main":
+        try:
+            resp = await client.get(
+                GITHUB_RELEASES_API + "/latest", headers=_github_headers()
             )
-            if tag:
-                found.append(tag)
-    except Exception as e:
-        logger.debug("github releases/latest fetch failed: %s", e)
+            if resp.status_code == 200:
+                payload = resp.json()
+                tag = normalize_version_tag(
+                    (payload or {}).get("tag_name") or (payload or {}).get("name")
+                )
+                if tag:
+                    found.append(tag)
+        except Exception as e:
+            logger.debug("github releases/latest fetch failed: %s", e)
 
     return found
 
 
-async def check_github_update(*, timeout: float = 4.0, force: bool = False) -> dict[str, Any]:
+async def check_github_update(
+    *,
+    timeout: float = 4.0,
+    force: bool = False,
+    channel: str | None = None,
+) -> dict[str, Any]:
     """
-    Compare local app version with GitHub (VERSION file + latest release).
+    Compare local app version with the configured update channel on GitHub.
     Returns: version, remote_version, update_available, label, tone (ok|warn|err)
     """
+    from app.services.update_channel import channel_label_fa, normalize_channel
+
+    ch = normalize_channel(channel if channel is not None else _active_channel())
     now = time.monotonic()
     cached = _CACHE.get("data")
     if (
         not force
         and isinstance(cached, dict)
+        and _CACHE.get("channel") == ch
         and (now - float(_CACHE["at"])) < (_CACHE_TTL_OK if _CACHE.get("ok") else _CACHE_TTL_FAIL)
     ):
         return dict(cached)
@@ -133,11 +157,13 @@ async def check_github_update(*, timeout: float = 4.0, force: bool = False) -> d
         "tone": "ok",
         "repo_url": GITHUB_REPO_URL,
         "checked": False,
+        "channel": ch,
+        "channel_label": channel_label_fa(ch),
     }
     ok = False
     try:
         async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
-            candidates = await _fetch_remote_version_candidates(client)
+            candidates = await _fetch_remote_version_candidates(client, channel=ch)
         if not candidates:
             result["label"] = "بررسی آپدیت ناموفق"
             result["tone"] = "warn"
@@ -157,7 +183,7 @@ async def check_github_update(*, timeout: float = 4.0, force: bool = False) -> d
         logger.debug("github version check failed: %s", e)
         result["label"] = "بررسی آپدیت ناموفق"
         result["tone"] = "warn"
-    _CACHE.update({"at": now, "data": dict(result), "ok": ok})
+    _CACHE.update({"at": now, "data": dict(result), "ok": ok, "channel": ch})
     return result
 
 
@@ -165,9 +191,18 @@ def clear_update_cache() -> None:
     _CACHE["at"] = 0.0
     _CACHE["data"] = None
     _CACHE["ok"] = False
+    _CACHE["channel"] = ""
     _RELEASES_CACHE["at"] = 0.0
     _RELEASES_CACHE["data"] = None
     _RELEASES_CACHE["ok"] = False
+    try:
+        from app.services.update_channel import clear_alembic_tree_cache
+        from app.services.release_notes import clear_remote_notes_cache
+
+        clear_alembic_tree_cache()
+        clear_remote_notes_cache()
+    except Exception:
+        pass
 
 
 def normalize_version_tag(value: str | None) -> str | None:

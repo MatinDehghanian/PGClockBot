@@ -3554,6 +3554,10 @@ const root = document.getElementById('upd-root');
   const ops = document.getElementById('upd-ops');
   const rollbackBtn = document.getElementById('rollback-start');
   const rollbackSelect = document.getElementById('rollback-version');
+  const channelSelect = document.getElementById('upd-channel');
+  const migrationFlash = document.getElementById('upd-migration-flash');
+  const versionFlash = document.getElementById('upd-version-flash');
+  const remoteVerEl = document.getElementById('upd-remote-ver');
   let timer = null;
   let waitingRestart = false;
   let sawDown = false;
@@ -3563,9 +3567,11 @@ const root = document.getElementById('upd-root');
   let expectedVersion = '';
   const RESTART_MSG = 'سرویس در حال راه‌اندازی مجدد است — ممکن است چند دقیقه طول بکشد. از صفحه خارج نشوید و رفرش نکنید.';
   const STAY_WARN = 'لطفاً تا پایان عملیات از این صفحه خارج نشوید و صفحه را رفرش نکنید.';
-  const targetRemote = (root && root.dataset.remote) || '';
+  let targetRemote = (root && root.dataset.remote) || '';
   let canStart = root && root.dataset.canStart === '1';
+  let migrationBlocked = root && root.dataset.migrationBlocked === '1';
   let blockLeave = false;
+  let channelBusy = false;
 
   function csrfToken(){
     const meta = document.querySelector('meta[name="csrf-token"]');
@@ -3618,6 +3624,9 @@ const root = document.getElementById('upd-root');
       if (busy) {
         startBtn.disabled = true;
         startBtn.textContent = label || 'در حال اجرا…';
+      } else if (migrationBlocked) {
+        startBtn.disabled = true;
+        startBtn.textContent = 'آپدیت بلاک شد';
       } else {
         const retry = label === 'تلاش دوباره';
         startBtn.disabled = !canStart && !retry;
@@ -3626,7 +3635,67 @@ const root = document.getElementById('upd-root');
     }
     if (rollbackBtn) rollbackBtn.disabled = !!busy;
     if (rollbackSelect) rollbackSelect.disabled = !!busy;
+    if (channelSelect) channelSelect.disabled = !!busy || channelBusy;
     if (busy) setBlockLeave(true);
+  }
+
+  function syncChannelBadges(channel, label){
+    const text = label || (channel === 'dev' ? 'توسعه' : 'پایدار');
+    document.querySelectorAll('.channel-badge').forEach((el) => {
+      el.textContent = text;
+      el.classList.remove('channel-badge-main', 'channel-badge-dev');
+      el.classList.add(channel === 'dev' ? 'channel-badge-dev' : 'channel-badge-main');
+    });
+    if (root) root.dataset.channel = channel || 'main';
+  }
+
+  function applyChannelPayload(data){
+    const info = (data && data.update_info) || {};
+    const pre = (data && data.migration_preflight) || {};
+    targetRemote = info.remote_version || '';
+    if (root) root.dataset.remote = targetRemote;
+    migrationBlocked = !!pre.blocked;
+    if (root) root.dataset.migrationBlocked = migrationBlocked ? '1' : '0';
+    canStart = !!data.can_start_update && !migrationBlocked;
+    if (root) root.dataset.canStart = canStart ? '1' : '0';
+    if (remoteVerEl) {
+      remoteVerEl.textContent = targetRemote ? ('v' + targetRemote) : '—';
+    }
+    if (migrationFlash) {
+      if (pre.blocked || (pre.tone === 'warn' && pre.message)) {
+        migrationFlash.hidden = false;
+        migrationFlash.className = 'flash ' + (pre.blocked ? 'err' : 'warn');
+        migrationFlash.textContent = pre.message || pre.label || '';
+      } else {
+        migrationFlash.hidden = true;
+        migrationFlash.textContent = '';
+      }
+    }
+    if (versionFlash && root.dataset.showOps !== '1') {
+      if (info.update_available && !migrationBlocked) {
+        versionFlash.hidden = false;
+        versionFlash.className = 'flash warn';
+        versionFlash.textContent = 'نسخه جدید آماده است: ' + (info.version || '') + ' → ' + (info.remote_version || '');
+      } else if (info.checked && !info.update_available) {
+        versionFlash.hidden = false;
+        versionFlash.className = 'flash ok';
+        versionFlash.textContent = 'شما روی آخرین نسخه این کانال هستید.';
+      } else if (!info.checked) {
+        versionFlash.hidden = false;
+        versionFlash.className = 'flash warn';
+        versionFlash.textContent = info.label || 'بررسی آپدیت ناموفق';
+      } else {
+        versionFlash.hidden = true;
+      }
+    }
+    if (stateEl && root.dataset.showOps !== '1') {
+      if (migrationBlocked) stateEl.textContent = pre.label || 'مایگریشن ناسازگار';
+      else if (info.update_available) stateEl.textContent = 'آپدیت آماده است';
+      else if (info.checked) stateEl.textContent = 'آخرین نسخه';
+      else stateEl.textContent = info.label || '';
+    }
+    syncChannelBadges(data.channel || (channelSelect && channelSelect.value), data.channel_label);
+    setBusy(false);
   }
 
   function markRestartUi(extra){
@@ -3857,11 +3926,44 @@ const root = document.getElementById('upd-root');
   }
 
   if (startBtn) startBtn.addEventListener('click', () => {
+    if (migrationBlocked) return;
     beginUpdate(/تلاش دوباره/.test(startBtn.textContent || ''));
   });
   if (refreshBtn) refreshBtn.addEventListener('click', () => {
     location.href = '/settings?tab=update&force=1';
   });
+  if (channelSelect) {
+    channelSelect.addEventListener('change', async () => {
+      const next = (channelSelect.value || 'main').trim();
+      const prev = (root && root.dataset.channel) || 'main';
+      if (!next || next === prev) return;
+      channelBusy = true;
+      channelSelect.disabled = true;
+      if (stateEl) stateEl.textContent = 'در حال تغییر کانال…';
+      try {
+        const tok = csrfToken();
+        const res = await fetch('/update/channel', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: updateFetchHeaders(),
+          body: JSON.stringify({ channel: next, csrf_token: tok || undefined }),
+        });
+        const data = await readUpdateResponse(res);
+        if (!data.ok) {
+          channelSelect.value = prev;
+          if (stateEl) stateEl.textContent = data.error || 'تغییر کانال ممکن نشد';
+          return;
+        }
+        applyChannelPayload(data);
+      } catch (_) {
+        channelSelect.value = prev;
+        if (stateEl) stateEl.textContent = 'خطا در تغییر کانال — اتصال یا نشست را بررسی کنید';
+      } finally {
+        channelBusy = false;
+        channelSelect.disabled = false;
+      }
+    });
+  }
 
   if (rollbackBtn && rollbackSelect) {
     rollbackBtn.addEventListener('click', async () => {
