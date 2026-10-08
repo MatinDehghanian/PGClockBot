@@ -906,6 +906,7 @@ SETTINGS_TABS: list[tuple[str, str]] = [
     ("notifications", "نوتیفیکیشن"),
     ("daily_report", "گزارش روزانه"),
     ("bot", "ربات و اتصال"),
+    ("pasarguard", "اتصال پاسارگارد"),
 ]
 
 # Legacy bot-settings tabs moved to page-level modals (finance / support / loyalty).

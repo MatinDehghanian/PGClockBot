@@ -101,6 +101,10 @@
         <small class="muted">با پورت و path وارد کنید — مثال: <code dir="ltr">https://panel.example.com:8443/base</code></small>
         <small class="muted">ریشه API — نه مسیر داشبورد (<code dir="ltr">/MrClock</code>)</small>
       </label>
+      <label>مسیر سابسکریپشن
+        <input name="pg_subscription_path" value="{{ values.PG_SUBSCRIPTION_PATH or '/sub' }}" dir="ltr" placeholder="/sub/" maxlength="128" autocomplete="off" />
+        <small class="muted">فقط مسیر لینک اشتراک؛ مثل <code dir="ltr">/sub/</code> یا <code dir="ltr">/apilog/</code>، بدون دامنه و توکن.</small>
+      </label>
       <label>نام کاربری پاسارگارد
         
         <input name="pg_username" value="{{ values.PG_USERNAME or '' }}" required dir="ltr" placeholder="pg_user" autocomplete="off" />

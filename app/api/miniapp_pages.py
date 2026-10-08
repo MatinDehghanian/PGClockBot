@@ -44,6 +44,7 @@ from app.services.miniapp_auth import (
     resolve_mini_persona,
 )
 from app.services.pasarguard import get_pg
+from app.services.service_live_info import fetch_subscription_info, service_info_error, validate_service_info
 from app.services.users import get_all_settings, on
 
 log = logging.getLogger(__name__)
@@ -144,16 +145,13 @@ def _service_sub_token(svc: UserService) -> str | None:
     return extract_sub_token(svc.subscription_url)
 
 
-async def _fetch_pg_info(subscription_token: str | None) -> dict:
-    """Public /sub/{token}/info — uses the service token only (auth=False, no admin JWT)."""
-    token = (subscription_token or "").strip()
-    if not token:
-        return {"error": "upstream_unavailable"}
-    try:
-        info = await asyncio.wait_for(get_pg().subscription_info(token), timeout=5.0)
-        return info if isinstance(info, dict) and info else {"error": "upstream_unavailable"}
-    except Exception:
-        return {"error": "upstream_unavailable"}
+async def _fetch_pg_info(subscription_token: str | None, *, subscription_url: str | None = None,
+                         service_id: int | None = None, expected_pg_user_id: int | None = None) -> dict:
+    """Fresh public subscription_info (auth=False); never fall back to admin JWT."""
+    return await fetch_subscription_info(
+        subscription_token, subscription_url=subscription_url, service_id=service_id,
+        expected_pg_user_id=expected_pg_user_id, client_factory=get_pg,
+    )
 
 
 def _safe_client_message(exc: BaseException, *, fallback: str) -> str:
@@ -186,7 +184,7 @@ def _safe_client_message(exc: BaseException, *, fallback: str) -> str:
 
 
 def _serialize_service(svc: UserService, info: dict | None = None) -> dict:
-    info = info or {}
+    info = validate_service_info(info)
     # Only our sentinel may appear as ``error`` — never raw upstream strings.
     upstream_err = not info or info.get("error") == "upstream_unavailable"
     used = info.get("used_traffic")
@@ -201,7 +199,7 @@ def _serialize_service(svc: UserService, info: dict | None = None) -> dict:
     )
     pending = bool(not upstream_err and is_on_hold_status(status_raw))
     # Omitted fields are unknown; explicit null/zero limits can mean unlimited.
-    volume_known = not upstream_err and "data_limit" in info
+    volume_known = not upstream_err and "data_limit" in info and "used_traffic" in info
     time_known = not upstream_err and (
         "expire" in info or "expire_date" in info or pending
     )
@@ -223,7 +221,7 @@ def _serialize_service(svc: UserService, info: dict | None = None) -> dict:
         else "—",
         "traffic_pct": _traffic_pct(used, limit) if volume_known else None,
         "expire": format_expire_short(expire, status=status_raw, expire_duration=hold_dur)
-        if not upstream_err
+        if time_known
         else "—",
         "expire_days": days,
         "expire_days_label": time_remaining_label(days_left=days, status=status_raw)
@@ -233,66 +231,43 @@ def _serialize_service(svc: UserService, info: dict | None = None) -> dict:
         "online_at": format_expire_short(info.get("online_at"))
         if info.get("online_at") and not upstream_err
         else None,
-        "error": "upstream_unavailable" if upstream_err else None,
+        "error": info.get("error"),
+        "error_code": info.get("error_code"),
+        "error_message": info.get("error_message"),
+        "info_fetched_at": info.get("info_fetched_at") if not upstream_err else None,
+    }
+
+
+def _unavailable_service_row(svc: UserService) -> dict:
+    """A local row remains visible even if upstream formatting fails."""
+    return {
+        "id": svc.id, "username": svc.pg_username or "", "plan_id": svc.plan_id,
+        "subscription_url": "", "status": "—", "status_fa": "—",
+        "traffic": "—", "traffic_pct": None, "expire": "—",
+        "expire_days": None, "expire_days_label": "—", "pending_start": False,
+        "online_at": None, "info_fetched_at": None,
+        **service_info_error("invalid_response"),
     }
 
 
 async def _enrich_services(services: list[UserService]) -> list[dict]:
     if not services:
         return []
-    try:
-        infos = await asyncio.gather(
-            *[_fetch_pg_info(_service_sub_token(s)) for s in services[:20]]
-        )
-    except Exception:
-        log.exception("miniapp enrich gather failed; returning bare services")
-        infos = [{} for _ in services[:20]]
-    out: list[dict] = []
-    for s, info in zip(services[:20], infos):
+    infos = await asyncio.gather(*[
+        _fetch_pg_info(_service_sub_token(s), subscription_url=s.subscription_url,
+                       service_id=s.id, expected_pg_user_id=getattr(s, "pg_user_id", None))
+        for s in services[:20]
+    ], return_exceptions=True)
+    out = []
+    for index, svc in enumerate(services):
+        info = infos[index] if index < len(infos) else service_info_error("not_loaded")
+        if isinstance(info, BaseException):
+            info = service_info_error()
         try:
-            out.append(_serialize_service(s, info if isinstance(info, dict) else {}))
+            out.append(_serialize_service(svc, info))
         except Exception:
-            log.exception("miniapp serialize failed service=%s", getattr(s, "id", None))
-            out.append(
-                {
-                    "id": int(getattr(s, "id", 0) or 0),
-                    "username": getattr(s, "pg_username", None) or "",
-                    "subscription_url": getattr(s, "subscription_url", None) or "",
-                    "plan_id": getattr(s, "plan_id", None),
-                    "status": "—",
-                    "status_fa": "—",
-                    "traffic": "—",
-                    "traffic_pct": None,
-                    "expire": "—",
-                    "expire_days": None,
-                    "expire_days_label": "—",
-                    "pending_start": False,
-                    "online_at": None,
-                    "error": "upstream_unavailable",
-                }
-            )
-    for s in services[20:]:
-        try:
-            out.append(_serialize_service(s, {}))
-        except Exception:
-            out.append(
-                {
-                    "id": int(getattr(s, "id", 0) or 0),
-                    "username": getattr(s, "pg_username", None) or "",
-                    "subscription_url": getattr(s, "subscription_url", None) or "",
-                    "plan_id": getattr(s, "plan_id", None),
-                    "status": "—",
-                    "status_fa": "—",
-                    "traffic": "—",
-                    "traffic_pct": None,
-                    "expire": "—",
-                    "expire_days": None,
-                    "expire_days_label": "—",
-                    "pending_start": False,
-                    "online_at": None,
-                    "error": None,
-                }
-            )
+            log.warning("miniapp serialization failed service=%s", svc.id)
+            out.append(_unavailable_service_row(svc))
     return out
 
 
@@ -337,27 +312,9 @@ async def _user_shop_payload(session: AsyncSession, user: BotUser) -> dict:
     try:
         enriched = await _enrich_services(services)
     except Exception:
-        log.exception("miniapp enrich failed user=%s", user.id)
+        log.warning("miniapp enrich failed user=%s", user.id)
         # Still list local rows — never hide owned services because PG enrich failed.
-        enriched = [
-            {
-                "id": int(s.id),
-                "username": s.pg_username or "",
-                "subscription_url": s.subscription_url or "",
-                "plan_id": s.plan_id,
-                "status": "—",
-                "status_fa": "—",
-                "traffic": "—",
-                "traffic_pct": None,
-                "expire": "—",
-                "expire_days": None,
-                "expire_days_label": "—",
-                "pending_start": False,
-                "online_at": None,
-                "error": "upstream_unavailable",
-            }
-            for s in services
-        ]
+        enriched = [_unavailable_service_row(s) for s in services]
     for row, svc in zip(enriched, services):
         row["addons_allowed"] = _addons_allowed(user, svc)
     try:
@@ -557,7 +514,7 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
         user = await load_mini_user(session, request)
         _require_commerce(user)
         svc = _owned_service_or_404(await session.get(UserService, service_id), user)
-        info = await _fetch_pg_info(_service_sub_token(svc))
+        info = await _fetch_pg_info(_service_sub_token(svc), subscription_url=svc.subscription_url, service_id=svc.id, expected_pg_user_id=svc.pg_user_id)
         # Never return raw PG payload — allowlisted summary only
         return _no_store({"service": _serialize_service(svc, info)})
 

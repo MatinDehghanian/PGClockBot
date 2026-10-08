@@ -66,6 +66,17 @@ def pg_api_base_candidates(raw: str) -> list[str]:
             out.append(origin)
     return out
 
+
+def normalize_pg_subscription_path(raw: str | None) -> str:
+    """Canonical subscription prefix; paths only, never an origin or query."""
+    import re
+
+    value = (raw or "").strip() or "/sub"
+    if len(value) > 128 or not re.fullmatch(r"/?[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*/?", value):
+        raise ValueError("مسیر سابسکریپشن نامعتبر است؛ فقط مسیر مثل /sub/ یا /apilog/ را وارد کنید")
+    return "/" + value.strip("/")
+
+
 def _parse_admin_ids(value: object) -> List[int]:
     """Parse ADMIN_IDS from env/.env without requiring JSON (empty string → [])."""
     if value is None or value == "":
@@ -100,6 +111,7 @@ class Settings(BaseSettings):
     )
 
     pg_base_url: str = Field(default="", alias="PG_BASE_URL")
+    pg_subscription_path: str = Field(default="/sub", alias="PG_SUBSCRIPTION_PATH")
     pg_username: str = Field(default="", alias="PG_USERNAME")
     pg_password: str = Field(default="", alias="PG_PASSWORD")
     pg_access_token: str = Field(default="", alias="PG_ACCESS_TOKEN")
@@ -141,6 +153,7 @@ class Settings(BaseSettings):
         "bot_token",
         "bot_username",
         "pg_base_url",
+        "pg_subscription_path",
         "pg_username",
         "pg_password",
         "pg_access_token",
@@ -183,6 +196,11 @@ class Settings(BaseSettings):
     @classmethod
     def normalize_pg_url(cls, value: str) -> str:
         return normalize_pg_base_url(value) or value
+
+    @field_validator("pg_subscription_path", mode="after")
+    @classmethod
+    def normalize_sub_path(cls, value: str) -> str:
+        return normalize_pg_subscription_path(value)
 
     def _miniapp_https_base(self) -> str:
         """Canonical HTTPS origin for Telegram WebApp buttons.

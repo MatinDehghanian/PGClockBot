@@ -219,15 +219,14 @@ async def build_delivery_content(
                 "skip_qr": True,
             }
 
-        if svc and svc.subscription_token:
-            try:
-                info = await get_pg().subscription_info(svc.subscription_token)
-                sub_info = info if isinstance(info, dict) else None
-                if include_details:
-                    detail_parts.append(service_card(info))
-            except Exception:
-                if include_details and svc.pg_username:
-                    detail_parts.append(f"👤 {copyable(svc.pg_username)}")
+        if svc:
+            from app.services.service_live_info import fetch_live_service_info
+
+            info = await fetch_live_service_info(svc, client_factory=get_pg)
+            info.setdefault("username", svc.pg_username)
+            sub_info = info if not info.get("error") else None
+            if include_details:
+                detail_parts.append(service_card(info))
             sub_url = absolutize_subscription_url(svc.subscription_url) or svc.subscription_url
             if include_details and sub_url and on(ui.get("show_sub_link_in_text", "1")):
                 detail_parts.append(

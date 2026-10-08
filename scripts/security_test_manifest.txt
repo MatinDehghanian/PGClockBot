@@ -79,6 +79,7 @@ tests/test_security_audit_3_6_3.py
 tests/test_security_audit_hardening.py
 tests/test_security_hardening.py
 tests/test_security_legacy_username_parity.py
+tests/test_service_live_info.py
 tests/test_setup_bot_placeholder_rejection.py
 tests/test_setup_gate_install_url.py
 tests/test_setup_url_log_redaction.py

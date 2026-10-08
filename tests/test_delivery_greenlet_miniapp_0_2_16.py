@@ -245,8 +245,8 @@ class OnHoldDisplayLabelTests(unittest.TestCase):
             html,
         )
         svc_src = (ROOT / "app/bot/handlers/services.py").read_text(encoding="utf-8")
-        self.assertIn("hold_duration_from_info", svc_src)
-        self.assertIn("status=sub_info.get('status')", svc_src)
+        self.assertIn("fetch_live_service_info", svc_src)
+        self.assertIn("service_card(sub_info)", svc_src)
         pg_src = (ROOT / "app/api/pg_pages.py").read_text(encoding="utf-8")
         self.assertIn("pg_expire_fields", pg_src)
 

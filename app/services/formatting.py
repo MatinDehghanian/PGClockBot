@@ -724,7 +724,7 @@ def service_card(info: dict, currency_note: str = "") -> str:
     username = info.get("username", "—")
     status_raw = info.get("status")
     status = status_label(status_raw)
-    used = info.get("used_traffic") or 0
+    used = info.get("used_traffic")
     limit = info.get("data_limit")
     expire_raw = info.get("expire") if "expire" in info else info.get("expire_date")
     expire = format_expire(
@@ -732,15 +732,23 @@ def service_card(info: dict, currency_note: str = "") -> str:
         status=status_raw,
         expire_duration=hold_duration_from_info(info),
     )
-    bar = progress_bar(float(used), float(limit) if limit else None)
+    if not ("expire" in info or "expire_date" in info or is_on_hold_status(status_raw)):
+        expire = "—"
+    volume_known = "data_limit" in info and used is not None
+    bar = progress_bar(float(used), float(limit) if limit else None) if volume_known else None
     lines = [
         f"👤 {copyable(username)}",
         "",
         kv_line("📶", "وضعیت", status),
-        kv_line("📦", "حجم", format_bytes_ratio(used, limit, joiner=" از ")),
-        f"<code>{bar}</code>",
+        kv_line("📦", "حجم", format_bytes_ratio(used, limit, joiner=" از ") if volume_known else "—"),
         kv_line("📅", "انقضا", f"<b>{expire}</b>"),
     ]
+    if bar is not None:
+        lines.insert(-1, f"<code>{bar}</code>")
+    if info.get("error_message"):
+        lines.extend(["", "⚠️ خطا در دریافت اطلاعات سرویس: " + html_mod.escape(str(info["error_message"]))])
+        if info.get("error_code"):
+            lines.append("کد خطا: " + copyable(info["error_code"]))
     if currency_note:
         lines.extend(["", currency_note])
     online = info.get("online_at")

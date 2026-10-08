@@ -882,7 +882,7 @@ async def _link_subscription(
             )
             return
         sub_url = user_subscription_url(info if isinstance(info, dict) else None) or (
-            absolutize_subscription_url(f"/sub/{token}")
+            absolutize_subscription_url(f"{get_settings().pg_subscription_path}/{token}")
         )
         svc = UserService(
             bot_user_id=db_user.id,

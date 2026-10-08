@@ -148,7 +148,7 @@ def test_fetch_and_enrich_reported_payload(service, pending_info):
     pg = SimpleNamespace(subscription_info=AsyncMock(return_value=pending_info))
     with patch("app.api.miniapp_pages.get_pg", return_value=pg):
         out = asyncio.run(_enrich_services([service]))
-    pg.subscription_info.assert_awaited_once_with("test-token")
+    pg.subscription_info.assert_awaited_once_with("test-token", subscription_url=service.subscription_url)
     assert out[0]["status_fa"] == "در انتظار اتصال"
     assert out[0]["traffic"] == "0 از 30 گیگ"
     assert out[0]["expire_days"] == 60
@@ -161,7 +161,9 @@ def test_empty_or_invalid_subscription_response_is_unavailable(payload):
     pg = SimpleNamespace(subscription_info=AsyncMock(return_value=payload))
     with patch("app.api.miniapp_pages.get_pg", return_value=pg):
         out = asyncio.run(_fetch_pg_info("test-token"))
-    assert out == {"error": "upstream_unavailable"}
+    assert out["error"] == "upstream_unavailable"
+    assert out["error_message"]
+    assert out["error_code"] == "invalid_response"
 
 
 def test_missing_token_never_falls_back_to_admin_read():
@@ -169,7 +171,9 @@ def test_missing_token_never_falls_back_to_admin_read():
 
     with patch("app.api.miniapp_pages.get_pg", side_effect=AssertionError("must not read panel")):
         out = asyncio.run(_fetch_pg_info(None))
-    assert out == {"error": "upstream_unavailable"}
+    assert out["error"] == "upstream_unavailable"
+    assert out["error_message"]
+    assert out["error_code"] == "missing_subscription_token"
 
 
 def test_unfetched_services_are_unknown_instead_of_unlimited(service, pending_info):
