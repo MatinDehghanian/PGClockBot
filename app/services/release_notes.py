@@ -15,6 +15,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.2.28": [
+        "ریلیز کانال توسعه روی GitHub (prerelease) تا پنل تیپ `dev` را ببیند",
+        "تشخیص آپدیت `dev`: Contents API + prerelease به‌عنوان پشتیبان raw CDN",
+    ],
     "0.2.27": [
         "تب محدودیت: هشدار کانال اجباری و قوانین بالای باکس مرتبط خودشان",
         "آموزش اتصال: عرض باکس رنگ دکمه هم‌عرض فیلدهای بالا",

@@ -114,8 +114,12 @@ class ChannelAwareUpdateCheckTests(unittest.IsolatedAsyncioTestCase):
         async def fake_get(url, **kwargs):
             u = str(url)
             calls.append(u)
-            if "VERSION" in u:
+            if u.rstrip("/").endswith("/VERSION") or "/VERSION?" in u or "/dev/VERSION" in u:
                 return _FakeResp(200, text="9.9.9\n")
+            if "/contents/VERSION" in u:
+                return _FakeResp(404)
+            if u.rstrip("/").endswith("/releases") or "/releases?" in u:
+                return _FakeResp(200, json_data=[])
             return _FakeResp(404)
 
         client = MagicMock()
@@ -136,6 +140,46 @@ class ChannelAwareUpdateCheckTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("آپدیت", info["label"])
         self.assertTrue(any("/dev/VERSION" in u for u in calls))
         self.assertFalse(any("/releases/latest" in u for u in calls))
+
+    async def test_dev_falls_back_to_contents_api_and_prerelease(self):
+        import base64
+
+        calls: list[str] = []
+
+        async def fake_get(url, **kwargs):
+            u = str(url)
+            calls.append(u)
+            if "raw.githubusercontent" in u:
+                raise RuntimeError("cdn blocked")
+            if "/contents/VERSION" in u:
+                body = base64.b64encode(b"9.9.8\n").decode()
+                return _FakeResp(200, json_data={"content": body})
+            if "/releases" in u and "/latest" not in u:
+                return _FakeResp(
+                    200,
+                    json_data=[
+                        {
+                            "tag_name": "v9.9.7",
+                            "prerelease": True,
+                            "target_commitish": "abc1234",
+                        }
+                    ],
+                )
+            return _FakeResp(404)
+
+        client = MagicMock()
+        client.get = AsyncMock(side_effect=fake_get)
+        client.__aenter__ = AsyncMock(return_value=client)
+        client.__aexit__ = AsyncMock(return_value=None)
+
+        with patch("app.services.updates.httpx.AsyncClient", return_value=client), patch(
+            "app.services.updates.local_version", return_value="0.2.0"
+        ):
+            info = await check_github_update(force=True, channel="dev")
+
+        self.assertTrue(info["checked"])
+        self.assertEqual(info["remote_version"], "9.9.8")
+        self.assertTrue(any("/contents/VERSION" in u for u in calls))
 
     async def test_dev_reports_no_update_when_already_latest(self):
         async def fake_get(url, **kwargs):
