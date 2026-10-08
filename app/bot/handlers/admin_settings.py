@@ -216,6 +216,9 @@ SECTIONS: dict[str, dict] = {
                 ("trial_require_contact", "تأیید شماره تماس", "toggle"),
                 ("trial_require_iran_phone", "فقط شماره ایران", "toggle"),
             ]),
+            ("purchase_contact", "شماره تماس خرید", [
+                ("purchase_require_contact", "شماره تماس اجباری", "toggle"),
+            ]),
             ("receipt_dup", "ضدتقلب رسید", [
                 ("receipt_dup_policy", "رسید تکراری (warn/block)", "text"),
             ]),

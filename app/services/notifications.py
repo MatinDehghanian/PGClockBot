@@ -46,6 +46,12 @@ def ticket_action_markup(ticket_id: int) -> InlineKeyboardMarkup:
 # (setting_key, title, description, default "1"|"0")
 NOTIFY_PREFS: list[tuple[str, str, str, str]] = [
     (
+        "notify_service_cancellation",
+        "درخواست لغو سرویس",
+        "وقتی مشتری درخواست لغو سرویس ثبت می‌کند؛ همراه دلیل و لینک بررسی در پنل",
+        "1",
+    ),
+    (
         "notify_new_subscription",
         "اشتراک جدید",
         "وقتی سرویس/اشتراک جدید تحویل شد (خرید کیف‌پول یا تأیید پرداخت)",
@@ -99,6 +105,7 @@ PLATFORM_ONLY_NOTIFY_KEYS: frozenset[str] = frozenset(
 
 # Shop notify key → at least one of these feature perms is required to see/toggle it.
 SHOP_NOTIFY_PERM_MAP: dict[str, frozenset[str]] = {
+    "notify_service_cancellation": frozenset({"orders"}),
     "notify_new_subscription": frozenset({"orders", "payments"}),
     "notify_pending_approval": frozenset({"payments"}),
     "notify_new_order": frozenset({"orders"}),

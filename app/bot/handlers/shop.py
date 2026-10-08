@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
+from app.bot.handlers.purchase_contact import prompt_purchase_contact_if_needed
 from app.bot.tg_utils import safe_edit_text
 from app.config import get_settings
 from app.db.models import BotUser, Order, PaymentMethod, UserService
@@ -796,6 +797,8 @@ async def custom_buy(callback: CallbackQuery, session: AsyncSession, db_user: Bo
     ui = await get_all_settings(session)
     if await _answer_shop_maintenance(callback, session, ui):
         return
+    if await prompt_purchase_contact_if_needed(callback, session, db_user, state, ui):
+        return
     from app.bot.handlers.terms import prompt_terms_if_needed
 
     if await prompt_terms_if_needed(
@@ -1160,6 +1163,8 @@ async def wholesale_buy(
     ui = await get_all_settings(session)
     if await _answer_shop_maintenance(callback, session, ui):
         return
+    if await prompt_purchase_contact_if_needed(callback, session, db_user, state, ui):
+        return
     from app.bot.handlers.terms import prompt_terms_if_needed
 
     if await prompt_terms_if_needed(
@@ -1346,6 +1351,8 @@ async def shop_buy(callback: CallbackQuery, session: AsyncSession, db_user: BotU
     plan = await get_catalog_plan(session, plan_id)
     if not plan:
         await callback.answer("پلن پیدا نشد", show_alert=True)
+        return
+    if not plan.is_trial and await prompt_purchase_contact_if_needed(callback, session, db_user, state, ui):
         return
     if plan.price > 0 and not kb.any_checkout_method_enabled(ui):
         await callback.answer("هیچ روش پرداختی فعال نیست", show_alert=True)

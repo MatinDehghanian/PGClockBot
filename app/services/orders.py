@@ -30,6 +30,7 @@ from app.db.models import (
     WalletTransaction,
 )
 from app.services.pasarguard import extract_sub_token, get_pg, user_subscription_url
+from app.services.purchase_contact import CONTACT_REQUIRED_MESSAGE, purchase_contact_needed, require_purchase_contact
 from app.services.provision_gate import (
     ProvisionError,
     assert_provision_create,
@@ -520,6 +521,8 @@ async def create_order(
     shop_rid = _shop_reseller_id()
     # Ignore sticky attribution from caller — shop bot context wins.
     _ = reseller_id
+    if not plan.is_trial:
+        await require_purchase_contact(session, user_id)
     if plan.is_trial:
         # One free trial per user per shop — unique claim closes the race window.
         shop_key = str(int(shop_rid)) if shop_rid is not None else "platform"
@@ -603,6 +606,7 @@ async def create_custom_order(
     discount_code: str | None = None,
 ) -> Order:
     """Create an order for a user-chosen GB/days combo via an inactive temp Plan."""
+    await require_purchase_contact(session, user_id)
     from app.services.users import get_all_settings, on
 
     ui = await get_all_settings(session)
@@ -828,6 +832,7 @@ async def create_wholesale_order(
     reseller_id: int | None = None,
 ) -> Order:
     """Create a bulk order for N identical services of one catalog plan."""
+    await require_purchase_contact(session, user_id)
     from app.services.users import get_all_settings, on
 
     ui = await get_all_settings(session)
@@ -1000,6 +1005,16 @@ async def _resume_paid_wallet_order(session: AsyncSession, order: Order, user) -
     return await fulfill_paid_order(session, order)
 
 
+async def _require_checkout_contact(session: AsyncSession, order: Order) -> None:
+    if is_mutation_order_note(order.note) or order.plan_id is None:
+        return
+    if not await purchase_contact_needed(session, order.user_id, shop_key=order.reseller_id or 0):
+        return
+    is_trial = await session.scalar(select(Plan.is_trial).where(Plan.id == order.plan_id))
+    if not is_trial:
+        raise ValueError(CONTACT_REQUIRED_MESSAGE)
+
+
 async def pay_with_wallet(session: AsyncSession, order: Order, user) -> Order:
     if order.status == OrderStatus.DELIVERED.value:
         return order
@@ -1034,6 +1049,7 @@ async def pay_with_wallet(session: AsyncSession, order: Order, user) -> Order:
 
     if order.status not in _PAYABLE_ORDER_STATUSES:
         raise ValueError("این سفارش قابل پرداخت با کیف پول نیست")
+    await _require_checkout_contact(session, order)
 
     payment: Payment | None = None
     debited = False
@@ -1100,6 +1116,9 @@ async def mark_order_free_paid(session: AsyncSession, order: Order, user_id: int
     """Mark a zero-amount order as paid with an approved payment row."""
     if order.amount > 0:
         raise ValueError("فقط سفارش رایگان قابل علامت‌گذاری رایگان است")
+    if order.status == OrderStatus.DELIVERED.value:
+        return order
+    await _require_checkout_contact(session, order)
     order = await _claim_payable_order(
         session, order, payment_method=PaymentMethod.WALLET.value
     )
@@ -1219,6 +1238,7 @@ async def start_method_payment(
     method: str,
 ) -> Payment:
     """Atomically claim a payable order → AWAITING_RECEIPT (blocks wallet race)."""
+    await _require_checkout_contact(session, order)
     order_id = int(order.id)
     with session.no_autoflush:
         claim = await session.execute(

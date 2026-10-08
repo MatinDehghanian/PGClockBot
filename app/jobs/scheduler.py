@@ -10,6 +10,7 @@ from sqlalchemy import or_, select
 
 from app.db.models import BotUser, ResellerProfile, UserService
 from app.db.session import SessionLocal
+from app.jobs.cancellation_notifications import run_cancellation_notifications
 from app.services.formatting import format_bytes_ratio, parse_expire
 from app.services.pasarguard import get_pg
 
@@ -812,6 +813,10 @@ def start_background_scheduler() -> None:
 def start_scheduler(bot: Bot) -> None:
     """Attach notification jobs after the bot connects to Telegram."""
     start_background_scheduler()
+    scheduler.add_job(
+        run_cancellation_notifications, "interval", seconds=10, args=[bot], id="cancellation_notifications",
+        max_instances=1, coalesce=True, misfire_grace_time=60, replace_existing=True,
+    )
     scheduler.add_job(
         run_targeted_campaigns_tick, "interval", minutes=1, args=[bot], id="targeted_campaigns",
         max_instances=1, coalesce=True, misfire_grace_time=120, replace_existing=True,

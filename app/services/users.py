@@ -665,6 +665,7 @@ DEFAULT_SETTINGS = {
     "terms_buy_reseller_reaccept": "1",
     "trial_enabled": "0",
     "trial_require_contact": "0",
+    "purchase_require_contact": "0",
     "trial_require_iran_phone": "0",
     "receipt_dup_policy": "warn",
     "connection_guides": "[]",
@@ -729,6 +730,7 @@ DEFAULT_SETTINGS = {
     "notify_new_order": "0",
     "notify_wallet_topup": "1",
     "notify_new_ticket": "1",
+    "notify_service_cancellation": "1",
     "notify_auto_approve": "1",
     "notify_account_edits": "1",
     # User low-remaining alerts (volume / time)
@@ -988,6 +990,14 @@ SETTING_GROUPS = {
             "فقط شماره ایران برای تست",
             "toggle",
             "همراه با تأیید تماس: فقط موبایل ایران (+۹۸) پذیرفته می‌شود. شماره خام ذخیره یا لاگ نمی‌شود.",
+        ),
+    ],
+    "شماره تماس خرید": [
+        (
+            "purchase_require_contact",
+            "شماره تماس اجباری برای خرید اشتراک",
+            "toggle",
+            "قبل از خرید عادی، دلخواه یا عمده، شماره خود کاربر با دکمه Contact تأیید شود. تأیید فقط برای همان فروشگاه است؛ شماره خام ذخیره نمی‌شود. تست تنظیم جداگانه دارد.",
         ),
     ],
     "ضدتقلب رسید": [
@@ -1474,6 +1484,7 @@ TAB_SETTING_GROUPS: dict[str, list[str]] = {
     "naming": ["نام‌گذاری سرویس در پاسارگارد"],
     "limits": [
         "معرف اجباری",
+        "شماره تماس خرید",
         "اکانت تست",
         "ضدتقلب رسید",
         "کانال اجباری",
