@@ -45,23 +45,24 @@
   <div class="flash warn" id="upd-migration-flash" hidden></div>
   {% endif %}
 
+  {% set ch_label = update_channel_label if update_channel_label is defined else (update_info.channel_label if update_info.channel_label is defined else 'پایدار') %}
   {% if available and not show_ops and not migration_blocked %}
-  <div class="flash warn" id="upd-version-flash">نسخه جدید آماده است: {{ local_version }} → {{ update_info.remote_version }}</div>
+  <div class="flash warn" id="upd-version-flash" role="status">برای کانال {{ ch_label }} آپدیت جدید هست: {{ local_version }} → {{ update_info.remote_version }}</div>
   {% elif update_info.checked and not available and not show_ops %}
-  <div class="flash ok" id="upd-version-flash">شما روی آخرین نسخه این کانال هستید.</div>
+  <div class="flash ok" id="upd-version-flash" role="status">برای کانال {{ ch_label }} آپدیت جدیدی نیست — روی آخرین نسخه هستید.</div>
   {% elif not update_info.checked and not show_ops %}
-  <div class="flash warn" id="upd-version-flash">{{ update_info.label }}</div>
+  <div class="flash warn" id="upd-version-flash" role="status">{{ update_info.label }}</div>
   {% else %}
-  <div class="flash warn" id="upd-version-flash" {% if show_ops %}hidden{% endif %}></div>
+  <div class="flash warn" id="upd-version-flash" role="status" {% if show_ops %}hidden{% endif %}></div>
   {% endif %}
 
   <div class="update-meta">
     <div class="update-meta-versions">
-      <div class="update-meta-box {% if available and not migration_blocked %}update-meta-err{% elif not available and update_info.checked %}update-meta-ok{% endif %}">
+      <div id="upd-local-box" class="update-meta-box {% if available and not migration_blocked %}update-meta-err{% elif not available and update_info.checked %}update-meta-ok{% endif %}">
         <span class="muted">نسخه فعلی</span>
-        <strong dir="ltr">v{{ local_version }}</strong>
+        <strong dir="ltr" id="upd-local-ver">v{{ local_version }}</strong>
       </div>
-      <div class="update-meta-box {% if available and not migration_blocked %}update-meta-ok{% endif %}">
+      <div id="upd-remote-box" class="update-meta-box {% if available and not migration_blocked %}update-meta-ok{% endif %}">
         <span class="muted">آخرین نسخه کانال</span>
         <strong dir="ltr" id="upd-remote-ver">{% if update_info.remote_version %}v{{ update_info.remote_version }}{% else %}—{% endif %}</strong>
       </div>
@@ -71,29 +72,31 @@
       <strong id="upd-state-label">
         {% if show_ops %}{{ status.message or 'در حال اجرا…' }}
         {% elif migration_blocked %}{{ preflight.get('label') or 'مایگریشن ناسازگار' }}
-        {% elif available %}آپدیت آماده است
-        {% elif update_info.checked %}آخرین نسخه
+        {% elif available %}آپدیت کانال {{ ch_label }} آماده است
+        {% elif update_info.checked %}آخرین نسخه کانال {{ ch_label }}
         {% else %}{{ update_info.label }}{% endif %}
       </strong>
     </div>
   </div>
 
   {% set cl = changelog if changelog is defined else none %}
-  {% if cl and cl.get('has_notes') %}
-  <div class="update-changelog">
-    <h3 class="update-changelog-title">{{ cl.get('title') or 'تغییرات نسخه جدید' }}</h3>
-    {% for block in cl.get('blocks') or [] %}
-    <div class="update-changelog-block">
-      <strong class="update-changelog-ver" dir="ltr">v{{ block.version }}</strong>
-      <ul class="update-changelog-list">
-        {% for note in block.notes %}
-        <li>{{ note }}</li>
-        {% endfor %}
-      </ul>
+  <div class="update-changelog" id="upd-changelog" {% if not cl or not cl.get('has_notes') %}hidden{% endif %}>
+    <h3 class="update-changelog-title" id="upd-changelog-title">{{ (cl.get('title') if cl else none) or 'تغییرات نسخه جدید' }}</h3>
+    <div id="upd-changelog-blocks">
+      {% if cl and cl.get('has_notes') %}
+      {% for block in cl.get('blocks') or [] %}
+      <div class="update-changelog-block">
+        <strong class="update-changelog-ver" dir="ltr">v{{ block.version }}</strong>
+        <ul class="update-changelog-list">
+          {% for note in block.notes %}
+          <li>{{ note }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endfor %}
+      {% endif %}
     </div>
-    {% endfor %}
   </div>
-  {% endif %}
 
   <div id="upd-ops" class="update-ops" {% if not show_ops %}hidden{% endif %}>
     <div class="flash warn update-stay-warn" id="upd-stay-warn" role="status">

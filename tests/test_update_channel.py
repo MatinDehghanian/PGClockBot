@@ -114,8 +114,32 @@ class ChannelAwareUpdateCheckTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(info["checked"])
         self.assertEqual(info["channel"], "dev")
         self.assertEqual(info["remote_version"], "9.9.9")
+        self.assertTrue(info["update_available"])
+        self.assertIn("توسعه", info["label"])
+        self.assertIn("آپدیت", info["label"])
         self.assertTrue(any("/dev/VERSION" in u for u in calls))
         self.assertFalse(any("/releases/latest" in u for u in calls))
+
+    async def test_dev_reports_no_update_when_already_latest(self):
+        async def fake_get(url, **kwargs):
+            if "VERSION" in str(url):
+                return _FakeResp(200, text="0.2.21\n")
+            return _FakeResp(404)
+
+        client = MagicMock()
+        client.get = AsyncMock(side_effect=fake_get)
+        client.__aenter__ = AsyncMock(return_value=client)
+        client.__aexit__ = AsyncMock(return_value=None)
+
+        with patch("app.services.updates.httpx.AsyncClient", return_value=client), patch(
+            "app.services.updates.local_version", return_value="0.2.21"
+        ):
+            info = await check_github_update(force=True, channel="dev")
+
+        self.assertTrue(info["checked"])
+        self.assertFalse(info["update_available"])
+        self.assertIn("توسعه", info["label"])
+        self.assertIn("نیست", info["label"])
 
     async def test_main_still_falls_back_to_releases(self):
         async def fake_get(url, **kwargs):

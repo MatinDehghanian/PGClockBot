@@ -16,11 +16,18 @@ logger = logging.getLogger(__name__)
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
     "0.2.22": [
+<<<<<<< HEAD
         "تب محدودیت‌ها در تنظیمات ربات (هدیه، تریال، رسید تکراری) — وب + تلگرام",
         "تب آموزش اتصال با دکمه‌های سرویس/تحویل و مخاطب",
         "هدیه per-user؛ تریال با تماس/شماره ایران (HMAC)؛ اثرانگشت رسید (warn|block)",
         "رفع URL نصب‌کننده/setup؛ دستور pgclock doctor با خروجی --json",
         "مایگریشن 0036_limits_guides_receipts (بعد از 0035 روی کانال dev)",
+=======
+        "کانال آپدیت پایدار/توسعه در تب آپدیت پنل (UPDATE_CHANNEL)",
+        "با عوض کردن کانال، تیپ همان کانال از گیت‌هاب خودکار بررسی می‌شود",
+        "Badge هدر پایدار/توسعه؛ گیت مایگریشن قبل از deploy (بدون downgrade)",
+        "ریستور: restore/pre-v0.2.22-v0.2.21",
+>>>>>>> origin/main
     ],
     "0.2.21": [
         "مسیر اشتراک پاسارگارد از لینک پنل تشخیص داده می‌شود (مثلاً /apilog) — دیگر فقط /sub نیست؛ درخواست‌ها فقط به host پنل می‌روند",

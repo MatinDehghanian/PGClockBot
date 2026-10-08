@@ -164,8 +164,9 @@ async def check_github_update(
     try:
         async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
             candidates = await _fetch_remote_version_candidates(client, channel=ch)
+        label_fa = channel_label_fa(ch)
         if not candidates:
-            result["label"] = "بررسی آپدیت ناموفق"
+            result["label"] = f"بررسی آپدیت کانال {label_fa} ناموفق"
             result["tone"] = "warn"
         else:
             remote = max(candidates, key=_parse_ver)
@@ -174,14 +175,14 @@ async def check_github_update(
             ok = True
             if is_newer(remote, local):
                 result["update_available"] = True
-                result["label"] = f"آپدیت {remote} آماده است"
+                result["label"] = f"برای کانال {label_fa} آپدیت {remote} آماده است"
                 result["tone"] = "err"
             else:
-                result["label"] = "آخرین نسخه"
+                result["label"] = f"برای کانال {label_fa} آپدیت جدیدی نیست"
                 result["tone"] = "ok"
     except Exception as e:
         logger.debug("github version check failed: %s", e)
-        result["label"] = "بررسی آپدیت ناموفق"
+        result["label"] = f"بررسی آپدیت کانال {channel_label_fa(ch)} ناموفق"
         result["tone"] = "warn"
     _CACHE.update({"at": now, "data": dict(result), "ok": ok, "channel": ch})
     return result
