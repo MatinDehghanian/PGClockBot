@@ -10290,6 +10290,11 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
   max-width: none;
   width: 100%;
 }
+/* Guides editor: color field matches full-width inputs above it */
+.guides-editor .pay-dest-color .plan-color-card {
+  max-width: none;
+  width: 100%;
+}
 
 .supports-fields-grid .supports-enabled-field {
   display: flex !important;
