@@ -2066,6 +2066,7 @@ async def reply_main_nav(
         kb.REPLY_ACTION_SVC_LINK,
         kb.REPLY_ACTION_SVC_RENEW,
         kb.REPLY_ACTION_SVC_ADDON,
+        kb.REPLY_ACTION_SVC_AUTO,
         kb.REPLY_ACTION_SVC_REFRESH,
         kb.REPLY_ACTION_SVC_DELETE,
         # Keep admin hub stack when opening list screens / group hubs
@@ -2718,6 +2719,7 @@ async def reply_main_nav(
         kb.REPLY_ACTION_SVC_LINK,
         kb.REPLY_ACTION_SVC_RENEW,
         kb.REPLY_ACTION_SVC_ADDON,
+        kb.REPLY_ACTION_SVC_AUTO,
         kb.REPLY_ACTION_SVC_REFRESH,
         kb.REPLY_ACTION_SVC_DELETE,
     }:
@@ -2738,6 +2740,9 @@ async def reply_main_nav(
         elif action == kb.REPLY_ACTION_SVC_ADDON:
             cb_data = f"svc:addon:{int(svc_id)}"
             fn = svc_h.svc_addon
+        elif action == kb.REPLY_ACTION_SVC_AUTO:
+            cb_data = f"svc:auto:{int(svc_id)}"
+            fn = svc_h.svc_auto
         elif action == kb.REPLY_ACTION_SVC_DELETE:
             cb_data = f"svc:delask:{int(svc_id)}"
             fn = svc_h.svc_delete_ask

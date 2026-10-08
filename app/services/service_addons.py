@@ -313,6 +313,7 @@ async def create_addon_order(
     user_id: int,
     service: UserService,
     pack: ServiceAddonPack,
+    commit: bool = True,
 ) -> Order:
     """Create a pending addon order. Price is snapshotted from the pack."""
     from app.services.orders import _shop_reseller_id
@@ -335,11 +336,9 @@ async def create_addon_order(
     user = await session.get(BotUser, int(user_id))
     if not user:
         raise ValueError("کاربر یافت نشد")
-    if shop_rid:
-        if int(user.reseller_id or 0) != int(shop_rid):
-            raise ValueError("سرویس این فروشگاه نیست")
-    elif user.reseller_id is not None:
-        # Platform bot must not sell addons onto shop-owned customer rows.
+    from app.services.service_automation import service_shop_id
+
+    if await service_shop_id(session, service) != shop_rid:
         raise ValueError("سرویس این فروشگاه نیست")
 
     # Fail closed on known-unlimited quotas (synced cache) so buyers are not charged
@@ -365,8 +364,11 @@ async def create_addon_order(
         reseller_id=shop_rid,
     )
     session.add(order)
-    await session.commit()
-    await session.refresh(order)
+    if commit:
+        await session.commit()
+        await session.refresh(order)
+    else:
+        await session.flush()
     return order
 
 

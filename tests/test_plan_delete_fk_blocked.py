@@ -1,7 +1,9 @@
-"""Plan delete must not 500 on FK dependents — clear Persian block instead.
+"""Plan delete must not 500 on FK dependents.
 
-Root cause: DELETE plans with RESTRICT FKs (user_services / orders / …) raised
-IntegrityError; bulk then hit PendingRollbackError on later items → HTTP 500.
+Shop sales plans detach historical refs (orders/services/…) so the catalog
+row can be removed; only mid-delivery paid orders still block. Reseller
+package plans keep a hard FK pre-check with a clear Persian message.
+Bulk uses nested savepoints so one blocked item cannot poison the session.
 """
 
 from __future__ import annotations
@@ -60,22 +62,46 @@ class PlanDeleteFkBlockedTests(unittest.IsolatedAsyncioTestCase):
         )
         await session.commit()
         await session.refresh(plan)
-        return plan
+        return plan, user
 
-    async def test_delete_shop_plan_blocked_with_clear_message(self):
-        from app.db.models import Plan
+    async def test_delete_shop_plan_detaches_service_refs(self):
+        from app.db.models import Plan, UserService
+        from app.services.plans_catalog import delete_shop_plan
+        from sqlalchemy import select
+
+        async with self.Session() as session:
+            plan, _user = await self._seed_plan_with_service(session)
+            pid = plan.id
+            await delete_shop_plan(session, plan)
+            await session.commit()
+            self.assertIsNone(await session.get(Plan, pid))
+            svc = (
+                await session.execute(
+                    select(UserService).where(UserService.pg_username == "svc-plan-fk")
+                )
+            ).scalar_one()
+            self.assertIsNone(svc.plan_id)
+
+    async def test_delete_shop_plan_blocked_while_paid_pending(self):
+        from app.db.models import Order, OrderStatus, Plan
         from app.services.plans_catalog import PlanDeleteBlocked, delete_shop_plan
 
         async with self.Session() as session:
-            plan = await self._seed_plan_with_service(session)
+            plan, user = await self._seed_plan_with_service(session)
+            session.add(
+                Order(
+                    user_id=user.id,
+                    plan_id=plan.id,
+                    amount=int(plan.price or 0),
+                    status=OrderStatus.PAID.value,
+                )
+            )
+            await session.commit()
+            await session.refresh(plan)
             pid = plan.id
             with self.assertRaises(PlanDeleteBlocked) as ctx:
                 await delete_shop_plan(session, plan)
-            msg = ctx.exception.message
-            self.assertIn("قابل حذف نیست", msg)
-            self.assertIn("سرویس کاربر", msg)
-            self.assertIn("کاربر", msg)
-            # Plan row must still exist
+            self.assertIn("انتظار تحویل", ctx.exception.message)
             self.assertIsNotNone(await session.get(Plan, pid))
 
     async def test_delete_shop_plan_ok_without_deps(self):
@@ -97,24 +123,22 @@ class PlanDeleteFkBlockedTests(unittest.IsolatedAsyncioTestCase):
         from sqlalchemy.exc import IntegrityError
 
         async with self.Session() as session:
-            plan = await self._seed_plan_with_service(session)
+            plan, _user = await self._seed_plan_with_service(session)
             await session.delete(plan)
             with self.assertRaises(IntegrityError):
                 await session.flush()
 
-    async def test_bulk_delete_survives_blocked_item(self):
-        """Blocked plan must not poison the session — free plan still deletes."""
+    async def test_bulk_delete_detaches_and_continues(self):
         from app.db.models import Plan
         from app.services.table_bulk_ext import bulk_shop_plan_action
 
         async with self.Session() as session:
-            blocked = await self._seed_plan_with_service(session)
+            linked, _user = await self._seed_plan_with_service(session)
             free = Plan(name="آزاد-bulk", price=1000, duration_days=3)
             session.add(free)
             await session.commit()
             await session.refresh(free)
 
-            # Explicit Owner Principal — required by plan_belongs_to_staff / is_platform_admin
             staff = {
                 "role": "admin",
                 "org_principal_id": 1,
@@ -124,26 +148,24 @@ class PlanDeleteFkBlockedTests(unittest.IsolatedAsyncioTestCase):
                 "pg_is_owner": True,
             }
             ok, fail, detail = await bulk_shop_plan_action(
-                session, staff, [blocked.id, free.id], "delete"
+                session, staff, [linked.id, free.id], "delete"
             )
-            self.assertEqual(ok, 1)
-            self.assertEqual(fail, 1)
-            self.assertIsNotNone(detail)
-            self.assertIn("قابل حذف نیست", detail or "")
-            self.assertIsNotNone(await session.get(Plan, blocked.id))
+            self.assertEqual(ok, 2)
+            self.assertEqual(fail, 0)
+            self.assertIsNone(detail)
+            self.assertIsNone(await session.get(Plan, linked.id))
             self.assertIsNone(await session.get(Plan, free.id))
 
-    async def test_format_mentions_orders_and_services(self):
-        from app.services.plans_catalog import format_shop_plan_delete_blocked
+    async def test_reseller_format_mentions_profiles(self):
+        from app.services.plans_catalog import format_reseller_plan_delete_blocked
 
-        msg = format_shop_plan_delete_blocked(
-            {"services": 2, "orders": 5, "points_rules": 0, "funnel_events": 0},
-            plan_name="طلایی",
+        msg = format_reseller_plan_delete_blocked(
+            {"profiles": 2, "subscriptions": 1, "applications": 0},
+            plan_name="نقره‌ای",
         )
-        self.assertIn("طلایی", msg)
-        self.assertIn("2 سرویس کاربر", msg)
-        self.assertIn("5 سفارش", msg)
-        self.assertIn("کاربر دارند", msg)
+        self.assertIn("نقره‌ای", msg)
+        self.assertIn("2 نماینده", msg)
+        self.assertIn("1 اشتراک پاسارگارد", msg)
 
     async def test_web_and_bulk_paths_use_helper(self):
         root = Path(__file__).resolve().parents[1]

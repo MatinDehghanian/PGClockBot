@@ -6,13 +6,14 @@ import logging
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import (
     FunnelEvent,
     Order,
+    OrderStatus,
     PgAdminSubscription,
     Plan,
     PointsRule,
@@ -383,6 +384,67 @@ def parse_group_ids_from_form(form: Any, *, prefix: str = "group_") -> list[int]
     return ids
 
 
+async def delete_sales_plan(session: AsyncSession, plan: Plan) -> None:
+    """Detach historical references so a sold plan can actually be removed.
+
+    Blocks only when a paid order is still mid-delivery. Raises PlanDeleteBlocked
+    (never IntegrityError / HTTP 500). Does not commit — caller owns the transaction.
+    """
+    from app.db.models import ServiceAutomation
+
+    if getattr(plan, "is_trial", False):
+        raise PlanDeleteBlocked("پلن آزمایشی از این مسیر حذف نمی‌شود")
+    outstanding = (
+        await session.execute(
+            select(Order.id)
+            .where(
+                Order.plan_id == plan.id,
+                Order.status.in_(
+                    [OrderStatus.PAID.value, OrderStatus.DELIVERING.value]
+                ),
+            )
+            .limit(1)
+        )
+    ).first()
+    if outstanding:
+        raise PlanDeleteBlocked(
+            "این پلن سفارش پرداخت‌شده در انتظار تحویل دارد؛ "
+            "ابتدا وضعیت سفارش را مشخص کنید"
+        )
+    for model in (Order, UserService, FunnelEvent):
+        await session.execute(
+            update(model).where(model.plan_id == plan.id).values(plan_id=None)
+        )
+    await session.execute(
+        update(PointsRule)
+        .where(PointsRule.plan_id == plan.id)
+        .values(plan_id=None, enabled=False)
+    )
+    await session.execute(
+        update(ServiceAutomation)
+        .where(ServiceAutomation.renew_plan_id == plan.id)
+        .values(renew_plan_id=None)
+    )
+    await session.delete(plan)
+    try:
+        await session.flush()
+    except IntegrityError as exc:
+        log.warning(
+            "shop plan delete blocked by FK after detach plan_id=%s: %s",
+            getattr(plan, "id", None),
+            exc,
+        )
+        raise PlanDeleteBlocked(
+            "این پلن قابل حذف نیست چون هنوز به دادهٔ وابسته وصل است. "
+            "پلن‌هایی که سفارش در حال تحویل دارند را نمی‌توان حذف کرد."
+        ) from None
+
+
+async def delete_shop_plan(session: AsyncSession, plan: Plan) -> None:
+    """Compatibility wrapper — shop deletes use detach semantics via delete_sales_plan."""
+    await delete_sales_plan(session, plan)
+
+
 async def _count_where(session: AsyncSession, model, column, plan_id: int) -> int:
     return int(
         await session.scalar(
@@ -390,88 +452,6 @@ async def _count_where(session: AsyncSession, model, column, plan_id: int) -> in
         )
         or 0
     )
-
-
-async def shop_plan_reference_counts(
-    session: AsyncSession, plan_id: int
-) -> dict[str, int]:
-    """How many dependent rows still point at this sales plan (FK RESTRICT)."""
-    pid = int(plan_id)
-    return {
-        "services": await _count_where(session, UserService, UserService.plan_id, pid),
-        "orders": await _count_where(session, Order, Order.plan_id, pid),
-        "points_rules": await _count_where(session, PointsRule, PointsRule.plan_id, pid),
-        "funnel_events": await _count_where(
-            session, FunnelEvent, FunnelEvent.plan_id, pid
-        ),
-    }
-
-
-def format_shop_plan_delete_blocked(
-    refs: dict[str, int], *, plan_name: str | None = None
-) -> str:
-    """Clear Persian warning when a sales plan cannot be deleted."""
-    parts: list[str] = []
-    n_svc = int(refs.get("services") or 0)
-    n_ord = int(refs.get("orders") or 0)
-    n_pts = int(refs.get("points_rules") or 0)
-    n_fun = int(refs.get("funnel_events") or 0)
-    if n_svc:
-        parts.append(f"{n_svc} سرویس کاربر")
-    if n_ord:
-        parts.append(f"{n_ord} سفارش")
-    if n_pts:
-        parts.append(f"{n_pts} قانون امتیاز")
-    if n_fun:
-        parts.append(f"{n_fun} رویداد قیف فروش")
-    label = f"پلن «{plan_name}»" if plan_name else "این پلن"
-    if not parts:
-        return (
-            f"{label} قابل حذف نیست چون هنوز به دادهٔ وابسته وصل است. "
-            "پلن‌هایی که کاربر/سفارش دارند را نمی‌توان حذف کرد."
-        )
-    joined = "، ".join(parts)
-    return (
-        f"{label} قابل حذف نیست چون هنوز به دادهٔ وابسته وصل است ({joined}). "
-        "پلن‌هایی که کاربر دارند حذف نمی‌شوند — ابتدا سرویس‌ها و سفارش‌های "
-        "مرتبط را جابه‌جا یا پاک کنید، بعد دوباره تلاش کنید."
-    )
-
-
-async def delete_shop_plan(session: AsyncSession, plan: Plan) -> None:
-    """Delete a sales plan after verifying no FK dependents remain.
-
-    Raises PlanDeleteBlocked with a clear Persian message instead of letting
-    SQLAlchemy raise IntegrityError / PendingRollbackError (HTTP 500).
-    Does not commit — caller owns the transaction.
-    """
-    if getattr(plan, "is_trial", False):
-        raise PlanDeleteBlocked("پلن آزمایشی از این مسیر حذف نمی‌شود")
-    refs = await shop_plan_reference_counts(session, int(plan.id))
-    if any(int(v or 0) > 0 for v in refs.values()):
-        raise PlanDeleteBlocked(
-            format_shop_plan_delete_blocked(refs, plan_name=getattr(plan, "name", None))
-        )
-    await session.delete(plan)
-    try:
-        await session.flush()
-    except IntegrityError as exc:
-        log.warning(
-            "shop plan delete blocked by FK after pre-check plan_id=%s: %s",
-            getattr(plan, "id", None),
-            exc,
-        )
-        raise PlanDeleteBlocked(
-            format_shop_plan_delete_blocked(
-                refs, plan_name=getattr(plan, "name", None)
-            )
-            if any(int(v or 0) > 0 for v in refs.values())
-            else (
-                "این پلن قابل حذف نیست چون هنوز به دادهٔ وابسته "
-                "(سرویس کاربر، سفارش و …) وصل است. "
-                "پلن‌هایی که کاربر دارند را نمی‌توان حذف کرد."
-            )
-        ) from None
 
 
 async def reseller_plan_reference_counts(
