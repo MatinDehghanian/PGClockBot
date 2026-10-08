@@ -76,16 +76,51 @@ def _valid_version(value: str | None) -> bool:
     return bool(_VER_RE.match(value.strip()))
 
 
+def _parse_version_body(text: str | None) -> str | None:
+    remote = (text or "").strip().splitlines()[0].strip() if text else ""
+    if _valid_version(remote):
+        return remote.lstrip("vV")
+    return None
+
+
+async def _fetch_version_via_contents_api(
+    client: httpx.AsyncClient, *, channel: str
+) -> str | None:
+    """Read VERSION via GitHub Contents API (bypasses raw.githubusercontent CDN)."""
+    import base64
+
+    from app.version import GITHUB_REPO
+
+    url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/VERSION"
+    try:
+        resp = await client.get(
+            url, headers=_github_headers(), params={"ref": channel}
+        )
+        if resp.status_code != 200:
+            return None
+        payload = resp.json() or {}
+        raw_b64 = str(payload.get("content") or "")
+        if not raw_b64:
+            return None
+        decoded = base64.b64decode(raw_b64).decode("utf-8", errors="replace")
+        return _parse_version_body(decoded)
+    except Exception as e:
+        logger.debug("github contents VERSION failed (%s): %s", channel, e)
+        return None
+
+
 async def _fetch_remote_version_candidates(
     client: httpx.AsyncClient,
     *,
     channel: str | None = None,
 ) -> list[str]:
-    """Collect version strings from the channel VERSION file (+ releases on main).
+    """Collect version strings for the active update channel.
 
-    Always cache-busts the raw VERSION URL (CDN max-age is 300s). Releases API
-    is a fallback on the stable channel when raw.githubusercontent.com is blocked
-    or stale. Dev channel uses the branch VERSION only (releases track main).
+    Sources (max wins):
+    - raw.githubusercontent VERSION (cache-busted)
+    - GitHub Contents API VERSION (same file, different CDN — helps when raw is stale)
+    - main only: GitHub releases/latest
+    - `dev` only: newest prerelease whose target is the `dev` branch
     """
     from app.services.update_channel import github_version_url, normalize_channel
 
@@ -101,11 +136,15 @@ async def _fetch_remote_version_candidates(
     try:
         resp = await client.get(version_url, headers=headers, params=bust)
         if resp.status_code == 200:
-            remote = (resp.text or "").strip().splitlines()[0].strip()
-            if _valid_version(remote):
-                found.append(remote.lstrip("vV"))
+            ver = _parse_version_body(resp.text)
+            if ver:
+                found.append(ver)
     except Exception as e:
         logger.debug("github VERSION fetch failed (%s): %s", ch, e)
+
+    contents_ver = await _fetch_version_via_contents_api(client, channel=ch)
+    if contents_ver:
+        found.append(contents_ver)
 
     if ch == "main":
         try:
@@ -121,6 +160,28 @@ async def _fetch_remote_version_candidates(
                     found.append(tag)
         except Exception as e:
             logger.debug("github releases/latest fetch failed: %s", e)
+    elif ch == "dev":
+        # Dev tip is published as GitHub prerelease (Latest stays on main).
+        try:
+            resp = await client.get(
+                GITHUB_RELEASES_API,
+                headers=_github_headers(),
+                params={"per_page": 20},
+            )
+            if resp.status_code == 200:
+                for row in resp.json() or []:
+                    if not isinstance(row, dict) or not row.get("prerelease"):
+                        continue
+                    target = str(row.get("target_commitish") or "").strip().lower()
+                    if target in {"main", "master"}:
+                        continue
+                    tag = normalize_version_tag(
+                        row.get("tag_name") or row.get("name")
+                    )
+                    if tag:
+                        found.append(tag)
+        except Exception as e:
+            logger.debug("github prereleases fetch failed: %s", e)
 
     return found
 
