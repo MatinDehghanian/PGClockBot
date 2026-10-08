@@ -13,8 +13,8 @@
 این دستورها را اجرا کنید:
 
 ```bash
-git fetch --no-tags https://github.com/Mrclocks/PGClockBot.git dev
-git restore --source=FETCH_HEAD -- app/services/update_channel.py app/services/migration_metadata.py
+git fetch --no-tags https://github.com/Mrclocks/PGClockBot.git dev &&
+git restore --source=FETCH_HEAD -- app/services/update_channel.py app/services/migration_metadata.py &&
 sudo systemctl restart pgclockbot
 ```
 
