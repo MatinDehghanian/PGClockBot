@@ -10,6 +10,7 @@
         <span dir="ltr" class="mono">{{ user.telegram_id }}</span>
         {% if user.username %}<span>@{{ user.username }}</span>{% endif %}
         {% if user.is_blocked %}<span class="badge blocked">مسدود</span>{% else %}<span class="badge active">فعال</span>{% endif %}
+        {% if user.is_demo %}<span class="badge neutral">دمو</span>{% endif %}
         {% set tag = color_tag_meta(user.color_tag) if color_tag_meta is defined else none %}
         {% if tag %}<span class="badge badge-risk-tag" style="--tag-color: {{ tag.hex }}">{{ tag.title_fa }}</span>{% endif %}
       </p>
@@ -22,6 +23,24 @@
 </section>
 
 {% set manage_user = can_manage_users if can_manage_users is defined else false %}
+{% if can_manage_demo_users %}
+<section class="edit-section">
+  <header class="edit-section-head">
+    <h3>کاربر دمو</h3>
+    <p class="muted">برای حساب‌های تست ادمین؛ سفارش‌ها، پرداخت‌ها و فعالیت‌های قبلی و جدید از آمار و گزارش‌های مالی کنار گذاشته می‌شوند. سوابق و موجودی کیف پول حفظ می‌شوند. با غیرفعال کردن دمو، سوابق دوباره در گزارش‌ها محاسبه می‌شوند.</p>
+  </header>
+  <form method="post" action="/users/{{ user.id }}/demo" class="form-stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+    <label class="form-field">وضعیت کاربر
+      <select name="is_demo" class="select-block">
+        <option value="0" {% if not user.is_demo %}selected{% endif %}>عادی — محاسبه در گزارش‌ها</option>
+        <option value="1" {% if user.is_demo %}selected{% endif %}>دمو — حذف از محاسبات گزارش‌ها</option>
+      </select>
+    </label>
+    <div class="actions"><button class="btn" type="submit">ذخیره وضعیت دمو</button></div>
+  </form>
+</section>
+{% endif %}
 <section class="edit-section">
   <header class="edit-section-head">
     <h3>تگ ریسک</h3>

@@ -8,7 +8,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 import httpx
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import (
@@ -16,10 +16,12 @@ from app.db.models import (
     Order,
     Payment,
     PaymentStatus,
+    Plan,
     ResellerProfile,
     Ticket,
     UserService,
 )
+from app.services.demo_users import non_demo_customer
 from app.services.pasarguard import get_pg
 from app.services.setup_wizard import current_setup_values
 
@@ -136,8 +138,6 @@ async def bot_panel_summary(session: AsyncSession) -> dict[str, Any]:
     Platform-scoped only: shop-tenant orders/payments/tickets are excluded
     (hard shop isolation — match web payments/orders lists).
     """
-    from sqlalchemy import or_
-
     pending_expr = (
         select(func.count())
         .select_from(Payment)
@@ -145,23 +145,24 @@ async def bot_panel_summary(session: AsyncSession) -> dict[str, Any]:
         .where(
             Payment.status == PaymentStatus.PENDING.value,
             Payment.receipt_file_id.is_not(None),
+            non_demo_customer(Payment.user_id),
             or_(
-                Payment.is_wallet_topup.is_(True),
-                Order.reseller_id.is_(None),
+                and_(Payment.is_wallet_topup.is_(True), Payment.wallet_shop_id.is_(None)),
+                and_(Payment.is_wallet_topup.is_(False), Order.reseller_id.is_(None)),
             ),
         )
         .scalar_subquery()
     )
     revenue_expr = (
         select(func.coalesce(func.sum(Order.amount), 0))
-        .where(Order.status == "delivered", Order.reseller_id.is_(None))
+        .where(Order.status == "delivered", Order.reseller_id.is_(None), non_demo_customer(Order.user_id))
         .scalar_subquery()
     )
     tickets_expr = (
         select(func.count())
         .select_from(Ticket)
         .join(BotUser, BotUser.id == Ticket.user_id)
-        .where(Ticket.status == "open", BotUser.reseller_id.is_(None))
+        .where(Ticket.status == "open", BotUser.reseller_id.is_(None), BotUser.is_demo.is_(False))
         .scalar_subquery()
     )
     resellers_expr = (
@@ -171,14 +172,14 @@ async def bot_panel_summary(session: AsyncSession) -> dict[str, Any]:
         .scalar_subquery()
     )
     orders_expr = (
-        select(func.count()).select_from(Order).where(Order.reseller_id.is_(None)).scalar_subquery()
+        select(func.count()).select_from(Order).where(Order.reseller_id.is_(None), non_demo_customer(Order.user_id)).scalar_subquery()
     )
     row = (
         await session.execute(
             select(
-                select(func.count()).select_from(BotUser).scalar_subquery(),
+                select(func.count()).select_from(BotUser).where(BotUser.is_demo.is_(False)).scalar_subquery(),
                 orders_expr,
-                select(func.count()).select_from(UserService).scalar_subquery(),
+                select(func.count()).select_from(UserService).where(non_demo_customer(UserService.bot_user_id)).scalar_subquery(),
                 pending_expr,
                 revenue_expr,
                 tickets_expr,
@@ -372,7 +373,7 @@ async def shop_period_stats(
                 _sum_since(month_s, case((delivered, Order.amount), else_=0)),
             )
             .select_from(Order)
-            .where(Order.created_at >= month_s, scope_orders)
+            .where(Order.created_at >= month_s, scope_orders, non_demo_customer(Order.user_id))
         )
     ).one()
 
@@ -390,7 +391,7 @@ async def shop_period_stats(
                 _users_since(month_s),
             )
             .select_from(BotUser)
-            .where(BotUser.created_at >= month_s, scope_users)
+            .where(BotUser.created_at >= month_s, scope_users, BotUser.is_demo.is_(False))
         )
     ).one()
 
@@ -515,3 +516,103 @@ async def build_home_overview(
             out["nodes"] = nodes
 
     return out
+
+
+async def reseller_shop_summary(
+    session: AsyncSession, rid: int, *, ticket_statuses: tuple[str, ...] = ("open",),
+) -> dict[str, int]:
+    """Single round-trip aggregate counts for a reseller shop dashboard."""
+    users_expr = (
+        select(func.count()).select_from(BotUser).where(BotUser.reseller_id == rid, BotUser.is_demo.is_(False)).scalar_subquery()
+    )
+    orders_expr = (
+        select(func.count()).select_from(Order).where(Order.reseller_id == rid, non_demo_customer(Order.user_id)).scalar_subquery()
+    )
+    pending_expr = (
+        select(func.count())
+        .select_from(Payment)
+        .outerjoin(Order, Order.id == Payment.order_id)
+        .where(
+            Payment.status == PaymentStatus.PENDING.value,
+            Payment.receipt_file_id.is_not(None),
+            non_demo_customer(Payment.user_id),
+            or_(
+                and_(Payment.is_wallet_topup.is_(True), Payment.wallet_shop_id == rid),
+                and_(Payment.is_wallet_topup.is_(False), Order.reseller_id == rid),
+            ),
+        )
+        .scalar_subquery()
+    )
+    services_expr = (
+        select(func.count())
+        .select_from(UserService)
+        .join(BotUser, BotUser.id == UserService.bot_user_id)
+        .where(BotUser.reseller_id == rid, BotUser.is_demo.is_(False))
+        .scalar_subquery()
+    )
+    revenue_expr = (
+        select(func.coalesce(func.sum(Order.amount), 0))
+        .where(Order.status == "delivered", Order.reseller_id == rid, non_demo_customer(Order.user_id))
+        .scalar_subquery()
+    )
+    plans_expr = (
+        select(func.count())
+        .select_from(Plan)
+        .where(Plan.is_active.is_(True), Plan.owner_reseller_id == rid)
+        .scalar_subquery()
+    )
+    tickets_expr = (
+        select(func.count())
+        .select_from(Ticket)
+        .join(BotUser, BotUser.id == Ticket.user_id)
+        .where(
+            Ticket.status.in_(ticket_statuses), BotUser.is_demo.is_(False),
+            or_(Ticket.reseller_id == rid, and_(Ticket.reseller_id.is_(None), BotUser.reseller_id == rid)),
+        )
+        .scalar_subquery()
+    )
+    row = (
+        await session.execute(
+            select(
+                users_expr,
+                orders_expr,
+                pending_expr,
+                services_expr,
+                revenue_expr,
+                plans_expr,
+                tickets_expr,
+            )
+        )
+    ).one()
+    return {
+        "users": int(row[0] or 0),
+        "orders": int(row[1] or 0),
+        "pending": int(row[2] or 0),
+        "services": int(row[3] or 0),
+        "revenue": int(row[4] or 0),
+        "plans": int(row[5] or 0),
+        "tickets": int(row[6] or 0),
+    }
+
+
+async def admin_customer_counts(session: AsyncSession) -> dict[str, int]:
+    """CRM hub counts exclude test customers while their records stay manageable."""
+    users = select(func.count()).select_from(BotUser).where(BotUser.is_demo.is_(False))
+    row = (await session.execute(select(
+        users.scalar_subquery(),
+        users.where(BotUser.is_blocked.is_(True)).scalar_subquery(),
+        select(func.count()).select_from(Order).where(non_demo_customer(Order.user_id)).scalar_subquery(),
+    ))).one()
+    return {"users": int(row[0]), "blocked": int(row[1]), "orders": int(row[2])}
+
+
+async def bot_dashboard_summary(session: AsyncSession) -> dict[str, int]:
+    """Add the platform approval queue to the shared non-demo dashboard totals."""
+    summary = await bot_panel_summary(session)
+    pending_orders = await session.scalar(
+        select(func.count()).select_from(Order).where(
+            Order.reseller_id.is_(None), non_demo_customer(Order.user_id),
+            Order.status.in_(["awaiting_approval", "paid"]),
+        )
+    )
+    return {**summary, "pending_orders": int(pending_orders or 0)}

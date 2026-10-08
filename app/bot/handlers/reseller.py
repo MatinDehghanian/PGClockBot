@@ -20,6 +20,7 @@ from app.db.models import (
     Ticket,
     TicketStatus,
 )
+from app.services.home_overview import reseller_shop_summary
 from app.services.formatting import format_message, format_toman, order_status_fa
 from app.services.reseller_access import load_reseller_actor
 from app.services.resellers import (
@@ -241,34 +242,11 @@ async def res_dash(
         await callback.answer("دسترسی ندارید", show_alert=True)
         return
     await callback.answer()
-    users_n = await session.scalar(
-        select(func.count()).select_from(BotUser).where(BotUser.reseller_id == owner_id)
-    ) or 0
-    orders_n = await session.scalar(
-        select(func.count()).select_from(Order).where(Order.reseller_id == owner_id)
-    ) or 0
-    pending_pay = await session.scalar(
-        select(func.count())
-        .select_from(Payment)
-        .join(BotUser, BotUser.id == Payment.user_id)
-        .where(
-            BotUser.reseller_id == owner_id,
-            Payment.status == PaymentStatus.PENDING.value,
-            Payment.receipt_file_id.is_not(None),
-        )
-    ) or 0
-    open_tickets = await session.scalar(
-        select(func.count())
-        .select_from(Ticket)
-        .outerjoin(BotUser, BotUser.id == Ticket.user_id)
-        .where(
-            or_(
-                Ticket.reseller_id == owner_id,
-                (Ticket.reseller_id.is_(None)) & (BotUser.reseller_id == owner_id),
-            ),
-            Ticket.status.in_([TicketStatus.OPEN.value, TicketStatus.ANSWERED.value]),
-        )
-    ) or 0
+    summary = await reseller_shop_summary(
+        session, int(owner_id), ticket_statuses=(TicketStatus.OPEN.value, TicketStatus.ANSWERED.value),
+    )
+    users_n, orders_n = summary["users"], summary["orders"]
+    pending_pay, open_tickets = summary["pending"], summary["tickets"]
     text = (
         "🏠 <b>خانه نماینده</b>\n\n"
         f"👥 مشتریان: {users_n}\n"

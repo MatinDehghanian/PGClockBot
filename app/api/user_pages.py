@@ -11,6 +11,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, Plan
+from app.services.authz import authz_from_staff, can_shop
+from app.services.demo_users import DEMO_USERS_PERMISSION, set_demo_user
 from app.services.shop_scope import ShopScopeError, assert_bot_user_in_scope
 
 
@@ -85,6 +87,23 @@ async def _require_scoped_user(
 
 def register_user_pages(app, *, render, require_admin, get_db, require_perm=None) -> None:
     require_ops = require_perm("dashboard") if require_perm else require_admin
+
+    @app.post("/users/{user_id}/demo")
+    async def user_demo(
+        user_id: int,
+        request: Request,
+        staff: dict = Depends(require_ops),
+        session: AsyncSession = Depends(get_db),
+    ) -> RedirectResponse:
+        form = await request.form()
+        state = form.get("is_demo")
+        if state not in {"0", "1"}:
+            return _redirect_user(user_id, err="وضعیت کاربر دمو نامعتبر است")
+        try:
+            await set_demo_user(session, staff, user_id, is_demo=state == "1")
+        except (PermissionError, ValueError, ShopScopeError) as exc:
+            return _redirect_user(user_id, err=str(exc))
+        return _redirect_user(user_id, ok="وضعیت کاربر دمو ذخیره شد")
 
     @app.post("/users/create")
     async def user_create(
@@ -221,6 +240,7 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
             "flash_err": request.query_params.get("err"),
             # CRM identity ops stay Owner-only (not PG ACL).
             "can_manage_users": is_explicit_owner_staff(staff),
+            "can_manage_demo_users": can_shop(authz_from_staff(staff), DEMO_USERS_PERMISSION),
             # Plan assign / service mutate follow PasarGuard users.* ACL.
             "can_provision_users": can_pg_create,
             "can_pg_create": can_pg_create,

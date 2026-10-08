@@ -96,6 +96,7 @@
         <td data-sort-value="{{ uname }}">
           {% if o.user and o.user.id %}
           <a class="cell-user-link" href="/users?uid={{ o.user.id }}">{{ uname }}</a>
+          {% if o.user.is_demo %}<span class="badge neutral" title="در گزارش‌های مالی محاسبه نمی‌شود">دمو</span>{% endif %}
           {% else %}
           {{ uname }}
           {% endif %}
@@ -240,6 +241,7 @@
         <td data-sort-value="{{ uname }}">
           {% if payer and payer.id %}
           <a class="cell-user-link" href="/users?uid={{ payer.id }}">{{ uname }}</a>
+          {% if payer.is_demo %}<span class="badge neutral" title="در گزارش‌های مالی محاسبه نمی‌شود">دمو</span>{% endif %}
           {% else %}
           {{ uname }}
           {% endif %}

@@ -14,6 +14,7 @@ from app.bot.auth import is_platform_admin as _is_admin
 from app.bot.auth import require_bot_owner_handler, require_platform_rep_mgmt
 from app.config import get_settings
 from app.db.models import BotUser, Order, OrderStatus, Payment, PaymentStatus, Plan, Role, Ticket, UserService
+from app.services.home_overview import admin_customer_counts, bot_dashboard_summary
 from app.services.formatting import (
     format_system_stats,
     format_toman,
@@ -363,35 +364,10 @@ async def adm_dash(callback: CallbackQuery, session: AsyncSession, db_user: BotU
         await callback.answer("ادمین نیستید", show_alert=True)
         return
     await callback.answer()
-    from sqlalchemy import or_
-
-    users_count = await session.scalar(select(func.count()).select_from(BotUser)) or 0
-    # Platform-scoped aggregates only (exclude shop-tenant orders/payments)
-    orders_count = await session.scalar(
-        select(func.count()).select_from(Order).where(Order.reseller_id.is_(None))
-    ) or 0
-    pending_pay = await session.scalar(
-        select(func.count())
-        .select_from(Payment)
-        .outerjoin(Order, Order.id == Payment.order_id)
-        .where(
-            Payment.status == PaymentStatus.PENDING.value,
-            Payment.receipt_file_id.is_not(None),
-            or_(
-                Payment.is_wallet_topup.is_(True),
-                Order.reseller_id.is_(None),
-            ),
-        )
-    ) or 0
-    pending_orders = await session.scalar(
-        select(func.count())
-        .select_from(Order)
-        .where(
-            Order.reseller_id.is_(None),
-            Order.status.in_([OrderStatus.AWAITING_APPROVAL.value, OrderStatus.PAID.value]),
-        )
-    ) or 0
-    services = await session.scalar(select(func.count()).select_from(UserService)) or 0
+    summary = await bot_dashboard_summary(session)
+    users_count, orders_count = summary["users"], summary["orders"]
+    pending_pay, pending_orders = summary["pending"], summary["pending_orders"]
+    services = summary["services"]
     text = (
         "📊 <b>داشبورد</b>\n"
         "━━━━━━━━━━━━\n"
@@ -1968,11 +1944,8 @@ async def adm_users(callback: CallbackQuery, session: AsyncSession, db_user: Bot
         await callback.answer("ادمین نیستید", show_alert=True)
         return
     await callback.answer()
-    total = await session.scalar(select(func.count()).select_from(BotUser))
-    blocked = await session.scalar(
-        select(func.count()).select_from(BotUser).where(BotUser.is_blocked.is_(True))
-    ) or 0
-    orders = await session.scalar(select(func.count()).select_from(Order))
+    counts = await admin_customer_counts(session)
+    total, blocked, orders = counts["users"], counts["blocked"], counts["orders"]
     text = (
         "👥 <b>کاربران بات</b>\n\n"
         f"کل: {total}\n"

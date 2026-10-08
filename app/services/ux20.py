@@ -28,6 +28,7 @@ from app.db.models import (
     Ticket,
     UserService,
 )
+from app.services.demo_users import non_demo_customer
 
 logger = logging.getLogger(__name__)
 
@@ -680,7 +681,9 @@ async def funnel_summary(
 ) -> dict[str, int]:
     """Step counts for the behavior panel (7d default)."""
     since = _utcnow() - timedelta(days=max(1, min(90, days)))
-    q = select(FunnelEvent.step, func.count()).where(FunnelEvent.created_at >= since)
+    q = select(FunnelEvent.step, func.count()).where(
+        FunnelEvent.created_at >= since, non_demo_customer(FunnelEvent.user_id),
+    )
     if reseller_id is None:
         q = q.where(FunnelEvent.reseller_id.is_(None))
     else:
@@ -693,7 +696,9 @@ async def funnel_summary(
             out[step] = int(cnt or 0)
     # Fallback derive from orders when funnel empty
     if not any(out.values()):
-        oq = select(Order.status, func.count()).where(Order.created_at >= since)
+        oq = select(Order.status, func.count()).where(
+            Order.created_at >= since, non_demo_customer(Order.user_id),
+        )
         if reseller_id is None:
             oq = oq.where(Order.reseller_id.is_(None))
         else:
