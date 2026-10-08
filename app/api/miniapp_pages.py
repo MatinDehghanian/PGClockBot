@@ -739,6 +739,37 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
             }
         )
 
+    @app.get("/api/mini/service/{service_id}/automation")
+    async def mini_automation(service_id: int, request: Request, session: AsyncSession = Depends(get_db)):
+        from app.services.service_automation import automation_settings
+
+        user = await load_mini_user(session, request)
+        await _require_commerce_ready(session, user)
+        _owned_service_or_404(await session.get(UserService, service_id), user)
+        try:
+            return _no_store(await automation_settings(session, user, service_id))
+        except ValueError as exc:
+            raise HTTPException(400, _safe_client_message(exc, fallback="دریافت تنظیمات ناموفق")) from exc
+
+    @app.post("/api/mini/service/{service_id}/automation")
+    async def mini_automation_save(service_id: int, request: Request, session: AsyncSession = Depends(get_db)):
+        from app.services.service_automation import configure_automation
+
+        user = await load_mini_user(session, request)
+        await _require_commerce_ready(session, user)
+        _owned_service_or_404(await session.get(UserService, service_id), user)
+        try:
+            body = await request.json()
+            if not isinstance(body, dict) or type(body.get("enabled")) is not bool:
+                raise ValueError("وضعیت روشن/خاموش نامعتبر است")
+            raw_id = body.get("choice_id")
+            if raw_id is not None and (type(raw_id) is not int or raw_id <= 0):
+                raise ValueError("پلن یا بسته نامعتبر است")
+            await configure_automation(session, user, service_id, body.get("action"), enabled=body["enabled"], choice_id=raw_id)
+        except ValueError as exc:
+            raise HTTPException(400, _safe_client_message(exc, fallback="ذخیره تنظیمات ناموفق")) from exc
+        return _no_store({"ok": True, "message": "تنظیمات ذخیره شد"})
+
     @app.post("/api/mini/renew")
     async def mini_renew(request: Request, session: AsyncSession = Depends(get_db)):
         from app.services.orders import get_catalog_plan, pay_with_wallet, renew_service_with_plan

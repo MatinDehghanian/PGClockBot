@@ -510,6 +510,30 @@ body {
   gap: 6px;
 }
 
+.automation-option {
+  display: grid;
+  gap: var(--space-1_5);
+  padding: var(--space-1_5);
+  margin-top: var(--space-1_5);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+.automation-option label { display: flex; align-items: center; gap: var(--space-1); }
+.automation-option input { width: 20px; height: 20px; accent-color: var(--brand); }
+.automation-option select {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: var(--space-1);
+  background: var(--card);
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font: inherit;
+}
+.automation-option select:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.automation-option .hint { margin: 0; }
+
 @keyframes ma-in {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }

@@ -710,9 +710,53 @@ async def run_pg_admin_subscription_tick() -> None:
         logger.exception("pg admin subscription tick failed")
 
 
+async def run_service_automation_tick(bot: Bot) -> None:
+    from app.db.models import ServiceAutomation
+    from app.services.reseller_bots import open_notify_bot_for_reseller
+    from app.services.service_automation import process_service_automation
+
+    last_id = 0
+    while True:
+        async with SessionLocal() as session:
+            rows = (await session.execute(
+                select(ServiceAutomation.service_id, ServiceAutomation.shop_id)
+                .where(
+                    ServiceAutomation.service_id > last_id,
+                    or_(
+                        ServiceAutomation.renew_enabled.is_(True),
+                        ServiceAutomation.duration_enabled.is_(True),
+                        ServiceAutomation.volume_enabled.is_(True),
+                        ServiceAutomation.pending_order_id.is_not(None),
+                    ),
+                ).order_by(ServiceAutomation.service_id).limit(100)
+            )).all()
+        if not rows:
+            return
+        for service_id, shop_id in rows:
+            last_id = service_id
+            async with SessionLocal() as session:
+                send_bot, should_close = bot, False
+                try:
+                    if shop_id:
+                        send_bot, should_close = await open_notify_bot_for_reseller(session, shop_id)
+                        if send_bot is None:
+                            continue
+                    await process_service_automation(session, service_id, send_bot)
+                except Exception:
+                    logger.exception("service automation tick failed service=%s", service_id)
+                finally:
+                    if should_close and send_bot is not None:
+                        await send_bot.session.close()
+
+
 def start_scheduler(bot: Bot) -> None:
     if scheduler.running:
         return
+    scheduler.add_job(
+        run_service_automation_tick,
+        "interval", minutes=1, args=[bot], id="service_automation",
+        max_instances=1, coalesce=True, misfire_grace_time=120,
+    )
     scheduler.add_job(
         check_expiring_services,
         "interval",

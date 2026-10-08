@@ -273,7 +273,13 @@ async def res_plan_delete(callback: CallbackQuery, session: AsyncSession, db_use
     if not plan or plan.owner_reseller_id != owner_id or plan.is_trial:
         await callback.answer("یافت نشد", show_alert=True)
         return
-    await session.delete(plan)
+    from app.services.plans_catalog import delete_sales_plan
+
+    try:
+        await delete_sales_plan(session, plan)
+    except ValueError as exc:
+        await callback.answer(str(exc), show_alert=True)
+        return
     await session.commit()
     await callback.answer("حذف شد")
     plans = await _list_plans(session, owner_id)

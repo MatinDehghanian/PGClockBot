@@ -3218,7 +3218,12 @@ def create_api_app(lifespan=None) -> FastAPI:
 
         plan = await get_owned_plan(session, plan_id, staff)
         if plan and not plan.is_trial:
-            await session.delete(plan)
+            from app.services.plans_catalog import delete_sales_plan
+
+            try:
+                await delete_sales_plan(session, plan)
+            except ValueError as exc:
+                return _redirect_msg("/plans", err=str(exc))
             await session.commit()
         return RedirectResponse("/plans", status_code=303)
 

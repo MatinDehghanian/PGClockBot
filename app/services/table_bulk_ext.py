@@ -195,7 +195,9 @@ async def bulk_shop_plan_action(
                 await session.flush()
                 ok += 1
             elif action == "delete":
-                await session.delete(plan)
+                from app.services.plans_catalog import delete_sales_plan
+
+                await delete_sales_plan(session, plan)
                 await session.flush()
                 ok += 1
             else:

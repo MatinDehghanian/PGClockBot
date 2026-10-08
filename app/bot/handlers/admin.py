@@ -1742,7 +1742,13 @@ async def adm_plan_del(callback: CallbackQuery, session: AsyncSession, db_user: 
     if not plan or plan.is_trial:
         await callback.answer("یافت نشد", show_alert=True)
         return
-    await session.delete(plan)
+    from app.services.plans_catalog import delete_sales_plan
+
+    try:
+        await delete_sales_plan(session, plan)
+    except ValueError as exc:
+        await callback.answer(str(exc), show_alert=True)
+        return
     await session.commit()
     await callback.answer("حذف شد")
     await _render_plans_list(callback, session)

@@ -77,7 +77,7 @@ async def fulfill_paid_order(session: AsyncSession, order: Order) -> Order:
         plan = await session.get(Plan, order.plan_id)
         if not service or not plan:
             raise ValueError("سرویس یا پلن تمدید یافت نشد")
-        return await apply_renewal(session, order, service, plan)
+        return await apply_renewal(session, order, service, plan, reset_traffic=note.endswith(":auto"))
     if is_addon_order_note(note):
         from app.services.service_addons import apply_service_addon
 
@@ -2114,6 +2114,7 @@ async def renew_service_with_plan(
     user_id: int,
     service: UserService,
     plan: Plan,
+    commit: bool = True,
 ) -> Order:
     """Create a pending renewal order. Caller shows pay_methods (or uses pay_with_wallet)."""
     if not plan or not plan.is_active:
@@ -2139,12 +2140,18 @@ async def renew_service_with_plan(
         reseller_id=shop_rid,
     )
     session.add(order)
-    await session.commit()
-    await session.refresh(order)
+    if commit:
+        await session.commit()
+        await session.refresh(order)
+    else:
+        await session.flush()
     return order
 
 
-async def apply_renewal(session: AsyncSession, order: Order, service: UserService, plan: Plan) -> Order:
+async def apply_renewal(
+    session: AsyncSession, order: Order, service: UserService, plan: Plan,
+    *, reset_traffic: bool = False,
+) -> Order:
     order_id = int(order.id)
     # Atomic renewal mutex (same pattern as deliver_order)
     with session.no_autoflush:
@@ -2223,6 +2230,8 @@ async def apply_renewal(session: AsyncSession, order: Order, service: UserServic
                     "expire": expire,
                 },
             )
+        if reset_traffic:
+            await pg.reset_user_by_id(service.pg_user_id)
         sub_url = (
             user_subscription_url(pg_user if isinstance(pg_user, dict) else None)
             or service.subscription_url

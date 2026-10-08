@@ -6,7 +6,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Plan
@@ -360,3 +360,22 @@ def parse_group_ids_from_form(form: Any, *, prefix: str = "group_") -> list[int]
         if str(k).startswith(prefix) and str(v).isdigit():
             ids.append(int(v))
     return ids
+
+
+async def delete_sales_plan(session: AsyncSession, plan: Plan) -> None:
+    """Detach historical references so a sold plan can actually be removed."""
+    from app.db.models import FunnelEvent, PointsRule, Order, OrderStatus, ServiceAutomation, UserService
+
+    outstanding = (await session.execute(select(Order.id).where(
+        Order.plan_id == plan.id,
+        Order.status.in_([OrderStatus.PAID.value, OrderStatus.DELIVERING.value]),
+    ).limit(1))).first()
+    if outstanding:
+        raise ValueError("این پلن سفارش پرداخت‌شده در انتظار تحویل دارد؛ ابتدا وضعیت سفارش را مشخص کنید")
+    for model in (Order, UserService, FunnelEvent):
+        await session.execute(update(model).where(model.plan_id == plan.id).values(plan_id=None))
+    await session.execute(update(PointsRule).where(PointsRule.plan_id == plan.id).values(plan_id=None, enabled=False))
+    await session.execute(update(ServiceAutomation).where(
+        ServiceAutomation.renew_plan_id == plan.id,
+    ).values(renew_plan_id=None))
+    await session.delete(plan)
