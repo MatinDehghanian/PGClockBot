@@ -42,7 +42,7 @@ class LimitsGuidesPhase02Tests(unittest.IsolatedAsyncioTestCase):
         return u
 
     async def test_redeem_charge_code_per_user_once(self):
-        from app.db.models import ChargeCode, ChargeCodeRedemption
+        from app.db.models import ChargeCode, ChargeCodeUse
         from app.services.ux20 import create_charge_code, redeem_charge_code
         from sqlalchemy import select
 
@@ -64,8 +64,9 @@ class LimitsGuidesPhase02Tests(unittest.IsolatedAsyncioTestCase):
                 await session.commit()
             n = (
                 await session.execute(
-                    select(ChargeCodeRedemption).where(
-                        ChargeCodeRedemption.code_id == code_id
+                    select(ChargeCodeUse).where(
+                        ChargeCodeUse.charge_code_id == code_id,
+                        ChargeCodeUse.status == "consumed",
                     )
                 )
             ).scalars().all()

@@ -29,6 +29,8 @@ TABLE_ORDER: tuple[str, ...] = (
     "panel_tickets",
     "panel_ticket_messages",
     "discount_codes",
+    "charge_codes",
+    "charge_code_uses",
     "broadcast_logs",
     "reseller_profiles",
     "reseller_billing_transactions",

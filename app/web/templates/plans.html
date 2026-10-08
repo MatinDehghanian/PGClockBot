@@ -1,5 +1,6 @@
 ﻿{% extends "base.html" %}
 {% from "macros.html" import switch, switch_chip, page_title, modal_title, row_actions, table_select_head, table_select_cell, table_bulk_bar %}
+{% from "_gift_code_fields.html" import gift_code_fields %}
 {% block title %}پلن‌ها{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -1082,24 +1083,11 @@
   <div class="ui-modal-backdrop" data-modal-close></div>
   <div class="ui-modal-panel ui-modal-panel-lg" role="dialog" aria-modal="true" aria-labelledby="gift-codes-title">
     <div class="ui-modal-head">
-      {{ modal_title('plans', 'کد هدیه / شارژ', caption='کد شارژ کیف‌پول بسازید و مدیریت کنید', tone='brand', heading_id='gift-codes-title') }}
+      {{ modal_title('plans', 'کد هدیه / تخفیف', caption='کد شارژ یا تخفیف خرید بسازید و شرایط استفاده را تنظیم کنید', tone='brand', heading_id='gift-codes-title') }}
       <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
-    <form method="post" action="/plans/gift-codes" class="form-stack">
-      <div class="settings-grid">
-        <label class="form-field">مبلغ (تومان)
-          <input name="amount" type="number" min="1000" step="1000" required placeholder="50000" />
-        </label>
-        <label class="form-field">سقف استفاده
-          <input name="max_uses" type="number" min="1" value="1" />
-        </label>
-        <label class="form-field">کد سفارشی (اختیاری)
-          <input name="code" dir="ltr" placeholder="خالی = خودکار" />
-        </label>
-        <label class="form-field">یادداشت
-          <input name="note" placeholder="مثلاً کمپین نوروز" />
-        </label>
-      </div>
+    <form method="post" action="/plans/gift-codes" class="form-stack gift-code-form">
+      {{ gift_code_fields() }}
       <div class="actions">
         <button class="btn" type="submit">ساخت کد</button>
         <button type="button" class="btn btn-ghost" data-modal-close>بستن</button>
@@ -1117,35 +1105,79 @@
             <th>کد</th>
             <th>مبلغ</th>
             <th class="col-hide-sm">مصرف</th>
+            <th>شرایط</th>
+            <th>انقضا</th>
             <th>وضعیت</th>
             <th class="col-actions"></th>
           </tr>
         </thead>
         <tbody>
         {% for c in gift_codes or [] %}
+          {% set d = (gift_code_details or {}).get(c.id, {}) %}
           <tr data-bulk-ops="toggle">
             {{ table_select_cell(c.id) }}
-            <td class="mono" dir="ltr">{{ c.code }}</td>
-            <td class="mono">{{ c.amount | num }}</td>
+            <td><span class="mono" dir="ltr">{{ c.code }}</span>{% if c.note %}<div class="muted">{{ c.note }}</div>{% endif %}</td>
+            <td>{% if c.kind == 'discount' %}<span class="mono">{{ c.percent }}٪</span>{% if c.max_discount_toman is not none %}<div class="muted">تا {{ c.max_discount_toman | num }} تومان</div>{% endif %}{% else %}<span class="mono">{{ c.amount | num }}</span><div class="muted">شارژ کیف پول</div>{% endif %}</td>
             <td class="col-hide-sm">{{ c.used_count }}{% if c.max_uses is not none %}/{{ c.max_uses }}{% endif %}</td>
-            <td>{% if c.is_active %}<span class="badge active">فعال</span>{% else %}<span class="badge warn">خاموش</span>{% endif %}</td>
+            <td><div>هر کاربر: {{ c.max_uses_per_user if c.max_uses_per_user is not none else 'نامحدود' }}</div>{% if c.kind == 'discount' %}<div class="muted">{{ 'فقط خرید اول' if c.first_purchase_only else d.get('purchase_label', 'همه خریدها') }}</div>{% endif %}</td>
+            <td dir="ltr">{{ d.get('expiry_label', 'بدون انقضا') }}</td>
+            <td><span class="badge {{ 'active' if d.get('state', 'فعال') == 'فعال' else 'warn' }}">{{ d.get('state', 'فعال' if c.is_active else 'خاموش') }}</span></td>
             <td class="col-actions">
+              <button class="btn btn-ghost btn-sm" type="button" data-gift-edit="gift-edit-{{ c.id }}" aria-expanded="false" aria-controls="gift-edit-{{ c.id }}">ویرایش</button>
               <form method="post" action="/plans/gift-codes/{{ c.id }}/toggle">
                 <button class="btn btn-ghost btn-sm" type="submit">{% if c.is_active %}خاموش{% else %}روشن{% endif %}</button>
               </form>
             </td>
           </tr>
         {% else %}
-          <tr><td colspan="6" class="muted">هنوز کدی ساخته نشده.</td></tr>
+          <tr><td colspan="8" class="muted">هنوز کدی ساخته نشده.</td></tr>
         {% endfor %}
         </tbody>
       </table>
     </div>
+    {% for c in gift_codes or [] %}
+    <div id="gift-edit-{{ c.id }}" class="gift-code-editor" hidden>
+      <form method="post" action="/plans/gift-codes/{{ c.id }}/edit" class="form-stack gift-code-form">
+        <strong>ویرایش کد <span class="mono" dir="ltr">{{ c.code }}</span></strong>
+        {{ gift_code_fields(c, (gift_code_details or {}).get(c.id, {})) }}
+        <div class="actions"><button class="btn" type="submit">ذخیره تنظیمات</button><button class="btn btn-ghost" type="button" data-gift-edit="gift-edit-{{ c.id }}">بستن</button></div>
+      </form>
+    </div>
+    {% endfor %}
   </div>
 </div>
 
 <script>
 (function(){
+  document.querySelectorAll('.gift-code-form').forEach(function(form){
+    function syncGiftKind(){
+      const kind = form.elements.kind.value;
+      form.querySelectorAll('[data-gift-kind]').forEach(function(section){
+        const visible = section.dataset.giftKind === kind;
+        section.hidden = !visible;
+        section.querySelectorAll('input, select').forEach(function(input){
+          input.disabled = !visible;
+          if (input.hasAttribute('data-gift-required')) input.required = visible;
+        });
+      });
+    }
+    const select = form.querySelector('[data-gift-kind-select]');
+    if (select) select.addEventListener('change', syncGiftKind);
+    syncGiftKind();
+    const first = form.elements.first_purchase_only;
+    if (first) first.addEventListener('change', function(){
+      if (first.checked) form.querySelectorAll('input[name="purchase_types"]').forEach(function(input){ input.checked = input.value === 'new'; });
+    });
+  });
+  document.querySelectorAll('[data-gift-edit]').forEach(function(button){
+    button.addEventListener('click', function(){
+      const row = document.getElementById(button.dataset.giftEdit);
+      if (!row) return;
+      row.hidden = !row.hidden;
+      if (!row.hidden) row.scrollIntoView({block: 'start'});
+      document.querySelectorAll('[data-gift-edit="' + button.dataset.giftEdit + '"]').forEach(function(toggle){ toggle.setAttribute('aria-expanded', String(!row.hidden)); });
+    });
+  });
   const isPlatformAdmin = {{ 'true' if is_platform_admin else 'false' }};
   const audienceSel = document.getElementById('plan-audience');
   const kindSel = document.getElementById('plan-kind');

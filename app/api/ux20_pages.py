@@ -25,6 +25,27 @@ from app.services.ux20 import (
 )
 
 
+def _gift_rules(form) -> dict:
+    from app.services.gift_codes import parse_expiry
+
+    def number(name, default=None):
+        raw = str(form.get(name) or "").strip().replace(",", "").replace("٬", "")
+        try:
+            return int(raw) if raw else default
+        except ValueError as exc:
+            raise ValueError("مبلغ، درصد و تعداد استفاده باید عدد صحیح باشند") from exc
+
+    return dict(
+        kind=str(form.get("kind") or "wallet"), amount=number("amount", 0),
+        percent=number("percent", 0), max_discount_toman=number("max_discount_toman"),
+        max_uses=number("max_uses", 1 if "max_uses" not in form else None),
+        max_uses_per_user=number("max_uses_per_user"),
+        expires_at=parse_expiry(str(form.get("expires_at") or "")),
+        first_purchase_only=str(form.get("first_purchase_only") or "") in {"1", "on", "true"},
+        purchase_types=form.getlist("purchase_types"),
+    )
+
+
 def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
     @app.post("/plans/{plan_id}/clone")
     async def plans_clone(
@@ -163,10 +184,7 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
 
     @app.post("/plans/gift-codes")
     async def gift_codes_create(
-        amount: int = Form(...),
-        max_uses: int = Form(1),
-        code: str = Form(""),
-        note: str = Form(""),
+        request: Request,
         staff: dict = Depends(require_staff),
         session: AsyncSession = Depends(get_db),
     ):
@@ -182,23 +200,56 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
         if not is_platform_admin(staff) and rid is None:
             return RedirectResponse("/home", status_code=303)
         try:
+            form = await request.form()
             row = await create_charge_code(
-                session,
-                amount=int(amount),
-                max_uses=int(max_uses) if max_uses else None,
-                reseller_id=rid,
-                note=note,
-                code=code or None,
+                session, reseller_id=rid, note=str(form.get("note") or ""),
+                code=str(form.get("code") or "") or None, **_gift_rules(form),
             )
             return RedirectResponse(
                 f"/plans?gifts=1&ok={quote('کد ساخته شد: ' + row.code)}",
                 status_code=303,
             )
         except Exception as exc:
+            await session.rollback()
             return RedirectResponse(
                 f"/plans?gifts=1&err={quote(str(exc) or 'خطا')}",
                 status_code=303,
             )
+
+    @app.post("/plans/gift-codes/{code_id}/edit")
+    async def gift_codes_edit(
+        code_id: int, request: Request,
+        staff: dict = Depends(require_staff), session: AsyncSession = Depends(get_db),
+    ):
+        from app.services.gift_codes import validate_rules
+
+        admin_scope = is_platform_admin(staff)
+        authz = authz_from_staff(staff)
+        if not (admin_scope or can_shop(authz, "plans") or can_shop(authz, "orders")):
+            return RedirectResponse("/home", status_code=303)
+        rid = None if admin_scope else shop_owner_id(staff)
+        if not admin_scope and rid is None:
+            return RedirectResponse("/home", status_code=303)
+        try:
+            # Serialize edits with usage claims; never reset the usage history.
+            row = (await session.execute(select(ChargeCode).where(
+                ChargeCode.id == code_id,
+                ChargeCode.reseller_id == rid if rid else ChargeCode.reseller_id.is_(None),
+            ).with_for_update())).scalar_one_or_none()
+            if not row:
+                return RedirectResponse("/plans?gifts=1", status_code=303)
+            form = await request.form()
+            rules = validate_rules(**_gift_rules(form))
+            if rules["kind"] != row.kind:
+                raise ValueError("نوع کد پس از ساخت قابل تغییر نیست؛ یک کد جدید بسازید")
+            for name, value in rules.items():
+                setattr(row, name, value)
+            row.note = str(form.get("note") or "").strip()[:255] or None
+            await session.commit()
+            return RedirectResponse(f"/plans?gifts=1&ok={quote('تنظیمات کد ذخیره شد')}", status_code=303)
+        except Exception as exc:
+            await session.rollback()
+            return RedirectResponse(f"/plans?gifts=1&err={quote(str(exc) or 'خطا')}", status_code=303)
 
     @app.post("/plans/gift-codes/{code_id}/toggle")
     async def gift_codes_toggle(

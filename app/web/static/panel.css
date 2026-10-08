@@ -5988,6 +5988,8 @@ form.settings-form > .actions.sticky-actions,
   box-sizing: border-box;
 }
 .ui-modal-panel-lg { width: min(720px, 100%); }
+.gift-code-editor { padding-top: var(--space-3); margin-top: var(--space-3); border-top: 1px solid var(--border); }
+.gift-code-editor[hidden] { display: none !important; }
 .ui-modal-panel-xl {
   width: min(720px, 100%);
   overflow: hidden;
