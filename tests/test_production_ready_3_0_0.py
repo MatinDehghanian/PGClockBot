@@ -33,6 +33,9 @@ class WalletDebitGuardTests(unittest.IsolatedAsyncioTestCase):
         order.amount = 5000
         order.status = OrderStatus.PENDING.value
         order.note = None
+        order.user_id = 1
+        order.plan_id = 1
+        order.reseller_id = None
 
         user = MagicMock()
         user.id = 1
@@ -49,7 +52,8 @@ class WalletDebitGuardTests(unittest.IsolatedAsyncioTestCase):
             patch(
                 "app.services.orders.debit_wallet",
                 new=AsyncMock(side_effect=ValueError("موجودی کافی نیست")),
-            ),
+            ) as debit,
+            patch("app.services.purchase_contact.get_all_settings", new=AsyncMock(return_value={"purchase_require_contact": "0"})),
             patch("app.services.orders.credit_wallet", new=AsyncMock()) as credit,
             patch("app.services.orders.deliver_order", new=AsyncMock()),
         ):
@@ -57,6 +61,7 @@ class WalletDebitGuardTests(unittest.IsolatedAsyncioTestCase):
                 await pay_with_wallet(session, order, user)
 
         credit.assert_not_awaited()
+        debit.assert_awaited_once()
 
 
 class SubscriptionUrlSanitizeTests(unittest.TestCase):

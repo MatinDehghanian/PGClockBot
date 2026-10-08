@@ -950,6 +950,18 @@ class TrialClaim(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class PurchaseContact(Base):
+    """A customer's verified Telegram contact, isolated to the current shop."""
+
+    __tablename__ = "purchase_contacts"
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id", ondelete="CASCADE"), primary_key=True)
+    shop_key: Mapped[int] = mapped_column(Integer, primary_key=True)
+    telegram_id: Mapped[int] = mapped_column(BigInteger)
+    phone_hash: Mapped[str] = mapped_column(String(64))
+    verified_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class ChargeCodeRedemption(Base):
     """Per-user gift-code redemption — UNIQUE(code_id, user_id) enforces one redeem each."""
 
@@ -1381,7 +1393,7 @@ class TermsAcceptance(Base):
 
 class ServiceCancellation(Base):
     __tablename__ = "service_cancellations"
-    __table_args__ = (Index(
+    __table_args__ = (Index("ix_service_cancellations_notification", "notification_status", "id"), Index(
         "uq_service_cancellations_open", "service_id", unique=True,
         sqlite_where=text("status IN ('pending','processing','review','approved')"),
         postgresql_where=text("status IN ('pending','processing','review','approved')"),
@@ -1401,6 +1413,8 @@ class ServiceCancellation(Base):
     locked_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     processed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    notification_status: Mapped[str] = mapped_column(String(24), default="pending", server_default="pending")
+    notification_attempted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class TargetedCampaign(Base):

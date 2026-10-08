@@ -20,7 +20,7 @@ OPERATIONS = {
     "pending_order_cleanup",
     "scheduled_backup",
 }
-NOTIFICATIONS = {"service_automation", "expiry", "admin_daily_report", "targeted_campaigns"}
+NOTIFICATIONS = {"service_automation", "expiry", "admin_daily_report", "targeted_campaigns", "cancellation_notifications"}
 
 
 class BackgroundSchedulerTests(unittest.IsolatedAsyncioTestCase):
@@ -65,9 +65,16 @@ class BackgroundSchedulerTests(unittest.IsolatedAsyncioTestCase):
         jobs.start_scheduler(object())
         bot = object()
         jobs.start_scheduler(bot)
-        self.assertEqual(len(self.scheduler.get_jobs()), 8)
+        self.assertEqual(len(self.scheduler.get_jobs()), 9)
         for job_id in NOTIFICATIONS:
             self.assertEqual(self.scheduler.get_job(job_id).args, (bot,))
+
+    async def test_cancellation_notices_run_every_ten_seconds_without_overlapping_batches(self) -> None:
+        jobs.start_scheduler(object())
+        job = self.scheduler.get_job("cancellation_notifications")
+        self.assertEqual(job.trigger.interval.total_seconds(), 10)
+        self.assertEqual(job.max_instances, 1)
+        self.assertTrue(job.coalesce)
 
     async def _check_application_startup(self, *, token):
         from app import main

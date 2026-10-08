@@ -108,6 +108,7 @@ def create_dispatcher() -> Dispatcher:
         loyalty,
         payments,
         plan_catalog_manage,
+        purchase_contact,
         reply_nav,
         reseller,
         reseller_plans,
@@ -126,6 +127,7 @@ def create_dispatcher() -> Dispatcher:
     dp.include_router(terms.router)
     # Reply-keyboard nav early so menu labels win over FSM amount parsers
     dp.include_router(reply_nav.router)
+    dp.include_router(purchase_contact.router)
     dp.include_router(loyalty.router)
     dp.include_router(shop.router)
     dp.include_router(wallet.router)
