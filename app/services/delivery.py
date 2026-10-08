@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 def _plan_name(order) -> str:
     try:
-        plan = getattr(order, "plan", None)
+        plan = vars(order).get("plan")
         if plan is not None:
             return getattr(plan, "name", "") or ""
     except Exception:
@@ -46,7 +46,7 @@ def _plan_type_label(order) -> str:
     if note == "custom" or note.startswith("custom:"):
         return "دلخواه"
     try:
-        plan = getattr(order, "plan", None)
+        plan = vars(order).get("plan")
         if plan is not None and bool(getattr(plan, "is_trial", False)):
             return "تست"
         # ResellerPlan billing_mode
@@ -147,7 +147,7 @@ async def build_delivery_content(
     sub_info: dict | None = None
 
     # Ensure plan is available for نوع پلن / {plan_name} even if caller didn't load it.
-    if order is not None and getattr(order, "plan", None) is None:
+    if order is not None and vars(order).get("plan") is None:
         plan_id = getattr(order, "plan_id", None)
         if plan_id:
             from app.db.models import Plan
