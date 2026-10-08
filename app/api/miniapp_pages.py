@@ -792,7 +792,7 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
             raise HTTPException(400, _safe_client_message(exc, fallback="دریافت پیش‌نمایش ناموفق")) from exc
         except Exception:
             log.exception("mini renewal preview failed user=%s svc=%s", user.id, service_id)
-            raise HTTPException(503, "دریافت اطلاعات سرویس ناموفق بود؛ دوباره تلاش کنید")
+            raise HTTPException(503, "دریافت اطلاعات سرویس ناموفق بود؛ دوباره تلاش کنید") from None
 
     @app.post("/api/mini/renew")
     async def mini_renew(request: Request, session: AsyncSession = Depends(get_db)):
