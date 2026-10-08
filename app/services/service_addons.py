@@ -8,6 +8,7 @@ import time
 from typing import Any
 
 from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import (
@@ -340,6 +341,9 @@ async def create_addon_order(
 
     if await service_shop_id(session, service) != shop_rid:
         raise ValueError("سرویس این فروشگاه نیست")
+    from app.services.service_renewals import assert_service_quota_available
+
+    await assert_service_quota_available(session, service.id)
 
     # Fail closed on known-unlimited quotas (synced cache) so buyers are not charged
     # for an entitlement that cannot be applied.
@@ -382,16 +386,24 @@ async def apply_service_addon(
     pack_id, service_id, snap_kind, snap_amount = parsed
     order_id = int(order.id)
 
-    with session.no_autoflush:
-        claim = await session.execute(
-            update(Order)
-            .where(
-                Order.id == order_id,
-                Order.status == OrderStatus.PAID.value,
+    try:
+        with session.no_autoflush:
+            from app.services.service_cancellations import lock_service_mutation
+            await lock_service_mutation(session, service_id)
+            claim = await session.execute(
+                update(Order)
+                .where(
+                    Order.id == order_id,
+                    Order.status == OrderStatus.PAID.value,
+                )
+                .values(status=OrderStatus.DELIVERING.value, service_mutation_pending=True)
+                .execution_options(synchronize_session=False)
             )
-            .values(status=OrderStatus.DELIVERING.value)
-            .execution_options(synchronize_session=False)
-        )
+    except IntegrityError as exc:
+        await session.rollback()
+        await session.refresh(order)
+        await session.get(BotUser, order.user_id)
+        raise ValueError("تغییر دیگری برای این سرویس در حال انجام یا بررسی است") from exc
     if claim.rowcount != 1:
         await session.refresh(order)
         if order.status == OrderStatus.DELIVERED.value:
@@ -407,7 +419,7 @@ async def apply_service_addon(
                 Order.id == order_id,
                 Order.status == OrderStatus.DELIVERING.value,
             )
-            .values(status=OrderStatus.PAID.value)
+            .values(status=OrderStatus.PAID.value, service_mutation_pending=False)
             .execution_options(synchronize_session=False)
         )
         await session.commit()
@@ -454,7 +466,7 @@ async def apply_service_addon(
                     Order.id == order_id,
                     Order.status == OrderStatus.DELIVERING.value,
                 )
-                .values(status=OrderStatus.DELIVERED.value)
+                .values(status=OrderStatus.DELIVERED.value, service_mutation_pending=False)
                 .execution_options(synchronize_session=False)
             )
         if done.rowcount != 1:
@@ -485,7 +497,7 @@ async def apply_service_addon(
                         Order.id == order_id,
                         Order.status == OrderStatus.DELIVERING.value,
                     )
-                    .values(status=OrderStatus.DELIVERED.value)
+                    .values(status=OrderStatus.DELIVERED.value, service_mutation_pending=False)
                     .execution_options(synchronize_session=False)
                 )
                 from app.services.loyalty import consume_loyalty_discount_for_order

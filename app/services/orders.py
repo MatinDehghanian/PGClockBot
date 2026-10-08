@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import json
 import logging
 import math
 import secrets
 import string
+import time
+from dataclasses import dataclass
 from typing import Optional
 
 from sqlalchemy import select, update
@@ -1066,7 +1069,15 @@ async def pay_with_wallet(session: AsyncSession, order: Order, user) -> Order:
         await session.refresh(order)
         await session.refresh(payment)
         return await _resume_paid_wallet_order(session, order, user)
-    except Exception:
+    except Exception as exc:
+        from app.services.service_renewals import RenewalPendingReview
+
+        if isinstance(exc, RenewalPendingReview):
+            # A lost panel response is not evidence that the paid renewal failed.
+            raise
+        if getattr(order, "renewal_snapshot", None):
+            await session.refresh(order)
+            await session.refresh(user)
         # Only refund when we actually debited — never mint balance on debit failure.
         if debited and order.amount > 0:
             shop_id = int(order.reseller_id) if order.reseller_id else None
@@ -1110,6 +1121,8 @@ async def mark_order_free_paid(session: AsyncSession, order: Order, user_id: int
 
 async def revert_failed_free_delivery(session: AsyncSession, order: Order) -> None:
     """Undo mark_order_free_paid so the user can retry after a delivery failure."""
+    if getattr(order, "service_mutation_pending", False):
+        return
     order.status = OrderStatus.PENDING.value
     pays = await session.execute(
         select(Payment).where(
@@ -1911,7 +1924,10 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
     prior = (
         await session.execute(
             select(UserService)
-            .where(UserService.remark.like(f"order:{order_id}%"))
+            .where(
+                UserService.remark == f"order:{order_id}",
+                UserService.bot_user_id == order.user_id,
+            )
             .order_by(UserService.id.asc())
             .limit(1)
         )
@@ -1993,8 +2009,6 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
         if plan.data_limit_gb is not None:
             data_limit = int(plan.data_limit_gb * (1024**3))
         if plan.duration_days:
-            import time
-
             expire = int(time.time()) + plan.duration_days * 86400
 
         # Reseller shop orders must always quota-check + assign ownership.
@@ -2193,20 +2207,23 @@ async def renew_service_with_plan(
     service: UserService,
     plan: Plan,
     commit: bool = True,
+    request_key: str | None = None,
 ) -> Order:
     """Create a pending renewal order. Caller shows pay_methods (or uses pay_with_wallet)."""
-    if not plan or not plan.is_active:
-        raise ValueError("پلن یافت نشد")
-    if plan.is_trial:
-        raise ValueError("پلن تست برای تمدید مجاز نیست")
+    from app.services.service_renewals import validate_renewal_selection
+
     shop_rid = _shop_reseller_id()
-    if shop_rid:
-        if int(plan.owner_reseller_id or 0) != int(shop_rid):
-            raise ValueError("این پلن در این فروشگاه موجود نیست")
-    elif plan.owner_reseller_id is not None:
-        raise ValueError("این پلن در این فروشگاه موجود نیست")
-    if service.bot_user_id != user_id:
-        raise ValueError("سرویس متعلق به شما نیست")
+    if request_key is not None:
+        if not isinstance(request_key, str) or len(request_key) != 32 or any(c not in string.hexdigits for c in request_key):
+            raise ValueError("شناسه درخواست تمدید نامعتبر است")
+        existing = await session.scalar(select(Order).where(Order.renewal_request_key == request_key))
+        if existing is not None:
+            if (existing.user_id, existing.service_id, existing.plan_id, existing.reseller_id) != (user_id, service.id, plan.id, shop_rid):
+                raise ValueError("درخواست تمدید نامعتبر است")
+            return existing
+    terms = await validate_renewal_selection(
+        session, user_id=user_id, service=service, plan=plan, shop_id=shop_rid,
+    )
 
     order = Order(
         user_id=user_id,
@@ -2216,8 +2233,29 @@ async def renew_service_with_plan(
         note=f"renew:{service.id}",
         service_id=service.id,
         reseller_id=shop_rid,
+        renewal_snapshot=json.dumps(terms),
+        renewal_request_key=request_key,
     )
-    session.add(order)
+    if request_key is None:
+        session.add(order)
+    else:
+        # SQLite's legacy transaction mode needs BEGIN before a first SAVEPOINT.
+        connection = await session.connection()
+        if connection.dialect.name == "sqlite":
+            raw = await connection.get_raw_connection()
+            if not raw.driver_connection.in_transaction:
+                await connection.exec_driver_sql("BEGIN")
+        try:
+            async with session.begin_nested():
+                session.add(order)
+                await session.flush()
+        except IntegrityError:
+            existing = await session.scalar(select(Order).where(Order.renewal_request_key == request_key))
+            if existing is None:
+                raise
+            if (existing.user_id, existing.service_id, existing.plan_id, existing.reseller_id) != (user_id, service.id, plan.id, shop_rid):
+                raise ValueError("درخواست تمدید نامعتبر است") from None
+            return existing
     if commit:
         await session.commit()
         await session.refresh(order)
@@ -2226,128 +2264,266 @@ async def renew_service_with_plan(
     return order
 
 
+@dataclass(slots=True)
+class _RenewalRun:
+    """Mutable state of one ``apply_renewal`` attempt, shared with its failure path."""
+
+    snapshot: dict | None
+    had_saved_target: bool
+    write_attempted: bool
+
+
+async def _assert_renewal_matches_service(session: AsyncSession, order: Order, service: UserService) -> None:
+    from app.services.service_automation import service_shop_id
+
+    if (
+        order.user_id != service.bot_user_id or order.service_id != service.id
+        or await service_shop_id(session, service) != order.reseller_id
+    ):
+        raise ValueError("سفارش و سرویس تمدید متعلق به یک فروشگاه و مشتری نیستند")
+    if not service.pg_user_id or (service.remark or "").strip() == "linked":
+        raise ValueError("تمدید این سرویس ممکن نیست")
+
+
+async def _claim_renewal_order(session: AsyncSession, order: Order, service: UserService) -> bool:
+    """Atomically move a paid renewal to DELIVERING; False means it was already delivered."""
+    from app.services.service_cancellations import lock_service_mutation
+
+    order_id = int(order.id)
+    try:
+        with session.no_autoflush:
+            await lock_service_mutation(session, service.id)
+            claim = await session.execute(
+                update(Order)
+                .where(Order.id == order_id, Order.status == OrderStatus.PAID.value)
+                .values(status=OrderStatus.DELIVERING.value, service_mutation_pending=True)
+                .execution_options(synchronize_session=False)
+            )
+    except IntegrityError as exc:
+        await session.rollback()
+        await session.refresh(order)
+        raise ValueError("تغییر دیگری برای این سرویس در حال انجام یا بررسی است") from exc
+    if claim.rowcount != 1:
+        await session.refresh(order)
+        if order.status == OrderStatus.DELIVERED.value:
+            return False
+        raise ValueError("سفارش تمدید قابل پردازش نیست")
+    await session.commit()
+    await session.refresh(order)
+    return True
+
+
+async def _release_renewal_claim(session: AsyncSession, order: Order, run: _RenewalRun) -> None:
+    """Return a DELIVERING renewal to PAID; keep the quota lock once a panel write may have happened."""
+    await session.execute(
+        update(Order)
+        .where(Order.id == int(order.id), Order.status == OrderStatus.DELIVERING.value)
+        .values(status=OrderStatus.PAID.value, service_mutation_pending=bool(run.snapshot and run.write_attempted))
+        .execution_options(synchronize_session=False)
+    )
+    await session.commit()
+    await session.refresh(order)
+
+
+async def _renewal_panel_client(session: AsyncSession, order: Order, service: UserService):
+    if order.reseller_id:
+        from app.services.pasarguard import get_pg_for_reseller
+
+        pg = await get_pg_for_reseller(session, int(order.reseller_id))
+    else:
+        pg = get_pg()
+    if not service.pg_user_id:
+        raise ValueError("service has no panel user")
+    return pg
+
+
+async def _renewal_targets(pg, service: UserService, plan: Plan, snapshot: dict | None):
+    """Return ``(payload, data_limit, expire, gate_expire)``.
+
+    ``payload`` is the absolute panel target for snapshot renewals (``None`` for
+    legacy orders); ``gate_expire`` is the expiry used for the reseller
+    provisioning gate, which counts an on-hold duration from now.
+    """
+    if snapshot is None:
+        data_limit = int(plan.data_limit_gb * (1024**3)) if plan.data_limit_gb is not None else None
+        expire = int(time.time()) + plan.duration_days * 86400 if plan.duration_days else None
+        return None, data_limit, expire, expire
+    if snapshot.get("version") != 1:
+        raise ValueError("اطلاعات سفارش تمدید نامعتبر است")
+    payload = snapshot.get("target")
+    if payload is None:
+        from app.services.service_renewals import calculate_renewal
+
+        payload = calculate_renewal(await pg.get_user_by_id(service.pg_user_id), snapshot)["payload"]
+    gate_expire = payload["expire"]
+    if payload.get("on_hold_expire_duration"):
+        gate_expire = int(time.time()) + payload["on_hold_expire_duration"]
+    return payload, payload["data_limit"], payload["expire"], gate_expire
+
+
+async def _assert_renewal_provision_gate(
+    session: AsyncSession, order: Order, plan: Plan, run: _RenewalRun,
+    *, data_limit: int | None, gate_expire: int | None,
+) -> None:
+    if not order.reseller_id:
+        return
+    pg_owner, pg_role_id = await _reseller_pg_link(session, order.reseller_id)
+    try:
+        await assert_provision_renew(
+            session,
+            reseller_user_id=int(order.reseller_id),
+            pg_admin_username=pg_owner,
+            pg_role_id=pg_role_id,
+            data_limit=data_limit,
+            expire_ts=gate_expire,
+            from_template=bool(plan.pg_template_id) if run.snapshot is None else False,
+        )
+    except ProvisionError as e:
+        raise ValueError(e.message) from e
+
+
+async def _started_on_hold_renewal(pg, service: UserService, snapshot: dict, payload: dict) -> dict | None:
+    """Return the live panel user when an earlier attempt already applied the on-hold target.
+
+    ``None`` means the user is still on hold, so the target must be written.
+    Anything that does not match the saved target needs operator review.
+    """
+    from app.services.formatting import hold_duration_from_info, is_on_hold_status, parse_expire
+    from app.services.service_live_info import validate_service_info
+    from app.services.service_renewals import RenewalPendingReview
+
+    live = validate_service_info(await pg.get_user_by_id(service.pg_user_id))
+    if live.get("error"):
+        raise RenewalPendingReview()
+    if is_on_hold_status(live["status"]):
+        return None
+    live_expire = parse_expire(live.get("expire", live.get("expire_date")))
+    duration = payload["on_hold_expire_duration"]
+    started_expire = int(live_expire.timestamp()) if live_expire else 0
+    matches_target = (
+        live["status"] == "active"
+        and int(live["data_limit"] or 0) == payload["data_limit"]
+        and hold_duration_from_info(live) == duration
+        and snapshot["prepared_at"] + duration - 1 <= started_expire <= int(time.time()) + duration + 1
+    )
+    if not matches_target:
+        raise RenewalPendingReview()
+    return live
+
+
+async def _write_renewal_target(
+    session: AsyncSession, order: Order, pg, service: UserService, run: _RenewalRun, payload: dict,
+) -> dict:
+    """Freeze the absolute target on the order, then write it to the panel."""
+    snapshot = run.snapshot
+    snapshot["target"] = payload
+    if not run.had_saved_target:
+        snapshot["prepared_at"] = int(time.time())
+    order.renewal_snapshot = json.dumps(snapshot)
+    await session.commit()
+    # From here a retry must reuse the saved target instead of recomputing it.
+    run.write_attempted = True
+    pg_user = None
+    if run.had_saved_target and payload["status"] == "on_hold":
+        pg_user = await _started_on_hold_renewal(pg, service, snapshot, payload)
+    if pg_user is None:
+        pg_user = await pg.modify_user_by_id(service.pg_user_id, payload)
+    return {**payload, **(pg_user if isinstance(pg_user, dict) else {})}
+
+
+async def _write_legacy_renewal(pg, service: UserService, plan: Plan, *, data_limit: int | None, expire: int | None):
+    if plan.pg_template_id:
+        return await pg.modify_user_with_template(service.pg_user_id, {"user_template_id": plan.pg_template_id})
+    return await pg.modify_user_by_id(
+        service.pg_user_id, {"status": "active", "data_limit": data_limit, "expire": expire},
+    )
+
+
+def _record_renewed_service(
+    service: UserService, plan: Plan, pg_user, run: _RenewalRun, *, data_limit: int | None, expire: int | None,
+) -> None:
+    from app.services.bot_user_admin import sync_service_quota_cache
+
+    sub_url = user_subscription_url(pg_user if isinstance(pg_user, dict) else None) or service.subscription_url
+    service.subscription_url = sub_url
+    service.subscription_token = extract_sub_token(sub_url)
+    service.plan_id = plan.id
+    service.notified_expire = False
+    service.notified_traffic = False
+    seconds = run.snapshot["duration_seconds"] if run.snapshot else int(getattr(plan, "duration_days", 0) or 0) * 86400
+    plan_days = seconds // 86400 or None
+    if isinstance(pg_user, dict):
+        sync_service_quota_cache(service, pg_user, fallback_duration_days=plan_days)
+    else:
+        sync_service_quota_cache(
+            service, expire_ts=expire, data_limit_bytes=data_limit, fallback_duration_days=plan_days,
+        )
+
+
+async def _notify_renewal_delivered(session: AsyncSession, order: Order) -> None:
+    try:
+        from app.services.loyalty import consume_loyalty_discount_for_order, on_order_delivered
+
+        await consume_loyalty_discount_for_order(session, order)
+        await session.commit()
+        await on_order_delivered(session, order)
+    except Exception:
+        logger.warning("loyalty on_order_delivered renew failed order=%s", order.id, exc_info=True)
+
+
+async def _release_failed_renewal(session: AsyncSession, order: Order, run: _RenewalRun, exc: Exception) -> bool:
+    """Undo the claim after a failed attempt; True when the panel outcome is unknown."""
+    from app.services.pasarguard import PasarGuardError
+
+    # A rejected request has a known outcome; transport and DB failures do not.
+    rejected = isinstance(exc, PasarGuardError) and exc.status_code in (400, 401, 403, 404, 422)
+    if rejected and not run.had_saved_target:
+        run.write_attempted = False
+        if run.snapshot is not None:
+            run.snapshot.pop("target", None)
+            order.renewal_snapshot = json.dumps(run.snapshot)
+    try:
+        if not session.is_active:
+            await session.rollback()
+        await _release_renewal_claim(session, order, run)
+    except Exception:
+        logger.warning("renewal claim release failed order=%s", order.id, exc_info=True)
+    return run.snapshot is not None and run.write_attempted
+
+
 async def apply_renewal(
     session: AsyncSession, order: Order, service: UserService, plan: Plan,
     *, reset_traffic: bool = False,
 ) -> Order:
-    order_id = int(order.id)
-    # Atomic renewal mutex (same pattern as deliver_order)
-    with session.no_autoflush:
-        claim = await session.execute(
-            update(Order)
-            .where(
-                Order.id == order_id,
-                Order.status == OrderStatus.PAID.value,
-            )
-            .values(status=OrderStatus.DELIVERING.value)
-            .execution_options(synchronize_session=False)
-        )
-    if claim.rowcount != 1:
-        await session.refresh(order)
-        if order.status == OrderStatus.DELIVERED.value:
-            return order
-        raise ValueError("سفارش تمدید قابل پردازش نیست")
-    await session.commit()
-    await session.refresh(order)
+    from app.services.service_renewals import RenewalPendingReview
 
-    async def _release_renewal_claim() -> None:
-        await session.execute(
-            update(Order)
-            .where(
-                Order.id == order_id,
-                Order.status == OrderStatus.DELIVERING.value,
-            )
-            .values(status=OrderStatus.PAID.value)
-            .execution_options(synchronize_session=False)
-        )
-        await session.commit()
-
-    try:
-        if order.reseller_id:
-            from app.services.pasarguard import get_pg_for_reseller
-
-            pg = await get_pg_for_reseller(session, int(order.reseller_id))
-        else:
-            pg = get_pg()
-        if not service.pg_user_id:
-            raise ValueError("service has no panel user")
-
-        pg_owner, pg_role_id = await _reseller_pg_link(session, order.reseller_id)
-        data_limit = int(plan.data_limit_gb * (1024**3)) if plan.data_limit_gb is not None else None
-        expire = None
-        if plan.duration_days:
-            import time
-
-            expire = int(time.time()) + plan.duration_days * 86400
-
-        if order.reseller_id:
-            try:
-                await assert_provision_renew(
-                    session,
-                    reseller_user_id=int(order.reseller_id),
-                    pg_admin_username=pg_owner,
-                    pg_role_id=pg_role_id,
-                    data_limit=data_limit,
-                    expire_ts=expire,
-                    from_template=bool(plan.pg_template_id),
-                )
-            except ProvisionError as e:
-                raise ValueError(e.message) from e
-
-        if plan.pg_template_id:
-            pg_user = await pg.modify_user_with_template(
-                service.pg_user_id,
-                {"user_template_id": plan.pg_template_id},
-            )
-        else:
-            pg_user = await pg.modify_user_by_id(
-                service.pg_user_id,
-                {
-                    "status": "active",
-                    "data_limit": data_limit,
-                    "expire": expire,
-                },
-            )
-        if reset_traffic:
-            await pg.reset_user_by_id(service.pg_user_id)
-        sub_url = (
-            user_subscription_url(pg_user if isinstance(pg_user, dict) else None)
-            or service.subscription_url
-        )
-        service.subscription_url = sub_url
-        service.subscription_token = extract_sub_token(sub_url)
-        service.plan_id = plan.id
-        service.notified_expire = False
-        service.notified_traffic = False
-        from app.services.bot_user_admin import sync_service_quota_cache
-
-        plan_days = int(getattr(plan, "duration_days", 0) or 0) or None
-        if isinstance(pg_user, dict):
-            sync_service_quota_cache(
-                service, pg_user, fallback_duration_days=plan_days
-            )
-        else:
-            sync_service_quota_cache(
-                service,
-                expire_ts=expire,
-                data_limit_bytes=data_limit,
-                fallback_duration_days=plan_days,
-            )
-        order.status = OrderStatus.DELIVERED.value
-        await session.commit()
-        await session.refresh(order)
-        try:
-            from app.services.loyalty import consume_loyalty_discount_for_order, on_order_delivered
-
-            await consume_loyalty_discount_for_order(session, order)
-            await session.commit()
-            await on_order_delivered(session, order)
-        except Exception:
-            logger.warning("loyalty on_order_delivered renew failed order=%s", order.id, exc_info=True)
+    snapshot_raw = getattr(order, "renewal_snapshot", None)
+    snapshot = json.loads(snapshot_raw) if snapshot_raw else None
+    if snapshot is not None:
+        await _assert_renewal_matches_service(session, order, service)
+    if not await _claim_renewal_order(session, order, service):
         return order
-    except Exception:
-        try:
-            await _release_renewal_claim()
-        except Exception:
-            pass
+
+    had_saved_target = bool(snapshot and snapshot.get("target"))
+    run = _RenewalRun(snapshot=snapshot, had_saved_target=had_saved_target, write_attempted=had_saved_target)
+    try:
+        pg = await _renewal_panel_client(session, order, service)
+        payload, data_limit, expire, gate_expire = await _renewal_targets(pg, service, plan, snapshot)
+        await _assert_renewal_provision_gate(session, order, plan, run, data_limit=data_limit, gate_expire=gate_expire)
+        if snapshot is not None:
+            pg_user = await _write_renewal_target(session, order, pg, service, run, payload)
+        else:
+            pg_user = await _write_legacy_renewal(pg, service, plan, data_limit=data_limit, expire=expire)
+            if reset_traffic:
+                await pg.reset_user_by_id(service.pg_user_id)
+        _record_renewed_service(service, plan, pg_user, run, data_limit=data_limit, expire=expire)
+        order.status = OrderStatus.DELIVERED.value
+        order.service_mutation_pending = False
+        await session.commit()
+        await session.refresh(order)
+        await _notify_renewal_delivered(session, order)
+        return order
+    except Exception as exc:
+        if await _release_failed_renewal(session, order, run, exc):
+            raise RenewalPendingReview() from exc
         raise

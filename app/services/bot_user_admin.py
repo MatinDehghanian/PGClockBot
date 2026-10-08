@@ -535,6 +535,13 @@ async def get_owned_service(
     return svc
 
 
+def _cache_quota_status(service: UserService, info: dict[str, Any]) -> None:
+    """Remember the panel status so audience queries need no live panel call."""
+    status = info.get("status")
+    if isinstance(status, str):
+        service.quota_status = status.strip().lower()[:32]
+
+
 def sync_service_quota_cache(
     service: UserService,
     info: dict[str, Any] | None = None,
@@ -560,6 +567,7 @@ def sync_service_quota_cache(
 
     touched = False
     if isinstance(info, dict):
+        _cache_quota_status(service, info)
         has_expire = "expire" in info or "expire_date" in info
         if has_expire:
             exp_raw = info["expire"] if "expire" in info else info.get("expire_date")

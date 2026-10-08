@@ -635,6 +635,7 @@ from app.bot.reply_keyboards import (  # noqa: E402
     reseller_apply_reply_keyboard,
     submenu_chrome_reply_keyboard,
     _service_action_entries,
+    REPLY_ACTION_SVC_CANCEL as REPLY_ACTION_SVC_CANCEL,
     service_actions_reply_keyboard,
     _review_submenu_entries,
     review_reply_keyboard,

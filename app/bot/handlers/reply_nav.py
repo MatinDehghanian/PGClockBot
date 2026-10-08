@@ -2067,6 +2067,7 @@ async def reply_main_nav(
         kb.REPLY_ACTION_REV_NO,
         kb.REPLY_ACTION_SVC_LINK,
         kb.REPLY_ACTION_SVC_GUIDE,
+        kb.REPLY_ACTION_SVC_CANCEL,
         kb.REPLY_ACTION_SVC_RENEW,
         kb.REPLY_ACTION_SVC_ADDON,
         kb.REPLY_ACTION_SVC_AUTO,
@@ -2721,6 +2722,7 @@ async def reply_main_nav(
     elif action in {
         kb.REPLY_ACTION_SVC_LINK,
         kb.REPLY_ACTION_SVC_GUIDE,
+        kb.REPLY_ACTION_SVC_CANCEL,
         kb.REPLY_ACTION_SVC_RENEW,
         kb.REPLY_ACTION_SVC_ADDON,
         kb.REPLY_ACTION_SVC_AUTO,
@@ -2741,6 +2743,9 @@ async def reply_main_nav(
         elif action == kb.REPLY_ACTION_SVC_GUIDE:
             cb_data = f"guide:svc:{int(svc_id)}"
             fn = svc_h.svc_guide
+        elif action == kb.REPLY_ACTION_SVC_CANCEL:
+            cb_data = f"svc:cancel:{int(svc_id)}"
+            fn = svc_h.svc_cancel
         elif action == kb.REPLY_ACTION_SVC_RENEW:
             cb_data = f"svc:renew:{int(svc_id)}"
             fn = svc_h.svc_renew

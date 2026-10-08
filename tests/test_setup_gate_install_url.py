@@ -73,14 +73,17 @@ class PgclockInstallHintTests(unittest.TestCase):
     def test_install_prints_setup_entry_url_helper(self):
         src = Path("pgclock.sh").read_text(encoding="utf-8")
         self.assertIn("setup_wizard_url", src)
-        self.assertIn("create_setup_gate_session", src)
+        # Re-printing the URL must reuse the live gate token instead of minting a new one.
+        self.assertIn("ensure_setup_gate_token", src)
+        self.assertNotIn("create_setup_gate_session", src)
         self.assertIn("build_setup_entry_url", src)
         self.assertIn("setup_gate.json", src)
         self.assertIn("Setup URL (one-time, 15 min)", src)
         self.assertIn('print_success "Install complete"', src)
         self.assertIn("?gate=", src)
         # Must not call is_setup_complete() when minting install URL (auto-flag side effect).
-        self.assertIn("Do NOT call is_setup_complete()", src)
+        self.assertIn("Do NOT call", " ".join(src.replace("#", " ").split()))
+        self.assertIn("is_setup_complete()", src)
         self.assertIn("ensure_public_web_host", src)
         self.assertIn('WEB_HOST="0.0.0.0"', src)
         # Install finish copy must stay English (CLI is English).

@@ -1468,6 +1468,9 @@ async def apply_service_reward(
     """Apply traffic/time to Pasarguard user (additive). Shared by redeem + lucky wheel."""
     import time
 
+    from app.services.service_cancellations import lock_service_mutation
+    await lock_service_mutation(session, service.id)
+
     from app.services.pasarguard import get_pg, get_pg_for_reseller
     from app.services.users import current_shop_reseller_id
 

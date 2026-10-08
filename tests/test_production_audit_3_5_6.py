@@ -44,17 +44,21 @@ class PaymentRaceSourceTests(unittest.TestCase):
         self.assertIn("order already paid", src)
 
     def test_apply_renewal_has_mutex_and_reseller_pg(self):
+        import ast
+
         src = (ROOT / "app/services/orders.py").read_text(encoding="utf-8")
-        # Find apply_renewal body
-        start = src.index("async def apply_renewal")
-        end = src.index("\nasync def ", start + 1) if "\nasync def " in src[start + 1 :] else len(src)
-        # crude: next def after apply_renewal
-        rest = src[start:]
-        body = rest[: rest.find("\nasync def ", 1)] if "\nasync def " in rest[1:] else rest
-        # Simpler substring checks in whole file for renew path
-        self.assertIn("get_pg_for_reseller", src)
-        self.assertIn("DELIVERING", src[start : start + 2500])
-        self.assertIn("_release_renewal_claim", src)
+        functions = {
+            node.name: ast.get_source_segment(src, node)
+            for node in ast.walk(ast.parse(src))
+            if isinstance(node, ast.AsyncFunctionDef)
+        }
+        # The atomic PAID -> DELIVERING claim and the reseller panel client are
+        # separate steps of the renewal; the orchestrator must call both.
+        self.assertIn("DELIVERING", functions["_claim_renewal_order"])
+        self.assertIn("get_pg_for_reseller", functions["_renewal_panel_client"])
+        self.assertIn("_claim_renewal_order", functions["apply_renewal"])
+        self.assertIn("_release_failed_renewal", functions["apply_renewal"])
+        self.assertIn("PAID", functions["_release_renewal_claim"])
 
 
 class DiscountReserveTests(unittest.TestCase):

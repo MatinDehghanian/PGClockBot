@@ -174,8 +174,9 @@ class AutomationTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(orders[0].note.endswith(":auto"))
         self.assertEqual(len(ledger), 1)
         self.assertIsNone(row.pending_order_id)
-        self.assertEqual(self.pg.resets, 1)
-        self.assertEqual(self.pg.info["used_traffic"], 0)
+        self.assertEqual(self.pg.resets, 0)
+        self.assertEqual(self.pg.info["used_traffic"], 10 * GB)
+        self.assertEqual(self.pg.info["data_limit"], 20 * GB)
 
     async def test_concurrent_ticks_do_not_double_buy(self):
         await self.enable()
@@ -566,7 +567,7 @@ class AutomationTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(row.renew_plan_id)
         self.assertIn("جدید انتخاب", self.bot.send_message.call_args.args[1])
 
-    async def test_normal_admin_recovery_keeps_auto_traffic_reset(self):
+    async def test_normal_admin_recovery_reuses_saved_renewal_target(self):
         from app.services.orders import fulfill_paid_order
 
         await self.enable()
@@ -582,7 +583,9 @@ class AutomationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(user.wallet_balance, 800)
         self.assertFalse(row.needs_review)
         self.assertIsNone(row.pending_order_id)
-        self.assertEqual(self.pg.resets, 1)
+        self.assertEqual(self.pg.resets, 0)
+        self.assertEqual(self.pg.info["data_limit"], 20 * GB)
+        self.assertEqual(self.pg.writes[0], self.pg.writes[1])
         self.assertEqual(len(ledger), 1)
 
     async def test_shop_wallet_cannot_spend_platform_balance(self):

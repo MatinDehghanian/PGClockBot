@@ -124,9 +124,9 @@ class SubLinkClaimTests(unittest.TestCase):
 
 
 class SchedulerPanelOnlyTests(unittest.TestCase):
-    def test_scheduler_starts_only_when_bot_online(self):
+    def test_telegram_jobs_attach_only_when_bot_online(self):
         src = Path("app/main.py").read_text(encoding="utf-8")
-        # start_scheduler must appear after successful get_me path
+        # Jobs that send notifications require a connected bot.
         self.assertIn("start_scheduler(bot)", src)
         idx_me = src.find("await bot.get_me()")
         idx_sched = src.find("start_scheduler(bot)")

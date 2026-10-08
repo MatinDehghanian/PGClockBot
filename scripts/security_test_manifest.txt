@@ -22,6 +22,7 @@ tests/test_cancel_tickets_isolation_3_6_6.py
 tests/test_client_ip_spoofing.py
 tests/test_csrf_body_replay_form_posts.py
 tests/test_csrf_csp_doctor_remaining.py
+tests/test_doctor_owner_identity.py
 tests/test_final_admin_reseller_security_audit.py
 tests/test_final_audit_2_0_2.py
 tests/test_final_audit_fixes.py
@@ -34,9 +35,11 @@ tests/test_inbox_platform_scope_leak.py
 tests/test_live_pg_menus.py
 tests/test_miniapp_security_audit.py
 tests/test_miniapp_service_addons.py
+tests/test_renewal_preview.py
 tests/test_on_hold_addon_quotas.py
 tests/test_on_hold_service_display.py
 tests/test_owner_bypass_guards.py
+tests/test_order_delivery_scope.py
 tests/test_pg_admin_web_gate.py
 tests/test_pg_groups_inbound_tag_allowlist.py
 tests/test_pg_outage_access_revoke.py
@@ -87,6 +90,8 @@ tests/test_setup_wizard_secret_masking.py
 tests/test_shop_isolation_3_5_4.py
 tests/test_shop_wallet_isolation.py
 tests/test_service_automation.py
+tests/test_customer_features.py
+tests/test_scheduler_background_jobs.py
 tests/test_sqlite_db_file_permissions.py
 tests/test_template_variable_validation.py
 tests/test_tenant_isolation.py
