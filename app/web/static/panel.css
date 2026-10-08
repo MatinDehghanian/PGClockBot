@@ -337,7 +337,8 @@ a.topbar-brand:focus-visible {
 .brand-ver-line {
   display: flex;
   align-items: center;
-  gap: var(--space-0);
+  /* Same gap as .topbar-version so dot↔version == version↔badge */
+  gap: var(--space-1);
   margin-top: var(--space-0);
   font-size: 11px;
   color: var(--muted-fg);
@@ -355,7 +356,8 @@ a.topbar-brand:focus-visible {
 .channel-badge {
   display: inline-flex;
   align-items: center;
-  margin-inline-start: var(--space-1);
+  /* Spacing comes only from parent flex gap (matches brand-ver-dot ↔ version). */
+  margin: 0;
   padding: 0.1em 0.45em;
   border-radius: var(--r-sm, 4px);
   border: 1px solid var(--border);

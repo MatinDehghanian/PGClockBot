@@ -46,6 +46,7 @@ def channel_label_fa(channel: object | None = None) -> str:
 
 
 def get_update_channel() -> str:
+    """Selected channel for update checks / next deploy (dropdown)."""
     try:
         from app.config import get_settings
 
@@ -54,8 +55,21 @@ def get_update_channel() -> str:
         return DEFAULT_CHANNEL
 
 
+def get_deployed_channel() -> str:
+    """Channel tip currently installed — header badge source of truth."""
+    try:
+        from app.config import get_settings
+
+        return normalize_channel(getattr(get_settings(), "deployed_channel", None))
+    except Exception:
+        return DEFAULT_CHANNEL
+
+
 def set_update_channel(channel: object | None) -> str:
-    """Persist UPDATE_CHANNEL in .env and clear settings + update caches."""
+    """Persist UPDATE_CHANNEL in .env and clear settings + update caches.
+
+    Does not change the header badge (see ``set_deployed_channel``).
+    """
     ch = normalize_channel(channel)
     from app.services.setup_wizard import update_env_keys
     from app.services.updates import clear_update_cache
@@ -63,6 +77,17 @@ def set_update_channel(channel: object | None) -> str:
     update_env_keys({"UPDATE_CHANNEL": ch})
     clear_update_cache()
     clear_alembic_tree_cache()
+    return ch
+
+
+def set_deployed_channel(channel: object | None) -> str:
+    """Persist DEPLOYED_CHANNEL after a successful channel deploy/rollback."""
+    ch = normalize_channel(channel)
+    from app.config import get_settings
+    from app.services.setup_wizard import update_env_keys
+
+    update_env_keys({"DEPLOYED_CHANNEL": ch})
+    get_settings.cache_clear()
     return ch
 
 
@@ -85,6 +110,7 @@ def github_release_notes_url(*, channel: object | None = None) -> str:
 
 
 def channel_context(channel: object | None = None) -> dict[str, Any]:
+    """Dropdown / update-check channel (preferred tip), not the header badge."""
     ch = normalize_channel(channel if channel is not None else get_update_channel())
     return {
         "channel": ch,
@@ -93,6 +119,15 @@ def channel_context(channel: object | None = None) -> dict[str, Any]:
             {"id": "main", "label": CHANNEL_LABELS_FA["main"]},
             {"id": "dev", "label": CHANNEL_LABELS_FA["dev"]},
         ],
+    }
+
+
+def badge_context(channel: object | None = None) -> dict[str, Any]:
+    """Header badge — reflects the actually deployed/running channel tip."""
+    ch = normalize_channel(channel if channel is not None else get_deployed_channel())
+    return {
+        "deployed_channel": ch,
+        "deployed_channel_label": channel_label_fa(ch),
     }
 
 

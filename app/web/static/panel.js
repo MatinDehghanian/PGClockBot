@@ -3645,16 +3645,6 @@ const root = document.getElementById('upd-root');
     if (busy) setBlockLeave(true);
   }
 
-  function syncChannelBadges(channel, label){
-    const text = label || (channel === 'dev' ? 'توسعه' : 'پایدار');
-    document.querySelectorAll('.channel-badge').forEach((el) => {
-      el.textContent = text;
-      el.classList.remove('channel-badge-main', 'channel-badge-dev');
-      el.classList.add(channel === 'dev' ? 'channel-badge-dev' : 'channel-badge-main');
-    });
-    if (root) root.dataset.channel = channel || 'main';
-  }
-
   function escHtml(s){
     return String(s == null ? '' : s)
       .replace(/&/g, '&amp;')
@@ -3750,7 +3740,8 @@ const root = document.getElementById('upd-root');
       else stateEl.textContent = info.label || '';
     }
     renderChangelog(data.changelog);
-    syncChannelBadges(data.channel || (channelSelect && channelSelect.value), chLabel);
+    // Header badge follows DEPLOYED_CHANNEL only — do not flip it on dropdown change.
+    if (root) root.dataset.channel = data.channel || (channelSelect && channelSelect.value) || 'main';
     setBusy(false);
   }
 
