@@ -17,6 +17,7 @@ import asyncio
 import base64
 import logging
 from datetime import datetime, timezone
+from typing import Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
@@ -596,7 +597,10 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
 
     @app.get("/api/mini/service/{service_id}/addons")
     async def mini_service_addons(
-        service_id: int, request: Request, session: AsyncSession = Depends(get_db)
+        service_id: int,
+        request: Request,
+        kind: Literal["volume", "duration"] | None = None,
+        session: AsyncSession = Depends(get_db),
     ):
         from app.services.service_addons import amount_label, list_packs
 
@@ -604,9 +608,10 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
         _require_commerce(user)
         await _addon_service(session, user, service_id)
         # Explicit platform scope, independent of any shop-bot ContextVar.
-        packs = await list_packs(session, None, active_only=True)
+        packs = await list_packs(session, None, active_only=True, kind=kind)
         return _no_store(
             {
+                "kind": kind,
                 "packs": [
                     {
                         "id": p.id,
@@ -638,8 +643,11 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
             body = await request.json()
             service_id = int(body.get("service_id"))
             pack_id = int(body.get("pack_id"))
+            kind = body.get("kind")
         except (AttributeError, TypeError, ValueError):
             raise HTTPException(400, "سرویس و بسته را انتخاب کنید")
+        if kind is not None and kind not in ("volume", "duration"):
+            raise HTTPException(400, "نوع بسته نامعتبر است")
         ui = await get_all_settings(session)
         if not on(ui.get("pay_wallet_enabled")):
             raise HTTPException(403, "پرداخت با کیف پول غیرفعال است")
@@ -647,6 +655,8 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
         pack = await session.get(ServiceAddonPack, pack_id)
         if not pack_matches_shop(pack, None):
             raise HTTPException(400, "بسته یافت نشد")
+        if kind is not None and pack.kind != kind:
+            raise HTTPException(400, "نوع بسته با بخش انتخاب‌شده مطابقت ندارد")
         await session.refresh(user)
         if int(pack.price or 0) > int(user.wallet_balance or 0):
             raise HTTPException(400, "موجودی کیف پول کافی نیست")
