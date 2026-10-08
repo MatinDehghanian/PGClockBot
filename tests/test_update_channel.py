@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.services.update_channel import (
+    badge_context,
     channel_label_fa,
     evaluate_migration_preflight,
     github_release_notes_url,
@@ -29,6 +30,22 @@ class NormalizeChannelTests(unittest.TestCase):
     def test_labels(self):
         self.assertEqual(channel_label_fa("main"), "پایدار")
         self.assertEqual(channel_label_fa("dev"), "توسعه")
+
+    def test_badge_follows_deployed_not_update_selection(self):
+        with patch("app.services.update_channel.get_deployed_channel", return_value="main"):
+            badge = badge_context()
+            self.assertEqual(badge["deployed_channel"], "main")
+            self.assertEqual(badge["deployed_channel_label"], "پایدار")
+        # Explicit deployed=dev still wins even if preferred update channel differs.
+        badge_dev = badge_context("dev")
+        self.assertEqual(badge_dev["deployed_channel"], "dev")
+        self.assertEqual(badge_dev["deployed_channel_label"], "توسعه")
+        self.assertNotEqual(badge_dev["deployed_channel_label"], channel_label_fa("main"))
+
+    def test_badge_dev_when_deployed_dev(self):
+        badge = badge_context("dev")
+        self.assertEqual(badge["deployed_channel"], "dev")
+        self.assertEqual(badge["deployed_channel_label"], "توسعه")
 
 
 class ChannelUrlTests(unittest.TestCase):
