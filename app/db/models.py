@@ -99,6 +99,7 @@ class BotUser(Base):
         ForeignKey("org_principals.id"), nullable=True, index=True
     )
     is_blocked: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_demo: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"), index=True)
     staff_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     # Staff color marker (fixed palette in app.services.color_tags).
     color_tag: Mapped[Optional[str]] = mapped_column(String(16), nullable=True, index=True)

@@ -17,7 +17,8 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import BotUser, Order, UserService
+from app.db.models import BotUser, UserService
+from app.services.home_overview import bot_panel_summary, reseller_shop_summary
 from app.services.safe_format import safe_format
 
 DOMAIN_DAILY_REPORT = "daily_report"
@@ -416,93 +417,19 @@ def preview_fill_map(actor: str = ACTOR_OWNER) -> dict[str, str]:
 
 
 async def _scoped_totals(session: AsyncSession, *, reseller_id: int | None) -> dict[str, int]:
-    if reseller_id is None:
-        from app.services.home_overview import bot_panel_summary
-
-        bs = await bot_panel_summary(session)
-        return {
-            "users_total": int(bs.get("users") or 0),
-            "orders_total": int(bs.get("orders") or 0),
-            "services_total": int(bs.get("services") or 0),
-            "revenue_total": int(bs.get("revenue") or 0),
-            "pending": int(bs.get("pending") or 0),
-            "tickets_open": int(bs.get("tickets") or 0),
-            "resellers_active": int(bs.get("resellers") or 0),
-        }
-
-    from app.db.models import Payment, PaymentStatus, Ticket
-
-    rid = int(reseller_id)
-    users_n = int(
-        (
-            await session.execute(
-                select(func.count()).select_from(BotUser).where(BotUser.reseller_id == rid)
-            )
-        ).scalar()
-        or 0
-    )
-    orders_n = int(
-        (
-            await session.execute(
-                select(func.count()).select_from(Order).where(Order.reseller_id == rid)
-            )
-        ).scalar()
-        or 0
-    )
-    services_n = int(
-        (
-            await session.execute(
-                select(func.count())
-                .select_from(UserService)
-                .join(BotUser, BotUser.id == UserService.bot_user_id)
-                .where(BotUser.reseller_id == rid)
-            )
-        ).scalar()
-        or 0
-    )
-    revenue_n = int(
-        (
-            await session.execute(
-                select(func.coalesce(func.sum(Order.amount), 0)).where(
-                    Order.status == "delivered", Order.reseller_id == rid
-                )
-            )
-        ).scalar()
-        or 0
-    )
-    pending_n = int(
-        (
-            await session.execute(
-                select(func.count())
-                .select_from(Payment)
-                .join(BotUser, BotUser.id == Payment.user_id)
-                .where(
-                    Payment.status == PaymentStatus.PENDING.value,
-                    Payment.receipt_file_id.is_not(None),
-                    BotUser.reseller_id == rid,
-                )
-            )
-        ).scalar()
-        or 0
-    )
-    tickets_n = int(
-        (
-            await session.execute(
-                select(func.count())
-                .select_from(Ticket)
-                .where(Ticket.status == "open", Ticket.reseller_id == rid)
-            )
-        ).scalar()
-        or 0
+    summary = (
+        await bot_panel_summary(session)
+        if reseller_id is None
+        else await reseller_shop_summary(session, int(reseller_id))
     )
     return {
-        "users_total": users_n,
-        "orders_total": orders_n,
-        "services_total": services_n,
-        "revenue_total": revenue_n,
-        "pending": pending_n,
-        "tickets_open": tickets_n,
-        "resellers_active": 0,
+        "users_total": summary["users"],
+        "orders_total": summary["orders"],
+        "services_total": summary["services"],
+        "revenue_total": summary["revenue"],
+        "pending": summary["pending"],
+        "tickets_open": summary["tickets"],
+        "resellers_active": summary.get("resellers", 0),
     }
 
 
@@ -521,7 +448,7 @@ async def _today_activity(session: AsyncSession, *, reseller_id: int | None) -> 
             select(func.count())
             .select_from(UserService)
             .join(BotUser, BotUser.id == UserService.bot_user_id)
-            .where(UserService.created_at >= since, BotUser.reseller_id.is_(None))
+            .where(UserService.created_at >= since, BotUser.reseller_id.is_(None), BotUser.is_demo.is_(False))
         )
     else:
         rid = int(reseller_id)
@@ -529,7 +456,7 @@ async def _today_activity(session: AsyncSession, *, reseller_id: int | None) -> 
             select(func.count())
             .select_from(UserService)
             .join(BotUser, BotUser.id == UserService.bot_user_id)
-            .where(UserService.created_at >= since, BotUser.reseller_id == rid)
+            .where(UserService.created_at >= since, BotUser.reseller_id == rid, BotUser.is_demo.is_(False))
         )
     services_new = int((await session.execute(svc_q)).scalar() or 0)
     return {

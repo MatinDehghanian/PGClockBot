@@ -162,6 +162,7 @@
               {% if row.has_alert %}<span class="alert-dot" title="اعلان سرویس" aria-label="اعلان سرویس"></span>{% endif %}
             </span>
             <span class="cell-name-tags">
+              {% if u.is_demo %}<span class="badge neutral">دمو</span>{% endif %}
               <span class="badge {% if u.role=='admin' %}role-admin{% elif u.role=='reseller' %}role-reseller{% else %}role-user{% endif %}">
                 {% if u.role=='admin' %}مدیر{% elif u.role=='reseller' %}نماینده{% else %}کاربر{% endif %}
               </span>

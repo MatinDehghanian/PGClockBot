@@ -7,12 +7,11 @@ import logging
 
 from fastapi import Depends, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import BotUser, Order, Payment, PaymentStatus, Plan, Ticket, UserService
 from app.services.host_gauges import gauges_json, local_host_gauges
-from app.services.home_overview import build_home_overview
+from app.services.home_overview import build_home_overview, reseller_shop_summary
 from app.services.shop_scope import empty_shop_stats, is_platform_admin, shop_owner_id
 from app.services.secret_box import reveal_bot_token
 
@@ -215,71 +214,8 @@ async def _staff_wallet_card(session: AsyncSession, staff: dict) -> dict | None:
 
 
 async def _reseller_shop_stats(session: AsyncSession, rid: int) -> dict[str, int]:
-    """Single round-trip aggregate counts for a reseller shop dashboard."""
-    users_expr = (
-        select(func.count()).select_from(BotUser).where(BotUser.reseller_id == rid).scalar_subquery()
-    )
-    orders_expr = (
-        select(func.count()).select_from(Order).where(Order.reseller_id == rid).scalar_subquery()
-    )
-    pending_expr = (
-        select(func.count())
-        .select_from(Payment)
-        .join(BotUser, BotUser.id == Payment.user_id)
-        .where(
-            Payment.status == PaymentStatus.PENDING.value,
-            Payment.receipt_file_id.is_not(None),
-            BotUser.reseller_id == rid,
-        )
-        .scalar_subquery()
-    )
-    services_expr = (
-        select(func.count())
-        .select_from(UserService)
-        .join(BotUser, BotUser.id == UserService.bot_user_id)
-        .where(BotUser.reseller_id == rid)
-        .scalar_subquery()
-    )
-    revenue_expr = (
-        select(func.coalesce(func.sum(Order.amount), 0))
-        .where(Order.status == "delivered", Order.reseller_id == rid)
-        .scalar_subquery()
-    )
-    plans_expr = (
-        select(func.count())
-        .select_from(Plan)
-        .where(Plan.is_active.is_(True), Plan.owner_reseller_id == rid)
-        .scalar_subquery()
-    )
-    tickets_expr = (
-        select(func.count())
-        .select_from(Ticket)
-        .join(BotUser, BotUser.id == Ticket.user_id)
-        .where(Ticket.status == "open", BotUser.reseller_id == rid)
-        .scalar_subquery()
-    )
-    row = (
-        await session.execute(
-            select(
-                users_expr,
-                orders_expr,
-                pending_expr,
-                services_expr,
-                revenue_expr,
-                plans_expr,
-                tickets_expr,
-            )
-        )
-    ).one()
-    return {
-        "users": int(row[0] or 0),
-        "orders": int(row[1] or 0),
-        "pending": int(row[2] or 0),
-        "services": int(row[3] or 0),
-        "revenue": int(row[4] or 0),
-        "plans": int(row[5] or 0),
-        "tickets": int(row[6] or 0),
-    }
+    """Return shop aggregates shared by the web panel, Mini App and reports."""
+    return await reseller_shop_summary(session, rid)
 
 
 def register_home_pages(app, *, render, require_admin, require_staff, get_db):

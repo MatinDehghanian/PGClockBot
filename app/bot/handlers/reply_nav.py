@@ -19,6 +19,7 @@ from app.bot import menu_nav as nav
 from app.bot.menu_nav import restore_main_reply, user_has_services
 from app.db.models import BotUser, Order, Role, UserService
 from app.services.formatting import format_message
+from app.services.home_overview import admin_customer_counts
 from app.services.users import get_all_settings
 from app.services.redact import user_safe_error
 
@@ -766,14 +767,8 @@ async def open_admin_users_hub(
         message, session, db_user, is_reseller_bot=is_reseller_bot
     ):
         return
-    from sqlalchemy import func
-    from app.db.models import Order
-
-    total = await session.scalar(select(func.count()).select_from(BotUser))
-    blocked = await session.scalar(
-        select(func.count()).select_from(BotUser).where(BotUser.is_blocked.is_(True))
-    ) or 0
-    orders = await session.scalar(select(func.count()).select_from(Order))
+    counts = await admin_customer_counts(session)
+    total, blocked, orders = counts["users"], counts["blocked"], counts["orders"]
     await nav.show_nav_keyboard(
         message,
         session,

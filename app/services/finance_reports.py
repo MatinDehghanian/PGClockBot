@@ -23,6 +23,7 @@ from app.db.models import (
     Ticket,
     UserService,
 )
+from app.services.demo_users import non_demo_customer
 from app.services.formatting import format_toman
 from app.services.home_overview import _period_since_utc, shop_period_stats
 from app.services.users_ops import DEFAULT_EXPIRE_DAYS
@@ -76,14 +77,17 @@ async def shop_ops_snapshot(
         user_scope = BotUser.reseller_id.is_(None)
         fail_scope = DeliveryFailure.reseller_id.is_(None)
         pay_scope = or_(
-            and_(Payment.is_wallet_topup.is_(True), BotUser.reseller_id.is_(None)),
+            and_(Payment.is_wallet_topup.is_(True), Payment.wallet_shop_id.is_(None)),
             and_(Payment.is_wallet_topup.is_(False), Order.reseller_id.is_(None)),
         )
     else:
         rid = int(reseller_id)
         user_scope = BotUser.reseller_id == rid
         fail_scope = DeliveryFailure.reseller_id == rid
-        pay_scope = BotUser.reseller_id == rid
+        pay_scope = or_(
+            and_(Payment.is_wallet_topup.is_(True), Payment.wallet_shop_id == rid),
+            and_(Payment.is_wallet_topup.is_(False), Order.reseller_id == rid),
+        )
 
     users_row = (
         await session.execute(
@@ -92,7 +96,7 @@ async def shop_ops_snapshot(
                 func.coalesce(func.sum(case((BotUser.is_blocked.is_(True), 1), else_=0)), 0),
             )
             .select_from(BotUser)
-            .where(user_scope)
+            .where(user_scope, BotUser.is_demo.is_(False))
         )
     ).one()
     out["total_users"] = int(users_row[0] or 0)
@@ -110,7 +114,7 @@ async def shop_ops_snapshot(
             await session.execute(
                 select(func.count())
                 .select_from(BotUser)
-                .where(user_scope, ~has_svc)
+                .where(user_scope, BotUser.is_demo.is_(False), ~has_svc)
             )
         ).scalar()
         or 0
@@ -126,6 +130,7 @@ async def shop_ops_snapshot(
             Payment.status == PaymentStatus.PENDING.value,
             Payment.receipt_file_id.is_not(None),
             pay_scope,
+            BotUser.is_demo.is_(False),
         )
     )
     out["pending_receipts"] = int((await session.execute(pending_q)).scalar() or 0)
@@ -134,7 +139,7 @@ async def shop_ops_snapshot(
         select(func.count())
         .select_from(Ticket)
         .join(BotUser, BotUser.id == Ticket.user_id)
-        .where(Ticket.status == "open")
+        .where(Ticket.status == "open", BotUser.is_demo.is_(False))
     )
     if reseller_id is None:
         tickets_q = tickets_q.where(
@@ -154,7 +159,8 @@ async def shop_ops_snapshot(
     fail_q = (
         select(func.count())
         .select_from(DeliveryFailure)
-        .where(DeliveryFailure.resolved_at.is_(None), fail_scope)
+        .join(Order, Order.id == DeliveryFailure.order_id)
+        .where(DeliveryFailure.resolved_at.is_(None), fail_scope, non_demo_customer(Order.user_id))
     )
     out["delivery_failures"] = int((await session.execute(fail_q)).scalar() or 0)
 
@@ -162,7 +168,7 @@ async def shop_ops_snapshot(
         select(func.count())
         .select_from(UserService)
         .join(BotUser, BotUser.id == UserService.bot_user_id)
-        .where(UserService.notified_traffic.is_(True), user_scope)
+        .where(UserService.notified_traffic.is_(True), user_scope, BotUser.is_demo.is_(False))
     )
     out["low_volume_services"] = int((await session.execute(low_q)).scalar() or 0)
 
@@ -194,6 +200,7 @@ async def shop_ops_snapshot(
                     UserService.created_at.is_not(None),
                     UserService.created_at >= scan_since,
                     user_scope,
+                    BotUser.is_demo.is_(False),
                 )
             )
         ).all()
@@ -238,6 +245,7 @@ async def shop_payment_method_breakdown(
                 Order.status == "delivered",
                 Order.created_at >= since,
                 scope,
+                non_demo_customer(Order.user_id),
             )
             .group_by(method_col)
             .order_by(func.count().desc())

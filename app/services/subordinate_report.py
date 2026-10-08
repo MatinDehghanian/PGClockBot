@@ -127,7 +127,7 @@ async def collect_subordinate_stats(
                     select(func.count())
                     .select_from(UserService)
                     .join(BotUser, BotUser.id == UserService.bot_user_id)
-                    .where(BotUser.reseller_id == rid)
+                    .where(BotUser.reseller_id == rid, BotUser.is_demo.is_(False))
                 )
             ).scalar()
             or 0
