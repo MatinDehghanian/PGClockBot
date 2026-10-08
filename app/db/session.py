@@ -154,6 +154,9 @@ def _migrate_sqlite_legacy(sync_conn) -> None:
     insp = inspect(sync_conn)
     if not insp.has_table("plans"):
         return
+    from app.db.gift_codes_schema import upgrade_gift_codes
+
+    upgrade_gift_codes(sync_conn)
     from app.db.models import PaymentReviewMessage, ServiceAutomation
 
     ServiceAutomation.__table__.create(sync_conn, checkfirst=True)

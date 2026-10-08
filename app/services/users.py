@@ -1800,6 +1800,16 @@ async def delete_bot_user(
     )
     await session.execute(delete(TermsAcceptance).where(TermsAcceptance.bot_user_id == user_id))
 
+    from app.db.models import ChargeCodeUse
+    from app.services.gift_codes import release_gift_discount
+
+    for unpaid in (await session.execute(select(Order).where(
+        Order.user_id == user_id,
+        Order.status.in_(("pending", "awaiting_receipt", "awaiting_approval", "rejected", "cancelled")),
+        Order.discount_code.is_not(None),
+    ))).scalars().all():
+        await release_gift_discount(session, unpaid)
+    await session.execute(delete(ChargeCodeUse).where(ChargeCodeUse.user_id == user_id))
     await session.execute(delete(Payment).where(Payment.user_id == user_id))
     await session.execute(delete(Order).where(Order.user_id == user_id))
     await session.execute(delete(UserService).where(UserService.bot_user_id == user_id))

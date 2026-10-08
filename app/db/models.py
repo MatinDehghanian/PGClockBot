@@ -1132,13 +1132,20 @@ class DeliveryFailure(Base):
 
 
 class ChargeCode(Base):
-    """Wallet gift / charge codes (fixed toman credit)."""
+    """Shop-scoped wallet gifts and checkout discount codes."""
 
     __tablename__ = "charge_codes"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     code: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     amount: Mapped[int] = mapped_column(Integer, default=0)  # toman
+    kind: Mapped[str] = mapped_column(String(16), default="wallet", server_default="wallet")
+    percent: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    max_discount_toman: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    max_uses_per_user: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    first_purchase_only: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    purchase_types: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     max_uses: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     used_count: Mapped[int] = mapped_column(Integer, default=0)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -1146,6 +1153,20 @@ class ChargeCode(Base):
         ForeignKey("bot_users.id"), nullable=True, index=True
     )
     note: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ChargeCodeUse(Base):
+    """Reservations count towards limits until an unpaid order is released."""
+
+    __tablename__ = "charge_code_uses"
+    __table_args__ = (Index("ix_charge_code_uses_code_user_status", "charge_code_id", "user_id", "status"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    charge_code_id: Mapped[int] = mapped_column(ForeignKey("charge_codes.id"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"))
+    order_id: Mapped[Optional[int]] = mapped_column(ForeignKey("orders.id"), nullable=True, index=True)
+    status: Mapped[str] = mapped_column(String(16), default="reserved")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

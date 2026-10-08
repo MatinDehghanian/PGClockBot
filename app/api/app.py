@@ -2535,6 +2535,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 pg_roles = []
 
         gift_codes: list = []
+        gift_code_details: dict = {}
         try:
             from app.db.models import ChargeCode
 
@@ -2545,6 +2546,9 @@ def create_api_app(lifespan=None) -> FastAPI:
                 else:
                     q = q.where(ChargeCode.reseller_id == int(rid))
                 gift_codes = list((await session.execute(q)).scalars().all())
+                from app.services.gift_codes import describe_code
+
+                gift_code_details = {c.id: describe_code(c) for c in gift_codes}
         except Exception:
             import logging
 
@@ -2604,6 +2608,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "feature_perms": feature_perms,
                 "pg_roles": pg_roles,
                 "gift_codes": gift_codes,
+                "gift_code_details": gift_code_details,
                 "plan_categories": plan_categories,
                 "plan_category_map": plan_category_map,
                 "reseller_plan_category_map": reseller_plan_category_map,

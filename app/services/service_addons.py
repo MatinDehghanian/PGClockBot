@@ -463,6 +463,9 @@ async def apply_service_addon(
                 "addon deliver seal failed after PG apply order=%s", order_id
             )
             raise ValueError("ثبت تحویل افزونه ناموفق بود")
+        from app.services.loyalty import consume_loyalty_discount_for_order
+
+        await consume_loyalty_discount_for_order(session, order)
         await session.commit()
         await session.refresh(order)
         return order
@@ -485,6 +488,9 @@ async def apply_service_addon(
                     .values(status=OrderStatus.DELIVERED.value)
                     .execution_options(synchronize_session=False)
                 )
+                from app.services.loyalty import consume_loyalty_discount_for_order
+
+                await consume_loyalty_discount_for_order(session, order)
                 await session.commit()
             except Exception:
                 log.exception(

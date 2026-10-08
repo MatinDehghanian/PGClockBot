@@ -13,6 +13,7 @@ from sqlalchemy.orm import selectinload
 
 from app.db.models import (
     BotUser,
+    ChargeCode,
     DiscountCode,
     Order,
     OrderStatus,
@@ -389,12 +390,18 @@ def _shop_reseller_id() -> int | None:
     return int(rid) if rid else None
 
 
-async def apply_discount(session: AsyncSession, code: str | None, amount: int) -> tuple[int, str | None]:
+async def apply_discount(session: AsyncSession, code: str | None, amount: int, *, order: Order | None = None) -> tuple[int, str | None]:
     """Read-only discount preview (does not consume uses)."""
     if not code:
         return 0, None
+    normalized = "".join(code.split()).upper()
+    gift = (await session.execute(select(ChargeCode).where(ChargeCode.code == normalized))).scalar_one_or_none()
+    if gift:
+        from app.services.gift_codes import preview_gift_discount
+
+        return await preview_gift_discount(session, gift, amount, order=order, shop_id=_shop_reseller_id())
     result = await session.execute(
-        select(DiscountCode).where(DiscountCode.code == code.upper(), DiscountCode.is_active.is_(True))
+        select(DiscountCode).where(DiscountCode.code == normalized, DiscountCode.is_active.is_(True))
     )
     row = result.scalar_one_or_none()
     if not row:
@@ -419,40 +426,53 @@ async def apply_discount_to_order(
         raise ValueError("این سفارش قابل تخفیف نیست")
     if order.discount_code:
         raise ValueError("روی این سفارش قبلاً تخفیف اعمال شده")
-    # Base amount before any discount
-    base = int(order.amount) + int(order.discount_amount or 0)
-    normalized = (code or "").strip().upper()
-    if normalized.startswith("LOY"):
-        from app.services.loyalty import reserve_loyalty_discount
+    normalized = "".join((code or "").split()).upper()
+    async with session.begin_nested():
+        # Serialize two discount submissions for the same payable order.
+        claim = await session.execute(update(Order).where(
+            Order.id == order.id, Order.discount_code.is_(None),
+            Order.status.in_((OrderStatus.PENDING.value, OrderStatus.REJECTED.value)),
+        ).values(amount=Order.amount).execution_options(synchronize_session=False))
+        if claim.rowcount != 1:
+            raise ValueError("این سفارش قابل تخفیف نیست یا قبلاً تخفیف گرفته است")
+        await session.refresh(order)
+        base = int(order.amount) + int(order.discount_amount or 0)
+        if normalized.startswith("LOY"):
+            from app.services.loyalty import reserve_loyalty_discount
 
-        discount, used_code = await reserve_loyalty_discount(
-            session,
-            user_id=int(order.user_id),
-            code=normalized,
-            order=order,
-            base_amount=base,
-        )
-    else:
-        discount, used_code = await _reserve_discount_code(session, code, base)
-    if not used_code:
-        raise ValueError("کد تخفیف نامعتبر است")
-    order.discount_amount = discount
-    order.discount_code = used_code
-    order.amount = max(0, base - discount)
+            discount, used_code = await reserve_loyalty_discount(
+                session, user_id=int(order.user_id), code=normalized,
+                order=order, base_amount=base,
+            )
+        else:
+            discount, used_code = await _reserve_discount_code(session, code, base, order=order)
+        if not used_code:
+            raise ValueError("کد تخفیف نامعتبر است")
+        order.discount_amount = discount
+        order.discount_code = used_code
+        order.amount = max(0, base - discount)
+        await session.flush()
     await session.commit()
     await session.refresh(order)
     return order
 
 
 async def _reserve_discount_code(
-    session: AsyncSession, code: str | None, amount: int
+    session: AsyncSession, code: str | None, amount: int, *, order: Order | None = None
 ) -> tuple[int, str | None]:
     """Atomically reserve one use at order creation (prevents max_uses races)."""
     if not code:
         return 0, None
     from sqlalchemy import or_
 
-    normalized = code.upper().strip()
+    normalized = "".join(code.split()).upper()
+    gift = (await session.execute(select(ChargeCode).where(ChargeCode.code == normalized))).scalar_one_or_none()
+    if gift:
+        from app.services.gift_codes import reserve_gift_discount
+
+        if order is None:
+            return 0, None
+        return await reserve_gift_discount(session, gift, order, amount)
     result = await session.execute(
         select(DiscountCode).where(DiscountCode.code == normalized, DiscountCode.is_active.is_(True))
     )
@@ -507,18 +527,24 @@ async def create_order(
         except IntegrityError as exc:
             await session.rollback()
             raise ValueError("پلن تست رایگان را قبلاً دریافت کرده‌اید") from exc
-    discount, used_code = await _reserve_discount_code(session, discount_code, plan.price)
     order = Order(
         user_id=user_id,
         plan_id=plan.id,
         reseller_id=shop_rid,
-        amount=max(0, plan.price - discount),
-        discount_amount=discount,
-        discount_code=used_code,
+        amount=int(plan.price),
+        discount_amount=0,
         status=OrderStatus.PENDING.value,
     )
     session.add(order)
     await session.flush()
+    try:
+        discount, used_code = await _reserve_discount_code(session, discount_code, plan.price, order=order)
+    except ValueError:
+        await session.rollback()
+        raise
+    order.amount = max(0, plan.price - discount)
+    order.discount_amount = discount
+    order.discount_code = used_code
     if plan.is_trial:
         shop_key = str(int(shop_rid)) if shop_rid is not None else "platform"
         row = (
@@ -645,18 +671,25 @@ async def create_custom_order(
     session.add(plan)
     await session.flush()
 
-    discount, used_code = await _reserve_discount_code(session, discount_code, amount)
     order = Order(
         user_id=user_id,
         plan_id=plan.id,
         reseller_id=shop_rid,
-        amount=max(0, amount - discount),
-        discount_amount=discount,
-        discount_code=used_code,
+        amount=amount,
+        discount_amount=0,
         status=OrderStatus.PENDING.value,
         note="custom",
     )
     session.add(order)
+    await session.flush()
+    try:
+        discount, used_code = await _reserve_discount_code(session, discount_code, amount, order=order)
+    except ValueError:
+        await session.rollback()
+        raise
+    order.amount = max(0, amount - discount)
+    order.discount_amount = discount
+    order.discount_code = used_code
     await session.commit()
     await session.refresh(order)
     return order
@@ -1077,10 +1110,15 @@ async def revert_failed_free_delivery(session: AsyncSession, order: Order) -> No
     await session.commit()
 
 
-async def _release_discount_code(session: AsyncSession, code: str | None) -> None:
+async def _release_discount_code(session: AsyncSession, code: str | None, *, order: Order | None = None) -> None:
     """Best-effort decrement of a previously reserved discount use."""
     if not code:
         return
+    if order is not None:
+        from app.services.gift_codes import release_gift_discount
+
+        if await release_gift_discount(session, order):
+            return
     normalized = code.upper().strip()
     if normalized.startswith("LOY"):
         # Loyalty path needs the order context — handled by release_loyalty_discount_for_order
@@ -1106,7 +1144,7 @@ async def _release_order_discount(session: AsyncSession, order: Order) -> None:
 
         await release_loyalty_discount_for_order(session, order)
     else:
-        await _release_discount_code(session, code)
+        await _release_discount_code(session, code, order=order)
     order.amount = int(order.amount) + int(order.discount_amount or 0)
     order.discount_amount = 0
     order.discount_code = None
@@ -1273,7 +1311,7 @@ async def cancel_stale_pending_orders(
 
                 await release_loyalty_discount_for_order(session, order)
             else:
-                await _release_discount_code(session, order.discount_code)
+                await _release_discount_code(session, order.discount_code, order=order)
         # Always attempt trial release (create_order never sets note="trial:…").
         await _release_trial_claim_for_order(session, order)
         # Unblock reseller apply if this was an unpaid agency checkout.
@@ -1778,7 +1816,7 @@ async def cancel_order(session: AsyncSession, order: Order, *, note: str = "") -
         if str(order.discount_code).upper().startswith("LOY"):
             await release_loyalty_discount_for_order(session, order)
         else:
-            await _release_discount_code(session, order.discount_code)
+            await _release_discount_code(session, order.discount_code, order=order)
     await _release_trial_claim_for_order(session, order)
     if (order.note or "").startswith("reseller_app:"):
         from app.services.resellers import cancel_application_for_order
