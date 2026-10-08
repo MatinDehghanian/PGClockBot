@@ -3991,6 +3991,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             return {"ok": False, "error": "کانال آپدیت مشخص نشده"}
         channel = set_update_channel(raw)
         clear_update_cache()
+        # Always re-check GitHub for the newly selected channel tip.
         ctx = await update_page_context(force_check=True)
         return {
             "ok": True,
@@ -4001,6 +4002,9 @@ def create_api_app(lifespan=None) -> FastAPI:
             "migration_preflight": ctx.get("migration_preflight"),
             "can_start_update": ctx.get("can_start_update"),
             "local_version": ctx.get("local_version"),
+            "changelog": ctx.get("changelog"),
+            "channel_check_message": ctx.get("channel_check_message"),
+            "channel_check_tone": ctx.get("channel_check_tone"),
             "normalized": normalize_channel(raw),
         }
 

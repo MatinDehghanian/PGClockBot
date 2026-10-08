@@ -1179,6 +1179,26 @@ async def update_page_context(*, force_check: bool = False) -> dict[str, Any]:
     preflight = await migration_preflight(channel, force=force_check)
     ch_ctx = channel_context(channel)
     can_start = bool(info.get("update_available")) and not bool(preflight.get("blocked"))
+    changelog = changelog_for_update_page(
+        local=local, remote=remote, remote_notes=remote_notes
+    )
+    ch_label = ch_ctx["channel_label"]
+    if preflight.get("blocked"):
+        check_message = str(preflight.get("message") or preflight.get("label") or "")
+        check_tone = "err"
+    elif info.get("update_available") and remote:
+        check_message = (
+            f"برای کانال {ch_label} آپدیت جدید هست: {local} → {remote}"
+        )
+        check_tone = "warn"
+    elif info.get("checked"):
+        check_message = (
+            f"برای کانال {ch_label} آپدیت جدیدی نیست — روی آخرین نسخه هستید."
+        )
+        check_tone = "ok"
+    else:
+        check_message = str(info.get("label") or "بررسی آپدیت ناموفق")
+        check_tone = "warn"
     return {
         "update_info": info,
         "update": info,  # sidebar badge on settings tab
@@ -1189,12 +1209,12 @@ async def update_page_context(*, force_check: bool = False) -> dict[str, Any]:
         "rollback_versions": rollback_versions,
         "can_rollback": bool(rollback_versions),
         "show_ops": show_ops,
-        "changelog": changelog_for_update_page(
-            local=local, remote=remote, remote_notes=remote_notes
-        ),
+        "changelog": changelog,
         "update_channel": ch_ctx["channel"],
-        "update_channel_label": ch_ctx["channel_label"],
+        "update_channel_label": ch_label,
         "update_channels": ch_ctx["channels"],
         "migration_preflight": preflight,
         "can_start_update": can_start,
+        "channel_check_message": check_message,
+        "channel_check_tone": check_tone,
     }
