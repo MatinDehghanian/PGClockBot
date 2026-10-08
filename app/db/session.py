@@ -154,6 +154,10 @@ def _migrate_sqlite_legacy(sync_conn) -> None:
     insp = inspect(sync_conn)
     if not insp.has_table("plans"):
         return
+    from app.db.models import PaymentReviewMessage, ServiceAutomation
+
+    ServiceAutomation.__table__.create(sync_conn, checkfirst=True)
+    PaymentReviewMessage.__table__.create(sync_conn, checkfirst=True)
     cols = {c["name"] for c in insp.get_columns("plans")}
     if "pg_group_ids" not in cols:
         sync_conn.execute(sql_text("ALTER TABLE plans ADD COLUMN pg_group_ids VARCHAR(255)"))

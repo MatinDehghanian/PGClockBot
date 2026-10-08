@@ -250,6 +250,21 @@ class Payment(Base):
     settlements: Mapped[list["PaymentSettlement"]] = relationship(back_populates="payment")
 
 
+class PaymentReviewMessage(Base):
+    """Every staff copy of a payment review card, including photo captions."""
+
+    __tablename__ = "payment_review_messages"
+
+    bot_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    chat_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    message_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    payment_id: Mapped[int] = mapped_column(
+        ForeignKey("payments.id", ondelete="CASCADE"), index=True
+    )
+    text: Mapped[str] = mapped_column(Text)
+    is_photo: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
 class SettlementStatus(str, Enum):
     """Lifecycle of an external settlement attempt (PSP / card-auto)."""
 
@@ -361,6 +376,38 @@ class UserService(Base):
         back_populates="services", foreign_keys=[bot_user_id]
     )
     plan: Mapped[Optional["Plan"]] = relationship()
+
+
+class ServiceAutomation(Base):
+    """Per-service wallet consent; deleted catalog choices become NULL."""
+
+    __tablename__ = "service_automations"
+
+    service_id: Mapped[int] = mapped_column(
+        ForeignKey("user_services.id", ondelete="CASCADE"), primary_key=True
+    )
+    shop_id: Mapped[Optional[int]] = mapped_column(ForeignKey("bot_users.id"), nullable=True)
+    renew_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    renew_plan_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("plans.id", ondelete="SET NULL"), nullable=True
+    )
+    duration_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    duration_pack_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("service_addon_packs.id", ondelete="SET NULL"), nullable=True
+    )
+    volume_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    volume_pack_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("service_addon_packs.id", ondelete="SET NULL"), nullable=True
+    )
+    renew_notice: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    duration_notice: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    volume_notice: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    # Persist the order with the debit so a restart cannot buy the same cycle again.
+    pending_order_id: Mapped[Optional[int]] = mapped_column(ForeignKey("orders.id"), nullable=True)
+    pending_action: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    needs_review: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    lock_token: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    locked_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class Ticket(Base):

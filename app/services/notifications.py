@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from aiogram import Bot
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -212,6 +212,7 @@ async def _send_to_chats(
     *,
     markup: InlineKeyboardMarkup | None = None,
     photo: str | None = None,
+    sent_messages: list[Message] | None = None,
 ) -> int:
     import asyncio
     import logging
@@ -239,7 +240,7 @@ async def _send_to_chats(
         nonlocal ok
         try:
             if photo:
-                await bot.send_photo(
+                message = await bot.send_photo(
                     admin_id,
                     photo=photo,
                     caption=text[:1024],
@@ -247,20 +248,24 @@ async def _send_to_chats(
                     parse_mode="HTML",
                 )
             else:
-                await bot.send_message(
+                message = await bot.send_message(
                     admin_id, text, reply_markup=markup, parse_mode="HTML"
                 )
             async with lock:
                 ok += 1
+                if sent_messages is not None:
+                    sent_messages.append(message)
         except Exception:
             log.warning("notify send failed chat_id=%s", admin_id, exc_info=True)
             if photo:
                 try:
-                    await bot.send_message(
+                    message = await bot.send_message(
                         admin_id, text, reply_markup=markup, parse_mode="HTML"
                     )
                     async with lock:
                         ok += 1
+                        if sent_messages is not None:
+                            sent_messages.append(message)
                 except Exception:
                     pass
 
@@ -424,6 +429,25 @@ async def _dispatch_dual_notify(
 
     log = logging.getLogger(__name__)
     rid: int | None = None
+
+    async def _send(send_bot: Bot, targets: list[int]) -> int:
+        sent_messages: list[Message] = []
+        kwargs = {"markup": markup, "photo": photo}
+        if key == "notify_pending_approval" and payment is not None:
+            kwargs["sent_messages"] = sent_messages
+        count = await _send_to_chats(send_bot, targets, text, **kwargs)
+        if sent_messages:
+            from app.services.payment_review_messages import (
+                remember_review_message, sync_review_messages,
+            )
+
+            for message in sent_messages:
+                await remember_review_message(session, payment.id, send_bot, message)
+            await session.commit()
+            # Another admin may have acted while fan-out was still sending.
+            await sync_review_messages(session, payment.id, bot=send_bot)
+        return count
+
     if shop and key not in PLATFORM_ONLY_NOTIFY_KEYS:
         rid = await _resolve_shop_reseller_id(
             session,
@@ -459,9 +483,7 @@ async def _dispatch_dual_notify(
             log.warning("shop notify: no bot for rid=%s key=%s", rid, key)
             return 0
         try:
-            return await _send_to_chats(
-                shop_bot, targets, text, markup=markup, photo=photo
-            )
+            return await _send(shop_bot, targets)
         finally:
             if should_close:
                 try:
@@ -471,13 +493,7 @@ async def _dispatch_dual_notify(
 
     # --- Platform-only customers / wallet / account edits ---
     if platform and await notify_enabled(session, key):
-        return await _send_to_chats(
-            bot,
-            list(get_settings().admin_ids),
-            text,
-            markup=markup,
-            photo=photo,
-        )
+        return await _send(bot, list(get_settings().admin_ids))
     return 0
 
 

@@ -22,6 +22,127 @@ from app.services.service_live_info import fetch_live_service_info
 router = Router(name="services")
 
 
+async def _show_automation(callback, session, db_user, service_id):
+    from app.services.service_automation import (
+        ACTIONS, CHOICE_FIELDS, LABELS, automation_choices,
+        get_automation, owned_automation_service, selected_choice,
+    )
+    service = await owned_automation_service(session, db_user, service_id)
+    row = await get_automation(session, service)
+    choices = await automation_choices(session)
+    await session.commit()
+    lines = [
+        f"سرویس: <b>{html.escape(service.pg_username)}</b>",
+        "هزینه با قیمت فعلی پلن یا بسته، فقط از کیف پول همین فروشگاه پرداخت می‌شود.",
+        "تمدید کامل پس از پایان زمان یا حجم انجام می‌شود. اگر افزایش خودکار همان مورد روشن باشد، بسته انتخاب‌شده اولویت دارد.",
+    ]
+    buttons = []
+    if row.needs_review:
+        lines.append(f"⚠️ سفارش #{row.pending_order_id} نیاز به بررسی پشتیبانی دارد؛ اجرای خودکار متوقف است.")
+    for action in ACTIONS:
+        enabled = getattr(row, f"{action}_enabled")
+        choice_id = getattr(row, CHOICE_FIELDS[action])
+        # Keep stale settings reachable even after the last pack is removed.
+        if action != "renew" and not (choices[action] or enabled or choice_id or getattr(row, f"{action}_notice")):
+            continue
+        choice = await selected_choice(session, row, action)
+        label = f"{html.escape(choice.name)} — {format_toman(choice.price)}" if choice else "انتخاب نشده / در دسترس نیست"
+        lines.append(f"\n{'✅' if enabled else '▫️'} <b>{LABELS[action]}</b>\n{label}")
+        if enabled and not choice:
+            lines.append("⚠️ پلن یا بسته قبلی حذف یا غیرفعال شده؛ گزینه جدید انتخاب کنید.")
+        buttons.append([
+            InlineKeyboardButton(text=f"{'☑️' if enabled else '⬜️'} {LABELS[action]}", callback_data=f"svc:autotoggle:{service_id}:{action}"),
+            InlineKeyboardButton(text="انتخاب پلن" if action == "renew" else "انتخاب بسته", callback_data=f"svc:autopick:{service_id}:{action}"),
+        ])
+    lines.append("\nبا روشن کردن هر گزینه، خرید تکرارشونده از کیف پول را فعال می‌کنید. موجودی ناکافی باعث خرید نمی‌شود؛ پس از شارژ دوباره تلاش می‌شود.")
+    buttons.append([InlineKeyboardButton(text="بازگشت به سرویس", callback_data=f"svc:view:{service_id}")])
+    if callback.message:
+        await safe_edit_text(callback.message, format_message("⚙️ تنظیمات خودکار سرویس", "\n".join(lines)), reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons))
+
+
+@router.callback_query(F.data.startswith("svc:auto:"))
+async def svc_auto(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    try:
+        service_id = int(callback.data.split(":")[-1])
+        await _show_automation(callback, session, db_user, service_id)
+    except ValueError as exc:
+        await callback.answer(str(exc), show_alert=True)
+        return
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("svc:autopick:"))
+async def svc_auto_pick(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    from app.services.service_automation import ACTIONS, LABELS, automation_choices, owned_automation_service
+    try:
+        _, _, service_id, action = callback.data.split(":")
+        service_id = int(service_id)
+        if action not in ACTIONS:
+            raise ValueError("تنظیم نامعتبر است")
+        await owned_automation_service(session, db_user, service_id)
+        choices = (await automation_choices(session))[action]
+        if not choices:
+            raise ValueError("پلن یا بسته فعالی موجود نیست")
+    except ValueError as exc:
+        await callback.answer(str(exc), show_alert=True)
+        return
+    from app.services.service_addons import amount_label
+    buttons = [[InlineKeyboardButton(
+        text=f"{p.name}{' — +' + amount_label(p) if action != 'renew' else ''} — {format_toman(p.price)}",
+        callback_data=f"svc:autoset:{service_id}:{action}:{p.id}",
+    )] for p in choices]
+    buttons.append([InlineKeyboardButton(text="بازگشت به تنظیمات", callback_data=f"svc:auto:{service_id}")])
+    await callback.answer()
+    if callback.message:
+        await safe_edit_text(callback.message, format_message(
+            f"⚙️ {LABELS[action]}",
+            "با انتخاب گزینه، این قابلیت روشن می‌شود و در هر بار پایان زمان یا حجم، هزینه از کیف پول پرداخت خواهد شد.",
+        ), reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons))
+
+
+@router.callback_query(F.data.startswith("svc:autotoggle:"))
+async def svc_auto_toggle(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    from app.services.service_automation import (
+        ACTIONS, configure_automation, get_automation,
+        owned_automation_service, selected_choice,
+    )
+    try:
+        _, _, service_id, action = callback.data.split(":")
+        service_id = int(service_id)
+        if action not in ACTIONS:
+            raise ValueError("تنظیم نامعتبر است")
+        service = await owned_automation_service(session, db_user, service_id)
+        row = await get_automation(session, service)
+        enabled = not getattr(row, f"{action}_enabled")
+        if enabled and await selected_choice(session, row, action) is None:
+            await session.commit()
+            # Open selection without enabling an incomplete configuration.
+            from app.bot.handlers.reply_nav import _SoftCallback
+            await svc_auto_pick(_SoftCallback(callback.message, f"svc:autopick:{service_id}:{action}"), session, db_user)
+            await callback.answer()
+            return
+        await configure_automation(session, db_user, service_id, action, enabled=enabled)
+        await _show_automation(callback, session, db_user, service_id)
+    except ValueError as exc:
+        await callback.answer(str(exc), show_alert=True)
+        return
+    await callback.answer("ذخیره شد")
+
+
+@router.callback_query(F.data.startswith("svc:autoset:"))
+async def svc_auto_set(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    from app.services.service_automation import configure_automation
+    try:
+        _, _, service_id, action, choice_id = callback.data.split(":")
+        service_id = int(service_id)
+        await configure_automation(session, db_user, service_id, action, enabled=True, choice_id=int(choice_id))
+        await _show_automation(callback, session, db_user, service_id)
+    except ValueError as exc:
+        await callback.answer(str(exc), show_alert=True)
+        return
+    await callback.answer("انتخاب شد و قابلیت روشن شد")
+
+
 @router.callback_query(F.data == "svc:list")
 async def svc_list(
     callback: CallbackQuery,

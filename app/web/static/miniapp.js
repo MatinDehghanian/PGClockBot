@@ -370,10 +370,12 @@
           <button type="button" class="btn secondary sm" data-addons="${Number(s.id)}" data-addon-kind="volume">افزایش حجم</button>
           <button type="button" class="btn secondary sm" data-addons="${Number(s.id)}" data-addon-kind="duration">افزایش زمان</button>
         ` : ""}
+        <button type="button" class="btn ghost sm" data-automation="${Number(s.id) || 0}">⚙️ تنظیمات خودکار</button>
       </div>
       <div class="qr-box" data-qr-box="${Number(s.id) || 0}" hidden></div>
       <div class="renew-sheet" data-renew-host="${Number(s.id) || 0}" hidden></div>
       <div class="addon-sheet" data-addon-host="${Number(s.id) || 0}" hidden></div>
+      <div class="renew-sheet" data-automation-host="${Number(s.id) || 0}" hidden></div>
     </article>`;
   }
 
@@ -631,6 +633,9 @@
     scope.querySelectorAll("[data-renew]").forEach((btn) => {
       btn.addEventListener("click", () => showRenew(Number(btn.getAttribute("data-renew"))));
     });
+    scope.querySelectorAll("[data-automation]").forEach((btn) => {
+      btn.addEventListener("click", () => showAutomation(Number(btn.getAttribute("data-automation"))));
+    });
     scope.querySelectorAll("[data-buy]").forEach((btn) => {
       btn.addEventListener("click", () => doBuy(Number(btn.getAttribute("data-buy"))));
     });
@@ -652,6 +657,46 @@
         Number(btn.getAttribute("data-do-addon")), Number(btn.getAttribute("data-pack"))
       ));
     });
+  }
+
+  async function showAutomation(serviceId) {
+    const host = document.querySelector(`[data-automation-host="${serviceId}"]`);
+    if (!host) return;
+    if (!host.hidden) { host.hidden = true; return; }
+    host.hidden = false;
+    host.textContent = "در حال دریافت تنظیمات…";
+    try {
+      const data = await api(`/api/mini/service/${serviceId}/automation`);
+      host.innerHTML = `<p>با روشن کردن هر گزینه، خرید تکرارشونده با قیمت فعلی از کیف پول همین فروشگاه فعال می‌شود. بسته زمان یا حجم برای مورد تمام‌شده اولویت دارد؛ در غیر این صورت تمدید کامل انجام می‌شود.</p>
+        ${data.needs_review ? `<p class="hint">⚠️ سفارش #${Number(data.pending_order_id)} نیاز به بررسی پشتیبانی دارد؛ اجرای خودکار متوقف است.</p>` : ""}
+        ${data.actions.map((a) => `<form class="automation-option" data-auto-form="${esc(a.action)}">
+          <label><input type="checkbox" name="enabled" ${a.enabled ? "checked" : ""}> ${esc(a.label)}</label>
+          <select name="choice_id" aria-label="انتخاب پلن یا بسته">
+            <option value="">انتخاب پلن یا بسته</option>
+            ${a.choices.map((c) => `<option value="${Number(c.id)}" ${Number(c.id) === Number(a.choice_id) ? "selected" : ""}>${esc(c.name)} — ${esc(money(c.price))}</option>`).join("")}
+          </select>
+          ${a.unavailable ? `<p class="hint">⚠️ گزینه قبلی حذف یا غیرفعال شده؛ پلن یا بسته جدید انتخاب کنید.</p>` : ""}
+          <button type="submit" class="btn sm">ذخیره</button>
+        </form>`).join("")}`;
+      host.querySelectorAll("[data-auto-form]").forEach((form) => {
+        form.addEventListener("submit", async (event) => {
+          event.preventDefault();
+          const button = form.querySelector("button");
+          button.disabled = true;
+          try {
+            const enabled = form.elements.enabled.checked;
+            const choiceId = Number(form.elements.choice_id.value) || null;
+            if (enabled && !choiceId) throw new Error("پلن یا بسته را انتخاب کنید");
+            await api(`/api/mini/service/${serviceId}/automation`, {method: "POST", body: {action: form.dataset.autoForm, enabled, choice_id: choiceId}});
+            toast("تنظیمات ذخیره شد");
+            host.hidden = true;
+            await showAutomation(serviceId);
+          } catch (error) { toast(error.message || "ذخیره ناموفق"); }
+          finally { button.disabled = false; }
+        });
+      });
+    } catch (error) { host.textContent = error.message || "دریافت تنظیمات ناموفق"; }
+    syncTelegramBackButton();
   }
 
   async function showQr(serviceId) {
@@ -727,8 +772,10 @@
   }
 
   const addonPacks = new Map();
+  let addonRequestId = 0;
 
   async function showAddons(serviceId, kind) {
+    if (kind !== "volume" && kind !== "duration") return;
     const host = document.querySelector(`[data-addon-host="${serviceId}"]`);
     if (!host) return;
     if (!host.hidden && host.dataset.kind === kind) {
@@ -738,8 +785,11 @@
       return;
     }
     closeOpenOverlays();
+    addonPacks.delete(serviceId);
+    const requestId = String(++addonRequestId);
     host.hidden = false;
     host.dataset.kind = kind;
+    host.dataset.requestId = requestId;
     host.textContent = "در حال دریافت بسته‌ها…";
     syncTelegramBackButton();
     const c = (state && state.customer) || {};
@@ -748,8 +798,9 @@
       return;
     }
     try {
-      const data = await api("/api/mini/service/" + serviceId + "/addons");
-      if (host.hidden || host.dataset.kind !== kind || !host.isConnected) return;
+      const data = await api("/api/mini/service/" + serviceId + "/addons?kind=" + encodeURIComponent(kind));
+      if (host.hidden || host.dataset.requestId !== requestId || !host.isConnected) return;
+      if (data.kind && data.kind !== kind) throw new Error("نوع بسته‌ها با بخش انتخاب‌شده مطابقت ندارد؛ دوباره تلاش کنید");
       const packs = (data.packs || []).filter((p) => p.kind === kind);
       addonPacks.set(serviceId, packs);
       const label = kind === "volume" ? "افزایش حجم" : "افزایش زمان";
@@ -765,7 +816,7 @@
         </div>`).join("") : '<p class="muted">بسته‌ای برای خرید فعال نیست</p>');
       bindActions(host);
     } catch (e) {
-      if (!host.hidden && host.dataset.kind === kind && host.isConnected) {
+      if (!host.hidden && host.dataset.requestId === requestId && host.isConnected) {
         host.textContent = String(e.message || e);
       }
     }
@@ -780,7 +831,8 @@
     }
     const pack = (addonPacks.get(serviceId) || []).find((p) => p.id === packId);
     const svc = (c.services || []).find((s) => s.id === serviceId);
-    if (!pack || !svc) return;
+    const host = document.querySelector(`[data-addon-host="${serviceId}"]`);
+    if (!pack || !svc || !host || host.hidden || pack.kind !== host.dataset.kind) return;
     busy = true;
     try {
       const label = pack.kind === "volume" ? "افزایش حجم" : "افزایش زمان";
@@ -790,7 +842,7 @@
         : window.confirm(message);
       if (!ok) return;
       const res = await api("/api/mini/addon", {
-        method: "POST", body: { service_id: serviceId, pack_id: packId },
+        method: "POST", body: { service_id: serviceId, pack_id: packId, kind: pack.kind },
       });
       toast(res.message || "بسته اضافه شد", "ok");
       await reload();

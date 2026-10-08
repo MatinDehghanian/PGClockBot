@@ -77,7 +77,7 @@ async def fulfill_paid_order(session: AsyncSession, order: Order) -> Order:
         plan = await session.get(Plan, order.plan_id)
         if not service or not plan:
             raise ValueError("سرویس یا پلن تمدید یافت نشد")
-        return await apply_renewal(session, order, service, plan)
+        return await apply_renewal(session, order, service, plan, reset_traffic=note.endswith(":auto"))
     if is_addon_order_note(note):
         from app.services.service_addons import apply_service_addon
 
@@ -1512,7 +1512,21 @@ async def _resume_approved_payment(
     raise ValueError("این پرداخت قبلاً تأیید شده")
 
 
-async def approve_payment(session: AsyncSession, payment: Payment, reviewer_tg: int) -> Order | None:
+async def _sync_payment_review_messages(
+    session: AsyncSession, payment_id: int, *, bot=None
+) -> None:
+    try:
+        from app.services.payment_review_messages import sync_review_messages
+
+        async with session.begin_nested():
+            await sync_review_messages(session, payment_id, bot=bot)
+    except Exception:
+        logger.warning("payment review sync failed payment=%s", payment_id, exc_info=True)
+
+
+async def approve_payment(
+    session: AsyncSession, payment: Payment, reviewer_tg: int, *, bot=None
+) -> Order | None:
     payment_id = int(payment.id)
     # DB-only claim: disable autoflush so a dirty in-memory status cannot
     # rewrite the row to pending before the conditional UPDATE runs.
@@ -1536,6 +1550,7 @@ async def approve_payment(session: AsyncSession, payment: Payment, reviewer_tg: 
             )
         ).scalar_one_or_none()
         if fresh and fresh.status == PaymentStatus.APPROVED.value:
+            await _sync_payment_review_messages(session, payment_id, bot=bot)
             # Approved but credit/delivery may still be incomplete — resume safely.
             return await _resume_approved_payment(session, fresh)
         raise ValueError("این پرداخت قابل تأیید نیست")
@@ -1577,10 +1592,12 @@ async def approve_payment(session: AsyncSession, payment: Payment, reviewer_tg: 
             await session.commit()
             raise
         await session.commit()
+        await _sync_payment_review_messages(session, payment_id, bot=bot)
         return None
     order = await session.get(Order, payment.order_id)
     if not order:
         await session.commit()
+        await _sync_payment_review_messages(session, payment_id, bot=bot)
         return None
     # Order already fulfilled — roll THIS payment back to rejected (do not leave
     # a second APPROVED row that double-counts revenue).
@@ -1596,6 +1613,7 @@ async def approve_payment(session: AsyncSession, payment: Payment, reviewer_tg: 
         payment.status = PaymentStatus.REJECTED.value
         payment.review_note = payment.review_note or "order already delivered"
         await session.commit()
+        await _sync_payment_review_messages(session, payment_id, bot=bot)
         raise ValueError("این سفارش قبلاً تحویل شده")
     # Reject sibling pending payments before committing the PAID claim
     await session.execute(
@@ -1638,15 +1656,19 @@ async def approve_payment(session: AsyncSession, payment: Payment, reviewer_tg: 
             payment.status = PaymentStatus.REJECTED.value
             payment.review_note = payment.review_note or "order already paid"
             await session.commit()
+            await _sync_payment_review_messages(session, payment_id, bot=bot)
             raise ValueError("این سفارش قبلاً پرداخت شده")
         await session.commit()
         raise ValueError("این سفارش قابل تأیید نیست")
     await session.commit()
     await session.refresh(order)
+    await _sync_payment_review_messages(session, payment_id, bot=bot)
     return await fulfill_paid_order(session, order)
 
 
-async def reject_payment(session: AsyncSession, payment: Payment, reviewer_tg: int, note: str = "") -> None:
+async def reject_payment(
+    session: AsyncSession, payment: Payment, reviewer_tg: int, note: str = "", *, bot=None
+) -> None:
     payment_id = int(payment.id)
     with session.no_autoflush:
         claim = await session.execute(
@@ -1663,6 +1685,7 @@ async def reject_payment(session: AsyncSession, payment: Payment, reviewer_tg: i
             .execution_options(synchronize_session=False)
         )
     if claim.rowcount != 1:
+        await _sync_payment_review_messages(session, payment_id, bot=bot)
         raise ValueError("این پرداخت قابل رد نیست")
     if payment.order_id:
         await session.execute(
@@ -1685,6 +1708,7 @@ async def reject_payment(session: AsyncSession, payment: Payment, reviewer_tg: i
             await _release_order_discount(session, rejected_order)
             await _release_trial_claim_for_order(session, rejected_order)
     await session.commit()
+    await _sync_payment_review_messages(session, payment_id, bot=bot)
 
 
 _MANUAL_CANCEL_STATUSES = frozenset(
@@ -2114,6 +2138,7 @@ async def renew_service_with_plan(
     user_id: int,
     service: UserService,
     plan: Plan,
+    commit: bool = True,
 ) -> Order:
     """Create a pending renewal order. Caller shows pay_methods (or uses pay_with_wallet)."""
     if not plan or not plan.is_active:
@@ -2139,12 +2164,18 @@ async def renew_service_with_plan(
         reseller_id=shop_rid,
     )
     session.add(order)
-    await session.commit()
-    await session.refresh(order)
+    if commit:
+        await session.commit()
+        await session.refresh(order)
+    else:
+        await session.flush()
     return order
 
 
-async def apply_renewal(session: AsyncSession, order: Order, service: UserService, plan: Plan) -> Order:
+async def apply_renewal(
+    session: AsyncSession, order: Order, service: UserService, plan: Plan,
+    *, reset_traffic: bool = False,
+) -> Order:
     order_id = int(order.id)
     # Atomic renewal mutex (same pattern as deliver_order)
     with session.no_autoflush:
@@ -2223,6 +2254,8 @@ async def apply_renewal(session: AsyncSession, order: Order, service: UserServic
                     "expire": expire,
                 },
             )
+        if reset_traffic:
+            await pg.reset_user_by_id(service.pg_user_id)
         sub_url = (
             user_subscription_url(pg_user if isinstance(pg_user, dict) else None)
             or service.subscription_url
