@@ -15,6 +15,13 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.2.29": [
+        "پیش‌نمایش تمدید با انتقال حجم/زمان باقی‌مانده (بات + مینی‌اپ؛ کلید یکبارمصرف)",
+        "درخواست لغو سرویس با بازپرداخت کیف‌پول همان فروشگاه؛ صفحه بررسی اپراتور",
+        "کمپین هدفمند فروشگاهی (آزمایشی/نزدیک انقضا/غیرفعال) با pause/resume و opt-out",
+        "رفع بازیابی تحویل سفارش و استارت جاب‌های مالی حتی وقتی تلگرام قطع است",
+        "مایگریشن 0038_renewal_preview و 0039_customer_features بعد از 0037",
+    ],
     "0.2.28": [
         "ریلیز کانال توسعه روی GitHub (prerelease) تا پنل تیپ `dev` را ببیند",
         "تشخیص آپدیت `dev`: Contents API + prerelease به‌عنوان پشتیبان raw CDN",
