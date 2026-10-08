@@ -194,6 +194,14 @@ class ServiceAddonPack(Base):
 
 class Order(Base):
     __tablename__ = "orders"
+    __table_args__ = (
+        Index("uq_orders_renewal_request_key", "renewal_request_key", unique=True),
+        Index(
+            "uq_orders_service_quota_mutation", "service_id", unique=True,
+            sqlite_where=text("service_mutation_pending = true"),
+            postgresql_where=text("service_mutation_pending = true"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"), index=True)
@@ -212,6 +220,11 @@ class Order(Base):
     payment_method: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     discount_code: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Purchased terms and an absolute target, persisted before panel mutation.
+    renewal_snapshot: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    renewal_request_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # Serialize quota changes and retain exclusion while a renewal needs review.
+    service_mutation_pending: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
     service_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("user_services.id"), nullable=True, index=True
     )
@@ -352,6 +365,8 @@ class UserService(Base):
     )
     pg_user_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
     pg_username: Mapped[str] = mapped_column(String(128))
+    cancellation_pending: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    is_cancelled: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
     subscription_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     subscription_token: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
     remark: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
@@ -367,6 +382,7 @@ class UserService(Base):
     quota_synced_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    quota_status: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     renew_nudge_sent_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -1361,3 +1377,62 @@ class TermsAcceptance(Base):
     accepted_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+
+class ServiceCancellation(Base):
+    __tablename__ = "service_cancellations"
+    __table_args__ = (Index(
+        "uq_service_cancellations_open", "service_id", unique=True,
+        sqlite_where=text("status IN ('pending','processing','review','approved')"),
+        postgresql_where=text("status IN ('pending','processing','review','approved')"),
+    ),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    service_id: Mapped[int] = mapped_column(ForeignKey("user_services.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id", ondelete="CASCADE"), index=True)
+    reseller_id: Mapped[Optional[int]] = mapped_column(ForeignKey("bot_users.id", ondelete="CASCADE"), nullable=True, index=True)
+    reason: Mapped[str] = mapped_column(Text)
+    pg_user_id: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(24), default="pending", index=True)
+    refund_amount: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    operator_note: Mapped[str] = mapped_column(Text, default="")
+    processed_by: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    lock_token: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    locked_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    processed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class TargetedCampaign(Base):
+    __tablename__ = "targeted_campaigns"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    reseller_id: Mapped[Optional[int]] = mapped_column(ForeignKey("bot_users.id", ondelete="CASCADE"), nullable=True, index=True)
+    audience: Mapped[str] = mapped_column(String(24))
+    days: Mapped[int] = mapped_column(Integer)
+    text: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(24), default="draft", index=True)
+    created_by: Mapped[str] = mapped_column(String(128))
+    lock_token: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    locked_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class CampaignRecipient(Base):
+    __tablename__ = "campaign_recipients"
+    __table_args__ = (UniqueConstraint("campaign_id", "user_id", name="uq_campaign_recipient"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    campaign_id: Mapped[int] = mapped_column(ForeignKey("targeted_campaigns.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id", ondelete="CASCADE"), index=True)
+    status: Mapped[str] = mapped_column(String(24), default="pending", index=True)
+    message_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    attempted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class MarketingPreference(Base):
+    __tablename__ = "marketing_preferences"
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id", ondelete="CASCADE"), primary_key=True)
+    shop_key: Mapped[int] = mapped_column(Integer, primary_key=True)  # 0 = platform
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)

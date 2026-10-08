@@ -209,6 +209,8 @@ def _serialize_service(svc: UserService, info: dict | None = None) -> dict:
     sub_url = absolutize_subscription_url(svc.subscription_url) or (svc.subscription_url or "")
     return {
         "id": svc.id,
+        "is_cancelled": bool(getattr(svc, "is_cancelled", False)),
+        "cancellation_pending": bool(getattr(svc, "cancellation_pending", False)),
         "username": svc.pg_username or "",
         "subscription_url": sub_url,
         "plan_id": svc.plan_id,
@@ -242,6 +244,8 @@ def _unavailable_service_row(svc: UserService) -> dict:
     """A local row remains visible even if upstream formatting fails."""
     return {
         "id": svc.id, "username": svc.pg_username or "", "plan_id": svc.plan_id,
+        "is_cancelled": bool(getattr(svc, "is_cancelled", False)),
+        "cancellation_pending": bool(getattr(svc, "cancellation_pending", False)),
         "subscription_url": "", "status": "—", "status_fa": "—",
         "traffic": "—", "traffic_pct": None, "expire": "—",
         "expire_days": None, "expire_days_label": "—", "pending_start": False,
@@ -250,7 +254,7 @@ def _unavailable_service_row(svc: UserService) -> dict:
     }
 
 
-async def _enrich_services(services: list[UserService]) -> list[dict]:
+async def _enrich_services(services: list[UserService], *, session=None) -> list[dict]:
     if not services:
         return []
     infos = await asyncio.gather(*[
@@ -265,9 +269,14 @@ async def _enrich_services(services: list[UserService]) -> list[dict]:
             info = service_info_error()
         try:
             out.append(_serialize_service(svc, info))
+            if session is not None and info.get("status") and "expire" in info:
+                from app.services.bot_user_admin import sync_service_quota_cache
+                sync_service_quota_cache(svc, info=info)
         except Exception:
             log.warning("miniapp serialization failed service=%s", svc.id)
             out.append(_unavailable_service_row(svc))
+    if session is not None:
+        await session.commit()
     return out
 
 
@@ -310,7 +319,7 @@ async def _user_shop_payload(session: AsyncSession, user: BotUser) -> dict:
     ui = await get_all_settings(session)
     wallet_pay = on(ui.get("pay_wallet_enabled"))
     try:
-        enriched = await _enrich_services(services)
+        enriched = await _enrich_services(services, session=session)
     except Exception:
         log.warning("miniapp enrich failed user=%s", user.id)
         # Still list local rows — never hide owned services because PG enrich failed.
@@ -469,6 +478,33 @@ async def _reseller_ops_payload(
 
 
 def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
+    @app.get("/api/mini/service/{service_id}/cancellation")
+    async def mini_cancellation(request: Request, service_id: int, session: AsyncSession = Depends(get_db)):
+        from app.services.service_cancellations import cancellation_status
+        user = await load_mini_user(session, request)
+        await _require_commerce_ready(session, user)
+        _owned_service_or_404(await session.get(UserService, service_id), user)
+        try:
+            return _no_store({"request": await cancellation_status(session, user, service_id, shop_id=None)})
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from None
+
+    @app.post("/api/mini/service/{service_id}/cancellation")
+    async def mini_request_cancellation(request: Request, service_id: int, session: AsyncSession = Depends(get_db)):
+        from app.services.service_cancellations import request_cancellation
+        user = await load_mini_user(session, request)
+        await _require_commerce_ready(session, user)
+        _owned_service_or_404(await session.get(UserService, service_id), user)
+        try:
+            data = await request.json()
+            if not isinstance(data, dict) or not isinstance(data.get("reason"), str):
+                raise ValueError("دلیل لغو را بنویسید")
+            row = await request_cancellation(session, user, service_id, shop_id=None, reason=data["reason"])
+            return _no_store({"request": row})
+        except ValueError:
+            await rollback_quiet(session)
+            raise HTTPException(400, "درخواست لغو نامعتبر است؛ دلیل و فروشگاه سرویس را بررسی کنید") from None
+
     @app.get("/miniapp/", response_class=HTMLResponse)
     @app.get("/miniapp", response_class=HTMLResponse)
     async def miniapp_index(request: Request):
@@ -515,6 +551,10 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
         _require_commerce(user)
         svc = _owned_service_or_404(await session.get(UserService, service_id), user)
         info = await _fetch_pg_info(_service_sub_token(svc), subscription_url=svc.subscription_url, service_id=svc.id, expected_pg_user_id=svc.pg_user_id)
+        if info.get("status") and "expire" in info:
+            from app.services.bot_user_admin import sync_service_quota_cache
+            sync_service_quota_cache(svc, info=info)
+            await session.commit()
         # Never return raw PG payload — allowlisted summary only
         return _no_store({"service": _serialize_service(svc, info)})
 
@@ -737,6 +777,23 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
             raise HTTPException(400, _safe_client_message(exc, fallback="ذخیره تنظیمات ناموفق")) from exc
         return _no_store({"ok": True, "message": "تنظیمات ذخیره شد"})
 
+    @app.get("/api/mini/service/{service_id}/renewal-preview")
+    async def mini_preview_renewal(service_id: int, plan_id: int, request: Request, session: AsyncSession = Depends(get_db)):
+        from app.services.orders import get_catalog_plan
+        from app.services.service_renewals import preview_renewal
+
+        user = await load_mini_user(session, request)
+        await _require_commerce_ready(session, user)
+        svc = _owned_service_or_404(await session.get(UserService, service_id), user)
+        plan = await get_catalog_plan(session, plan_id)
+        try:
+            return _no_store(await preview_renewal(session, user_id=user.id, service=svc, plan=plan))
+        except ValueError as exc:
+            raise HTTPException(400, _safe_client_message(exc, fallback="دریافت پیش‌نمایش ناموفق")) from exc
+        except Exception:
+            log.exception("mini renewal preview failed user=%s svc=%s", user.id, service_id)
+            raise HTTPException(503, "دریافت اطلاعات سرویس ناموفق بود؛ دوباره تلاش کنید")
+
     @app.post("/api/mini/renew")
     async def mini_renew(request: Request, session: AsyncSession = Depends(get_db)):
         from app.services.orders import get_catalog_plan, pay_with_wallet, renew_service_with_plan
@@ -745,6 +802,8 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
         await _require_commerce_ready(session, user)
         try:
             body = await request.json()
+            if not isinstance(body, dict):
+                raise ValueError("bad json")
         except Exception:
             raise HTTPException(400, "bad json")
         try:
@@ -773,8 +832,13 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
         if int(plan.price or 0) > int(user.wallet_balance or 0):
             raise HTTPException(400, "موجودی کیف پول کافی نیست")
         try:
+            from app.services.service_renewals import renewal_terms
+
+            quote = body.get("preview")
+            if not isinstance(quote, dict) or quote.get("terms") != renewal_terms(plan) or quote.get("price") != plan.price or not quote.get("request_key"):
+                raise ValueError("پیش‌نمایش تمدید معتبر نیست یا پلن تغییر کرده؛ دوباره پلن را انتخاب کنید")
             order = await renew_service_with_plan(
-                session, user_id=user.id, service=svc, plan=plan
+                session, user_id=user.id, service=svc, plan=plan, request_key=quote["request_key"],
             )
             await session.refresh(user)
             order = await pay_with_wallet(session, order, user)

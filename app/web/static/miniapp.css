@@ -503,6 +503,23 @@ body {
   border-top: 1px solid var(--border);
 }
 
+[data-cancellation-form] {
+  display: grid;
+  gap: var(--space-2);
+  margin: var(--space-2) 0;
+}
+[data-cancellation-form] label { display: grid; gap: var(--space-1); }
+[data-cancellation-form] textarea {
+  width: 100%;
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+  color: inherit;
+  font: inherit;
+  resize: vertical;
+}
+
 .addon-price {
   display: flex;
   flex-direction: column;

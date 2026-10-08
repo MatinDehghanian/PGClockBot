@@ -364,18 +364,20 @@
         <button type="button" class="btn ghost sm" data-refresh-service="${Number(s.id) || 0}">به‌روزرسانی اطلاعات</button>
         <button type="button" class="btn ghost sm" data-copy="${url}">کپی لینک</button>
         <button type="button" class="btn ghost sm" data-qr="${Number(s.id) || 0}">نمایش QR</button>
+        <button type="button" class="btn ghost sm" data-cancellation="${Number(s.id) || 0}">درخواست لغو</button>
         <button type="button" class="btn secondary sm" data-open-url="${url}">باز کردن لینک</button>
-        <button type="button" class="btn sm" data-renew="${Number(s.id) || 0}">تمدید</button>
-        ${s.addons_allowed ? `
+        ${!s.is_cancelled && !s.cancellation_pending ? `<button type="button" class="btn sm" data-renew="${Number(s.id) || 0}">تمدید</button>` : ""}
+        ${s.addons_allowed && !s.is_cancelled && !s.cancellation_pending ? `
           <button type="button" class="btn secondary sm" data-addons="${Number(s.id)}" data-addon-kind="volume">افزایش حجم</button>
           <button type="button" class="btn secondary sm" data-addons="${Number(s.id)}" data-addon-kind="duration">افزایش زمان</button>
         ` : ""}
-        <button type="button" class="btn ghost sm" data-automation="${Number(s.id) || 0}">⚙️ تنظیمات خودکار</button>
+        ${!s.is_cancelled && !s.cancellation_pending ? `<button type="button" class="btn ghost sm" data-automation="${Number(s.id) || 0}">⚙️ تنظیمات خودکار</button>` : ""}
       </div>
       <div class="qr-box" data-qr-box="${Number(s.id) || 0}" hidden></div>
       <div class="renew-sheet" data-renew-host="${Number(s.id) || 0}" hidden></div>
       <div class="addon-sheet" data-addon-host="${Number(s.id) || 0}" hidden></div>
       <div class="renew-sheet" data-automation-host="${Number(s.id) || 0}" hidden></div>
+      <div class="renew-sheet" data-cancellation-host="${Number(s.id) || 0}" hidden></div>
     </article>`;
   }
 
@@ -602,7 +604,47 @@
     }
   }
 
+  async function showCancellation(serviceId) {
+    const host = document.querySelector(`[data-cancellation-host="${serviceId}"]`);
+    if (!host || host.cancellationBusy) return;
+    host.hidden = false;
+    host.innerHTML = '<p class="muted">در حال دریافت درخواست…</p>';
+    try {
+      const data = await api(`/api/mini/service/${serviceId}/cancellation`);
+      const row = data.request;
+      host.innerHTML = '<h4>درخواست لغو</h4><p class="hint">مبلغ را اپراتور تعیین می‌کند. اعتبار پس از تأیید غیرفعال‌شدن سرویس به کیف پول همین فروشگاه برمی‌گردد. ثبت درخواست، سرویس را غیرفعال نمی‌کند.</p>';
+      if (row) host.innerHTML += `<p>${esc(row.label)}</p>${row.refund_amount == null ? "" : `<p>اعتبار برگشتی: ${esc(money(row.refund_amount))}</p>`}<p style="white-space:pre-wrap">${esc(row.operator_note || "")}</p>`;
+      if (!row || ["rejected", "withdrawn"].includes(row.status)) {
+        host.innerHTML += '<form data-cancellation-form><label>دلیل لغو<textarea name="reason" rows="3" maxlength="1000" required></textarea></label><button type="submit" class="btn sm">ثبت درخواست</button></form>';
+        const form = host.querySelector("[data-cancellation-form]");
+        form.addEventListener("submit", async (event) => {
+          event.preventDefault();
+          if (host.cancellationBusy) return;
+          const reason = form.elements.reason.value.trim();
+          if (!reason) return;
+          host.cancellationBusy = true;
+          form.querySelector("button").disabled = true;
+          try {
+            await api(`/api/mini/service/${serviceId}/cancellation`, {method: "POST", body: {reason}});
+            toast("درخواست ثبت شد");
+            host.cancellationBusy = false;
+            await showCancellation(serviceId);
+          } catch (err) { toast(err.message, "err"); }
+          finally {
+            host.cancellationBusy = false;
+            form.querySelector("button").disabled = false;
+          }
+        });
+      }
+      host.innerHTML += `<button type="button" class="btn ghost sm" data-cancellation="${serviceId}">به‌روزرسانی درخواست</button>`;
+      bindActions(host);
+    } catch (err) { host.innerHTML = `<p class="hint">${esc(err.message)}</p>`; }
+  }
+
   function bindActions(scope) {
+    scope.querySelectorAll("[data-cancellation]").forEach((btn) => {
+      btn.addEventListener("click", () => showCancellation(Number(btn.dataset.cancellation)));
+    });
     scope.querySelectorAll("[data-refresh-service]").forEach((btn) => {
       btn.addEventListener("click", () => refreshService(Number(btn.dataset.refreshService), btn));
     });
@@ -641,11 +683,24 @@
     });
     scope.querySelectorAll("[data-do-renew]").forEach((btn) => {
       btn.addEventListener("click", () =>
-        doRenew(
+        previewRenew(
           Number(btn.getAttribute("data-do-renew")),
           Number(btn.getAttribute("data-plan"))
         )
       );
+    });
+    scope.querySelectorAll("[data-confirm-renew]").forEach((btn) => {
+      btn.addEventListener("click", () => doRenew(
+        Number(btn.getAttribute("data-confirm-renew")), Number(btn.getAttribute("data-plan"))
+      ));
+    });
+    scope.querySelectorAll("[data-renew-back]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const serviceId = Number(btn.getAttribute("data-renew-back"));
+        const host = document.querySelector(`[data-renew-host="${serviceId}"]`);
+        if (host) host.hidden = true;
+        showRenew(serviceId);
+      });
     });
     scope.querySelectorAll("[data-addons]").forEach((btn) => {
       btn.addEventListener("click", () => showAddons(
@@ -751,6 +806,8 @@
       setTimeout(() => showRenew(serviceId), 50);
       return;
     }
+    host.dataset.requestId = String(++renewalRequestId);
+    renewalPreviews.delete(serviceId);
     if (!host.hidden) {
       host.hidden = true;
       host.innerHTML = "";
@@ -888,24 +945,51 @@
     }
   }
 
+  const renewalPreviews = new Map();
+  let renewalRequestId = 0;
+
+  async function previewRenew(serviceId, planId) {
+    const host = document.querySelector(`[data-renew-host="${serviceId}"]`);
+    if (!host || busy || !(state && state.commerce_allowed)) return;
+    renewalPreviews.delete(serviceId);
+    const requestId = String(++renewalRequestId);
+    host.dataset.requestId = requestId;
+    host.innerHTML = '<p class="muted">دریافت پیش‌نمایش تمدید…</p>';
+    try {
+      const preview = await api(`/api/mini/service/${serviceId}/renewal-preview?plan_id=${planId}`);
+      if (host.hidden || host.dataset.requestId !== requestId) return;
+      renewalPreviews.set(serviceId, {planId, terms: preview.terms, price: preview.price, requestKey: preview.request_key});
+      host.innerHTML = '<h3>پیش‌نمایش تمدید</h3><p>' + esc(preview.plan_name) + '</p>' +
+        '<p>مبلغ: <b>' + esc(money(preview.price)) + '</b></p>' +
+        (preview.lines || []).map((line) => '<p>' + esc(line) + '</p>').join('') +
+        (preview.warnings || []).map((line) => '<p class="error">' + esc(line) + '</p>').join('') +
+        '<p class="muted">' + esc(preview.notice) + '</p>' +
+        `<button type="button" class="btn primary" data-confirm-renew="${serviceId}" data-plan="${planId}">تأیید و پرداخت با کیف پول</button>` +
+        `<button type="button" class="btn ghost" data-renew-back="${serviceId}">انتخاب پلن دیگر</button>`;
+      bindActions(host);
+    } catch (e) {
+      if (host.hidden || host.dataset.requestId !== requestId) return;
+      host.innerHTML = '<p class="error">' + esc(String(e.message || e)) + '</p>' +
+        `<button type="button" class="btn ghost" data-renew-back="${serviceId}">انتخاب پلن</button>`;
+      bindActions(host);
+    }
+  }
+
   async function doRenew(serviceId, planId) {
     if (busy) return;
     if (!(state && state.commerce_allowed)) {
       toast("تمدید برای این نقش مجاز نیست", "err");
       return;
     }
-    if (tg && tg.showConfirm) {
-      const ok = await new Promise((resolve) => {
-        tg.showConfirm("تمدید این سرویس با کیف پول؟", resolve);
-      });
-      if (!ok) return;
-    }
+    const preview = renewalPreviews.get(serviceId);
+    if (!preview || preview.planId !== planId) return;
     busy = true;
     try {
       const res = await api("/api/mini/renew", {
         method: "POST",
-        body: { service_id: serviceId, plan_id: planId },
+        body: { service_id: serviceId, plan_id: planId, preview: {terms: preview.terms, price: preview.price, request_key: preview.requestKey} },
       });
+      renewalPreviews.delete(serviceId);
       toast(res.message || "تمدید شد", "ok");
       await reload();
       setView("services");

@@ -4,6 +4,9 @@ import html
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.filters import Command
+from aiogram.types import Message
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,6 +23,93 @@ from app.services.redact import user_safe_error
 from app.services.service_live_info import fetch_live_service_info
 
 router = Router(name="services")
+
+
+class CancellationStates(StatesGroup):
+    reason = State()
+
+
+@router.callback_query(F.data.startswith("svc:cancel:"))
+async def svc_cancel(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    from app.services.service_cancellations import cancellation_status
+    from app.services.users import current_shop_reseller_id
+    try:
+        service_id = int(callback.data.split(":")[-1])
+        status = await cancellation_status(session, db_user, service_id, shop_id=current_shop_reseller_id())
+    except ValueError as exc:
+        await callback.answer(str(exc), show_alert=True)
+        return
+    text = "📝 درخواست لغو سرویس\nاپراتور مبلغ اعتبار برگشتی را تعیین می‌کند. پس از تأیید، سرویس غیرفعال و اعتبار به کیف پول همین فروشگاه برمی‌گردد. ثبت درخواست به‌تنهایی سرویس را غیرفعال نمی‌کند."
+    buttons = []
+    if status:
+        text += f"\n\nدرخواست #{status['id']}: {html.escape(status['label'])}"
+        if status["operator_note"]:
+            text += "\n" + html.escape(status["operator_note"])
+        if status["refund_amount"] is not None:
+            text += "\nاعتبار برگشتی: " + format_toman(status["refund_amount"])
+    if not status or status["status"] in {"rejected", "withdrawn"}:
+        buttons.append([InlineKeyboardButton(text="ثبت درخواست و دلیل لغو", callback_data=f"svc:cancelnew:{service_id}")])
+    else:
+        buttons.append([InlineKeyboardButton(text="به‌روزرسانی درخواست", callback_data=f"svc:cancel:{service_id}")])
+    buttons.append([InlineKeyboardButton(text="بازگشت به سرویس", callback_data=f"svc:view:{service_id}")])
+    if callback.message:
+        await safe_edit_text(callback.message, text, reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons))
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("svc:cancelnew:"))
+async def svc_cancel_new(callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext):
+    from app.services.service_cancellations import owned_cancellation_service
+    from app.services.users import current_shop_reseller_id
+    try:
+        service_id = int(callback.data.split(":")[-1])
+        await owned_cancellation_service(session, db_user, service_id, current_shop_reseller_id())
+    except ValueError as exc:
+        await callback.answer(str(exc), show_alert=True)
+        return
+    await state.update_data(cancellation_service_id=service_id)
+    await state.set_state(CancellationStates.reason)
+    if callback.message:
+        await callback.message.answer("دلیل درخواست لغو را بنویسید (حداکثر ۱۰۰۰ نویسه).", reply_markup=kb.cancel_reply())
+    await callback.answer()
+
+
+@router.message(CancellationStates.reason, F.text)
+async def svc_cancel_reason(message: Message, session: AsyncSession, db_user: BotUser, state: FSMContext):
+    from app.services.service_cancellations import request_cancellation
+    from app.services.users import current_shop_reseller_id
+    data = await state.get_data()
+    try:
+        row = await request_cancellation(session, db_user, int(data.get("cancellation_service_id") or 0), shop_id=current_shop_reseller_id(), reason=message.text)
+    except ValueError as exc:
+        await message.answer(str(exc))
+        return
+    await state.set_state(None)
+    await message.answer(f"درخواست #{row['id']} ثبت شد. نتیجه و اعتبار برگشتی را از «درخواست لغو سرویس» ببینید.", reply_markup=kb.service_actions_reply_keyboard(await get_all_settings(session)))
+
+
+@router.callback_query(F.data == "campaign:optout")
+async def campaign_optout(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    from app.services.campaigns import set_marketing_preference
+    from app.services.users import current_shop_reseller_id
+    await set_marketing_preference(session, db_user.id, shop_id=current_shop_reseller_id(), enabled=False)
+    await callback.answer("پیام‌های پیشنهادی این فروشگاه قطع شد. برای فعال‌سازی: /marketing", show_alert=True)
+
+
+@router.message(Command("marketing"))
+async def marketing_settings(message: Message, session: AsyncSession, db_user: BotUser):
+    await message.answer("دریافت پیام‌های پیشنهادی همین فروشگاه:", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="فعال", callback_data="campaign:optin"),
+        InlineKeyboardButton(text="غیرفعال", callback_data="campaign:optout"),
+    ]]))
+
+
+@router.callback_query(F.data == "campaign:optin")
+async def campaign_optin(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+    from app.services.campaigns import set_marketing_preference
+    from app.services.users import current_shop_reseller_id
+    await set_marketing_preference(session, db_user.id, shop_id=current_shop_reseller_id(), enabled=True)
+    await callback.answer("دریافت پیام‌های پیشنهادی فعال شد.", show_alert=True)
 
 
 async def _show_automation(callback, session, db_user, service_id):
@@ -196,6 +286,10 @@ async def svc_view(
         return
     await callback.answer()
     info = await fetch_live_service_info(svc, client_factory=get_pg)
+    if info.get("status") and "expire" in info:
+        from app.services.bot_user_admin import sync_service_quota_cache
+        sync_service_quota_cache(svc, info=info)
+        await session.commit()
     info.setdefault("username", svc.pg_username)
     text = format_message("📦 سرویس شما", service_card(info))
     if callback.message:
@@ -304,6 +398,38 @@ async def svc_renew(callback: CallbackQuery, session: AsyncSession, db_user: Bot
 
 
 @router.callback_query(F.data.startswith("svc:renewpay:"))
+async def svc_renew_preview(
+    callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext
+):
+    from app.services.service_renewals import preview_renewal
+
+    _, _, svc_id, plan_id = callback.data.split(":")
+    svc = await session.get(UserService, int(svc_id))
+    plan = await get_plan(session, int(plan_id))
+    if not svc or not plan or svc.bot_user_id != db_user.id:
+        await callback.answer("نامعتبر", show_alert=True)
+        return
+    try:
+        preview = await preview_renewal(session, user_id=db_user.id, service=svc, plan=plan)
+    except Exception as exc:
+        await callback.answer(user_safe_error(exc), show_alert=True)
+        return
+    await state.update_data(renewal_preview={
+        "service_id": svc.id, "plan_id": plan.id, "price": preview["price"], "terms": preview["terms"], "request_key": preview["request_key"],
+    })
+    lines = [f"پلن: {plan.name}", f"مبلغ: {format_toman(preview['price'], get_settings().currency)}", *preview["lines"], *preview["warnings"], "", preview["notice"]]
+    if callback.message:
+        await safe_edit_text(
+            callback.message, format_message("🔄 پیش‌نمایش تمدید", html.escape("\n".join(lines))),
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="تأیید و ادامه", callback_data=f"svc:renewconfirm:{svc.id}:{plan.id}")],
+                [InlineKeyboardButton(text="انتخاب پلن دیگر", callback_data=f"svc:renew:{svc.id}")],
+            ]),
+        )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("svc:renewconfirm:"))
 async def svc_renew_pay(
     callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext
 ):
@@ -325,14 +451,21 @@ async def svc_renew_pay(
         return
 
     from app.services.orders import renew_service_with_plan
+    from app.services.service_renewals import renewal_terms
 
     try:
+        quote = (await state.get_data()).get("renewal_preview") or {}
+        expected = {"service_id": svc.id, "plan_id": plan.id, "price": plan.price, "terms": renewal_terms(plan)}
+        if not quote.get("request_key") or any(quote.get(k) != v for k, v in expected.items()):
+            raise ValueError("پلن تغییر کرده یا پیش‌نمایش معتبر نیست؛ دوباره پلن تمدید را انتخاب کنید")
         order = await renew_service_with_plan(
             session,
             user_id=db_user.id,
             service=svc,
             plan=plan,
+            request_key=quote["request_key"],
         )
+        await state.update_data(renewal_preview=None)
     except Exception as e:
         await callback.answer(user_safe_error(e), show_alert=True)
         return
@@ -340,16 +473,11 @@ async def svc_renew_pay(
     await callback.answer()
 
     if order.amount <= 0:
-        from app.services.orders import apply_renewal, mark_order_free_paid, revert_failed_free_delivery
+        from app.services.orders import pay_with_wallet
 
-        await mark_order_free_paid(session, order, db_user.id)
         try:
-            order = await apply_renewal(session, order, svc, plan)
+            order = await pay_with_wallet(session, order, db_user)
         except Exception as e:
-            try:
-                await revert_failed_free_delivery(session, order)
-            except Exception:
-                pass
             if callback.message:
                 await safe_edit_text(
                     callback.message,

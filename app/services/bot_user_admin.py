@@ -560,6 +560,8 @@ def sync_service_quota_cache(
 
     touched = False
     if isinstance(info, dict):
+        if isinstance(info.get("status"), str):
+            service.quota_status = info["status"].strip().lower()[:32]
         has_expire = "expire" in info or "expire_date" in info
         if has_expire:
             exp_raw = info["expire"] if "expire" in info else info.get("expire_date")

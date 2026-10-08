@@ -207,6 +207,12 @@ async def check_expiring_services(bot: Bot) -> None:
             for (svc, user, _ui, traffic_pct, time_pct, shop_rid), info in zip(eligible, infos):
                 if not info:
                     continue
+                from app.services.bot_user_admin import sync_service_quota_cache
+                from app.services.service_live_info import validate_service_info
+
+                cached_info = validate_service_info(info)
+                if cached_info.get("status") and "expire" in cached_info:
+                    sync_service_quota_cache(svc, info=cached_info)
                 send_bot = _resolve_send_bot(bot, shop_rid, profile_by_user)
 
                 # --- remaining TIME percent ---
@@ -749,13 +755,72 @@ async def run_service_automation_tick(bot: Bot) -> None:
                         await send_bot.session.close()
 
 
+async def run_targeted_campaigns_tick(bot: Bot) -> None:
+    from app.db.models import TargetedCampaign
+    from app.services.campaigns import process_campaign
+    from app.services.reseller_bots import open_notify_bot_for_reseller
+
+    last_id = 0
+    while True:
+        async with SessionLocal() as session:
+            rows = (await session.execute(select(TargetedCampaign.id, TargetedCampaign.reseller_id).where(
+                TargetedCampaign.id > last_id, TargetedCampaign.status == "running",
+            ).order_by(TargetedCampaign.id).limit(50))).all()
+        if not rows:
+            return
+        for campaign_id, shop_id in rows:
+            last_id = campaign_id
+            async with SessionLocal() as session:
+                send_bot, should_close = bot, False
+                try:
+                    if shop_id:
+                        send_bot, should_close = await open_notify_bot_for_reseller(session, shop_id)
+                        if send_bot is None:
+                            continue
+                    await process_campaign(session, campaign_id, send_bot)
+                except Exception:
+                    logger.exception("campaign batch failed campaign=%s", campaign_id)
+                finally:
+                    if should_close and send_bot is not None:
+                        await send_bot.session.close()
+
+
+def start_background_scheduler() -> None:
+    """Run financial and maintenance jobs as soon as the database is ready."""
+    jobs = (
+        ("billing_tick", run_reseller_billing_tick, {"minutes": 1}, 120),
+        ("pg_admin_subscription", run_pg_admin_subscription_tick, {"minutes": 5}, 300),
+        ("pending_order_cleanup", cleanup_stale_pending_orders, {"hours": 1}, 3600),
+        ("scheduled_backup", run_scheduled_backup, {"minutes": 30}, 3600),
+    )
+    for job_id, func, interval, grace in jobs:
+        if scheduler.get_job(job_id) is None:
+            scheduler.add_job(
+                func,
+                "interval",
+                id=job_id,
+                max_instances=1,
+                coalesce=True,
+                misfire_grace_time=grace,
+                **interval,
+            )
+    if not scheduler.running:
+        scheduler.start()
+        logger.info("Background scheduler started")
+
+
 def start_scheduler(bot: Bot) -> None:
-    if scheduler.running:
-        return
+    """Attach notification jobs after the bot connects to Telegram."""
+    start_background_scheduler()
+    scheduler.add_job(
+        run_targeted_campaigns_tick, "interval", minutes=1, args=[bot], id="targeted_campaigns",
+        max_instances=1, coalesce=True, misfire_grace_time=120, replace_existing=True,
+    )
     scheduler.add_job(
         run_service_automation_tick,
         "interval", minutes=1, args=[bot], id="service_automation",
         max_instances=1, coalesce=True, misfire_grace_time=120,
+        replace_existing=True,
     )
     scheduler.add_job(
         check_expiring_services,
@@ -766,43 +831,7 @@ def start_scheduler(bot: Bot) -> None:
         max_instances=1,
         coalesce=True,
         misfire_grace_time=3600,
-    )
-    # Job fires every minute; no-ops until billing_tick_minutes elapses.
-    scheduler.add_job(
-        run_reseller_billing_tick,
-        "interval",
-        minutes=1,
-        id="billing_tick",
-        max_instances=1,
-        coalesce=True,
-        misfire_grace_time=120,
-    )
-    scheduler.add_job(
-        run_pg_admin_subscription_tick,
-        "interval",
-        minutes=5,
-        id="pg_admin_subscription",
-        max_instances=1,
-        coalesce=True,
-        misfire_grace_time=300,
-    )
-    scheduler.add_job(
-        cleanup_stale_pending_orders,
-        "interval",
-        hours=1,
-        id="pending_order_cleanup",
-        max_instances=1,
-        coalesce=True,
-        misfire_grace_time=3600,
-    )
-    scheduler.add_job(
-        run_scheduled_backup,
-        "interval",
-        minutes=30,
-        id="scheduled_backup",
-        max_instances=1,
-        coalesce=True,
-        misfire_grace_time=3600,
+        replace_existing=True,
     )
     scheduler.add_job(
         run_admin_daily_report,
@@ -813,6 +842,11 @@ def start_scheduler(bot: Bot) -> None:
         max_instances=1,
         coalesce=True,
         misfire_grace_time=3600,
+        replace_existing=True,
     )
-    scheduler.start()
-    logger.info("Scheduler started")
+    logger.info("Telegram scheduler jobs attached")
+
+
+def stop_scheduler() -> None:
+    if scheduler.running:
+        scheduler.shutdown(wait=False)

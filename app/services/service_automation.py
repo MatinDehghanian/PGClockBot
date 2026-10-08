@@ -76,6 +76,8 @@ async def owned_automation_service(
         raise ValueError("سرویس یافت نشد")
     if user.is_blocked:
         raise ValueError("حساب شما مسدود است")
+    if service.is_cancelled or service.cancellation_pending:
+        raise ValueError("این سرویس لغو شده یا لغو آن در حال بررسی است")
     if not service.pg_user_id or (service.remark or "").strip() == "linked":
         raise ValueError("تنظیمات خودکار برای این سرویس قابل استفاده نیست")
     if await service_shop_id(session, service) != current_shop_reseller_id():

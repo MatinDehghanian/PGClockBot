@@ -15,7 +15,7 @@ from app.bot import create_bot, create_dispatcher
 from app.config import get_settings
 from app.db.models import Plan
 from app.db.session import SessionLocal, init_db
-from app.jobs.scheduler import start_scheduler
+from app.jobs.scheduler import start_background_scheduler, start_scheduler, stop_scheduler
 from app.services.pasarguard import get_pg
 from app.services.users import ensure_default_settings
 from app.services.web_auth import load_web_admin
@@ -117,6 +117,11 @@ def main() -> None:
             await seed_demo_plan()
         except Exception:
             logger.exception("Demo plan seed failed — continuing")
+
+        try:
+            start_background_scheduler()
+        except Exception:
+            logger.exception("Background scheduler failed to start")
 
         poll_task = None
         reseller_mgr = None
@@ -254,6 +259,7 @@ def main() -> None:
         try:
             yield
         finally:
+            stop_scheduler()
             if reseller_mgr is not None:
                 try:
                     await reseller_mgr.stop_all()
