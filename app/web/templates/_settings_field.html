@@ -5,7 +5,7 @@
 {% set options = field[4] if field|length > 4 else [] %}
 {% set val = values.get(key, '') %}
 {# Full-span kinds + lone payment/text keys that look half-empty in a 2-col modal grid #}
-{% set full_kinds = ['textarea', 'image', 'toggle', 'btn_color', 'force_channels', 'payment_cards', 'payment_gateways', 'payment_crypto_wallets'] %}
+{% set full_kinds = ['textarea', 'image', 'toggle', 'btn_color', 'force_channels', 'connection_guides', 'payment_cards', 'payment_gateways', 'payment_crypto_wallets'] %}
 {% set full_keys = [
   'referral_bonus',
   'pending_order_ttl_hours',
@@ -13,7 +13,9 @@
   'stars_toman_per_star', 'stars_title', 'stars_description',
   'psp_provider', 'psp_merchant_id',
   'btn_force_join', 'btn_force_join_check',
+  'btn_guides', 'btn_guide_open_link',
   'terms_entry_btn', 'terms_buy_user_btn', 'terms_buy_reseller_btn',
+  'receipt_dup_policy',
 ] %}
 <div class="setting-item {% if kind in full_kinds or key in full_keys %}full{% endif %}">
   {% if kind == 'toggle' %}
@@ -67,6 +69,15 @@
     </div>
     <input type="hidden" name="s_{{ key }}" value="{{ val }}" data-force-channels-json />
     <div class="force-channels-list" data-force-channels-list></div>
+  </div>
+  {% elif kind == 'connection_guides' %}
+  <div class="pay-dest-list guides-editor" data-guides-editor>
+    <div class="pay-dest-head">
+      <strong class="pay-dest-title">{{ label }}</strong>
+      {% if help %}<p class="muted pay-dest-help">{{ help }}</p>{% endif %}
+    </div>
+    <input type="hidden" name="s_{{ key }}" value="{{ val }}" data-guides-json />
+    <div class="pay-dest-rows" data-guides-list></div>
   </div>
   {% elif kind == 'payment_cards' %}
   <div class="pay-dest-list" data-pay-dest="cards" data-style-inherit-label="ارث از کارت به کارت">

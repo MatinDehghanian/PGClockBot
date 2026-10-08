@@ -4173,10 +4173,23 @@ def create_api_app(lifespan=None) -> FastAPI:
         values = await get_all_settings(session)
         tab_groups = TAB_SETTING_GROUPS.get(tab, [])
         groups = {name: SETTING_GROUPS[name] for name in tab_groups if name in SETTING_GROUPS}
-        if tab == "terms":
+        if tab in {"terms", "limits"}:
             from app.services.rich_text import prepare_settings_values_for_web
 
             values = prepare_settings_values_for_web(values)
+
+        if tab == "guides":
+            from app.services.connection_guides import (
+                default_connection_guides,
+                parse_connection_guides,
+                serialize_connection_guides,
+            )
+
+            guides = parse_connection_guides(values.get("connection_guides"))
+            if not guides:
+                values["connection_guides"] = serialize_connection_guides(
+                    default_connection_guides()
+                )
 
         if tab == "colors":
             from app.services.payment_destinations import enrich_payment_settings
@@ -4208,7 +4221,7 @@ def create_api_app(lifespan=None) -> FastAPI:
 
         if tab == "menu":
             ctx.update(_menu_tab_context(values))
-        elif tab == "terms":
+        elif tab in {"terms", "limits", "guides"}:
             from app.services.button_styles import STYLE_OPTIONS
 
             ctx["style_options"] = STYLE_OPTIONS
@@ -4726,6 +4739,20 @@ def create_api_app(lifespan=None) -> FastAPI:
                     from app.services.users import normalize_force_join_channel_value
 
                     val = normalize_force_join_channel_value(val)
+                if key == "connection_guides":
+                    import json as _json
+
+                    from app.services.connection_guides import serialize_connection_guides
+
+                    try:
+                        parsed = _json.loads(val) if (val or "").strip() else []
+                    except _json.JSONDecodeError:
+                        parsed = []
+                    val = serialize_connection_guides(parsed if isinstance(parsed, list) else [])
+                if key == "receipt_dup_policy":
+                    from app.services.receipt_fingerprints import normalize_dup_policy
+
+                    val = normalize_dup_policy(val)
                 payload[key] = val
         if tab == "daily_report":
             from app.services.daily_report import (

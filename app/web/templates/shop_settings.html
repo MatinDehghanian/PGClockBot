@@ -130,9 +130,10 @@
     {% include "_settings_colors.html" %}
 
   {% else %}
-    {% if tab == 'forcejoin' %}
+    {% if tab == 'forcejoin' or tab == 'limits' %}
       {% include "_forcejoin_admin_notice.html" %}
-    {% elif tab == 'terms' %}
+    {% endif %}
+    {% if tab == 'terms' or tab == 'limits' %}
       {% include "_terms_admin_notice.html" %}
     {% endif %}
     <form method="post" action="/shop-settings?tab={{ tab }}" enctype="multipart/form-data" class="settings-form" id="settings-form">

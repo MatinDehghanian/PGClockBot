@@ -159,11 +159,16 @@ class DomainSettingGroupsTests(unittest.TestCase):
         self.assertNotIn("referral_text", msg_keys)
         self.assertEqual(keys_for_tab("supports"), {"support_text"})
         self.assertEqual(keys_for_tab("loyalty"), {"referral_text"})
+        # Required-referral moved from payment modal → limits tab
         self.assertEqual(
             keys_for_tab("payment") & {"referral_required", "referral_required_text"},
+            set(),
+        )
+        self.assertEqual(
+            keys_for_tab("limits") & {"referral_required", "referral_required_text"},
             {"referral_required", "referral_required_text"},
         )
-        self.assertEqual(TAB_SETTING_GROUPS["payment"][0], "معرف اجباری")
+        self.assertEqual(TAB_SETTING_GROUPS["limits"][0], "معرف اجباری")
         self.assertIn("روش‌های پرداخت", TAB_SETTING_GROUPS["payment"])
         self.assertIn("معرف اجباری", SETTING_GROUPS)
         self.assertEqual(

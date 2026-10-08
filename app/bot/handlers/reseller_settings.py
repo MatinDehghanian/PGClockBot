@@ -66,10 +66,6 @@ SECTIONS: dict[str, dict] = {
     "pay": {
         "title": "پرداخت",
         "subs": [
-            ("referral", "معرف اجباری", [
-                ("referral_required", "معرف اجباری", "toggle"),
-                ("referral_required_text", "پیام دریافت معرف", "textarea"),
-            ]),
             ("methods", "روش‌های فعال", [
                 ("pay_wallet_enabled", "کیف پول", "toggle"),
                 ("pay_card_enabled", "کارت به کارت", "toggle"),
@@ -130,6 +126,22 @@ SECTIONS: dict[str, dict] = {
                 ("show_sub_link_in_text", "لینک در کپشن", "toggle"),
                 ("qr_caption", "کپشن QR", "textarea"),
             ]),
+        ],
+    },
+    "limits": {
+        "title": "محدودیت",
+        "subs": [
+            ("referral", "معرف اجباری", [
+                ("referral_required", "معرف اجباری", "toggle"),
+                ("referral_required_text", "پیام دریافت معرف", "textarea"),
+            ]),
+            ("trial_gate", "اکانت تست", [
+                ("trial_require_contact", "تأیید شماره تماس", "toggle"),
+                ("trial_require_iran_phone", "فقط شماره ایران", "toggle"),
+            ]),
+            ("receipt_dup", "ضدتقلب رسید", [
+                ("receipt_dup_policy", "رسید تکراری (warn/block)", "text"),
+            ]),
             ("force", "کانال اجباری", [
                 ("force_join_enabled", "فعال", "toggle"),
                 ("force_join_channel", "کانال‌ها (هر خط یکی)", "text"),
@@ -153,6 +165,18 @@ SECTIONS: dict[str, dict] = {
             ]),
         ],
     },
+    "guides": {
+        "title": "آموزش اتصال",
+        "subs": [
+            ("labels", "متن دکمه‌ها", [
+                ("btn_guides", "دکمه فهرست آموزش", "text"),
+                ("btn_guide_open_link", "دکمه لینک اشتراک", "text"),
+            ]),
+            ("hint", "ویرایش آموزش‌ها", [
+                ("connection_guides", "JSON آموزش‌ها (از وب‌پنل)", "textarea"),
+            ]),
+        ],
+    },
     "notify": {
         "title": "اعلان‌ها",
         "kind": "notify",
@@ -164,7 +188,7 @@ SECTIONS: dict[str, dict] = {
     },
 }
 
-HUB_ORDER = ["shop", "menu", "pay", "support", "access", "notify", "bot"]
+HUB_ORDER = ["shop", "menu", "pay", "support", "access", "limits", "guides", "notify", "bot"]
 
 
 class ResellerSettingsStates(StatesGroup):

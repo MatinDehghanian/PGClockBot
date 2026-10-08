@@ -69,7 +69,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Skip alembic upgrade on ETL target",
     )
 
-    sub.add_parser("doctor", help="Run diagnostics")
+    doc = sub.add_parser("doctor", help="Run read-only diagnostics (OK/WARN/FAIL)")
+    doc.add_argument(
+        "--json",
+        action="store_true",
+        dest="doctor_json",
+        help="Machine-readable JSON report",
+    )
     return p
 
 
@@ -150,6 +156,8 @@ def main(argv: list[str] | None = None) -> int:
         if cmd == "doctor":
             from app.cli.doctor_cmds import cmd_doctor
 
+            if getattr(args, "doctor_json", False):
+                ctx.json_mode = True
             return cmd_doctor(ctx)
 
         parser.error(f"unknown command: {cmd}")

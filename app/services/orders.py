@@ -488,6 +488,8 @@ async def create_order(
     plan_id: int,
     reseller_id: int | None = None,
     discount_code: str | None = None,
+    trial_phone_hash: str | None = None,
+    trial_telegram_id: int | None = None,
 ) -> Order:
     plan = await get_catalog_plan(session, plan_id)
     if not plan or not plan.is_active:
@@ -500,12 +502,26 @@ async def create_order(
         shop_key = str(int(shop_rid)) if shop_rid is not None else "platform"
         if shop_rid is None and plan.owner_reseller_id is not None:
             raise ValueError("پلن تست این فروشگاه در دسترس نیست")
-        claim = TrialClaim(user_id=user_id, shop_key=shop_key)
-        session.add(claim)
+        from app.services.users import get_all_settings, on
+
+        ui = await get_all_settings(session, reseller_id=shop_rid)
+        phone_hash = (trial_phone_hash or "").strip() or None
+        tg_id = int(trial_telegram_id) if trial_telegram_id else None
+        if on(ui.get("trial_require_contact")) and not phone_hash:
+            raise ValueError("برای دریافت تست باید شماره تماس خود را تأیید کنید")
+        if on(ui.get("trial_require_iran_phone")) and not phone_hash:
+            raise ValueError("برای دریافت تست باید شماره موبایل ایران را تأیید کنید")
+        claim = TrialClaim(
+            user_id=user_id,
+            shop_key=shop_key,
+            phone_hash=phone_hash,
+            telegram_id=tg_id,
+        )
         try:
-            await session.flush()
+            async with session.begin_nested():
+                session.add(claim)
+                await session.flush()
         except IntegrityError as exc:
-            await session.rollback()
             raise ValueError("پلن تست رایگان را قبلاً دریافت کرده‌اید") from exc
     discount, used_code = await _reserve_discount_code(session, discount_code, plan.price)
     order = Order(

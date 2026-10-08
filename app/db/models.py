@@ -865,15 +865,57 @@ class OrgPrincipalWebIdentity(Base):
 
 
 class TrialClaim(Base):
-    """One free trial per user per shop — unique constraint closes the race window."""
+    """One free trial per user per shop — unique constraint closes the race window.
+
+    Optional phone_hash (HMAC-SHA256, never raw) and telegram_id close contact-gated
+    abuse windows. Uniques are shop-scoped so platform and reseller shops stay isolated.
+    """
 
     __tablename__ = "trial_claims"
-    __table_args__ = (UniqueConstraint("user_id", "shop_key", name="uq_trial_claims_user_shop"),)
+    __table_args__ = (
+        UniqueConstraint("user_id", "shop_key", name="uq_trial_claims_user_shop"),
+        UniqueConstraint("telegram_id", "shop_key", name="uq_trial_claims_tg_shop"),
+        UniqueConstraint("phone_hash", "shop_key", name="uq_trial_claims_phone_shop"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"), index=True)
     shop_key: Mapped[str] = mapped_column(String(64))  # "platform" or str(reseller_id)
     order_id: Mapped[Optional[int]] = mapped_column(ForeignKey("orders.id"), nullable=True)
+    telegram_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    phone_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ChargeCodeRedemption(Base):
+    """Per-user gift-code redemption — UNIQUE(code_id, user_id) enforces one redeem each."""
+
+    __tablename__ = "charge_code_redemptions"
+    __table_args__ = (
+        UniqueConstraint("code_id", "user_id", name="uq_charge_code_redemptions_code_user"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    code_id: Mapped[int] = mapped_column(
+        ForeignKey("charge_codes.id", ondelete="CASCADE"), index=True
+    )
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("bot_users.id", ondelete="CASCADE"), index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class PaymentReceiptFingerprint(Base):
+    """Telegram file_unique_id + image sha256 for duplicate-receipt review warnings."""
+
+    __tablename__ = "payment_receipt_fingerprints"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    payment_id: Mapped[int] = mapped_column(
+        ForeignKey("payments.id", ondelete="CASCADE"), index=True
+    )
+    file_unique_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True, index=True)
+    sha256: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

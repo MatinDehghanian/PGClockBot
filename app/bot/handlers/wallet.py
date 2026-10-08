@@ -14,8 +14,8 @@ from app.config import get_settings
 from app.db.models import BotUser, Payment, PaymentMethod, PaymentStatus
 from app.services.redact import user_safe_error
 from app.services.formatting import format_message, format_toman, kv_line
-from app.services.orders import attach_receipt, create_wallet_topup
-from app.services.receipts import process_receipt
+from app.services.orders import create_wallet_topup
+from app.services.receipts import submit_receipt
 from app.services.users import get_all_settings, on
 from app.services.wallet import list_activity
 from app.services.message_variables import DOMAIN_PAYMENT, render_message_template
@@ -586,13 +586,14 @@ async def wallet_receipt_photo(
             reseller_owner_id=reseller_owner_id,
         )
         return
-    file_id = message.photo[-1].file_id
-    await attach_receipt(session, payment, file_id)
+    photo = message.photo[-1]
     await state.clear()
-    text = await process_receipt(
+    text = await submit_receipt(
         session,
         payment,
         bot=message.bot,
+        file_id=photo.file_id,
+        file_unique_id=getattr(photo, "file_unique_id", None),
         user_tg_id=message.from_user.id if message.from_user else None,
     )
     # Always leave payment/cancel keyboards — delivery already attaches main KB on auto-approve
@@ -669,11 +670,13 @@ async def generic_receipt(
     payment = result.scalar_one_or_none()
     if not payment:
         return
-    await attach_receipt(session, payment, message.photo[-1].file_id)
-    text = await process_receipt(
+    photo = message.photo[-1]
+    text = await submit_receipt(
         session,
         payment,
         bot=message.bot,
+        file_id=photo.file_id,
+        file_unique_id=getattr(photo, "file_unique_id", None),
         user_tg_id=message.from_user.id if message.from_user else None,
     )
     # Leave pay-method / cancel reply keyboards after receipt (success or pending review)

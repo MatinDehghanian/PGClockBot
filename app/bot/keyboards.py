@@ -1340,6 +1340,7 @@ def services_keyboard(services: list, ui: dict | None = None) -> InlineKeyboardM
 
 
 REPLY_ACTION_SVC_LINK = "svc_link"
+REPLY_ACTION_SVC_GUIDE = "svc_guide"
 REPLY_ACTION_SVC_RENEW = "svc_renew"
 REPLY_ACTION_SVC_ADDON = "svc_addon"
 REPLY_ACTION_SVC_REFRESH = "svc_refresh"

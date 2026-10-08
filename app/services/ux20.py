@@ -551,7 +551,15 @@ async def redeem_charge_code(
     user: BotUser,
     code: str,
 ) -> tuple[ChargeCode, int]:
-    """Credit wallet from a gift/charge code. Returns (code_row, new_balance)."""
+    """Credit wallet from a gift/charge code. Returns (code_row, new_balance).
+
+    Records ``charge_code_redemptions`` in the same transaction so each user can
+    redeem a given code at most once (UNIQUE code_id+user_id). IntegrityError →
+    rollback and «already used».
+    """
+    from sqlalchemy.exc import IntegrityError
+
+    from app.db.models import ChargeCodeRedemption
     from app.services.users import current_shop_reseller_id
     from app.services.wallet import credit_wallet
 
@@ -574,19 +582,30 @@ async def redeem_charge_code(
     amount = int(row.amount or 0)
     if amount <= 0:
         raise ValueError("مبلغ کد نامعتبر است")
-    # Atomic consume
-    claim = await session.execute(
-        update(ChargeCode)
-        .where(
-            ChargeCode.id == row.id,
-            ChargeCode.is_active.is_(True),
-            or_(ChargeCode.max_uses.is_(None), ChargeCode.used_count < ChargeCode.max_uses),
-        )
-        .values(used_count=ChargeCode.used_count + 1)
-        .execution_options(synchronize_session=False)
-    )
-    if claim.rowcount != 1:
-        raise ValueError("کد قابل استفاده نیست")
+
+    # Per-user redemption + use consume in one savepoint so IntegrityError /
+    # exhausted uses never leave a half-applied outer session.
+    try:
+        async with session.begin_nested():
+            session.add(ChargeCodeRedemption(code_id=int(row.id), user_id=int(user.id)))
+            await session.flush()
+            claim = await session.execute(
+                update(ChargeCode)
+                .where(
+                    ChargeCode.id == row.id,
+                    ChargeCode.is_active.is_(True),
+                    or_(
+                        ChargeCode.max_uses.is_(None),
+                        ChargeCode.used_count < ChargeCode.max_uses,
+                    ),
+                )
+                .values(used_count=ChargeCode.used_count + 1)
+                .execution_options(synchronize_session=False)
+            )
+            if claim.rowcount != 1:
+                raise ValueError("کد قابل استفاده نیست")
+    except IntegrityError as exc:
+        raise ValueError("این کد را قبلاً استفاده کرده‌اید") from exc
     # Shop codes credit the isolated shop purse; platform codes credit main purse.
     await credit_wallet(
         session,
