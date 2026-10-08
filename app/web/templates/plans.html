@@ -1150,8 +1150,11 @@
 <script>
 (function(){
   document.querySelectorAll('.gift-code-form').forEach(function(form){
+    const select = form.querySelector('[data-gift-kind-select]');
+    /* The enhanced dropdown fires `change` before it refreshes its hidden
+       mirror input, so read the native select itself when there is one. */
     function syncGiftKind(){
-      const kind = form.elements.kind.value;
+      const kind = select ? select.value : form.elements.kind.value;
       form.querySelectorAll('[data-gift-kind]').forEach(function(section){
         const visible = section.dataset.giftKind === kind;
         section.hidden = !visible;
@@ -1161,7 +1164,6 @@
         });
       });
     }
-    const select = form.querySelector('[data-gift-kind-select]');
     if (select) select.addEventListener('change', syncGiftKind);
     syncGiftKind();
     const first = form.elements.first_purchase_only;

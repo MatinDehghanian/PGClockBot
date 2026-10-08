@@ -1736,7 +1736,7 @@ async def _handle_pay_action(
         elif action == kb.REPLY_ACTION_PAY_STARS:
             await shop_h.pay_stars_cb(cb, session, db_user, state=state)
         elif action == kb.REPLY_ACTION_PAY_DISCOUNT:
-            await shop_h.ask_discount(cb, state, session)
+            await shop_h.ask_discount(cb, state, session, db_user)
     except Exception as e:
         try:
             await bubble.edit_text(f"خطا: {user_safe_error(e)}")
