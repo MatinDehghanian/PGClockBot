@@ -549,8 +549,9 @@ class GiftCodeValidationTests(unittest.TestCase):
             engine = create_engine(url)
             Base.metadata.create_all(engine)
             cfg = alembic_config(url)
+            # Stamp gift tip then drop only 0037 — avoid SQLite ALTER on 0036 uniques.
             command.stamp(cfg, "0037_gift_code_rules")
-            command.downgrade(cfg, "0035_payment_review_messages")
+            command.downgrade(cfg, "0036_limits_guides_receipts")
             with engine.begin() as conn:
                 conn.execute(
                     text(
