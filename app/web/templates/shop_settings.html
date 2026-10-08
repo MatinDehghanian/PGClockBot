@@ -130,14 +130,19 @@
     {% include "_settings_colors.html" %}
 
   {% else %}
-    {% if tab == 'forcejoin' or tab == 'limits' %}
+    {% if tab == 'forcejoin' %}
       {% include "_forcejoin_admin_notice.html" %}
-    {% endif %}
-    {% if tab == 'terms' or tab == 'limits' %}
+    {% elif tab == 'terms' %}
       {% include "_terms_admin_notice.html" %}
     {% endif %}
     <form method="post" action="/shop-settings?tab={{ tab }}" enctype="multipart/form-data" class="settings-form" id="settings-form">
       {% for group_name in tab_groups %}
+      {% if tab == 'limits' and group_name == 'کانال اجباری' %}
+        {% include "_forcejoin_admin_notice.html" %}
+      {% endif %}
+      {% if tab == 'limits' and group_name == 'قوانین ورود به ربات' %}
+        {% include "_terms_admin_notice.html" %}
+      {% endif %}
       {% set fields = groups[group_name] %}
       <div class="card settings-card">
         <h2>{{ group_name }}</h2>

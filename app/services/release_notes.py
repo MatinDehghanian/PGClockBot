@@ -15,6 +15,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.2.27": [
+        "تب محدودیت: هشدار کانال اجباری و قوانین بالای باکس مرتبط خودشان",
+        "آموزش اتصال: عرض باکس رنگ دکمه هم‌عرض فیلدهای بالا",
+    ],
     "0.2.26": [
         "کد هدیه: انقضا، تخفیف درصدی، سقف هر کاربر و قوانین نوع خرید",
         "مایگریشن 0037_gift_code_rules بعد از 0036_limits (بدون collision با #556)",

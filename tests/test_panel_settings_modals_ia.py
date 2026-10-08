@@ -102,6 +102,24 @@ class DomainModalTemplateTests(unittest.TestCase):
         self.assertNotIn("tab == 'payment'", html)
         self.assertNotIn("tab == 'reseller'", html)
 
+    def test_limits_notices_sit_above_related_groups(self):
+        html = (TEMPLATES / "settings.html").read_text(encoding="utf-8")
+        limits = html.split("tab == 'limits'", 1)[1].split("tab == 'guides'", 1)[0]
+        # Notices are injected next to their groups, not dumped before the form.
+        self.assertIn("group_name == 'کانال اجباری'", limits)
+        self.assertIn("group_name == 'قوانین ورود به ربات'", limits)
+        self.assertIn("_forcejoin_admin_notice.html", limits)
+        self.assertIn("_terms_admin_notice.html", limits)
+        force_i = limits.find("group_name == 'کانال اجباری'")
+        terms_i = limits.find("group_name == 'قوانین ورود به ربات'")
+        self.assertGreater(force_i, 0)
+        self.assertGreater(terms_i, force_i)
+        shop = (TEMPLATES / "shop_settings.html").read_text(encoding="utf-8")
+        self.assertIn("tab == 'limits' and group_name == 'کانال اجباری'", shop)
+        self.assertIn("tab == 'limits' and group_name == 'قوانین ورود به ربات'", shop)
+        css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
+        self.assertIn(".guides-editor .pay-dest-color .plan-color-card", css)
+
     def test_reseller_settings_live_on_resellers_page(self):
         html = (TEMPLATES / "resellers.html").read_text(encoding="utf-8")
         self.assertIn("تنظیمات نمایندگی", html)
