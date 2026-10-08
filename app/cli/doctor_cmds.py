@@ -94,6 +94,26 @@ def _cert_expiry_days(port: int) -> int | None:
         return None
 
 
+def _owner_identity_status() -> tuple[str, str, str]:
+    """Compare the panel Web Owner login with the Telegram ADMIN_IDS owner list.
+
+    The two are independent identity stores; either one missing locks an owner
+    out of one surface, so the doctor reports which side is unset.
+    """
+    from app.config import get_settings
+    from app.services.web_auth import load_web_admin
+
+    has_web_password = bool((load_web_admin().get("password") or "").strip())
+    has_admin_ids = bool(get_settings().admin_ids)
+    if has_web_password and has_admin_ids:
+        return "OK", "Web Owner and ADMIN_IDS are both configured", ""
+    if has_web_password:
+        return "WARN", "Web Owner is configured but ADMIN_IDS is empty", "set ADMIN_IDS so Telegram owner tools work"
+    if has_admin_ids:
+        return "WARN", "ADMIN_IDS is set but the Web Owner password is empty", "finish the setup wizard to set the panel login"
+    return "WARN", "neither the Web Owner password nor ADMIN_IDS is configured yet", "run the setup wizard"
+
+
 def cmd_doctor(ctx: CliContext) -> int:
     checks: list[Check] = []
 
@@ -134,6 +154,12 @@ def cmd_doctor(ctx: CliContext) -> int:
             add(f"env:{key}", "FAIL", "placeholder", fix="set a strong WEB_SECRET")
         else:
             add(f"env:{key}", "OK", "set")
+
+    try:
+        status, detail, fix = _owner_identity_status()
+        add("owner_identity", status, detail, fix=fix)
+    except Exception as exc:  # diagnostics must not abort the rest of the doctor run
+        add("owner_identity", "WARN", f"check skipped: {exc}"[:160])
 
     bot_token = env_get(ctx.root, "BOT_TOKEN", "")
     if not bot_token:
