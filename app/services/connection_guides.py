@@ -13,7 +13,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.button_styles import parse_item_button_style_raw, serialize_item_button_style
+from app.services.button_styles import parse_item_button_style_raw
 from app.services.users import get_setting, set_setting
 
 SETTING_KEY = "connection_guides"
@@ -67,6 +67,9 @@ def parse_connection_guides(raw: str | None) -> list[dict[str, Any]]:
         deep_link = bool(item.get("deep_link") or item.get("deep_link_enabled"))
         gid = str(item.get("id") or "").strip() or _new_id()
         style_raw = item.get("style", item.get("button_style", _STYLE_UNSET))
+        # Accept legacy nested {"button_style": "..."} from earlier drafts.
+        if isinstance(style_raw, dict):
+            style_raw = style_raw.get("button_style", _STYLE_UNSET)
         style = (
             parse_item_button_style_raw(style_raw)
             if style_raw is not _STYLE_UNSET
@@ -82,7 +85,8 @@ def parse_connection_guides(raw: str | None) -> list[dict[str, Any]]:
             "deep_link": deep_link,
         }
         if style is not None:
-            entry["style"] = serialize_item_button_style(style) or ""
+            # Store plain Telegram style token (""|primary|success|danger), not a nested dict.
+            entry["style"] = style
         if title or body:
             out.append(entry)
     out.sort(key=lambda x: (int(x.get("sort") or 0), str(x.get("title") or "")))
