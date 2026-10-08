@@ -7,6 +7,15 @@ from pathlib import Path
 
 
 class ReleaseNotesTests(unittest.TestCase):
+    def test_demo_customer_notes_explain_previous_transactions_and_reversibility(self) -> None:
+        from app.services.release_notes import latest_notes_block, notes_for_version
+        from app.version import __version__
+
+        notes = notes_for_version("0.2.32")
+        self.assertTrue(any("قبلی و جدید" in note for note in notes))
+        self.assertTrue(any("عادی کردن کاربر" in note for note in notes))
+        self.assertEqual(latest_notes_block()["version"], __version__)
+
     def test_current_version_has_single_block(self):
         from app.services.release_notes import changelog_for_update_page
         from app.version import __version__
