@@ -11,6 +11,7 @@ os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 from fastapi import HTTPException
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
+from app.api.catalog_discounts import authorized_scope
 from app.api.customer_features import feature_scope
 from app.api.loyalty_pages import _shop_scope
 from app.services.authz import authz_from_staff, can_shop
@@ -19,6 +20,7 @@ from app.services.marketing_nav import (
     CAMPAIGNS,
     CLUB,
     CLUB_TRANSACTIONS,
+    DISCOUNTS,
     MarketingSection,
     marketing_sections,
 )
@@ -46,6 +48,8 @@ PROFILES = [
     _reseller(["campaigns"]),
     _reseller(["loyalty"]),
     _reseller(["loyalty", "campaigns"]),
+    _reseller(["catalog_discounts"]),
+    _reseller(["catalog_discounts"], shop_id=None),
     _reseller(["campaigns"], shop_id=None),
     _reseller([]),
     {"role": "pg_staff", "permissions": ["loyalty", "campaigns"]},
@@ -55,6 +59,14 @@ PROFILES = [
 def _campaigns_route_allows(staff: dict) -> bool:
     try:
         feature_scope(staff, "campaigns")
+    except HTTPException:
+        return False
+    return True
+
+
+def _discounts_route_allows(staff: dict) -> bool:
+    try:
+        authorized_scope(staff)
     except HTTPException:
         return False
     return True
@@ -81,7 +93,7 @@ class MarketingSectionVisibilityTests(unittest.TestCase):
         self.assertEqual(marketing_sections({}), ())
 
     def test_owner_sees_every_section_in_order(self):
-        self.assertEqual(_keys(OWNER), [CLUB, CLUB_TRANSACTIONS, CAMPAIGNS, BROADCAST])
+        self.assertEqual(_keys(OWNER), [CLUB, CLUB_TRANSACTIONS, DISCOUNTS, CAMPAIGNS, BROADCAST])
 
     def test_legacy_admin_without_owner_principal_gets_no_tenant_sections(self):
         self.assertEqual(marketing_sections(LEGACY_ADMIN), ())
@@ -93,6 +105,11 @@ class MarketingSectionVisibilityTests(unittest.TestCase):
         )
         self.assertEqual(_keys(_reseller(["campaigns"])), [CAMPAIGNS])
         self.assertEqual(_keys(_reseller(["loyalty"])), [CLUB, CLUB_TRANSACTIONS])
+
+    def test_discounts_follow_their_own_permission(self):
+        self.assertEqual(_keys(_reseller(["catalog_discounts"])), [DISCOUNTS])
+        self.assertNotIn(DISCOUNTS, _keys(_reseller(["loyalty", "campaigns"])))
+        self.assertEqual(_keys(_reseller(["catalog_discounts"], shop_id=None)), [])
 
     def test_reseller_never_sees_broadcast(self):
         every_perm = ["loyalty", "campaigns", "broadcast", "shop_settings", "dashboard"]
@@ -119,6 +136,7 @@ class MarketingSectionVisibilityTests(unittest.TestCase):
         for staff in PROFILES:
             with self.subTest(staff=staff):
                 self.assertEqual(CAMPAIGNS in _keys(staff), _campaigns_route_allows(staff))
+                self.assertEqual(DISCOUNTS in _keys(staff), _discounts_route_allows(staff))
                 self.assertEqual(CLUB in _keys(staff), _loyalty_route_allows(staff))
                 self.assertEqual(CLUB_TRANSACTIONS in _keys(staff), _loyalty_route_allows(staff))
 
@@ -221,3 +239,25 @@ class MarketingNavRenderedPageTests(unittest.TestCase):
         self.assertNotIn("بازاریابی و وفاداری", html)
         self.assertNotIn('href="/broadcast"', html)
         self.assertNotIn('href="/campaigns"', html)
+
+
+class MarketingNavDiscountsPageTests(unittest.TestCase):
+    def test_discounts_page_keeps_its_sidebar_entry_and_joins_the_strip(self):
+        staff = _reseller(["catalog_discounts", "loyalty"])
+        html = _page(
+            "catalog_discounts.html",
+            "/catalog-discounts",
+            staff,
+            discounts=[],
+            plans=[],
+            categories=[],
+            announcement_status=None,
+            deadlines={},
+            next_before=None,
+            scopes={},
+            modes={},
+            request_key="k",
+        )
+        self.assertIn("بازاریابی و وفاداری", html)
+        self.assertIn('href="/catalog-discounts" class="active" aria-current="page"', html)
+        self.assertNotIn('href="/broadcast"', html)

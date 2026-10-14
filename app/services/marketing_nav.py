@@ -1,6 +1,6 @@
 """Which marketing & loyalty sections a signed-in staff member may open.
 
-The panel groups the loyalty club, targeted campaigns and broadcasts under one
+The panel groups the loyalty club, discounts, targeted campaigns and broadcasts under one
 navigation entry. Visibility here mirrors the guard of each route exactly, so
 the sidebar and the shared tab strip never offer a link that ends in a 403 and
 never reveal a section the route would refuse.
@@ -18,6 +18,7 @@ from app.services.shop_scope import ShopScopeError, resolve_shop_scope_id
 
 CLUB = "club"
 CLUB_TRANSACTIONS = "club_transactions"
+DISCOUNTS = "discounts"
 CAMPAIGNS = "campaigns"
 BROADCAST = "broadcast"
 
@@ -33,6 +34,7 @@ _CLUB_SECTIONS: tuple[MarketingSection, ...] = (
     MarketingSection(CLUB, "باشگاه مشتریان", "/loyalty?tab=overview"),
     MarketingSection(CLUB_TRANSACTIONS, "تراکنش‌های باشگاه", "/loyalty?tab=transactions"),
 )
+_DISCOUNT_SECTION = MarketingSection(DISCOUNTS, "تخفیف‌ها", "/catalog-discounts")
 _CAMPAIGN_SECTION = MarketingSection(CAMPAIGNS, "کمپین هدفمند", "/campaigns")
 _BROADCAST_SECTION = MarketingSection(BROADCAST, "پیام گروهی", "/broadcast")
 
@@ -47,7 +49,7 @@ def _has_shop_scope(staff: Mapping[str, Any]) -> bool:
 
 
 def _can_open_feature(staff: Mapping[str, Any], permission: str) -> bool:
-    """Feature permission plus a shop scope, as ``GET /loyalty`` and ``GET /campaigns`` both require."""
+    """Feature permission plus a shop scope, as the loyalty, discount and campaign pages all require."""
     return can_shop(authz_from_staff(staff), permission) and _has_shop_scope(staff)
 
 
@@ -63,6 +65,8 @@ def marketing_sections(staff: Mapping[str, Any] | None) -> tuple[MarketingSectio
     sections: list[MarketingSection] = []
     if _can_open_feature(staff, "loyalty"):
         sections.extend(_CLUB_SECTIONS)
+    if _can_open_feature(staff, "catalog_discounts"):
+        sections.append(_DISCOUNT_SECTION)
     if _can_open_feature(staff, "campaigns"):
         sections.append(_CAMPAIGN_SECTION)
     if _can_open_broadcast(staff):
