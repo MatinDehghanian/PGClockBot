@@ -1962,6 +1962,22 @@ async def resplan_edit_grp_done(
             reply_markup=_resplan_detail_keyboard(plan),
         )
 
+
+def _perm_rows(plan_id: int, active: set[str]) -> list[list[InlineKeyboardButton]]:
+    """Permission toggles of a reseller plan (two columns for short labels) plus the back row."""
+    rows = kb.pack_long_list(
+        [
+            InlineKeyboardButton(
+                text=f"{'✅' if key in active else '⬜️'} {label}",
+                callback_data=f"adm:resplan:togperm:{plan_id}:{key}",
+            )
+            for key, label in FEATURE_PERMS
+        ]
+    )
+    rows.append(_back_row(f"adm:resplan:view:{plan_id}"))
+    return rows
+
+
 @router.callback_query(F.data.startswith("adm:resplan:perms:"))
 @require_bot_owner_handler
 async def resplan_perms_screen(
@@ -1981,18 +1997,7 @@ async def resplan_perms_screen(
         await callback.answer("بسته افزونه دسترسی وب/ربات ندارد", show_alert=True)
         return
     active = set(parse_perms(plan.web_permissions or plan.bot_permissions))
-    rows: list[list[InlineKeyboardButton]] = []
-    for key, label in FEATURE_PERMS:
-        mark = "✅" if key in active else "⬜️"
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=f"{mark} {label}",
-                    callback_data=f"adm:resplan:togperm:{plan_id}:{key}",
-                )
-            ]
-        )
-    rows.append(_back_row(f"adm:resplan:view:{plan_id}"))
+    rows = _perm_rows(plan_id, active)
     await callback.answer()
     if callback.message:
         await callback.message.edit_text(
@@ -2029,19 +2034,7 @@ async def resplan_tog_perm(callback: CallbackQuery, session: AsyncSession, db_us
     plan.can_approve_receipts = "payments" in perms
     await _persist(session)
     await callback.answer("بروز شد")
-    active = perms
-    rows: list[list[InlineKeyboardButton]] = []
-    for perm_key, label in FEATURE_PERMS:
-        mark = "✅" if perm_key in active else "⬜️"
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=f"{mark} {label}",
-                    callback_data=f"adm:resplan:togperm:{plan_id}:{perm_key}",
-                )
-            ]
-        )
-    rows.append(_back_row(f"adm:resplan:view:{plan_id}"))
+    rows = _perm_rows(plan_id, perms)
     if callback.message:
         await callback.message.edit_text(
             "🔐 <b>دسترسی‌های پلن</b>\nوب و ربات نماینده یکسان است.",
