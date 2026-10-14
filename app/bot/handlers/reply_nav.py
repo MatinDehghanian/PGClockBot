@@ -393,6 +393,9 @@ async def open_services_list(
     )
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_SERVICES, push=push)
+    from app.bot.service_import_ui import EMPTY_LIST_HINT, empty_services_keyboard, import_enabled
+
+    allow_import = import_enabled(ui)
     if not services and not reseller_label:
         from app.services.rich_text import outbound_setting_text
 
@@ -400,10 +403,16 @@ async def open_services_list(
             ui.get("empty_services_text")
             or "هنوز سرویسی ندارید.\nاز بخش «خرید سرویس» شروع کنید."
         )
+        if allow_import:
+            await present_inline_only(
+                message, text=f"{text}\n\n{EMPTY_LIST_HINT}", inline=empty_services_keyboard(ui), **send_kw
+            )
+            return
         await message.answer(text, reply_markup=main_kb, **send_kw)
         return
     # Exactly one customer service and no reseller capacity → open card (Wave B).
-    if len(services) == 1 and not reseller_label:
+    # With «افزودن سرویس قبلی» on, the list stays so the add button is reachable.
+    if len(services) == 1 and not reseller_label and not allow_import:
         from app.bot.handlers.services import svc_view
 
         bubble = await message.answer("⏳")
@@ -456,7 +465,7 @@ async def open_services_list(
         message,
         text=body,
         inline=services_list_keyboard(
-            services, ui, reseller_capacity_label=reseller_label
+            services, ui, reseller_capacity_label=reseller_label, allow_import=allow_import
         ),
     )
     if heal_reply:

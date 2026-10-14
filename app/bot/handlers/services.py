@@ -296,6 +296,9 @@ async def svc_list(
         is_reseller_bot=is_reseller_bot,
         reseller_owner_id=reseller_owner_id,
     )
+    from app.bot.service_import_ui import EMPTY_LIST_HINT, empty_services_keyboard, import_enabled
+
+    allow_import = import_enabled(ui)
     if not services and not reseller_label:
         if callback.message:
             from app.services.rich_text import outbound_setting_text
@@ -306,8 +309,8 @@ async def svc_list(
             )
             await safe_edit_text(
                 callback.message,
-                text,
-                reply_markup=kb.back_home(ui),
+                f"{text}\n\n{EMPTY_LIST_HINT}" if allow_import else text,
+                reply_markup=empty_services_keyboard(ui) if allow_import else kb.back_home(ui),
                 **send_kw,
             )
         return
@@ -315,7 +318,7 @@ async def svc_list(
         from app.bot.nav_inline import services_list_keyboard
 
         markup = services_list_keyboard(
-            services, ui, reseller_capacity_label=reseller_label
+            services, ui, reseller_capacity_label=reseller_label, allow_import=allow_import
         )
         await safe_edit_text(
             callback.message,
@@ -912,9 +915,11 @@ async def svc_delete(
         return
     from app.services.bot_user_admin import admin_delete_service
 
-    # Linked subscription shares are read-only attachments — never delete the
-    # underlying PasarGuard user (could belong to an admin / another customer).
-    delete_pg = (svc.remark or "").strip() != "linked"
+    # Linked or imported services were not created by the bot: removing them only detaches
+    # them from the list and never deletes the underlying PasarGuard user.
+    from app.services.service_import import is_external_service
+
+    delete_pg = not is_external_service(svc)
     try:
         await admin_delete_service(session, svc, delete_pg=delete_pg)
     except Exception as e:
