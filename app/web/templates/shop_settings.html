@@ -12,7 +12,7 @@
   </div>
 </div>
 
-{{ shop_settings_tabs(tab, tabs, "/shop-settings", request.url.path) }}
+{{ shop_settings_tabs(tab, tabs, "/shop-settings", request.url.path, tab_nav|default(none)) }}
 
 <div class="settings-layout {% if tab in ['menu','welcome','messages','buttons','qr','appearance','daily_report'] %}can-preview{% endif %}" id="settings-layout">
   <div class="settings-main">
