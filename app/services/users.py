@@ -16,6 +16,7 @@ from app.config import get_settings
 from app.db.models import BotUser, Role, Setting
 from app.services.button_styles import default_settings as button_style_defaults
 from app.services.button_styles import setting_group_fields as button_style_setting_fields
+from app.services.user_purge import purge_user_references
 
 logger = logging.getLogger("pgclock.users")
 
@@ -1993,6 +1994,7 @@ async def delete_bot_user(
     await session.execute(
         delete(ChargeCodeRedemption).where(ChargeCodeRedemption.user_id == user_id)
     )
+    await purge_user_references(session, user_id)
     await session.execute(delete(Payment).where(Payment.user_id == user_id))
     await session.execute(delete(Order).where(Order.user_id == user_id))
     await session.execute(delete(UserService).where(UserService.bot_user_id == user_id))
@@ -2078,6 +2080,16 @@ def friendly_user_delete_error(exc: Exception) -> str:
     """Short Persian message for hard-delete failures (hide raw SQL)."""
     text = str(exc or "")
     low = text.lower()
+    is_integrity_error = (
+        "foreign key" in low
+        or "integrityerror" in low
+        or "constraint failed" in low
+        or isinstance(exc, IntegrityError)
+    )
+    if is_integrity_error:
+        logger.warning(
+            "user delete blocked by constraint: %s", str(getattr(exc, "orig", exc))[:500]
+        )
     if (
         "foreign key" in low
         or "integrityerror" in low
