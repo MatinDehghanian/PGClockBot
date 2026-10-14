@@ -4882,6 +4882,19 @@ form.settings-form > .actions.sticky-actions,
     background: var(--background);
   }
 
+  /* Installed iOS PWA: svh can resolve shorter than the real screen (it leaves out the
+     status-bar area), which parks the footer above the bottom edge. The large unit has no
+     browser chrome to account for here, so use it for the fill height. */
+  @media (display-mode: standalone) {
+    @supports (min-height: 100lvh) {
+      html:has(.shell),
+      html:has(.shell) body,
+      .shell {
+        min-height: 100lvh;
+      }
+    }
+  }
+
   .topbar { display: flex; }
 
   .menu-toggle {
