@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.services.authz import authz_from_staff, can_shop
+from app.services.funnel_access import funnel_shop_scope
 from app.services.gift_codes import gift_code_scope
 from app.services.platform_identity import is_explicit_owner_staff
 from app.services.shop_scope import ShopScopeError, resolve_shop_scope_id
@@ -21,6 +22,7 @@ CLUB = "club"
 CLUB_TRANSACTIONS = "club_transactions"
 DISCOUNTS = "discounts"
 GIFT_CODES = "gift_codes"
+FUNNEL = "funnel"
 CAMPAIGNS = "campaigns"
 BROADCAST = "broadcast"
 
@@ -38,6 +40,7 @@ _CLUB_SECTIONS: tuple[MarketingSection, ...] = (
 )
 _DISCOUNT_SECTION = MarketingSection(DISCOUNTS, "تخفیف‌ها", "/catalog-discounts")
 _GIFT_CODE_SECTION = MarketingSection(GIFT_CODES, "کد هدیه", "/gift-codes")
+_FUNNEL_SECTION = MarketingSection(FUNNEL, "رفتار کاربر", "/funnel")
 _CAMPAIGN_SECTION = MarketingSection(CAMPAIGNS, "کمپین هدفمند", "/campaigns")
 _BROADCAST_SECTION = MarketingSection(BROADCAST, "پیام گروهی", "/broadcast")
 
@@ -65,6 +68,15 @@ def _can_open_gift_codes(staff: Mapping[str, Any]) -> bool:
     return True
 
 
+def _can_open_funnel(staff: Mapping[str, Any]) -> bool:
+    """Same rule as the funnel page (``funnel_shop_scope``)."""
+    try:
+        funnel_shop_scope(staff)
+    except PermissionError:
+        return False
+    return True
+
+
 def _can_open_broadcast(staff: Mapping[str, Any]) -> bool:
     """Same rule as ``require_admin``: ``role=admin`` plus an explicit Owner principal."""
     return staff.get("role") == "admin" and is_explicit_owner_staff(dict(staff))
@@ -83,6 +95,8 @@ def marketing_sections(staff: Mapping[str, Any] | None) -> tuple[MarketingSectio
         sections.append(_GIFT_CODE_SECTION)
     if _can_open_feature(staff, "campaigns"):
         sections.append(_CAMPAIGN_SECTION)
+    if _can_open_funnel(staff):
+        sections.append(_FUNNEL_SECTION)
     if _can_open_broadcast(staff):
         sections.append(_BROADCAST_SECTION)
     return tuple(sections)

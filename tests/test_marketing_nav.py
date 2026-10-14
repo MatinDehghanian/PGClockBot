@@ -14,6 +14,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from app.api.catalog_discounts import authorized_scope
 from app.api.customer_features import feature_scope
 from app.api.loyalty_pages import _shop_scope
+from app.services.funnel_access import funnel_shop_scope
 from app.services.gift_codes import gift_code_scope
 from app.services.authz import authz_from_staff, can_shop
 from app.services.marketing_nav import (
@@ -22,6 +23,7 @@ from app.services.marketing_nav import (
     CLUB,
     CLUB_TRANSACTIONS,
     DISCOUNTS,
+    FUNNEL,
     GIFT_CODES,
     MarketingSection,
     marketing_sections,
@@ -53,6 +55,7 @@ PROFILES = [
     _reseller(["catalog_discounts"]),
     _reseller(["catalog_discounts"], shop_id=None),
     _reseller(["plans"]),
+    _reseller(["payments"]),
     _reseller(["orders"], shop_id=None),
     _reseller(["campaigns"], shop_id=None),
     _reseller([]),
@@ -71,6 +74,14 @@ def _campaigns_route_allows(staff: dict) -> bool:
 def _gift_codes_route_allows(staff: dict) -> bool:
     try:
         gift_code_scope(staff)
+    except PermissionError:
+        return False
+    return True
+
+
+def _funnel_route_allows(staff: dict) -> bool:
+    try:
+        funnel_shop_scope(staff)
     except PermissionError:
         return False
     return True
@@ -105,7 +116,7 @@ class MarketingSectionVisibilityTests(unittest.TestCase):
         self.assertEqual(marketing_sections({}), ())
 
     def test_owner_sees_every_section_in_order(self):
-        self.assertEqual(_keys(OWNER), [CLUB, CLUB_TRANSACTIONS, DISCOUNTS, GIFT_CODES, CAMPAIGNS, BROADCAST])
+        self.assertEqual(_keys(OWNER), [CLUB, CLUB_TRANSACTIONS, DISCOUNTS, GIFT_CODES, CAMPAIGNS, FUNNEL, BROADCAST])
 
     def test_legacy_admin_without_owner_principal_gets_no_tenant_sections(self):
         self.assertEqual(marketing_sections(LEGACY_ADMIN), ())
@@ -123,9 +134,15 @@ class MarketingSectionVisibilityTests(unittest.TestCase):
         self.assertNotIn(DISCOUNTS, _keys(_reseller(["loyalty", "campaigns"])))
         self.assertEqual(_keys(_reseller(["catalog_discounts"], shop_id=None)), [])
 
+    def test_funnel_follows_the_orders_or_payments_permission(self):
+        self.assertEqual(_keys(_reseller(["payments"])), [FUNNEL])
+        self.assertEqual(_keys(_reseller(["orders"])), [GIFT_CODES, FUNNEL])
+        self.assertEqual(_keys(_reseller(["orders"], shop_id=None)), [])
+        self.assertNotIn(FUNNEL, _keys(_reseller(["plans", "loyalty"])))
+
     def test_gift_codes_follow_the_orders_or_plans_permission(self):
         self.assertEqual(_keys(_reseller(["plans"])), [GIFT_CODES])
-        self.assertEqual(_keys(_reseller(["orders"])), [GIFT_CODES])
+        self.assertIn(GIFT_CODES, _keys(_reseller(["orders"])))
         self.assertEqual(_keys(_reseller(["plans"], shop_id=None)), [])
         self.assertNotIn(GIFT_CODES, _keys(_reseller(["loyalty", "campaigns"])))
 
@@ -156,6 +173,7 @@ class MarketingSectionVisibilityTests(unittest.TestCase):
                 self.assertEqual(CAMPAIGNS in _keys(staff), _campaigns_route_allows(staff))
                 self.assertEqual(DISCOUNTS in _keys(staff), _discounts_route_allows(staff))
                 self.assertEqual(GIFT_CODES in _keys(staff), _gift_codes_route_allows(staff))
+                self.assertEqual(FUNNEL in _keys(staff), _funnel_route_allows(staff))
                 self.assertEqual(CLUB in _keys(staff), _loyalty_route_allows(staff))
                 self.assertEqual(CLUB_TRANSACTIONS in _keys(staff), _loyalty_route_allows(staff))
 
