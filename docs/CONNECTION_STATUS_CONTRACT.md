@@ -48,18 +48,19 @@ Telegram escape می‌شود. انتخاب host دارای endpoint بیش از
   فقط در صورت پوشش همهٔ endpointهای موردنیاز می‌تواند سالم باشد. آدرس DNS حل‌شده در یک
   نمونه تضمین تمام مسیرهای DNS/CDN نیست و چنین ادعایی در محصول نمایش داده نمی‌شود.
 
-ماتریس هدف مرحلهٔ اول؛ **هیچ ردیفی در مرحلهٔ صفر تأیید اجرایی نشده است**:
+ماتریس مرحلهٔ اول؛ syntax مسیرهای اولیه با core نسخهٔ 26.3.27 تأیید شد.
+[شواهد و محدودیت‌های سازگاری](CONNECTION_STATUS_COMPATIBILITY.md) مرجع پشتیبانی است:
 
 | ترکیب | تنظیمات لازم برای fixture و validation | وضعیت فعلی |
 | --- | --- | --- |
-| VLESS + Reality با transport خام | UUID، flow، serverName، fingerprint، public key و short ID | اولویت اثبات فنی |
-| VLESS + TLS/WebSocket | UUID، certificate verification، SNI، path، Host و port | اولویت اثبات فنی |
-| host با چند آدرس ساده | مسیر مستقل برای تمام آدرس‌های منتخب با تنظیمات security یکسان | نیازمند تست پوشش |
+| VLESS + Reality با transport خام | UUID، flow، serverName، fingerprint، public key و short ID | fixture و core validation قبول؛ اتصال زنده باز |
+| VLESS + TLS/WebSocket | UUID، certificate verification، SNI، path، Host و port | fixture و core validation قبول؛ اتصال زنده باز |
+| host با چند آدرس ساده | مسیر مستقل برای تمام آدرس‌های منتخب با تنظیمات security یکسان | پوشش مصنوعی و core validation قبول |
 | wildcard/SNI تصادفی، XHTTP مسیر دانلود جدا، fragment و template سفارشی | نگاشت و وابستگی‌های اضافی | تا اثبات مستقل `not_ready` |
 | سایر پروتکل/transportها | ماتریس و fixture مستقل مطابق نیاز واقعی | هنوز تأیید نشده |
 
-نسخهٔ Xray بعد از تست fixture و validation در مرحلهٔ یک تثبیت می‌شود. شمارهٔ نسخهٔ
-آزمایش‌نشده یا پشتیبانی عمومی همهٔ transportها در مرحلهٔ صفر اعلام نمی‌شود.
+نسخهٔ تأییدشدهٔ syntax مرحلهٔ یک Xray 26.3.27 روی macOS/arm64 است. پورت صریح و یک
+SNI ثابت برای هر هاست لازم است. سازگاری Linux و اتصال زنده هنوز gate استقرارند.
 
 ## قرارداد اندازه‌گیری
 

@@ -1,5 +1,8 @@
 
 #
+# Selected-host route identity, scope and prevention of direct fallback.
+tests/test_connection_monitor_catalog.py
+tests/test_connection_monitor_config.py
 # Subscription contact ownership, shop isolation and cancellation notification claims.
 tests/test_purchase_contact_and_cancellation_notices.py
 # Monetary display escaping and canonical refund form values.
