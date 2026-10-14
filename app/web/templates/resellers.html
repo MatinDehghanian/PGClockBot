@@ -88,6 +88,22 @@
     </div>
   </form>
 </div>
+
+<div class="card settings-card">
+  <h2>همگام‌سازی ظرفیت از پاسارگارد</h2>
+  <p class="muted update-card-caption">
+    نمایندگانی که با پلن «ظرفیت فعلی» اعطا شده‌اند و ظرفیتشان صفر (نامحدود) ثبت شده، دوباره از سقف حجم و کاربر ادمین‌شان در پاسارگارد خوانده می‌شوند.
+    ظرفیتی که قبلاً درست ثبت شده تغییر نمی‌کند و چیزی در پاسارگارد نوشته نمی‌شود.
+  </p>
+  <form method="post" action="/resellers/repair-capacity"
+        data-confirm="ظرفیت نمایندگانی که صفر ثبت شده دوباره از پاسارگارد خوانده شود؟ چیزی در پاسارگارد تغییر نمی‌کند."
+        data-confirm-title="همگام‌سازی ظرفیت"
+        data-confirm-label="همگام‌سازی">
+    <div class="actions">
+      <button class="btn btn-ghost" type="submit">همگام‌سازی ظرفیت</button>
+    </div>
+  </form>
+</div>
 {% endif %}
 
 <div class="card card-flush">
