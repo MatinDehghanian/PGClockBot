@@ -13,11 +13,6 @@
 <div class="page-head">
   <div>
     {{ page_title('orders', 'مدیریت مالی', help='finance') }}
-    {% if finance_tab == 'reports' %}
-    <p class="muted page-sub">گزارش فروش و کاربران · امروز · ۷ روز · ۳۰ روز</p>
-    {% elif finance_tab == 'cancellations' %}
-    <p class="muted page-sub">بررسی درخواست لغو سرویس و اعتبار برگشتی کیف پول همین فروشگاه</p>
-    {% endif %}
   </div>
   {% if can_finance_settings %}
   <button type="button" class="btn btn-ghost" data-modal-open="modal-finance-settings">تنظیمات</button>

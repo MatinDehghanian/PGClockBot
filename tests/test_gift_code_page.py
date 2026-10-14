@@ -136,6 +136,10 @@ class GiftCodePageTests(GiftCodeHarness):
         self.assertNotIn("<script>x</script>", response.text)
         self.assertIn("&lt;script&gt;x&lt;/script&gt;", response.text)
 
+    async def test_the_title_has_no_caption_under_it(self):
+        response = await self._get(OWNER)
+        self.assertNotIn("page-sub", response.text)
+
     async def test_shop_staff_see_only_their_own_shop(self):
         response = await self._get(_reseller(["plans"], shop_id=5))
         self.assertIn("SHOPFIVECODE", response.text)

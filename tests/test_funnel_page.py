@@ -103,6 +103,10 @@ class FunnelPageTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(response.headers["location"], "/home")
                 summary.assert_not_awaited()
 
+    async def test_the_title_has_no_caption_under_it(self):
+        response = await self._get(OWNER, AsyncMock(return_value={}))
+        self.assertNotIn("page-sub", response.text)
+
     async def test_empty_funnel_still_renders(self):
         response = await self._get(OWNER, AsyncMock(return_value=None))
         self.assertEqual(response.status_code, 200)
