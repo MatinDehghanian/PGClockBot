@@ -24,8 +24,10 @@ class TooManyRequests(ValueError):
 
 async def open_request(
     session: AsyncSession, *, user_id: int, shop_id: int | None, panel_user_id: int, panel_username: str
-) -> ServiceImportRequest:
+) -> tuple[ServiceImportRequest, bool]:
     """Create the request, or return the one already waiting for this customer and panel user.
+
+    The flag tells whether the request is new, so the admins are told once, not on every repeat.
 
     Runs inside the caller's transaction (the customer row is already locked there), so the
     per-customer cap holds; the partial unique index backs it up for simultaneous callers.
@@ -41,7 +43,7 @@ async def open_request(
     if waiting is not None:
         if as_utc(waiting.expires_at) <= now:
             waiting.expires_at = now + REQUEST_TTL
-        return waiting
+        return waiting, False
     open_count = int(
         await session.scalar(
             select(func.count()).select_from(ServiceImportRequest).where(
@@ -64,7 +66,7 @@ async def open_request(
     )
     session.add(request)
     await session.flush()
-    return request
+    return request, True
 
 
 def as_utc(value: datetime) -> datetime:

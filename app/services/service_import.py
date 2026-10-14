@@ -125,6 +125,8 @@ class ImportResult:
     outcome: ImportOutcome
     service: UserService | None  # ``None`` while the request waits for an admin
     info: dict[str, Any]
+    request_id: int | None = None  # the waiting request, when the outcome is PENDING_APPROVAL
+    new_request: bool = False
 
 
 class ServiceImportError(ValueError):
@@ -464,13 +466,15 @@ async def _queue_request(
     session: AsyncSession, user: BotUser, verified: VerifiedService, shop_id: int | None
 ) -> ImportResult:
     try:
-        await open_request(
+        request, created = await open_request(
             session, user_id=int(user.id), shop_id=shop_id, panel_user_id=verified.panel_id,
             panel_username=str(verified.record.get("username") or ""),
         )
     except TooManyRequests:
         raise ServiceImportError(REQUEST_LIMIT, Reason.REQUEST_LIMIT) from None
-    return await _commit(session, None, verified.record, ImportOutcome.PENDING_APPROVAL)
+    request_id = int(request.id)
+    result = await _commit(session, None, verified.record, ImportOutcome.PENDING_APPROVAL)
+    return ImportResult(result.outcome, None, result.info, request_id=request_id, new_request=created)
 
 
 async def _commit(session: AsyncSession, service: UserService | None, record: dict[str, Any], outcome: ImportOutcome) -> ImportResult:
