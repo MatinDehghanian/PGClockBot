@@ -5397,12 +5397,32 @@ form.settings-form > .actions.sticky-actions,
 }
 .settings-main { min-width: 0; }
 .settings-tabs { margin-bottom: var(--page-title-gap); }
-/* Grouped bot settings: group pills on top, the active group's tabs as a slightly smaller capsule row */
-.settings-tabs-groups { margin-bottom: var(--space-1); }
+/* Grouped bot settings: group pills on top; the active group's tabs sit in a recessed tray below,
+   so the second level reads as a child of the group, not as a second row of the same pills. */
+.settings-tabs-groups { margin-bottom: 0; }
+.section-tabs.settings-subtabs {
+  width: fit-content;
+  max-width: 100%;
+  gap: 2px;
+  padding: 4px;
+  margin: var(--space-1_5) 0 var(--page-title-gap);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--btn-h) / 2 + 4px);
+  background: color-mix(in srgb, var(--muted) 55%, transparent);
+}
 .section-tabs.settings-subtabs a {
-  height: calc(var(--btn-h) - 6px);
+  height: calc(var(--btn-h) - 8px);
   min-height: 0;
+  padding: 0 var(--space-1_5);
   font-size: 12px;
+  border-color: transparent;
+  background: transparent;
+}
+.section-tabs.settings-subtabs a:hover { background: rgba(255, 255, 255, 0.07); }
+.section-tabs.settings-subtabs a.active {
+  background: var(--card);
+  color: var(--brand-fg);
+  border-color: rgba(249, 115, 22, 0.42);
 }
 
 .tg-preview-slot { min-width: 0; }
@@ -7880,6 +7900,16 @@ html[data-theme="light"] .section-tabs a.active:hover,
 html[data-theme="light"] .section-tabs .tab-btn.active:hover {
   background: rgba(249, 115, 22, 0.18);
   color: #c2410c;
+}
+html[data-theme="light"] .section-tabs.settings-subtabs a {
+  background: transparent;
+  border-color: transparent;
+}
+html[data-theme="light"] .section-tabs.settings-subtabs a:hover { background: rgba(24, 24, 27, 0.06); }
+html[data-theme="light"] .section-tabs.settings-subtabs a.active {
+  background: var(--card);
+  color: #c2410c;
+  border-color: rgba(249, 115, 22, 0.42);
 }
 html[data-theme="light"] .btn-star {
   color: #c2410c !important;
