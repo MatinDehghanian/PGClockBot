@@ -100,6 +100,7 @@ from app.services.web_auth import (
     verify_web_admin,
 )
 from app.api.catalog_discounts import register_catalog_discounts
+from app.api.funnel_pages import register_funnel_pages
 from app.api.gift_code_pages import legacy_gift_modal_redirect, register_gift_code_pages
 from app.api.home_pages import register_home_pages
 from app.api.pg_pages import register_pg_pages
@@ -1482,6 +1483,7 @@ def create_api_app(lifespan=None) -> FastAPI:
     register_customer_features(app, render=render, require_staff=require_staff, get_db=get_db)
     register_catalog_discounts(app, render=render, require_staff=require_staff, get_db=get_db)
     register_gift_code_pages(app, render=render, require_staff=require_staff, get_db=get_db)
+    register_funnel_pages(app, render=render, require_staff=require_staff, get_db=get_db)
 
     @app.get("/settings/ssl/progress")
     async def ssl_progress(staff: dict = Depends(require_admin)):
