@@ -19,7 +19,8 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.db.models import BotUser, ResellerProfile, ServiceImportAttempt, UserService
 from app.services import service_import as si
-from app.services.pasarguard import PasarGuardError
+from app.services import service_import_config as si_config
+from app.services.pasarguard import PasarGuardError, subscription_path_from_url
 from app.services.service_import import (
     GENERIC_REFUSAL,
     ImportOutcome,
@@ -35,20 +36,36 @@ TOKEN = "tok-AAAAAAAAAAAA"
 
 
 class FakePanel:
-    """Authenticated panel client: unknown tokens 404, a scoped client only sees its own users."""
+    """Authenticated panel client: unknown tokens 404, a scoped client only sees its own users.
 
-    def __init__(self, users: dict[str, dict], *, visible_admin: str | None = None):
+    Subscription links answer only on ``sub_path`` (the panel's real subscription prefix) and the
+    client is signed in as ``signed_in_as``, like a password or an API-key login.
+    """
+
+    def __init__(self, users: dict[str, dict], *, visible_admin: str | None = None, signed_in_as: str = "platformadmin"):
         self.users = users
         self.visible_admin = visible_admin
         self.fail_with: Exception | None = None
+        self.sub_path = "/sub"
+        self.signed_in_as = signed_in_as
+        self.uses_api_key = False
+        self.base_url = f"http://panel-{id(self)}.test"
+        self.info_calls: list[str] = []
 
-    async def subscription_info(self, token: str) -> dict:
+    async def subscription_info(self, token: str, *, subscription_url: str | None = None) -> dict:
         if self.fail_with:
             raise self.fail_with
+        prefix = subscription_path_from_url(subscription_url) if subscription_url else "/sub"
+        self.info_calls.append(f"{prefix}/{token}")
         user = self.users.get(token)
-        if not user:
+        if not user or prefix != self.sub_path:
             raise PasarGuardError("not found", status_code=404)
         return {"username": user["username"]}
+
+    async def get_current_admin(self) -> dict:
+        if self.fail_with:
+            raise self.fail_with
+        return {"username": self.signed_in_as}
 
     async def get_user_by_username(self, username: str) -> dict:
         for user in self.users.values():
@@ -68,6 +85,9 @@ class ImportCase(unittest.IsolatedAsyncioTestCase):
         from app.db import Base
         import app.db.models  # noqa: F401
 
+        from app.services.users import clear_settings_cache
+
+        clear_settings_cache()  # settings are cached per process; every test has its own database
         self._tmpdir = tempfile.TemporaryDirectory()
         self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmpdir.name) / 'i.db'}")
         async with self.engine.begin() as conn:
@@ -91,11 +111,13 @@ class ImportCase(unittest.IsolatedAsyncioTestCase):
         }
         self.platform_panel = FakePanel(self.platform_users)  # owner credentials see every user
         self.shop_panel = FakePanel(self.platform_users, visible_admin=SHOP_ADMIN)
-        for target, value in (
-            ("get_pg", lambda: self.platform_panel),
-            ("get_settings", lambda: SimpleNamespace(pg_username=PLATFORM_ADMIN, pg_subscription_path="/sub")),
+        self.panel_settings = SimpleNamespace(pg_username=PLATFORM_ADMIN, pg_subscription_path="/sub")
+        for module, target, value in (
+            (si, "get_pg", lambda: self.platform_panel),
+            (si, "get_settings", lambda: self.panel_settings),
+            (si_config, "get_settings", lambda: self.panel_settings),
         ):
-            patcher = patch.object(si, target, value)
+            patcher = patch.object(module, target, value)
             patcher.start()
             self.addCleanup(patcher.stop)
 
@@ -161,9 +183,17 @@ class ScopeTests(ImportCase):
     async def test_a_blocked_customer_is_refused(self):
         self.assertEqual(await self.refused(8, "tok-plat-0000001"), GENERIC_REFUSAL)
 
-    async def test_a_missing_owner_setting_fails_closed(self):
-        with patch.object(si, "get_settings", lambda: SimpleNamespace(pg_username="", pg_subscription_path="/sub")):
-            self.assertEqual(await self.refused(1, "tok-plat-0000001"), GENERIC_REFUSAL)
+    async def test_the_admin_is_read_from_the_panel_so_a_blank_username_setting_still_works(self):
+        self.panel_settings.pg_username = ""  # e.g. an API-key login
+        self.assertEqual((await self.run_import(1, "tok-plat-0000001")).outcome, ImportOutcome.ADDED)
+
+    async def test_when_nobody_can_tell_who_the_bot_is_the_import_fails_closed(self):
+        self.panel_settings.pg_username = ""
+        self.platform_panel.fail_with = PasarGuardError("down", status_code=500)
+        with self.assertRaises(ServiceImportError) as caught:
+            await self.run_import(1, "tok-plat-0000001")
+        self.assertEqual(caught.exception.reason, si.Reason.IDENTITY_UNKNOWN)
+        self.assertEqual(str(caught.exception), si.PANEL_UNAVAILABLE)
 
     async def test_mismatching_or_malformed_panel_data_is_refused(self):
         self.platform_users["tok-plat-0000001"]["id"] = True
@@ -213,7 +243,7 @@ class OwnershipTests(ImportCase):
         async def stale(_session, _pg_user_id, _token):
             return []
 
-        with patch.object(si, "_existing_rows", stale):
+        with patch.object(si, "existing_rows", stale):
             self.assertEqual(await self.refused(2, "tok-plat-0000001"), GENERIC_REFUSAL)
         rows = await self.rows()
         self.assertEqual([r.bot_user_id for r in rows], [1])
@@ -229,14 +259,30 @@ class OwnershipTests(ImportCase):
             session.add(UserService(bot_user_id=2, pg_user_id=99, pg_username="a", remark="order:1"))
             await session.commit()
 
-    async def test_a_cap_limits_how_many_services_one_customer_can_add(self):
+    async def _set(self, **values: str) -> None:
+        from app.services.users import set_settings_bulk
+
+        async with self.Session() as session:
+            await set_settings_bulk(session, values)
+
+    async def _seed_imported(self, count: int) -> None:
         async with self.Session() as session:
             session.add_all(
                 UserService(bot_user_id=1, pg_user_id=500 + i, pg_username=f"x{i}", remark="imported")
-                for i in range(si.MAX_IMPORTED_PER_USER)
+                for i in range(count)
             )
             await session.commit()
+
+    async def test_the_default_cap_is_five_services_per_customer(self):
+        await self._seed_imported(5)
         self.assertEqual(await self.refused(1, "tok-plat-0000001"), si.LIMIT_REACHED)
+
+    async def test_the_cap_comes_from_the_setting(self):
+        await self._set(service_import_max_per_user="2")
+        await self._seed_imported(2)
+        self.assertEqual(await self.refused(1, "tok-plat-0000001"), si.LIMIT_REACHED)
+        await self._set(service_import_max_per_user="3")
+        self.assertEqual((await self.run_import(1, "tok-plat-0000001")).outcome, ImportOutcome.ADDED)
 
 
 class RateLimitTests(ImportCase):

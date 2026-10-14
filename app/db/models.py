@@ -431,6 +431,8 @@ class ServiceImportAttempt(Base):
     bot_user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id", ondelete="CASCADE"))
     token_hash: Mapped[str] = mapped_column(String(64))
     outcome: Mapped[str] = mapped_column(String(24))
+    # Operator-facing cause of a refusal (service_import.Reason); never shown to customers.
+    reason: Mapped[str | None] = mapped_column(String(32), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
