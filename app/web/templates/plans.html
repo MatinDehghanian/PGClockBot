@@ -188,7 +188,7 @@
           {{ a.name }}
           {% if a.description %}<br><small class="muted">{{ a.description }}</small>{% endif %}
         </td>
-        <td class="col-hide-sm muted">{% if a.category_id and plan_category_map and plan_category_map.get(a.category_id) %}{{ plan_category_map.get(a.category_id).name }}{% else %}—{% endif %}</td>
+        <td class="col-hide-sm muted">{% if a.is_general %}عمومی{% elif a.category_id and plan_category_map and plan_category_map.get(a.category_id) %}{{ plan_category_map.get(a.category_id).name }}{% else %}—{% endif %}</td>
         <td>{% if a.kind == 'duration' %}زمان{% else %}حجم{% endif %}</td>
         <td class="mono">{% if a.kind == 'duration' %}{{ a.amount | int }} روز{% else %}{{ a.amount | gb }}{% endif %}</td>
         <td class="mono" dir="ltr">{{ a.price | money }}</td>
@@ -701,19 +701,19 @@
 
     {# —— User service addon packs (volume / duration) —— #}
     <div id="panel-user-addon" class="plan-panel" hidden>
-      <p class="muted update-card-caption" id="user-addon-hint">خرید از کارت همان سرویس در ربات — برچسب دسته را با پلن سرویس یکی بگذارید تا قیمت هر دسته جدا باشد.</p>
+      <p class="muted update-card-caption" id="user-addon-hint">خرید از کارت همان سرویس در ربات — بسته‌ی «عمومی» برای همه‌ی دسته‌ها نمایش داده می‌شود؛ برای قیمت جدا، برچسب دسته را با پلن سرویس یکی بگذارید.</p>
       <form method="post" action="/plans/addons" class="form-stack" id="unified-service-addon-form">
         <input type="hidden" name="kind" id="unified-addon-kind" value="volume" />
-        <label class="form-field">برچسب دسته (اختیاری)
+        <label class="form-field">دسته‌ی بسته
           <select name="category_id" id="unified-addon-category" data-plan-category-select data-category-audience="users">
-            <option value="">— بدون برچسب —</option>
+            <option value="">عمومی (همه‌ی دسته‌ها)</option>
             {% for c in plan_categories or [] %}
               {% if c.is_active and (c.audience or 'users') == 'users' %}
               <option value="{{ c.id }}">{{ c.name }}</option>
               {% endif %}
             {% endfor %}
           </select>
-          <small class="muted">فقط روی سرویس‌هایی با همین برچسب پلن دیده می‌شود</small>
+          <small class="muted">پیش‌فرض «عمومی» است و روی همه‌ی سرویس‌ها دیده می‌شود؛ با انتخاب برچسب فقط روی سرویس‌هایی با همین برچسب پلن دیده می‌شود</small>
         </label>
         <div class="form-row">
           <label class="form-field">نام بسته
@@ -957,6 +957,7 @@
           <tbody>
           {% for c in plan_categories or [] %}
             {% set linked = (category_linked_plans or {}).get(c.id) or [] %}
+            {% set linked_packs = service_addon_packs | default([]) | selectattr('category_id', 'equalto', c.id) | list %}
             {% if c.button_style is none %}
               {% set cat_style_label = 'ارث' %}
             {% elif c.button_style == '' %}
@@ -980,8 +981,11 @@
               <td class="col-hide-sm">
                 {% if linked %}
                   <span class="muted">{{ linked | join('، ') }}</span>
-                {% else %}
+                {% elif not linked_packs %}
                   <span class="muted">—</span>
+                {% endif %}
+                {% if linked_packs %}
+                  <div class="muted">بسته‌ها: {{ linked_packs | map(attribute='name') | join('، ') }}</div>
                 {% endif %}
               </td>
               <td class="col-hide-sm mono">{{ c.sort_order }}</td>
@@ -999,6 +1003,10 @@
                   <form method="post" action="/plans/categories/{{ c.id }}/toggle">
                     <button class="btn btn-ghost btn-sm" type="submit">{% if c.is_active %}خاموش{% else %}روشن{% endif %}</button>
                   </form>
+                  {% if linked_packs %}
+                  <button class="btn btn-danger btn-sm" type="button" disabled
+                          title="ابتدا بسته‌های این برچسب را به «عمومی» منتقل یا حذف کنید">حذف</button>
+                  {% else %}
                   <form method="post" action="/plans/categories/{{ c.id }}/delete"
                         data-confirm="این برچسب حذف شود؟ پلن‌هایش بدون برچسب می‌مانند."
                         data-confirm-title="حذف برچسب دسته"
@@ -1006,6 +1014,7 @@
                         data-confirm-label="حذف">
                     <button class="btn btn-danger btn-sm" type="submit">حذف</button>
                   </form>
+                  {% endif %}
                 {% endcall %}
               </td>
             </tr>
@@ -1038,16 +1047,16 @@
             <option value="duration">زمان (روز)</option>
           </select>
         </label>
-        <label class="form-field">برچسب دسته (اختیاری)
+        <label class="form-field">دسته‌ی بسته
           <select name="category_id" id="service-addon-category" data-plan-category-select data-category-audience="users">
-            <option value="">— بدون برچسب —</option>
+            <option value="">عمومی (همه‌ی دسته‌ها)</option>
             {% for c in plan_categories or [] %}
               {% if c.is_active and (c.audience or 'users') == 'users' %}
               <option value="{{ c.id }}">{{ c.name }}</option>
               {% endif %}
             {% endfor %}
           </select>
-          <small class="muted">فقط سرویس‌های همین دسته این بسته را می‌بینند</small>
+          <small class="muted">پیش‌فرض «عمومی» است و روی همه‌ی سرویس‌ها دیده می‌شود؛ با انتخاب برچسب فقط سرویس‌های همین دسته این بسته را می‌بینند</small>
         </label>
         <label class="form-field">مقدار
           <input name="amount" id="service-addon-amount" type="number" min="0.1" step="0.1" required placeholder="۱۰" />
@@ -1090,7 +1099,7 @@
               {{ a.name }}
               {% if a.description %}<br><small class="muted">{{ a.description }}</small>{% endif %}
             </td>
-            <td class="col-hide-sm muted">{% if a.category_id and plan_category_map and plan_category_map.get(a.category_id) %}{{ plan_category_map.get(a.category_id).name }}{% else %}—{% endif %}</td>
+            <td class="col-hide-sm muted">{% if a.is_general %}عمومی{% elif a.category_id and plan_category_map and plan_category_map.get(a.category_id) %}{{ plan_category_map.get(a.category_id).name }}{% else %}—{% endif %}</td>
             <td>{% if a.kind == 'duration' %}زمان{% else %}حجم{% endif %}</td>
             <td class="mono">{% if a.kind == 'duration' %}{{ a.amount | int }} روز{% else %}{{ a.amount | gb }}{% endif %}</td>
             <td class="mono" dir="ltr">{{ a.price | money }}</td>

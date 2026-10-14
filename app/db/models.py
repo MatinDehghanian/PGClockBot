@@ -178,9 +178,10 @@ class Plan(Base):
 class ServiceAddonPack(Base):
     """Customer add-on packs: extra volume (GB) or duration (days) on an existing service.
 
-    ``category_id`` scopes pricing to the same plan category as the service's
-    sales plan — VIP and economy packs can differ. NULL matches only
-    uncategorized services (strict equality).
+    ``is_general`` packs apply to every plan category of the shop. Otherwise
+    ``category_id`` ties the pack to the plan category of the service's sales
+    plan, so VIP and economy packs can be priced differently. A pack that is
+    neither general nor tied to a category matches nothing.
     """
 
     __tablename__ = "service_addon_packs"
@@ -201,6 +202,7 @@ class ServiceAddonPack(Base):
         nullable=True,
         index=True,
     )
+    is_general: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
