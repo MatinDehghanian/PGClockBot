@@ -15,6 +15,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.3.45": [
+        "حذف کاربر: جاروی خودکار همهٔ کلیدهای خارجی به ردیف کاربر (قبل از orders/payments) تا حذف به‌خاطر FK ناقص گیر نکند (#748)",
+        "ریستور: restore/pre-v0.3.45-v0.3.44",
+    ],
     "0.3.44": [
         "پنل وب: گروه‌بندی زندهٔ ارقام پول روی ورودی‌های جاافتاده (پیش‌فرض شارژ، کاهش کاتالوگ، جایزه/چرخ کیف‌پول) و کش محتوایی اسکریپت‌های money/list (#734)",
         "ریستور: restore/pre-v0.3.44-v0.3.43",
