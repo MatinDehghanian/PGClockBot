@@ -46,5 +46,6 @@ def register_message_variables_pages(
                 "staff": staff,
                 "groups": groups,
                 "include_owner_only": include_owner,
+                "settings_base": settings_base,
             },
         )
