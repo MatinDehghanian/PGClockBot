@@ -1724,6 +1724,15 @@ async def provision_existing_pg_admin(
         validate_web_username,
     )
 
+    from app.services.db_safe import rollback_quiet
+    from app.services.pg_admin_subscription import (
+        PgCapacityUnreadable,
+        is_current_capacity_plan,
+        is_subscription_plan,
+        read_live_pg_admin_capacity,
+        start_or_refresh_subscription,
+    )
+
     pg_u = (pg_username or "").strip().lower()
     if not pg_u:
         return None, None, "نام ادمین پاسارگارد الزامی است"
@@ -1737,6 +1746,13 @@ async def provision_existing_pg_admin(
         try:
             require_positive_payg_rate(int(getattr(plan, "price_per_gb", 0) or 0))
         except PaygRateError as exc:
+            return None, None, str(exc)
+    if is_current_capacity_plan(plan):
+        # Nothing is created unless the admin's existing limits can be read, so a grant can
+        # never record «unlimited» by mistake.
+        try:
+            await read_live_pg_admin_capacity(pg_u)
+        except PgCapacityUnreadable as exc:
             return None, None, str(exc)
 
     cleaned, uerr = validate_web_username(web_username, lowercase=True)
@@ -1897,13 +1913,8 @@ async def provision_existing_pg_admin(
     await session.commit()
     await session.refresh(profile)
 
-    try:
-        from app.services.pg_admin_subscription import (
-            is_subscription_plan,
-            start_or_refresh_subscription,
-        )
-
-        if is_subscription_plan(plan):
+    if is_subscription_plan(plan):
+        try:
             await start_or_refresh_subscription(
                 session,
                 pg_username=pg_u,
@@ -1912,8 +1923,13 @@ async def provision_existing_pg_admin(
                 apply_pg_limits=True,
             )
             await session.commit()
-    except Exception:
-        logger.exception("subscription start failed after provision_existing pg=%s", pg_u)
+        except ValueError as exc:
+            await rollback_quiet(session)
+            return profile, None, f"نمایندگی فعال شد ولی اشتراک پلن ثبت نشد: {exc}"
+        except Exception:  # noqa: BLE001 - the panel/DB detail stays in the log, the admin sees a safe text
+            logger.exception("subscription start failed after provision_existing pg=%s", pg_u)
+            await rollback_quiet(session)
+            return profile, None, "نمایندگی فعال شد ولی اشتراک پلن ثبت نشد؛ اتصال پنل را بررسی و دوباره تلاش کنید"
 
     setup_hint = None
     if not (profile.bot_token or "").strip():
@@ -1974,7 +1990,7 @@ async def convert_staff_to_reseller(
         plan_id=plan_id,
         note=note or "converted from pg_staff",
     )
-    if err:
+    if err and profile is None:
         # Staff delete was flushed but not committed; restore prior state.
         await session.rollback()
         return None, None, f"تبدیل به نماینده ناموفق بود: {err}"
@@ -1987,7 +2003,7 @@ async def convert_staff_to_reseller(
         except Exception:
             pass
         await session.commit()
-    return profile, hint, None
+    return profile, hint, err
 
 
 def bot_needs_setup(profile: ResellerProfile | None) -> bool:

@@ -11,6 +11,7 @@ from app.services.formatting import (
     format_number,
 )
 from app.services.pasarguard import get_pg
+from app.services.pg_quota import extract_admin_capacity
 
 
 _SERVER_STAT_KEYS = {
@@ -386,22 +387,12 @@ async def build_reseller_pg_overview(
                 role = None
 
         limits = _role_limits(admin, role)
+        data_limit, max_users = extract_admin_capacity(admin, role)
         total_users = _as_int(admin.get("total_users")) or _as_int(admin.get("users_count")) or 0
-        max_users = (
-            _as_int(limits.get("max_users"))
-            or _as_int(limits.get("users_max"))
-            or _as_int(admin.get("max_users"))
-        )
         used_traffic = (
             _as_int(admin.get("used_traffic"))
             or _as_int(admin.get("traffic_used"))
             or 0
-        )
-        data_limit = (
-            _as_int(admin.get("data_limit"))
-            or _as_int(limits.get("data_limit"))
-            or _as_int(limits.get("max_traffic"))
-            or _as_int(limits.get("traffic_limit"))
         )
         lifetime = _as_int(admin.get("lifetime_used_traffic"))
 

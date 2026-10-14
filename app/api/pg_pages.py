@@ -2053,7 +2053,7 @@ def register_pg_pages(
             )
             if werr:
                 return RedirectResponse(
-                    f"/pg/admins?err={_q(f'{msg} — ولی نمایندگی ساخته نشد: {werr}')}",
+                    f"/pg/admins?err={_q(f'{msg} — {werr}')}",
                     status_code=303,
                 )
             msg += " و به‌عنوان نماینده (پنل ربات + پاسارگارد) فعال شد"
