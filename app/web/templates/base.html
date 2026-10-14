@@ -227,7 +227,7 @@
           {% endif %}
           {% set mk_sections = marketing_sections if marketing_sections is defined else () %}
           {% if mk_sections %}
-          <a href="{{ mk_sections[0].href }}" class="nav-item nav-item-bot {% if path.startswith('/loyalty') or path.startswith('/catalog-discounts') or path.startswith('/campaigns') or path.startswith('/broadcast') %}active{% endif %}">
+          <a href="{{ mk_sections[0].href }}" class="nav-item nav-item-bot {% if path.startswith('/loyalty') or path.startswith('/catalog-discounts') or path.startswith('/campaigns') or path.startswith('/broadcast') or path.startswith('/gift-codes') %}active{% endif %}">
             <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4h3l5 4V6L7 10H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M18.8 6.2a8.5 8.5 0 0 1 0 11.6"/></svg>
             <span>بازاریابی و وفاداری</span>
           </a>
