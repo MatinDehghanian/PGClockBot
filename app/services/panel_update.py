@@ -1015,7 +1015,7 @@ def resolve_stale_update_status() -> dict[str, Any]:
     - Unlock zombie "running" when the worker thread is gone.
     - Keep restart_required / error visible until cleared.
     """
-    from app.services.updates import is_newer, is_same_or_newer
+    from app.services.updates import is_same_or_newer
 
     st = read_status()
     local = local_version()
@@ -1233,7 +1233,7 @@ async def _update_page_context_impl(*, force_check: bool = False) -> dict[str, A
         get_update_channel,
         migration_preflight,
     )
-    from app.services.updates import fetch_recent_versions, is_newer
+    from app.services.updates import fetch_recent_versions
 
     channel = get_update_channel()
     info = await check_github_update(force=force_check, channel=channel)

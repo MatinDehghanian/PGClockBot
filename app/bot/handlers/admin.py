@@ -14,7 +14,7 @@ from app.bot.auth import is_platform_admin as _is_admin
 from app.bot.auth import require_bot_owner_handler, require_platform_rep_mgmt
 from app.config import get_settings
 from app.db.models import BotUser, Order, OrderStatus, Payment, PaymentStatus, Plan, Role, Ticket, UserService
-from app.services.home_overview import admin_customer_counts, bot_dashboard_summary
+from app.services.home_overview import bot_dashboard_summary
 from app.services.formatting import (
     format_system_stats,
     format_toman,
@@ -27,7 +27,7 @@ from app.services.orders import (
 )
 from app.services.redact import user_safe_error
 from app.services.pasarguard import get_pg
-from app.services.tickets import get_ticket, list_open_tickets, reply_ticket
+from app.services.tickets import get_ticket, reply_ticket
 from app.services.updates import local_version
 from app.services.users import get_all_settings, get_setting, on, set_setting
 from app.bot.tg_utils import parse_bot_float, parse_bot_int, safe_edit_text

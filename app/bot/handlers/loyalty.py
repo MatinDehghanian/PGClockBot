@@ -40,7 +40,7 @@ from app.services.lucky_wheel import (
     spin as wheel_spin,
     wheel_feature_enabled,
 )
-from app.services.message_variables import DOMAIN_REFERRAL, render_message_template
+from app.services.message_variables import DOMAIN_REFERRAL
 from app.services.users import get_all_settings, get_setting, on, set_setting
 from app.services.redact import user_safe_error
 

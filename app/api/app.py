@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
-import hmac
 import json
 import logging
 import time
 from pathlib import Path
 from typing import Optional
-from urllib.parse import parse_qsl, quote
+from urllib.parse import quote
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -17,7 +15,6 @@ from fastapi.templating import Jinja2Templates
 from itsdangerous import BadSignature, BadTimeSignature, URLSafeTimedSerializer
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.config import DATA_DIR, get_settings, normalize_pg_base_url, normalize_pg_subscription_path
@@ -30,7 +27,6 @@ from app.db.models import (
     Plan,
     ResellerProfile,
     Role,
-    UserService,
 )
 from app.db.session import SessionLocal
 from app.services.orders import (
@@ -44,7 +40,6 @@ from app.services.orders import (
 )
 from app.services.list_query import filter_by_search, normalize_search_q
 from app.services.payer_notify import notify_payer
-from app.services.pasarguard import get_pg
 from app.services.resellers import (
     setup_is_complete,
     DEFAULT_FEATURE_PERMS,
@@ -3164,7 +3159,6 @@ def create_api_app(lifespan=None) -> FastAPI:
         btn = str(form.get("btn_wholesale") or "").strip() or "📦 فروش عمده"
         await set_setting(session, "btn_wholesale", btn, reseller_id=owner_id)
         tiers = parse_wholesale_tiers(str(form.get("wholesale_tiers") or ""))
-        import json
 
         await set_setting(
             session,

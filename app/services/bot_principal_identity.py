@@ -16,7 +16,7 @@ Identity + AuthzContext only — PG gates live in the 4B–4E pilots.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Iterable, Mapping
+from typing import Any, Iterable
 
 from sqlalchemy.ext.asyncio import AsyncSession
 

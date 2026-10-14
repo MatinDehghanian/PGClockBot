@@ -7,14 +7,12 @@ Supports ``--json`` via CliContext.json_mode.
 from __future__ import annotations
 
 import json
-import os
 import shutil
 import socket
 import ssl
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 
 from app.cli.context import (
@@ -26,8 +24,8 @@ from app.cli.context import (
     systemctl,
     web_port,
 )
-from app.cli.install_root import MARKER_PATH, python_bin
-from app.cli.output import header, info, kv, ok, warn
+from app.cli.install_root import MARKER_PATH
+from app.cli.output import header, ok, warn
 from app.cli.service_cmds import _probe_health
 
 Check = dict[str, Any]
