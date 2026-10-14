@@ -456,11 +456,31 @@ def gift_code_scope(staff: Mapping[str, Any]) -> int | None:
     return shop_id
 
 
-async def list_gift_codes(session: AsyncSession, *, shop_id: int | None) -> list[ChargeCode]:
+async def list_gift_codes(
+    session: AsyncSession, *, shop_id: int | None, limit: int = GIFT_CODE_LIST_LIMIT
+) -> list[ChargeCode]:
     """Newest codes of one shop, bounded; the shop filter is applied in SQL."""
-    query = select(ChargeCode).order_by(ChargeCode.id.desc()).limit(GIFT_CODE_LIST_LIMIT)
+    query = select(ChargeCode).order_by(ChargeCode.id.desc()).limit(max(1, int(limit)))
     if shop_id is None:
         query = query.where(ChargeCode.reseller_id.is_(None))
     else:
         query = query.where(ChargeCode.reseller_id == int(shop_id))
     return list((await session.execute(query)).scalars().all())
+
+
+async def set_gift_code_active(
+    session: AsyncSession, code_id: int, *, shop_id: int | None, active: bool
+) -> bool:
+    """Set a code's state in one shop-scoped UPDATE; repeating the call is harmless.
+
+    Returns ``False`` when the code does not belong to ``shop_id``.
+    """
+    owner = ChargeCode.reseller_id.is_(None) if shop_id is None else ChargeCode.reseller_id == int(shop_id)
+    result = await session.execute(
+        update(ChargeCode)
+        .where(ChargeCode.id == int(code_id), owner)
+        .values(is_active=bool(active))
+        .execution_options(synchronize_session=False)
+    )
+    await session.commit()
+    return result.rowcount == 1

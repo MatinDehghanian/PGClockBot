@@ -17,7 +17,7 @@ from app.services.users import get_all_settings
 
 router = Router(name="nav_marketing")
 
-MARKETING_HUB_BODY = "🎯 <b>بازاریابی</b>\nباشگاه مشتریان و پیام گروهی."
+MARKETING_HUB_BODY = "🎯 <b>بازاریابی</b>\nباشگاه مشتریان، پیام گروهی، کد هدیه و کمپین‌ها."
 
 
 async def open_admin_marketing_hub(

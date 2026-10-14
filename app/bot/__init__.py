@@ -107,6 +107,7 @@ def create_dispatcher() -> Dispatcher:
         admin_settings,
         loyalty,
         nav_hubs,
+        marketing_tools,
         nav_marketing,
         payments,
         plan_catalog_manage,
@@ -132,6 +133,7 @@ def create_dispatcher() -> Dispatcher:
     dp.include_router(reply_nav.router)
     dp.include_router(nav_hubs.router)
     dp.include_router(nav_marketing.router)
+    dp.include_router(marketing_tools.router)
     from app.bot import nav_input as nav_input_mod
     from app.bot import staff_cancel as _staff_cancel  # noqa: F401 — cancel registry
 
