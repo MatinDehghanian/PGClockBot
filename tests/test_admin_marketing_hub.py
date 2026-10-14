@@ -38,10 +38,10 @@ class MarketingHubKeyboardTests(unittest.TestCase):
             ["nv:adm:ops", "nv:adm:people", "nv:adm:product", "nv:adm:marketing", "nv:adm:system", "menu:home"],
         )
 
-    def test_hub_lists_club_and_broadcast_and_returns_home(self):
+    def test_hub_lists_its_leaves_and_returns_home(self):
         self.assertEqual(
             _callbacks(admin_marketing_hub_keyboard({})),
-            ["nv:adm:loy", "nv:adm:broadcast", "nv:adm:home"],
+            ["nv:adm:loy", "nv:adm:broadcast", "nv:adm:gc", "nv:adm:cmp", "nv:adm:home"],
         )
 
     def test_club_and_broadcast_left_their_old_hubs(self):
