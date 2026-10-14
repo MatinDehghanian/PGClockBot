@@ -170,6 +170,11 @@ class GiftCodePageTests(GiftCodeHarness):
         failed = await self._get(OWNER, "/gift-codes?err=%3Cb%3Ebad%3C%2Fb%3E")
         self.assertNotIn("<b>bad</b>", failed.text)
 
+    async def test_sidebar_entry_is_active_on_the_page(self):
+        response = await self._get(_reseller(["plans"], shop_id=5))
+        entry = response.text.split("بازاریابی و وفاداری</span>", 1)[0].rsplit("<a ", 1)[1]
+        self.assertIn("active", entry)
+
     async def test_tab_strip_marks_gift_codes_active(self):
         response = await self._get(_reseller(["plans", "loyalty"], shop_id=5))
         self.assertIn('href="/gift-codes" class="active" aria-current="page"', response.text)
