@@ -53,6 +53,7 @@ REPLY_ACTION_ADMIN_USERS = _k.REPLY_ACTION_ADMIN_USERS
 REPLY_ACTION_ADM_HUB_OPS = _k.REPLY_ACTION_ADM_HUB_OPS
 REPLY_ACTION_ADM_HUB_PEOPLE = _k.REPLY_ACTION_ADM_HUB_PEOPLE
 REPLY_ACTION_ADM_HUB_PRODUCT = _k.REPLY_ACTION_ADM_HUB_PRODUCT
+REPLY_ACTION_ADM_HUB_MARKETING = _k.REPLY_ACTION_ADM_HUB_MARKETING
 REPLY_ACTION_ADM_HUB_SYSTEM = _k.REPLY_ACTION_ADM_HUB_SYSTEM
 REPLY_ACTION_ADM_LOY_OVERVIEW = _k.REPLY_ACTION_ADM_LOY_OVERVIEW
 REPLY_ACTION_ADM_LOY_REF_TEXT = _k.REPLY_ACTION_ADM_LOY_REF_TEXT
@@ -209,6 +210,7 @@ def _reply_admin_hub_entries(ui: dict | None = None) -> list[tuple[str, str]]:
         (REPLY_ACTION_ADM_HUB_OPS, _t(ui, "btn_adm_hub_ops")),
         (REPLY_ACTION_ADM_HUB_PEOPLE, _t(ui, "btn_adm_hub_people")),
         (REPLY_ACTION_ADM_HUB_PRODUCT, _t(ui, "btn_adm_hub_product")),
+        (REPLY_ACTION_ADM_HUB_MARKETING, _t(ui, "btn_adm_hub_marketing")),
         (REPLY_ACTION_ADM_HUB_SYSTEM, _t(ui, "btn_adm_hub_system")),
     ]
 
@@ -231,7 +233,6 @@ def _reply_admin_people_entries(
     entries = [
         (REPLY_ACTION_ADMIN_USERS, _t(ui, "btn_adm_users")),
         (REPLY_ACTION_ADMIN_RESELLERS, _t(ui, "btn_adm_resellers")),
-        (REPLY_ACTION_ADMIN_LOYALTY, _t(ui, "btn_adm_loyalty")),
     ]
     if not can_manage_representatives:
         entries = [e for e in entries if e[0] != REPLY_ACTION_ADMIN_RESELLERS]
@@ -252,10 +253,16 @@ def _reply_admin_product_entries(
     return entries
 
 
+def _reply_admin_marketing_entries(ui: dict | None = None) -> list[tuple[str, str]]:
+    return [
+        (REPLY_ACTION_ADMIN_LOYALTY, _t(ui, "btn_adm_loyalty")),
+        (REPLY_ACTION_ADMIN_BROADCAST, _t(ui, "btn_adm_broadcast")),
+    ]
+
+
 def _reply_admin_system_entries(ui: dict | None = None) -> list[tuple[str, str]]:
     return [
         (REPLY_ACTION_ADMIN_SETTINGS, _t(ui, "btn_adm_settings")),
-        (REPLY_ACTION_ADMIN_BROADCAST, _t(ui, "btn_adm_broadcast")),
         (REPLY_ACTION_ADMIN_BACKUP, _t(ui, "btn_adm_backup")),
         (REPLY_ACTION_ADMIN_PREVIEW, _t(ui, "btn_adm_preview")),
     ]
@@ -274,6 +281,7 @@ def _reply_admin_entries(
             ui, can_manage_representatives=can_manage_representatives
         ),
         *_reply_admin_product_entries(ui, pg_features=pg_features),
+        *_reply_admin_marketing_entries(ui),
         *_reply_admin_system_entries(ui),
     ]
 
@@ -807,6 +815,15 @@ def admin_product_reply_keyboard(
         footer_row=_submenu_footer(ui),
     )
     return _reply_markup(rows, placeholder="محصول و PG…")
+
+
+def admin_marketing_reply_keyboard(ui: dict | None = None) -> ReplyKeyboardMarkup:
+    rows = _pack_reply_rows(
+        _reply_admin_marketing_entries(ui),
+        ui,
+        footer_row=_submenu_footer(ui),
+    )
+    return _reply_markup(rows, placeholder="بازاریابی…")
 
 
 def admin_system_reply_keyboard(ui: dict | None = None) -> ReplyKeyboardMarkup:

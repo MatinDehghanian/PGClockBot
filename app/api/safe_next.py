@@ -15,6 +15,7 @@ _SAFE_NEXT_PREFIXES: tuple[str, ...] = (
     "/users",
     "/resellers",
     "/plans",
+    "/gift-codes",
     "/broadcast",
 )
 

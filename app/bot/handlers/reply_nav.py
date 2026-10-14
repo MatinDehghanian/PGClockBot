@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot import keyboards as kb
 from app.bot import menu_nav as nav
 from app.bot.menu_nav import restore_main_reply
+from app.bot.reply_keyboards import _reply_admin_marketing_entries
 from app.db.models import BotUser, Order, Role, UserService
 from app.services.formatting import format_message
 from app.services.home_overview import admin_customer_counts
@@ -221,6 +222,9 @@ class ReplyMenuTextFilter(BaseFilter):
         elif level == nav.NAV_ADMIN_PRODUCT:
             for key, label in kb._reply_admin_product_entries(ui):
                 mapping[(label or "").strip()] = key
+        elif level == nav.NAV_ADMIN_MARKETING:
+            for key, label in _reply_admin_marketing_entries(ui):
+                mapping[(label or "").strip()] = key
         elif level == nav.NAV_ADMIN_SYSTEM:
             for key, label in kb._reply_admin_system_entries(ui):
                 mapping[(label or "").strip()] = key
@@ -239,6 +243,7 @@ class ReplyMenuTextFilter(BaseFilter):
             nav.NAV_ADMIN_OPS,
             nav.NAV_ADMIN_PEOPLE,
             nav.NAV_ADMIN_PRODUCT,
+            nav.NAV_ADMIN_MARKETING,
             nav.NAV_ADMIN_SYSTEM,
             nav.NAV_LOYALTY,
             nav.NAV_ADMIN_LOYALTY,
@@ -1637,7 +1642,7 @@ async def open_admin_people_hub(
     _, can_reps = await nav._platform_admin_menu_flags(
         session, db_user, is_reseller_bot=is_reseller_bot
     )
-    body = "👤 <b>افراد</b>\nکاربران، نمایندگان و باشگاه مشتریان."
+    body = "👤 <b>افراد</b>\nکاربران و نمایندگان."
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_ADMIN_PEOPLE, push=push)
     await present_nav_panel(
@@ -1696,7 +1701,7 @@ async def open_admin_system_hub(
     ):
         return
     ui = await get_all_settings(session)
-    body = "🛠 <b>سیستم</b>\nتنظیمات، پیام همگانی، بکاپ و پیش‌نمایش."
+    body = "🛠 <b>سیستم</b>\nتنظیمات، بکاپ و پیش‌نمایش."
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_ADMIN_SYSTEM, push=push)
     await present_nav_panel(
@@ -2048,6 +2053,13 @@ async def handle_back(
         return
     if level == nav.NAV_ADMIN_PRODUCT:
         await open_admin_product_hub(
+            message, session, db_user, state, push=False, is_reseller_bot=is_reseller_bot
+        )
+        return
+    if level == nav.NAV_ADMIN_MARKETING:
+        from app.bot.handlers.nav_marketing import open_admin_marketing_hub
+
+        await open_admin_marketing_hub(
             message, session, db_user, state, push=False, is_reseller_bot=is_reseller_bot
         )
         return
@@ -2670,6 +2682,7 @@ async def reply_main_nav(
         kb.REPLY_ACTION_ADM_HUB_OPS,
         kb.REPLY_ACTION_ADM_HUB_PEOPLE,
         kb.REPLY_ACTION_ADM_HUB_PRODUCT,
+        kb.REPLY_ACTION_ADM_HUB_MARKETING,
         kb.REPLY_ACTION_ADM_HUB_SYSTEM,
         kb.REPLY_ACTION_ADMIN,
         kb.REPLY_ACTION_ADMIN_DASH,
@@ -2972,6 +2985,12 @@ async def reply_main_nav(
         )
     elif action == kb.REPLY_ACTION_ADM_HUB_PRODUCT:
         await open_admin_product_hub(
+            message, session, db_user, state, is_reseller_bot=is_reseller_bot
+        )
+    elif action == kb.REPLY_ACTION_ADM_HUB_MARKETING:
+        from app.bot.handlers.nav_marketing import open_admin_marketing_hub
+
+        await open_admin_marketing_hub(
             message, session, db_user, state, is_reseller_bot=is_reseller_bot
         )
     elif action == kb.REPLY_ACTION_ADM_HUB_SYSTEM:

@@ -24,6 +24,7 @@ class AdminHubKeyboardTests(unittest.TestCase):
                 "nv:adm:ops",
                 "nv:adm:people",
                 "nv:adm:product",
+                "nv:adm:marketing",
                 "nv:adm:system",
                 "menu:home",
             ],
@@ -73,7 +74,7 @@ class AdminHubKeyboardTests(unittest.TestCase):
         ]
         self.assertNotIn("nv:adm:resellers", data)
         self.assertIn("nv:adm:users", data)
-        self.assertIn("nv:adm:loy", data)
+        self.assertNotIn("nv:adm:loy", data)
 
     def test_loyalty_manage_callbacks(self):
         from app.bot.nav_inline import admin_loyalty_manage_hub_keyboard
@@ -85,7 +86,7 @@ class AdminHubKeyboardTests(unittest.TestCase):
         ]
         self.assertIn("nv:adm:loy:overview", data)
         self.assertIn("nv:adm:loy:tiers", data)
-        self.assertIn("nv:adm:people", data)
+        self.assertIn("nv:adm:marketing", data)
 
     def test_reseller_manage_uses_ra_prefix(self):
         from app.bot.nav_inline import reseller_manage_hub_keyboard

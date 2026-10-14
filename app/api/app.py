@@ -75,6 +75,7 @@ from app.services.security_policy import (
 from app.services.updates import local_version
 from app.services.message_variables import template_variable_specs
 from app.services.panel_assets import get_panel_asset_cache_key
+from app.services.settings_tab_groups import group_settings_tabs
 from app.services.users import (
     SETTINGS_DOMAIN_REDIRECTS,
     SETTING_GROUPS,
@@ -95,6 +96,7 @@ from app.services.web_auth import (
     verify_web_admin,
 )
 from app.api.catalog_discounts import register_catalog_discounts
+from app.api.gift_code_pages import legacy_gift_modal_redirect, register_gift_code_pages
 from app.api.home_pages import register_home_pages
 from app.api.pg_pages import register_pg_pages
 from app.api.panel_connection import PanelConnectionMiddleware, finish_panel_authentication
@@ -294,6 +296,14 @@ def render(request: Request, name: str, context: dict | None = None, status_code
             ctx["is_owner"] = bool(is_explicit_owner_staff(ctx.get("staff")))
         except Exception:
             ctx["is_owner"] = False
+    if ctx.get("staff") and "marketing_sections" not in ctx:
+        try:
+            from app.services.marketing_nav import marketing_sections
+
+            ctx["marketing_sections"] = marketing_sections(ctx.get("staff"))
+        except Exception:
+            logging.getLogger(__name__).warning("marketing nav resolution failed", exc_info=True)
+            ctx["marketing_sections"] = ()
     response = templates.TemplateResponse(request, name, ctx, status_code=status_code)
     try:
         from app.services.csrf import CSRF_COOKIE, ensure_csrf_token
@@ -1467,6 +1477,7 @@ def create_api_app(lifespan=None) -> FastAPI:
 
     register_customer_features(app, render=render, require_staff=require_staff, get_db=get_db)
     register_catalog_discounts(app, render=render, require_staff=require_staff, get_db=get_db)
+    register_gift_code_pages(app, render=render, require_staff=require_staff, get_db=get_db)
 
     @app.get("/settings/ssl/progress")
     async def ssl_progress(staff: dict = Depends(require_admin)):
@@ -2554,6 +2565,9 @@ def create_api_app(lifespan=None) -> FastAPI:
         staff: dict = Depends(require_perm("plans")),
         session: AsyncSession = Depends(get_db),
     ):
+        legacy_gifts = legacy_gift_modal_redirect(request.query_params)
+        if legacy_gifts:
+            return RedirectResponse(legacy_gifts, status_code=303)
         from app.services.plans_catalog import (
             catalog_owner_id,
             custom_range_limit_issue,
@@ -2652,27 +2666,6 @@ def create_api_app(lifespan=None) -> FastAPI:
             except Exception:
                 pg_roles = []
 
-        gift_codes: list = []
-        gift_code_details: dict = {}
-        try:
-            from app.db.models import ChargeCode
-
-            if is_platform_admin(staff) or rid:
-                q = select(ChargeCode).order_by(ChargeCode.id.desc()).limit(200)
-                if is_platform_admin(staff):
-                    q = q.where(ChargeCode.reseller_id.is_(None))
-                else:
-                    q = q.where(ChargeCode.reseller_id == int(rid))
-                gift_codes = list((await session.execute(q)).scalars().all())
-                from app.services.gift_codes import describe_code
-
-                gift_code_details = {c.id: describe_code(c) for c in gift_codes}
-        except Exception:
-            import logging
-
-            logging.getLogger(__name__).exception("gift codes load failed on /plans")
-            gift_codes = []
-
         plan_categories: list = []
         plan_category_map: dict = {}
         reseller_plan_category_map: dict = {}
@@ -2732,8 +2725,6 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "reseller_plans_err": reseller_plans_err,
                 "feature_perms": feature_perms,
                 "pg_roles": pg_roles,
-                "gift_codes": gift_codes,
-                "gift_code_details": gift_code_details,
                 "plan_categories": plan_categories,
                 "plan_category_map": plan_category_map,
                 "reseller_plan_category_map": reseller_plan_category_map,
@@ -2744,7 +2735,6 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "plan_limit_issues": plan_limit_issues,
                 "trial_limit_issue": trial_limit_issue,
                 "custom_limit_issue": custom_limit_msg,
-                "open_gifts": request.query_params.get("gifts") in {"1", "true", "yes"},
                 "open_categories": request.query_params.get("categories")
                 in {"1", "true", "yes"},
                 "open_addons": request.query_params.get("addons") in {"1", "true", "yes"},
@@ -4425,6 +4415,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             "groups": groups,
             "tab_groups": tab_groups,
             "tabs": page_tabs,
+            "tab_nav": group_settings_tabs(page_tabs, tab),
             "tab": tab,
             "is_panel_settings": tab in PANEL_SETTINGS_KEYS,
             "panel_tab_label": dict(PANEL_SETTINGS_TABS).get(tab),
