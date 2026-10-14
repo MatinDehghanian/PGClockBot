@@ -2039,13 +2039,7 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
 
         # Reseller shop orders must always quota-check + assign ownership.
         # Creating as owner without set_owner would bypass PasarGuard max_users.
-        profile: ResellerProfile | None = None
         if order.reseller_id:
-            profile = (
-                await session.execute(
-                    select(ResellerProfile).where(ResellerProfile.user_id == order.reseller_id)
-                )
-            ).scalar_one_or_none()
             try:
                 await assert_provision_create(
                     session,
