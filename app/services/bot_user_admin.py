@@ -1056,9 +1056,11 @@ async def admin_delete_service(
     pg_disabled = False
     pg_already_absent = False
 
-    if delete_pg and pg_uid:
+    if pg_uid:
+        # Detaching a service from the list needs the same right as deleting its panel user.
         # ACL before any PG network call (fail closed on missing users.delete).
         assert_staff_pg_user_action(staff, "delete")
+    if delete_pg and pg_uid:
         pg = await _pg_client_for_bot_service(session, service)
         outcome = await ensure_pg_user_removed_or_absent(
             pg, pg_uid, staff=staff, allow_disable_fallback=True

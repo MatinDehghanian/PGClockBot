@@ -28,7 +28,7 @@ from enum import StrEnum
 from typing import Any
 
 import httpx
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -49,6 +49,7 @@ logger = logging.getLogger(__name__)
 REMARK_IMPORTED = "imported"
 REMARK_LINKED = "linked"
 SETTING_KEY = "service_import_enabled"
+PENDING = "pending"
 
 MAX_LINK_LENGTH = 2048
 MAX_FAILED_ATTEMPTS = 5
@@ -109,20 +110,42 @@ def _token_hash(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
-async def _record_attempt(session: AsyncSession, user_id: int, token: str, outcome: str) -> None:
-    """Persist one try (separate commit, so a refused claim still counts) and prune old rows."""
+async def _record_attempt(session: AsyncSession, user_id: int, token: str, outcome: str) -> int:
+    """Persist one try (own commit, so a refused claim still counts), prune old rows, return its id."""
     now = datetime.now(timezone.utc)
-    session.add(ServiceImportAttempt(bot_user_id=int(user_id), token_hash=_token_hash(token), outcome=outcome))
+    row = ServiceImportAttempt(bot_user_id=int(user_id), token_hash=_token_hash(token), outcome=outcome)
+    session.add(row)
+    await session.flush()
+    attempt_id = int(row.id)
     await session.execute(
         delete(ServiceImportAttempt).where(
             ServiceImportAttempt.bot_user_id == int(user_id),
             ServiceImportAttempt.created_at < now - ATTEMPT_RETENTION,
-        )
+        ),
+        execution_options={"synchronize_session": False},
+    )
+    await session.commit()
+    return attempt_id
+
+
+async def _finish_attempt(session: AsyncSession, attempt_id: int, outcome: str) -> None:
+    await session.execute(
+        update(ServiceImportAttempt).where(ServiceImportAttempt.id == int(attempt_id)).values(outcome=outcome),
+        execution_options={"synchronize_session": False},
+    )
+    await session.commit()
+
+
+async def _discard_attempt(session: AsyncSession, attempt_id: int) -> None:
+    await session.execute(
+        delete(ServiceImportAttempt).where(ServiceImportAttempt.id == int(attempt_id)),
+        execution_options={"synchronize_session": False},
     )
     await session.commit()
 
 
 async def _failed_attempts(session: AsyncSession, user_id: int) -> int:
+    """Tries in the window that did not succeed; an unfinished («pending») try counts as failed."""
     since = datetime.now(timezone.utc) - ATTEMPT_WINDOW
     ok = {ImportOutcome.ADDED.value, ImportOutcome.UPGRADED.value, ImportOutcome.ALREADY_YOURS.value, "error"}
     return int(
@@ -187,24 +210,31 @@ async def import_existing_service(
     if token is None:
         await _record_attempt(session, user_id, raw_link[:64] or "-", "invalid")
         raise ServiceImportError(GENERIC_REFUSAL)
-    if await _failed_attempts(session, user_id) >= MAX_FAILED_ATTEMPTS:
+    # The try is stored as «pending» before anything else, so simultaneous messages from one
+    # customer see each other and cannot all pass the failed-attempt limit.
+    attempt_id = await _record_attempt(session, user_id, token, PENDING)
+    if await _failed_attempts(session, user_id) > MAX_FAILED_ATTEMPTS:
+        await _discard_attempt(session, attempt_id)
         raise ServiceImportError(RATE_LIMITED)
     try:
         result = await _attach(session, user, token, shop_id, renewable)
     except ServiceImportError:
         await session.rollback()
-        await _record_attempt(session, user_id, token, "refused")
+        await _finish_attempt(session, attempt_id, "refused")
         raise
     except (PasarGuardError, httpx.HTTPError, TimeoutError) as exc:
         await session.rollback()
         if _is_not_found(exc):
             # An unknown or out-of-scope link is a failed guess and counts against the budget.
-            await _record_attempt(session, user_id, token, "refused")
+            await _finish_attempt(session, attempt_id, "refused")
             raise ServiceImportError(GENERIC_REFUSAL) from None
-        logger.warning("service import: panel call failed (%s)", type(exc).__name__, exc_info=True)
-        await _record_attempt(session, user_id, token, "error")
+        # No traceback or message: the panel error text carries the request URL, which holds the token.
+        logger.warning(
+            "service import: panel call failed (%s, status=%s)", type(exc).__name__, getattr(exc, "status_code", None)
+        )
+        await _finish_attempt(session, attempt_id, "error")
         raise ServiceImportError(PANEL_UNAVAILABLE) from None
-    await _record_attempt(session, user_id, token, result.outcome.value)
+    await _finish_attempt(session, attempt_id, result.outcome.value)
     return result
 
 
@@ -221,6 +251,8 @@ async def _attach(session: AsyncSession, user: BotUser, token: str, shop_id: int
         raise ServiceImportError(GENERIC_REFUSAL)
     panel_id = _panel_user_id(record)
 
+    # Serialise this customer's imports (no effect on SQLite) so the per-user cap below holds.
+    await session.scalar(select(BotUser.id).where(BotUser.id == user.id).with_for_update())
     mine: UserService | None = None
     for row in await _existing_rows(session, panel_id, token):
         if row.bot_user_id != user.id:

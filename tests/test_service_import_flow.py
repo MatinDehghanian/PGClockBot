@@ -187,7 +187,7 @@ class HandlerTests(unittest.IsolatedAsyncioTestCase):
         return message, importer, forget, finish
 
     async def test_the_message_carrying_the_link_is_deleted_and_the_prompt_becomes_the_card(self):
-        service = SimpleNamespace(id=7)
+        service = SimpleNamespace(id=7, remark="imported")
         result = ImportResult(ImportOutcome.ADDED, service, {"username": "vpn1", "status": "active"})
         message, importer, forget, finish = await self._run("https://p.example/sub/abc12345", result=result)
         forget.assert_awaited_once()
@@ -200,7 +200,7 @@ class HandlerTests(unittest.IsolatedAsyncioTestCase):
         message.answer.assert_not_awaited()
 
     async def test_a_shop_bot_passes_its_shop_to_the_checks(self):
-        result = ImportResult(ImportOutcome.ADDED, SimpleNamespace(id=7), {"username": "vpn1"})
+        result = ImportResult(ImportOutcome.ADDED, SimpleNamespace(id=7, remark="imported"), {"username": "vpn1"})
         _, importer, _, _ = await self._run("abc12345XYZ", result=result, is_reseller_bot=True, reseller_owner_id=5)
         self.assertEqual(importer.await_args.kwargs["shop_id"], 5)
 

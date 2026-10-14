@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
+from app.bot.nav_input import delete_user_message
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser, UserService
 from app.services.formatting import service_card
@@ -820,8 +821,9 @@ async def _link_subscription(
 ):
     from app.bot.service_import_ui import import_enabled
     from app.services.formatting import format_message
-    from app.services.service_import import ServiceImportError, import_existing_service
+    from app.services.service_import import ServiceImportError, import_existing_service, is_external_service
 
+    await delete_user_message(message)  # the link is a bearer secret, keep it out of the chat
     ui = await get_all_settings(session)
     # Same checks as the in-bot flow: the service must belong to this shop's panel admin and to
     # nobody else. Without «افزودن سرویس قبلی» the attachment stays view-only, as before.
@@ -844,5 +846,7 @@ async def _link_subscription(
 
     await message.answer(
         format_message("✅ اتصال سرویس", service_card(result.info)),
-        reply_markup=service_card_keyboard(int(result.service.id), ui),
+        reply_markup=service_card_keyboard(
+            int(result.service.id), ui, external=is_external_service(result.service)
+        ),
     )

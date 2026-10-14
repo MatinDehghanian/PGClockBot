@@ -19,6 +19,7 @@ from app.db.models import BotUser, UserService
 from app.services.formatting import format_message, format_toman, service_card
 from app.services.orders import get_catalog_plan, list_active_plans
 from app.services.pasarguard import get_pg
+from app.services.service_import import is_external_service
 from app.services.users import get_all_settings
 from app.services.redact import user_safe_error
 from app.services.service_live_info import fetch_live_service_info
@@ -399,7 +400,7 @@ async def svc_view(
         await safe_edit_text(
             callback.message,
             text,
-            reply_markup=service_card_keyboard(svc_id, ui),
+            reply_markup=service_card_keyboard(svc_id, ui, external=is_external_service(svc)),
         )
     if state is not None:
         from app.bot import menu_nav as nav
@@ -867,11 +868,12 @@ async def svc_delete_ask(
         return
     await callback.answer()
     label = html.escape(svc.pg_username or f"#{svc_id}")
+    external = is_external_service(svc)
     markup = InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="🗑 بله، حذف شود",
+                    text="بله، از لیست من حذف شود" if external else "🗑 بله، حذف شود",
                     callback_data=f"svc:del:{svc_id}",
                 ),
                 InlineKeyboardButton(
@@ -887,7 +889,11 @@ async def svc_delete_ask(
             format_message(
                 "⚠️ حذف سرویس",
                 (
-                    f"سرویس <b>{label}</b> برای همیشه حذف شود؟\n"
+                    f"سرویس <b>{label}</b> از لیست شما حذف شود؟\n"
+                    "فقط از این ربات جدا می‌شود؛ سرویس و لینک اشتراک آن سر جایش می‌ماند "
+                    "و می‌توانید دوباره اضافه‌اش کنید."
+                    if external
+                    else f"سرویس <b>{label}</b> برای همیشه حذف شود؟\n"
                     "لینک اشتراک از کار می‌افتد و برگشت‌ناپذیر است."
                 ),
             ),
@@ -917,8 +923,6 @@ async def svc_delete(
 
     # Linked or imported services were not created by the bot: removing them only detaches
     # them from the list and never deletes the underlying PasarGuard user.
-    from app.services.service_import import is_external_service
-
     delete_pg = not is_external_service(svc)
     try:
         await admin_delete_service(session, svc, delete_pg=delete_pg)
