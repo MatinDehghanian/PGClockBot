@@ -11,13 +11,21 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+from app.services.authz import authz_from_staff, can_shop
+
 FALLBACK_GROUP_KEY = "more"
 FALLBACK_GROUP_LABEL = "سایر"
+
+MESSAGE_VARIABLES_TAB_KEY = "variables"
+MESSAGE_VARIABLES_TAB = (MESSAGE_VARIABLES_TAB_KEY, "متغیرهای پیام")
+MESSAGE_VARIABLES_PERMISSION = "shop_settings"
+# Tabs that open their own page instead of ``<settings base>?tab=<key>``.
+_TAB_PAGES = {MESSAGE_VARIABLES_TAB_KEY: "/message-variables"}
 
 # (group key, label, tab keys in display order)
 _GROUP_LAYOUT: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("look", "ظاهر و متن‌ها", ("welcome", "appearance", "messages", "buttons", "colors", "menu")),
-    ("service", "سرویس و فروش", ("naming", "qr", "guides", "limits")),
+    ("service", "سرویس و فروش", ("naming", "qr", "guides", "limits", MESSAGE_VARIABLES_TAB_KEY)),
     ("alerts", "اعلان‌ها", ("notifications", "daily_report")),
     ("connect", "اتصال و لینک‌ها", ("links", "bot")),
 )
@@ -27,6 +35,7 @@ _GROUP_LAYOUT: tuple[tuple[str, str, tuple[str, ...]], ...] = (
 class SettingsTab:
     key: str
     label: str
+    href: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,11 +46,26 @@ class SettingsTabGroup:
     is_active: bool
 
 
+def can_open_message_variables(staff: dict) -> bool:
+    """Same rule as the ``/message-variables`` route, so the tab never points at a denied page."""
+    return can_shop(authz_from_staff(staff), MESSAGE_VARIABLES_PERMISSION)
+
+
+def tabs_with_message_variables(
+    tabs: Sequence[tuple[str, str]], staff: dict
+) -> list[tuple[str, str]]:
+    """``tabs`` plus the message-variables tab when ``staff`` may open that page."""
+    merged = list(tabs)
+    if can_open_message_variables(staff):
+        merged.append(MESSAGE_VARIABLES_TAB)
+    return merged
+
+
 def group_settings_tabs(
     tabs: Sequence[tuple[str, str]], active: str
 ) -> tuple[SettingsTabGroup, ...]:
     """Split ``tabs`` into groups, keeping only tabs the caller already holds."""
-    available = {key: SettingsTab(key, label) for key, label in tabs}
+    available = {key: SettingsTab(key, label, _TAB_PAGES.get(key)) for key, label in tabs}
     claimed: set[str] = set()
     groups: list[SettingsTabGroup] = []
     for group_key, label, keys in _GROUP_LAYOUT:

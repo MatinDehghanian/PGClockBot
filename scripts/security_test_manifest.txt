@@ -22,6 +22,7 @@ tests/test_update_migration_metadata.py
 tests/test_update_owner_only.py
 tests/test_marketing_nav.py
 tests/test_gift_code_page.py
+tests/test_message_variables_tab.py
 tests/test_admin_marketing_hub.py
 tests/test_marketing_tools_bot.py
 tests/test_marketing_nav_levels.py

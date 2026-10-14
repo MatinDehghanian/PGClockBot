@@ -8,6 +8,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.message_variables import catalog_groups
 from app.services.platform_identity import is_explicit_owner_staff
+from app.services.resellers import RESELLER_SETTINGS_TABS
+from app.services.settings_tab_groups import (
+    MESSAGE_VARIABLES_TAB_KEY,
+    group_settings_tabs,
+    tabs_with_message_variables,
+)
+from app.services.users import SETTINGS_TABS
 
 
 def register_message_variables_pages(
@@ -39,12 +46,17 @@ def register_message_variables_pages(
             include_owner_only=include_owner,
             settings_base=settings_base,
         )
+        settings_tabs = SETTINGS_TABS if settings_base == "/settings" else RESELLER_SETTINGS_TABS
+        tab_nav = group_settings_tabs(
+            tabs_with_message_variables(settings_tabs, staff), MESSAGE_VARIABLES_TAB_KEY
+        )
         return render(
             request,
             "message_variables.html",
             {
                 "staff": staff,
                 "groups": groups,
+                "tab_nav": tab_nav,
                 "include_owner_only": include_owner,
                 "settings_base": settings_base,
             },

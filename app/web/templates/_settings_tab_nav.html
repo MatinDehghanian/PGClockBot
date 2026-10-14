@@ -3,13 +3,13 @@
 {% macro grouped_settings_tabs(groups, active, base, aria_label) -%}
 <nav class="section-tabs settings-tabs settings-tabs-groups" aria-label="{{ aria_label }}">
   {% for group in groups %}
-  <a href="{{ base }}?tab={{ group.tabs[0].key }}" class="{% if group.is_active %}active{% endif %}"{% if group.is_active %} aria-current="true"{% endif %}>{{ group.label }}</a>
+  <a href="{{ group.tabs[0].href or (base ~ '?tab=' ~ group.tabs[0].key) }}" class="{% if group.is_active %}active{% endif %}"{% if group.is_active %} aria-current="true"{% endif %}>{{ group.label }}</a>
   {% endfor %}
 </nav>
 {% for group in groups if group.is_active and group.tabs|length > 1 %}
 <nav class="section-tabs settings-tabs settings-subtabs" aria-label="{{ group.label }}">
   {% for tab in group.tabs %}
-  <a href="{{ base }}?tab={{ tab.key }}" class="{% if tab.key == active %}active{% endif %}">{{ tab.label }}</a>
+  <a href="{{ tab.href or (base ~ '?tab=' ~ tab.key) }}" class="{% if tab.key == active %}active{% endif %}">{{ tab.label }}</a>
   {% endfor %}
 </nav>
 {% endfor %}
