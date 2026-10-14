@@ -22,11 +22,12 @@ from app.bot.nav_input import (
     register_cancel_code,
     try_legacy_cancel,
 )
-from app.bot.service_import_ui import ADD_CALLBACK, import_enabled
+from app.bot.service_import_ui import ADD_CALLBACK, announce_new_request, import_enabled
 from app.db.models import BotUser
 from app.services.formatting import format_message, service_card
 from app.services.service_import import (
     NOT_ENABLED,
+    PENDING_NOTICE,
     RATE_LIMITED,
     ImportOutcome,
     ServiceImportError,
@@ -122,6 +123,10 @@ async def svc_import_link(
         await message.answer(text, reply_markup=cancel_keyboard(CANCEL_CODE))
         return
     await state.set_state(None)
+    if result.outcome == ImportOutcome.PENDING_APPROVAL:
+        await finish_text_step(message, state, text=format_message("⏳ در انتظار تأیید", PENDING_NOTICE))
+        await announce_new_request(message, session, db_user, result)
+        return
     from app.bot.nav_inline import service_card_keyboard
 
     await finish_text_step(

@@ -28,6 +28,19 @@
   <div id="si-test-result" role="status" aria-live="polite"></div>
 </div>
 
+<div class="card settings-card card-flush" id="si-requests" data-url="/service-import/requests" hidden>
+  <div class="card-flush-head"><h2>درخواست‌های در انتظار</h2></div>
+  <div class="table-wrap">
+    <table class="table-compact">
+      <thead>
+        <tr><th>مشتری</th><th>کاربر پنل</th><th>انقضا</th><th>تصمیم</th></tr>
+      </thead>
+      <tbody id="si-requests-body"></tbody>
+    </table>
+  </div>
+  <div id="si-requests-msg" class="muted" role="status" aria-live="polite"></div>
+</div>
+
 <div class="card settings-card card-flush">
   <div class="card-flush-head"><h2>آخرین تلاش‌های مشتریان</h2></div>
   <div class="table-wrap">

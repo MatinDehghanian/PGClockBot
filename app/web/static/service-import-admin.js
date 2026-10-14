@@ -133,10 +133,77 @@
     }
   }
 
+  function requestButton(label, className, onClick) {
+    const button = el("button", "btn " + className, label);
+    button.type = "button";
+    button.addEventListener("click", onClick);
+    return button;
+  }
+
+  async function decide(card, id, action, buttons) {
+    const msg = document.getElementById("si-requests-msg");
+    buttons.forEach(function (b) { b.disabled = true; });
+    msg.textContent = "";
+    try {
+      const res = await fetch(card.dataset.url + "/" + id + "/" + action, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {"X-CSRF-Token": csrfToken(), Accept: "application/json"},
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) msg.textContent = data.error || "انجام نشد";
+    } catch (err) {
+      msg.textContent = "انجام نشد؛ دوباره تلاش کنید";
+    }
+    loadRequests(card);
+  }
+
+  function renderRequests(card, rows) {
+    const body = document.getElementById("si-requests-body");
+    body.replaceChildren();
+    if (!rows.length) {
+      const tr = el("tr");
+      const cell = el("td", "muted", "درخواستی در انتظار نیست");
+      cell.colSpan = 4;
+      tr.appendChild(cell);
+      body.appendChild(tr);
+      return;
+    }
+    rows.forEach(function (row) {
+      const tr = el("tr");
+      tr.appendChild(el("td", "", (row.customer_name ? row.customer_name + " · " : "") + row.customer));
+      const user = el("td", "", row.panel_username);
+      user.setAttribute("dir", "ltr");
+      tr.appendChild(user);
+      tr.appendChild(el("td", "muted", new Date(row.expires_at).toLocaleDateString("fa-IR")));
+      const cell = el("td", "actions");
+      const approve = requestButton("تأیید", "", function () { decide(card, row.id, "approve", [approve, reject]); });
+      const reject = requestButton("رد", "btn-ghost", function () { decide(card, row.id, "reject", [approve, reject]); });
+      cell.appendChild(approve);
+      cell.appendChild(reject);
+      tr.appendChild(cell);
+      body.appendChild(tr);
+    });
+  }
+
+  async function loadRequests(card) {
+    try {
+      const res = await fetch(card.dataset.url, {credentials: "same-origin", headers: {Accept: "application/json"}});
+      if (!res.ok) return; // no approval permission: the card stays hidden
+      const data = await res.json();
+      card.hidden = false;
+      renderRequests(card, data.requests || []);
+    } catch (err) {
+      card.hidden = true;
+    }
+  }
+
   function boot() {
     const root = document.getElementById("si-panel");
     if (!root) return;
     loadStatus(root, false);
+    const requests = document.getElementById("si-requests");
+    if (requests) loadRequests(requests);
     document.getElementById("si-refresh").addEventListener("click", function () { loadStatus(root, true); });
     document.getElementById("si-test").addEventListener("click", function () { runTest(root); });
     document.getElementById("si-link").addEventListener("keydown", function (e) {

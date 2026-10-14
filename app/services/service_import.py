@@ -53,6 +53,7 @@ from app.services.service_import_config import (
     allowed_paths,
     read_settings,
 )
+from app.services.service_import_store import TooManyRequests, open_request
 from app.services.users import get_all_settings
 
 logger = logging.getLogger(__name__)
@@ -75,7 +76,9 @@ GENERIC_REFUSAL = "این لینک قابل افزودن نیست. لینک اش
 INVALID_LINK = "لینک اشتراک معتبر نیست. لینک را کامل و بدون متن اضافه بفرستید."
 RATE_LIMITED = "تعداد تلاش‌های ناموفق زیاد بود. کمی بعد دوباره تلاش کنید."
 PANEL_UNAVAILABLE = "اتصال به پنل برقرار نشد. کمی بعد دوباره تلاش کنید."
+REQUEST_LIMIT = "چند درخواست شما در انتظار تأیید است. بعد از بررسی دوباره تلاش کنید."
 LIMIT_REACHED = "به سقف تعداد سرویس‌های قابل افزودن رسیده‌اید."
+PENDING_NOTICE = "درخواست شما ثبت شد. بعد از تأیید ادمین سرویس به لیست شما اضافه می‌شود و پیام می‌گیرید."
 NOT_ENABLED = "افزودن سرویس قبلی در این فروشگاه فعال نیست."
 
 
@@ -83,6 +86,7 @@ class ImportOutcome(StrEnum):
     ADDED = "added"
     UPGRADED = "upgraded"
     ALREADY_YOURS = "already_yours"
+    PENDING_APPROVAL = "pending_approval"
 
 
 class Reason(StrEnum):
@@ -96,6 +100,7 @@ class Reason(StrEnum):
     WRONG_SHOP = "wrong_shop"
     BLOCKED = "blocked"
     LIMIT_REACHED = "limit_reached"
+    REQUEST_LIMIT = "request_limit"
     RATE_LIMITED = "rate_limited"
     PANEL_ERROR = "panel_error"
     IDENTITY_UNKNOWN = "identity_unknown"
@@ -118,8 +123,10 @@ class VerifiedService:
 @dataclass(frozen=True, slots=True)
 class ImportResult:
     outcome: ImportOutcome
-    service: UserService
+    service: UserService | None  # ``None`` while the request waits for an admin
     info: dict[str, Any]
+    request_id: int | None = None  # the waiting request, when the outcome is PENDING_APPROVAL
+    new_request: bool = False
 
 
 class ServiceImportError(ValueError):
@@ -216,7 +223,7 @@ async def _discard_attempt(session: AsyncSession, attempt_id: int) -> None:
 async def _failed_attempts(session: AsyncSession, user_id: int) -> int:
     """Tries in the window that did not succeed; an unfinished («pending») try counts as failed."""
     since = datetime.now(timezone.utc) - ATTEMPT_WINDOW
-    ok = {ImportOutcome.ADDED.value, ImportOutcome.UPGRADED.value, ImportOutcome.ALREADY_YOURS.value, "error"}
+    ok = {ImportOutcome.ADDED.value, ImportOutcome.UPGRADED.value, ImportOutcome.ALREADY_YOURS.value, ImportOutcome.PENDING_APPROVAL.value, "error"}
     return int(
         await session.scalar(
             select(func.count()).select_from(ServiceImportAttempt).where(
@@ -321,7 +328,7 @@ async def _panel_record(pg: Any, info: dict[str, Any]) -> dict[str, Any]:
     return record
 
 
-def _panel_user_id(record: dict[str, Any]) -> int:
+def panel_user_id(record: dict[str, Any]) -> int:
     value = record.get("id")
     if type(value) is not int or value <= 0:
         raise ServiceImportError(GENERIC_REFUSAL, Reason.NOT_FOUND)
@@ -344,7 +351,7 @@ async def verify_link(
     owner = pg_user_owner_username(record)
     if owner not in admins:
         raise ServiceImportError(GENERIC_REFUSAL, Reason.ADMIN_NOT_ALLOWED, detail={"owner_admin": owner})
-    return VerifiedService(record=record, token=link.token, prefix=prefix, panel_id=_panel_user_id(record))
+    return VerifiedService(record=record, token=link.token, prefix=prefix, panel_id=panel_user_id(record))
 
 
 async def existing_rows(session: AsyncSession, pg_user_id: int, token: str) -> list[UserService]:
@@ -406,6 +413,22 @@ async def _attach(
     if user.is_blocked:
         raise ServiceImportError(GENERIC_REFUSAL, Reason.BLOCKED)
     verified = await verify_link(session, raw_link=raw_link, shop_id=shop_id, config=config)
+    return await attach_verified(
+        session, user, verified, shop_id=shop_id, renewable=renewable, config=config, ask_approval=True
+    )
+
+
+async def attach_verified(
+    session: AsyncSession,
+    user: BotUser,
+    verified: VerifiedService,
+    *,
+    shop_id: int | None,
+    renewable: bool,
+    config: ImportSettings,
+    ask_approval: bool,
+) -> ImportResult:
+    """Attach a verified panel user to ``user``; with approval on, queue a request instead."""
     # Serialise this customer's imports (no effect on SQLite) so the per-user cap below holds.
     await session.scalar(select(BotUser.id).where(BotUser.id == user.id).with_for_update())
     mine: UserService | None = None
@@ -422,6 +445,8 @@ async def _attach(
 
     if renewable and await _imported_count(session, user.id) >= config.max_per_user:
         raise ServiceImportError(LIMIT_REACHED, Reason.LIMIT_REACHED)
+    if ask_approval and renewable and config.needs_approval:
+        return await _queue_request(session, user, verified, shop_id)
     sub_url = user_subscription_url(verified.record) or absolutize_subscription_url(
         f"{verified.prefix}/{verified.token}"
     )
@@ -437,13 +462,29 @@ async def _attach(
     return await _commit(session, service, verified.record, ImportOutcome.ADDED)
 
 
-async def _commit(session: AsyncSession, service: UserService, record: dict[str, Any], outcome: ImportOutcome) -> ImportResult:
+async def _queue_request(
+    session: AsyncSession, user: BotUser, verified: VerifiedService, shop_id: int | None
+) -> ImportResult:
+    try:
+        request, created = await open_request(
+            session, user_id=int(user.id), shop_id=shop_id, panel_user_id=verified.panel_id,
+            panel_username=str(verified.record.get("username") or ""),
+        )
+    except TooManyRequests:
+        raise ServiceImportError(REQUEST_LIMIT, Reason.REQUEST_LIMIT) from None
+    request_id = int(request.id)
+    result = await _commit(session, None, verified.record, ImportOutcome.PENDING_APPROVAL)
+    return ImportResult(result.outcome, None, result.info, request_id=request_id, new_request=created)
+
+
+async def _commit(session: AsyncSession, service: UserService | None, record: dict[str, Any], outcome: ImportOutcome) -> ImportResult:
     try:
         await session.commit()
     except IntegrityError:
         # A concurrent claim of the same panel user won the unique index.
         raise ServiceImportError(GENERIC_REFUSAL, Reason.ALREADY_TAKEN) from None
-    await session.refresh(service)
+    if service is not None:
+        await session.refresh(service)
     return ImportResult(outcome, service, record)
 
 

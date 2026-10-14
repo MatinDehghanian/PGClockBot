@@ -25,3 +25,15 @@ def add_existing_row(ui: dict | None) -> list[InlineKeyboardButton]:
 
 def empty_services_keyboard(ui: dict | None) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[add_existing_row(ui)])
+
+
+async def announce_new_request(message, session, user, result) -> None:
+    """Tell the admins about a freshly queued request (once; repeats of the same link stay quiet)."""
+    if not result.new_request or result.request_id is None:
+        return
+    from app.services.service_import_notify import notify_service_import_request
+
+    await notify_service_import_request(
+        message.bot, session, user=user,
+        panel_username=str(result.info.get("username") or ""), request_id=result.request_id,
+    )
