@@ -219,11 +219,12 @@ def register_finance_pages(app, *, render, require_staff, get_db):
         can_billing_settings = staff.get("role") == "admin"
 
         tab = (request.query_params.get("tab") or "").strip()
-        if tab not in {"reports", "behavior", "orders", "payments", "delivery", "cancellations"}:
+        if tab == "behavior":
+            # The customer-behaviour panel moved to the marketing section.
+            return RedirectResponse("/funnel", status_code=303)
+        if tab not in {"reports", "orders", "payments", "delivery", "cancellations"}:
             tab = "reports" if (can_orders or can_payments) else "payments"
         if tab == "reports" and not (can_orders or can_payments):
-            tab = "payments"
-        if tab == "behavior" and not (can_orders or can_payments):
             tab = "payments"
         if tab == "orders" and not can_orders:
             tab = "reports" if can_payments else "payments"
@@ -281,13 +282,6 @@ def register_finance_pages(app, *, render, require_staff, get_db):
             "billing_settings_action": "",
             "finance_pending_action": "",
             "receipt_matches": {},
-            "funnel": {
-                "shop_open": 0,
-                "plan_view": 0,
-                "pay_start": 0,
-                "receipt": 0,
-                "delivered": 0,
-            },
             "report": {},
             "report_period": report_period,
             "cancel_requests": [],
@@ -355,22 +349,6 @@ def register_finance_pages(app, *, render, require_staff, get_db):
                 session, reseller_id=rid, period=report_period
             )
             ctx["report_period"] = report_period
-
-        elif tab == "behavior" and (can_orders or can_payments):
-            from app.api.home_pages import _EMPTY_FUNNEL, _safe_funnel
-            from app.services.db_safe import recover_session
-
-            await recover_session(session)
-            if is_platform_admin(staff):
-                rid = None
-            else:
-                rid = shop_owner_id(staff)
-                if not rid:
-                    ctx["flash_err"] = ctx["flash_err"] or "محدوده فروشگاه مشخص نیست"
-                    return render(request, "finance.html", ctx)
-            ctx["funnel"] = await _safe_funnel(session, reseller_id=rid) or dict(
-                _EMPTY_FUNNEL
-            )
 
         elif tab == "orders" and can_orders:
             base_filters = []

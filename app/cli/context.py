@@ -7,7 +7,6 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 from app.cli.install_root import resolve_install_root
 from app.cli.output import CliError

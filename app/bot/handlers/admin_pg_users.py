@@ -342,8 +342,7 @@ async def adm_pg(
     reseller_owner_id: int | None = None,
 ):
     """PasarGuard hub for Owner and L1 with migrated PG pages (not platform overview)."""
-    from app.bot.auth import bot_may_open_pg_hub, filtered_pg_reply_keyboard
-    from app.services.users import get_all_settings
+    from app.bot.auth import bot_may_open_pg_hub
 
     if not await bot_may_open_pg_hub(
         session,
@@ -357,7 +356,6 @@ async def adm_pg(
     await callback.answer()
     if not callback.message:
         return
-    ui = await get_all_settings(session)
     from app.bot.handlers.reply_nav import open_pg_home
 
     await open_pg_home(

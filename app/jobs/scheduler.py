@@ -410,7 +410,6 @@ async def run_admin_daily_report(bot: Bot) -> None:
                 ACTOR_OWNER,
                 ACTOR_SHOP,
                 DEFAULT_REPORT_TEMPLATE,
-                build_daily_report,
                 shop_daily_report_chat_ids,
             )
             from app.services.org_principals import DEPTH_ONE, STATUS_ACTIVE

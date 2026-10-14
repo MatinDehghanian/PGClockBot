@@ -2232,7 +2232,31 @@ def admin_user_service_actions(user_id: int, service_id: int) -> InlineKeyboardM
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def admin_user_service_delete_confirm(user_id: int, service_id: int) -> InlineKeyboardMarkup:
+def admin_user_service_delete_confirm(
+    user_id: int, service_id: int, *, external: bool = False
+) -> InlineKeyboardMarkup:
+    cancel = InlineKeyboardButton(
+        text="انصراف", callback_data=f"adm:users:svc:{user_id}:{service_id}"
+    )
+    if external:
+        # Added from outside the bot: detaching is separate from removing the panel account.
+        return InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="🔗 فقط جدا شود (حساب پنل می‌ماند)",
+                        callback_data=f"adm:users:svcdel:{user_id}:{service_id}",
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="🗑 حذف همراه حساب پاسارگارد",
+                        callback_data=f"adm:users:svcdel:{user_id}:{service_id}:pg",
+                    )
+                ],
+                [cancel],
+            ]
+        )
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -2240,10 +2264,7 @@ def admin_user_service_delete_confirm(user_id: int, service_id: int) -> InlineKe
                     text="🗑 بله، حذف شود",
                     callback_data=f"adm:users:svcdel:{user_id}:{service_id}",
                 ),
-                InlineKeyboardButton(
-                    text="انصراف",
-                    callback_data=f"adm:users:svc:{user_id}:{service_id}",
-                ),
+                cancel,
             ]
         ]
     )

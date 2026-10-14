@@ -14,7 +14,7 @@ from app.bot.auth import is_platform_admin as _is_admin
 from app.bot.auth import require_bot_owner_handler, require_platform_rep_mgmt
 from app.config import get_settings
 from app.db.models import BotUser, Order, OrderStatus, Payment, PaymentStatus, Plan, Role, Ticket, UserService
-from app.services.home_overview import admin_customer_counts, bot_dashboard_summary
+from app.services.home_overview import bot_dashboard_summary
 from app.services.formatting import (
     format_system_stats,
     format_toman,
@@ -27,7 +27,7 @@ from app.services.orders import (
 )
 from app.services.redact import user_safe_error
 from app.services.pasarguard import get_pg
-from app.services.tickets import get_ticket, list_open_tickets, reply_ticket
+from app.services.tickets import get_ticket, reply_ticket
 from app.services.updates import local_version
 from app.services.users import get_all_settings, get_setting, on, set_setting
 from app.bot.tg_utils import parse_bot_float, parse_bot_int, safe_edit_text
@@ -2956,15 +2956,26 @@ async def adm_users_service_delete_ask(
         return
     await callback.answer()
     label = svc.pg_username or f"#{service_id}"
+    from app.services.service_import import is_external_service
+
+    external = is_external_service(svc)
     if callback.message:
-        await safe_edit_text(
-            callback.message,
-            (
+        text = (
+            f"⚠️ <b>حذف سرویس #{service_id}</b>\n\n"
+            f"سرویس <code>{html.escape(str(label))}</code> از بیرون ربات اضافه شده است.\n"
+            "«جدا شود» فقط آن را از لیست مشتری برمی‌دارد و حساب VPN در پاسارگارد می‌ماند. "
+            "«حذف همراه حساب» حساب پاسارگارد را هم برای همیشه حذف می‌کند و برگشت‌ناپذیر است."
+            if external
+            else (
                 f"⚠️ <b>حذف سرویس #{service_id}</b>\n\n"
                 f"سرویس <code>{html.escape(str(label))}</code> و کاربر پاسارگارد مرتبط "
                 f"برای همیشه حذف شوند؟\nاین عمل برگشت‌ناپذیر است."
-            ),
-            reply_markup=kb.admin_user_service_delete_confirm(user_id, service_id),
+            )
+        )
+        await safe_edit_text(
+            callback.message,
+            text,
+            reply_markup=kb.admin_user_service_delete_confirm(user_id, service_id, external=external),
         )
 
 @router.callback_query(F.data.startswith("adm:users:svcdel:"))
@@ -2987,23 +2998,29 @@ async def adm_users_service_delete(
         await callback.answer(deny, show_alert=True)
         return
     from app.services.bot_user_admin import admin_delete_service, get_owned_service
+    from app.services.service_import import admin_delete_pg_flag, is_external_service
 
+    explicit_pg = len(parts) > 5 and parts[5] == "pg"
     try:
         svc = await get_owned_service(
             session, bot_user_id=user_id, service_id=service_id
         )
-        await admin_delete_service(session, svc, delete_pg=True)
+        detach_only = is_external_service(svc) and not explicit_pg
+        await admin_delete_service(
+            session, svc, delete_pg=admin_delete_pg_flag(svc, explicit=explicit_pg)
+        )
     except ValueError as e:
         await callback.answer(user_safe_error(e, limit=160), show_alert=True)
         return
     except Exception as e:
         await callback.answer(user_safe_error(e, limit=160), show_alert=True)
         return
-    await callback.answer("سرویس حذف شد", show_alert=True)
+    done = f"سرویس #{service_id} از لیست مشتری جدا شد؛ حساب پاسارگارد حفظ شد." if detach_only else f"سرویس #{service_id} حذف شد."
+    await callback.answer(done, show_alert=True)
     if callback.message:
         await safe_edit_text(
             callback.message,
-            f"✅ سرویس #{service_id} حذف شد.",
+            f"✅ {done}",
             reply_markup=InlineKeyboardMarkup(
                 inline_keyboard=[
                     [

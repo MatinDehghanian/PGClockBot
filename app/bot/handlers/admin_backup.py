@@ -6,11 +6,12 @@ import asyncio
 import tempfile
 from pathlib import Path
 
-from aiogram import F, Router
+from aiogram import Bot, F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import (
     CallbackQuery,
+    Document,
     FSInputFile,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
@@ -386,6 +387,24 @@ async def backup_upload_ask(callback: CallbackQuery, db_user: BotUser, state: FS
     )
 
 
+async def _download_upload_bytes(bot: Bot, doc: Document) -> bytes:
+    """Download an uploaded backup via a temp file that is always removed.
+
+    File I/O runs in a thread so a large archive does not stall the event loop.
+    """
+    tmp_path = Path(await asyncio.to_thread(_new_temp_zip_path))
+    try:
+        await bot.download(doc, destination=tmp_path)
+        return await asyncio.to_thread(tmp_path.read_bytes)
+    finally:
+        await asyncio.to_thread(tmp_path.unlink, missing_ok=True)
+
+
+def _new_temp_zip_path() -> str:
+    with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as buf:
+        return buf.name
+
+
 @router.message(BackupStates.waiting_upload, F.document)
 @require_bot_owner_handler
 async def backup_upload_file(message: Message, db_user: BotUser, state: FSMContext):
@@ -401,12 +420,7 @@ async def backup_upload_file(message: Message, db_user: BotUser, state: FSMConte
         return
     await message.answer("⏳ در حال دریافت و بررسی…")
     try:
-        buf = tempfile.NamedTemporaryFile(suffix=".zip", delete=False)
-        tmp_path = Path(buf.name)
-        buf.close()
-        await message.bot.download(doc, destination=tmp_path)
-        content = tmp_path.read_bytes()
-        tmp_path.unlink(missing_ok=True)
+        content = await _download_upload_bytes(message.bot, doc)
         result = await asyncio.to_thread(
             save_uploaded_backup,
             content,

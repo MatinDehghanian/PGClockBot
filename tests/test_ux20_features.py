@@ -185,17 +185,14 @@ class Ux20TemplatePresenceTests(unittest.TestCase):
         self.assertGreater(export_at, -1)
         self.assertLess(export_at, create_at)
 
-    def test_finance_behavior_tab(self):
+    def test_behavior_panel_moved_out_of_finance(self):
         html = Path("app/web/templates/finance.html").read_text(encoding="utf-8")
         self.assertIn("finance?tab=reports", html)
-        self.assertIn("finance?tab=behavior", html)
-        self.assertLess(
-            html.find("finance?tab=reports"),
-            html.find("finance?tab=behavior"),
-        )
+        self.assertNotIn("finance?tab=behavior", html)
+        self.assertNotIn("_funnel_panel.html", html)
+        self.assertIn("_funnel_panel.html", Path("app/web/templates/funnel.html").read_text(encoding="utf-8"))
         self.assertIn("تحویل ناموفق", html)
         self.assertIn("retry-delivery", html)
-        self.assertIn('_funnel_panel.html', html)
         self.assertNotIn("staff-note", html)
         self.assertNotIn("finance-note-form", html)
         self.assertIn("data-receipt-open", html)

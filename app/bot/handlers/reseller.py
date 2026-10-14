@@ -1454,7 +1454,7 @@ async def res_renew(
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ):
-    from app.services.reseller_capacity import plan_renew_price, renew_reseller_capacity
+    from app.services.reseller_capacity import plan_renew_price
     from app.services.pg_admin_subscription import (
         compute_renew_invoice,
         format_renew_invoice_html,

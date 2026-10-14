@@ -8,14 +8,13 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from typing import Any, Protocol
 
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import ResellerBillingRate, ResellerBillingTransaction, ResellerProfile
+from app.db.models import BotUser, ResellerBillingRate, ResellerBillingTransaction, ResellerProfile
 from app.services.billing_alerts import (
     PANEL_TICK_ISSUES,
     TickIssue,
@@ -469,13 +468,11 @@ async def load_payg_profile(
 async def ensure_payg_shop_wallet(
     session: AsyncSession,
     profile: ResellerProfile,
-) -> tuple["BotUser", int]:
+) -> tuple[BotUser, int]:
     """One-time merge of legacy billing_balance into shop wallet; then wallet is SoT.
 
     Returns ``(BotUser, available_balance)``. ``billing_balance`` is kept as a mirror.
     """
-    from app.db.models import BotUser
-
     user = await session.get(BotUser, int(profile.user_id))
     if user is None:
         raise ValueError("کاربر نماینده یافت نشد")
@@ -567,8 +564,6 @@ async def credit_topup(
     commit: bool = True,
 ) -> ResellerBillingTransaction:
     """Credit shop wallet for PAYG (admin path). ``billing_balance`` mirrors wallet."""
-    from app.db.models import BotUser
-
     if amount <= 0:
         raise ValueError("مبلغ شارژ باید مثبت باشد")
     key = idempotency_key
@@ -712,8 +707,6 @@ async def debit_usage(
       wallet cannot pay the whole delta, the watermark advances only over the paid bytes and
       the remainder stays unbilled until the wallet is topped up.
     """
-    from app.db.models import BotUser
-
     if bytes_delta <= 0:
         profile.billing_watermark_bytes = int(watermark_after)
         if commit:

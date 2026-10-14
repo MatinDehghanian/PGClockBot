@@ -5397,6 +5397,13 @@ form.settings-form > .actions.sticky-actions,
 }
 .settings-main { min-width: 0; }
 .settings-tabs { margin-bottom: var(--page-title-gap); }
+/* Grouped bot settings: group pills on top, the active group's tabs as a slightly smaller capsule row */
+.settings-tabs-groups { margin-bottom: var(--space-1); }
+.section-tabs.settings-subtabs a {
+  height: calc(var(--btn-h) - 6px);
+  min-height: 0;
+  font-size: 12px;
+}
 
 .tg-preview-slot { min-width: 0; }
 .settings-layout > .tg-preview-slot > .card,
