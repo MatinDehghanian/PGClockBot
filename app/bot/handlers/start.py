@@ -821,7 +821,7 @@ async def _link_subscription(
 ):
     from app.bot.service_import_ui import import_enabled
     from app.services.formatting import format_message
-    from app.services.service_import import ServiceImportError, import_existing_service
+    from app.services.service_import import ServiceImportError, import_existing_service, is_external_service
 
     await delete_user_message(message)  # the link is a bearer secret, keep it out of the chat
     ui = await get_all_settings(session)
@@ -846,5 +846,7 @@ async def _link_subscription(
 
     await message.answer(
         format_message("✅ اتصال سرویس", service_card(result.info)),
-        reply_markup=service_card_keyboard(int(result.service.id), ui),
+        reply_markup=service_card_keyboard(
+            int(result.service.id), ui, external=is_external_service(result.service)
+        ),
     )

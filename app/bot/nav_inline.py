@@ -1228,14 +1228,20 @@ def reseller_plans_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
 
 
 def service_card_keyboard(
-    service_id: int, ui: dict | None = None
+    service_id: int, ui: dict | None = None, *, external: bool = False
 ) -> InlineKeyboardMarkup:
     """Inline actions for one service card (replaces service_actions_reply_keyboard).
 
     Reuses existing ``svc:*`` / ``guide:svc:*`` callbacks — no duplicated business logic.
-    Cancel sits above delete so destructive delete stays visually separated.
+    Cancel sits above delete so destructive delete stays visually separated. A service that was
+    not sold by the bot (``external``) can never be cancelled for a refund, so it has no cancel button.
     """
     sid = int(service_id)
+    cancel_rows = (
+        []
+        if external
+        else [[_ikb("📝 درخواست لغو سرویس", callback_data=f"svc:cancel:{sid}", ui=ui)]]
+    )
     rows: list[list[InlineKeyboardButton]] = [
         [
             _ikb(
@@ -1282,13 +1288,7 @@ def service_card_keyboard(
                 ui=ui,
             ),
         ],
-        [
-            _ikb(
-                "📝 درخواست لغو سرویس",
-                callback_data=f"svc:cancel:{sid}",
-                ui=ui,
-            ),
-        ],
+        *cancel_rows,
         [
             _ikb(
                 "🗑 حذف سرویس",
