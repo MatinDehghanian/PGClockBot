@@ -19,6 +19,7 @@ tests/test_update_migration_metadata.py
 # starting with # are comments; blank lines are ignored.
 # --- Tenant / shop isolation & IDOR ---
 
+tests/test_update_owner_only.py
 tests/test_marketing_nav.py
 tests/test_gift_code_page.py
 tests/test_admin_marketing_hub.py

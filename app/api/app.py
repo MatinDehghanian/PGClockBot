@@ -75,6 +75,7 @@ from app.services.security_policy import (
 from app.services.updates import local_version
 from app.services.message_variables import template_variable_specs
 from app.services.panel_assets import get_panel_asset_cache_key
+from app.services.shop_scope import is_platform_admin
 from app.services.settings_tab_groups import group_settings_tabs
 from app.services.users import (
     SETTINGS_DOMAIN_REDIRECTS,
@@ -261,8 +262,11 @@ def render(request: Request, name: str, context: dict | None = None, status_code
             ctx["pwa_name"] = panel_display_name()
         except Exception:
             ctx["pwa_name"] = "MrClockBot"
+    # Update availability is shown to the Owner only, like the update pages themselves.
+    if not is_platform_admin(ctx.get("staff")):
+        ctx["update"] = None
     # Sidebar update badge — prefer explicit context, else request.state, else cache peek.
-    if "update" not in ctx:
+    elif "update" not in ctx:
         upd = getattr(request.state, "panel_update", None)
         if upd is None:
             try:

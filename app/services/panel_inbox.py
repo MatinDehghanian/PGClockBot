@@ -168,12 +168,11 @@ async def build_inbox_context(
 
     update = None
     try:
-        from app.services.updates import check_github_update, peek_update_cache
+        from app.services.updates import check_github_update
 
+        # Only the Owner may act on a new version; nobody else is told about it.
         if is_platform_admin(staff):
             update = await check_github_update(force=False)
-        else:
-            update = peek_update_cache()
     except Exception:
         update = None
 
