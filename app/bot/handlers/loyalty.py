@@ -542,7 +542,7 @@ async def _staff_loyalty_answer(
     from app.services.users import get_all_settings
 
     ui = await get_all_settings(session)
-    hub_back = "nv:res:home" if is_reseller_bot else "nv:adm:people"
+    hub_back = "nv:res:home" if is_reseller_bot else "nv:adm:marketing"
     leaf_back = "nv:adm:loy"
     if content_inline is not None:
         inline = with_inline_back(content_inline, ui, leaf_back)
@@ -617,7 +617,7 @@ async def open_admin_loyalty_hub(
             ui,
             include_tiers=can_tiers,
             back_callback=(
-                "nv:res:home" if is_reseller_bot else "nv:adm:people"
+                "nv:res:home" if is_reseller_bot else "nv:adm:marketing"
             ),
         ),
     )
