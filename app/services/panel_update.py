@@ -132,7 +132,7 @@ def _append_log(line: str) -> None:
     with _LOCK:
         cur = read_status()
         log = list(cur.get("log") or [])
-        log.append(f"{datetime.now().strftime('%H:%M:%S')} {line}")
+        log.append(f"{datetime.now().astimezone().strftime('%H:%M:%S')} {line}")
         cur["log"] = log[-100:]
         tmp = STATUS_FILE.with_suffix(".tmp")
         tmp.write_text(json.dumps(cur, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -588,7 +588,7 @@ def _do_update(target_version: str | None) -> None:
 
         env_path = root / ".env"
         if env_path.exists():
-            bak = root / f".env.bak.{datetime.now().strftime('%Y%m%d%H%M%S')}"
+            bak = root / f".env.bak.{datetime.now().astimezone().strftime('%Y%m%d%H%M%S')}"
             shutil.copy2(env_path, bak)
             _append_log(f"پشتیبان env: {bak.name}")
 
@@ -740,7 +740,7 @@ def _do_rollback(snapshot_id: str) -> None:
 
         env_path = root / ".env"
         if env_path.exists():
-            bak = root / f".env.bak.rollback.{datetime.now().strftime('%Y%m%d%H%M%S')}"
+            bak = root / f".env.bak.rollback.{datetime.now().astimezone().strftime('%Y%m%d%H%M%S')}"
             shutil.copy2(env_path, bak)
             _append_log(f"پشتیبان env: {bak.name}")
 
@@ -885,7 +885,7 @@ def _do_rollback_to_version(version: str) -> None:
 
         env_path = root / ".env"
         if env_path.exists():
-            bak = root / f".env.bak.rollback.{datetime.now().strftime('%Y%m%d%H%M%S')}"
+            bak = root / f".env.bak.rollback.{datetime.now().astimezone().strftime('%Y%m%d%H%M%S')}"
             shutil.copy2(env_path, bak)
             _append_log(f"پشتیبان env: {bak.name}")
 
