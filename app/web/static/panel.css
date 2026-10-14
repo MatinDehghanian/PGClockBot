@@ -5397,22 +5397,12 @@ form.settings-form > .actions.sticky-actions,
 }
 .settings-main { min-width: 0; }
 .settings-tabs { margin-bottom: var(--page-title-gap); }
-/* Grouped bot settings: group pills on top, the active group's tabs as a quieter second row */
+/* Grouped bot settings: group pills on top, the active group's tabs as a slightly smaller capsule row */
 .settings-tabs-groups { margin-bottom: var(--space-1); }
 .section-tabs.settings-subtabs a {
-  height: auto;
+  height: calc(var(--btn-h) - 6px);
   min-height: 0;
-  padding: var(--space-1) var(--space-2);
-  border-color: transparent;
-  background: transparent;
   font-size: 12px;
-}
-.section-tabs.settings-subtabs a:hover { background: rgba(255, 255, 255, 0.07); }
-.section-tabs.settings-subtabs a.active {
-  background: transparent;
-  border-color: transparent;
-  border-bottom: 2px solid var(--brand-fg);
-  border-radius: 0;
 }
 
 .tg-preview-slot { min-width: 0; }
