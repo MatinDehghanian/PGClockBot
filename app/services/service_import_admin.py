@@ -52,11 +52,11 @@ REASON_LABELS: dict[str, str] = {
 _test_calls: dict[str, list[float]] = {}
 
 
-def import_scope(staff: Mapping[str, Any]) -> int | None:
+def import_scope(staff: Mapping[str, Any], perm: str = "shop_settings") -> int | None:
     """Shop whose import settings ``staff`` may see (``None`` = platform). Raises ``PermissionError``."""
     if is_platform_admin(dict(staff)):
         return None
-    if not can_shop(authz_from_staff(staff), "shop_settings"):
+    if not can_shop(authz_from_staff(staff), perm):
         raise PermissionError("دسترسی تنظیمات فروشگاه ندارید")
     shop_id = shop_owner_id(dict(staff))
     if shop_id is None:

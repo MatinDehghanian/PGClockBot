@@ -27,6 +27,7 @@ from app.db.models import BotUser
 from app.services.formatting import format_message, service_card
 from app.services.service_import import (
     NOT_ENABLED,
+    PENDING_NOTICE,
     RATE_LIMITED,
     ImportOutcome,
     ServiceImportError,
@@ -122,6 +123,9 @@ async def svc_import_link(
         await message.answer(text, reply_markup=cancel_keyboard(CANCEL_CODE))
         return
     await state.set_state(None)
+    if result.outcome == ImportOutcome.PENDING_APPROVAL:
+        await finish_text_step(message, state, text=format_message("⏳ در انتظار تأیید", PENDING_NOTICE))
+        return
     from app.bot.nav_inline import service_card_keyboard
 
     await finish_text_step(
