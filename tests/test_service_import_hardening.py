@@ -24,12 +24,16 @@ SECRET = "tok-SECRETSECRET1"
 class TokenNeverReachesTheLogTests(ImportCase):
     async def test_a_panel_outage_does_not_log_the_request_url_or_traceback(self):
         self.platform_panel.fail_with = PasarGuardError(f"GET https://p.example/sub/{SECRET}/info failed (503)", status_code=503)
-        with self.assertLogs("app.services.service_import", level="WARNING") as captured:
+        # The logger is replaced instead of captured: other tests may switch logging off for the process.
+        with patch.object(si, "logger") as log:
             self.assertEqual(await self.refused(1, SECRET), si.PANEL_UNAVAILABLE)
-        output = "\n".join(captured.output)
-        self.assertNotIn(SECRET, output)
-        self.assertIsNone(captured.records[0].exc_info)
-        self.assertIn("503", output)
+        log.warning.assert_called_once()
+        call = log.warning.call_args
+        self.assertNotIn("exc_info", call.kwargs)
+        rendered = str(call.args[0]) % tuple(call.args[1:])
+        self.assertNotIn(SECRET, rendered)
+        self.assertIn("503", rendered)
+        self.assertFalse(log.exception.called)
 
 
 class FailedAttemptLimitHoldsUnderBurstTests(ImportCase):
