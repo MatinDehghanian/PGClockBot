@@ -259,8 +259,6 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
         staff: dict = Depends(require_staff),
         session: AsyncSession = Depends(get_db),
     ):
-        from urllib.parse import quote
-
         from app.services.inbox_dismissals import alert_counts, upsert_dismissal
         from app.services.panel_inbox import build_inbox_context
 
@@ -268,7 +266,7 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
         alert_key = str(form.get("alert_key") or "").strip()
         entity_id = str(form.get("entity_id") or "").strip()
         mode = str(form.get("mode") or "").strip()
-        from app.services.table_bulk import sanitize_return_to
+        from app.services.table_bulk import redirect_bulk, sanitize_return_to
 
         return_to = sanitize_return_to(
             str(form.get("return_to") or "/inbox"), default="/inbox"
@@ -284,15 +282,9 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 seen_count=alert_counts(ctx).get(alert_key, 0),
             )
         except ValueError as e:
-            return RedirectResponse(
-                f"{return_to}?err={quote(str(e))}",
-                status_code=303,
-            )
+            return redirect_bulk(return_to, err=str(e))
         _invalidate_inbox_caches(staff)
-        return RedirectResponse(
-            f"{return_to}?ok={quote('اعلان مخفی شد')}",
-            status_code=303,
-        )
+        return redirect_bulk(return_to, ok="اعلان مخفی شد")
 
     @app.post("/inbox/dismiss/reset")
     async def inbox_dismiss_reset(
@@ -300,12 +292,10 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
         staff: dict = Depends(require_staff),
         session: AsyncSession = Depends(get_db),
     ):
-        from urllib.parse import quote
-
         from app.services.inbox_dismissals import clear_staff_dismissals
 
         form = await request.form()
-        from app.services.table_bulk import sanitize_return_to
+        from app.services.table_bulk import redirect_bulk, sanitize_return_to
 
         return_to = sanitize_return_to(
             str(form.get("return_to") or "/inbox"), default="/inbox"
@@ -313,10 +303,7 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
         removed = await clear_staff_dismissals(session, staff)
         _invalidate_inbox_caches(staff)
         msg = "اعلان‌های مخفی‌شده بازنشانی شدند" if removed else "اعلان مخفی‌شده‌ای نبود"
-        return RedirectResponse(
-            f"{return_to}?ok={quote(msg)}",
-            status_code=303,
-        )
+        return redirect_bulk(return_to, ok=msg)
 
     async def _render_home_result(request: Request, result, *, as_body_fragment: bool):
         if isinstance(result, RedirectResponse):
