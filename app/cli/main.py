@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from app.cli.output import CliError, err, info
+from app.cli.output import CliError, err
 
 
 def build_parser() -> argparse.ArgumentParser:

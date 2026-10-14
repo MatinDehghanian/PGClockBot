@@ -13,7 +13,7 @@ import logging
 from datetime import datetime, timezone
 from enum import StrEnum
 
-from sqlalchemy import or_, select, update
+from sqlalchemy import or_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings

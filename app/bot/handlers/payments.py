@@ -7,7 +7,6 @@ from aiogram.types import CallbackQuery, Message, PreCheckoutQuery
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, Payment, PaymentMethod, PaymentStatus
-from app.services.redact import user_safe_error
 from app.services.delivery import send_delivery_to_user
 from app.services.formatting import format_message
 from app.services.orders import approve_payment, reject_payment, stars_amount_for_toman

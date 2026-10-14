@@ -817,6 +817,7 @@ DEFAULT_SETTINGS = {
     "btn_adm_hub_ops": "🗓 عملیات روزانه",
     "btn_adm_hub_people": "👤 افراد",
     "btn_adm_hub_product": "📦 محصول و PG",
+    "btn_adm_hub_marketing": "🎯 بازاریابی",
     "btn_adm_hub_system": "🛠 سیستم",
     "btn_adm_dash": "📊 داشبورد",
     "btn_adm_reports": "📈 گزارشات",
@@ -1144,6 +1145,7 @@ SETTING_GROUPS = {
         ("btn_adm_hub_ops", "گروه عملیات روزانه (ادمین)", "text", "هاب پنل ادمین"),
         ("btn_adm_hub_people", "گروه افراد (ادمین)", "text", "هاب پنل ادمین"),
         ("btn_adm_hub_product", "گروه محصول و PG (ادمین)", "text", "هاب پنل ادمین"),
+        ("btn_adm_hub_marketing", "گروه بازاریابی (ادمین)", "text", "هاب پنل ادمین"),
         ("btn_adm_hub_system", "گروه سیستم (ادمین)", "text", "هاب پنل ادمین"),
         ("btn_adm_dash", "دکمه داشبورد (ادمین)", "text", "هاب عملیات"),
         ("btn_adm_reports", "دکمه گزارشات (ادمین)", "text", "هاب عملیات"),
@@ -1154,9 +1156,9 @@ SETTING_GROUPS = {
         ("btn_adm_pg", "دکمه پاسارگارد (ادمین)", "text", "هاب محصول"),
         ("btn_adm_users", "دکمه کاربران (ادمین)", "text", "هاب افراد"),
         ("btn_adm_resellers", "دکمه نمایندگان (ادمین)", "text", "هاب افراد"),
-        ("btn_adm_loyalty", "دکمه باشگاه (ادمین)", "text", "هاب افراد"),
+        ("btn_adm_loyalty", "دکمه باشگاه (ادمین)", "text", "هاب بازاریابی"),
         ("btn_adm_settings", "دکمه تنظیمات (ادمین)", "text", "هاب سیستم"),
-        ("btn_adm_broadcast", "دکمه پیام گروهی (ادمین)", "text", "هاب سیستم"),
+        ("btn_adm_broadcast", "دکمه پیام گروهی (ادمین)", "text", "هاب بازاریابی"),
         ("btn_adm_backup", "دکمه بکاپ (ادمین)", "text", "هاب سیستم"),
         ("btn_adm_preview", "دکمه پیش‌نمایش کاربر (ادمین)", "text", "هاب سیستم"),
         ("btn_adm_exit_preview", "خروج از پیش‌نمایش", "text", "روی کیبورد هنگام پیش‌نمایش منوی کاربر"),
@@ -1791,8 +1793,6 @@ async def delete_bot_user(
     await session.execute(
         update(Order).where(Order.reseller_id == user_id).values(reseller_id=None)
     )
-    from app.db.models import Ticket
-
     await session.execute(
         update(Ticket).where(Ticket.reseller_id == user_id).values(reseller_id=None)
     )

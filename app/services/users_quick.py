@@ -14,7 +14,6 @@ from app.db.models import BotUser, Plan, UserService
 from app.services.users_ops import (
     UserOpsRow,
     approx_expire_at,
-    build_user_ops_row,
     load_services_by_user_ids,
 )
 

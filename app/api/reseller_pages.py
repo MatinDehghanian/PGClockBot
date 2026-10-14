@@ -524,7 +524,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         _ = form.get("reseller_profile_id")
         try:
             role_raw = str(form.get("pg_role_id") or "").strip()
-            result = await provision_level2_child(
+            await provision_level2_child(
                 session,
                 staff,
                 Level2ProvisionRequest(

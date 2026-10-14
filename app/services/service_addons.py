@@ -7,7 +7,7 @@ import re
 import time
 from typing import Any
 
-from sqlalchemy import select, update
+from sqlalchemy import or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -125,17 +125,31 @@ def category_ids_equal(a: int | None, b: int | None) -> bool:
 def pack_matches_service_category(
     pack: ServiceAddonPack | None, service_category_id: int | None
 ) -> bool:
-    """Packs are priced per plan category; only same-category packs apply.
+    """A general pack fits every category of its shop; any other pack only its own.
 
-    Uncategorized packs (``category_id is None``) match only uncategorized
-    services. Cross-category purchase is fail-closed.
+    Cross-category purchase of a category pack stays fail-closed, and a pack that is
+    neither general nor tied to a category (its category was removed) matches nothing.
     """
     if not pack:
         return False
+    if pack.is_general:
+        return True
+    if pack.category_id is None:
+        return False
     return category_ids_equal(
-        int(pack.category_id) if pack.category_id is not None else None,
+        int(pack.category_id),
         int(service_category_id) if service_category_id is not None else None,
     )
+
+
+def prefer_category_packs(packs: list[ServiceAddonPack]) -> list[ServiceAddonPack]:
+    """Drop a general pack when a category pack offers the same kind and amount.
+
+    The category pack is the shop's price for that category, so customers never see
+    two prices for the same bundle. The input order is kept.
+    """
+    specific = {(pack.kind, float(pack.amount)) for pack in packs if not pack.is_general}
+    return [pack for pack in packs if not pack.is_general or (pack.kind, float(pack.amount)) not in specific]
 
 
 async def service_plan_category_id(
@@ -198,12 +212,13 @@ async def list_shop_packs(
     reseller_id: int | None = None,
     active_only: bool = True,
     kind: str | None = None,
-    category_id: int | None | object = ...,
+    service_category_id: int | None | object = ...,
 ) -> list[ServiceAddonPack]:
-    """List shop packs. Pass ``category_id`` to filter strictly by plan category.
+    """List shop packs. Pass ``service_category_id`` to get what a service of that plan
+    category may buy: the general packs plus the packs tied to that category (``None``
+    means a service without a category, which only sees general packs).
 
-    Omit ``category_id`` (default) to return every shop pack (admin lists).
-    Pass ``None`` explicitly to only return uncategorized packs.
+    Omit it (default) to return every shop pack (admin lists).
     """
     from app.services.users import current_shop_reseller_id
 
@@ -219,12 +234,14 @@ async def list_shop_packs(
         q = q.where(ServiceAddonPack.is_active.is_(True))
     if kind:
         q = q.where(ServiceAddonPack.kind == kind)
-    if category_id is not ...:
-        if category_id is None:
-            q = q.where(ServiceAddonPack.category_id.is_(None))
-        else:
-            q = q.where(ServiceAddonPack.category_id == int(category_id))
+    if service_category_id is not ...:
+        fits = ServiceAddonPack.is_general.is_(True)
+        if service_category_id is not None:
+            fits = or_(fits, ServiceAddonPack.category_id == int(service_category_id))
+        q = q.where(fits)
     packs = list((await session.execute(q)).scalars().all())
+    if service_category_id is not ...:
+        packs = prefer_category_packs(packs)
     await annotate_prices(session, packs, shop_id=rid)
     return packs
 
@@ -246,7 +263,7 @@ async def list_packs_for_service(
         reseller_id=shop_rid,
         active_only=active_only,
         kind=kind,
-        category_id=cat_id,
+        service_category_id=cat_id,
     )
 
 
@@ -338,6 +355,7 @@ async def create_pack(
         description=desc,
         owner_reseller_id=owner_id,
         category_id=resolved_cat,
+        is_general=resolved_cat is None,
         sort_order=int(sort_order or 0),
         is_active=True,
     )
@@ -394,6 +412,7 @@ async def update_pack(
             expected_audience=AUDIENCE_USERS,
             allow_inactive_id=pack.category_id,
         )
+        pack.is_general = pack.category_id is None
     await session.commit()
     await session.refresh(pack)
     return pack

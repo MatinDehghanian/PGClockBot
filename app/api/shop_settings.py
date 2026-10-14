@@ -21,6 +21,7 @@ from app.services.resellers import (
     complete_reseller_setup,
 )
 from app.services.secret_box import reveal_bot_token
+from app.services.settings_tab_groups import group_settings_tabs
 from app.services.users import (
     IMAGE_KEYS,
     SECRET_KEYS,
@@ -213,6 +214,7 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
             "groups": groups,
             "tab_groups": list(groups.keys()),
             "tabs": RESELLER_SETTINGS_TABS,
+            "tab_nav": group_settings_tabs(RESELLER_SETTINGS_TABS, tab),
             "tab": tab,
             "saved": request.query_params.get("saved") == "1",
             "saved_msg": request.query_params.get("msg") or "",

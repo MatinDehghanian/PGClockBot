@@ -111,7 +111,7 @@ class ServiceAddonScopeTests(unittest.TestCase):
         self.assertFalse(pack_matches_shop(shop, None))
         self.assertFalse(pack_matches_shop(shop, 9))
 
-    def test_pack_category_match_is_strict(self):
+    def test_pack_category_match_is_general_or_exact(self):
         self.assertTrue(category_ids_equal(None, None))
         self.assertTrue(category_ids_equal(3, 3))
         self.assertFalse(category_ids_equal(None, 3))
@@ -127,21 +127,39 @@ class ServiceAddonScopeTests(unittest.TestCase):
             category_id=7,
             is_active=True,
         )
-        bare = ServiceAddonPack(
+        general = ServiceAddonPack(
             id=11,
-            name="Bare 10G",
+            name="General 10G",
             kind=KIND_VOLUME,
             amount=10,
             price=1000,
             owner_reseller_id=None,
             category_id=None,
+            is_general=True,
             is_active=True,
         )
+        orphan = ServiceAddonPack(
+            id=12,
+            name="Orphan 10G",
+            kind=KIND_VOLUME,
+            amount=10,
+            price=1000,
+            owner_reseller_id=None,
+            category_id=None,
+            is_general=False,
+            is_active=True,
+        )
+        for pack in (vip,):
+            pack.is_general = False
         self.assertTrue(pack_matches_service_category(vip, 7))
         self.assertFalse(pack_matches_service_category(vip, None))
         self.assertFalse(pack_matches_service_category(vip, 9))
-        self.assertTrue(pack_matches_service_category(bare, None))
-        self.assertFalse(pack_matches_service_category(bare, 7))
+        # A general pack fits every category and uncategorized services.
+        self.assertTrue(pack_matches_service_category(general, None))
+        self.assertTrue(pack_matches_service_category(general, 7))
+        # A pack that lost its category without being general matches nothing.
+        self.assertFalse(pack_matches_service_category(orphan, None))
+        self.assertFalse(pack_matches_service_category(orphan, 7))
 
     def test_note_parse_snapshot_and_legacy(self):
         self.assertEqual(

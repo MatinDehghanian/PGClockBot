@@ -29,6 +29,7 @@ PLATFORM_ONLY_BTN_KEYS: frozenset[str] = frozenset(
         "btn_adm_hub_ops",
         "btn_adm_hub_people",
         "btn_adm_hub_product",
+        "btn_adm_hub_marketing",
         "btn_adm_hub_system",
         "btn_adm_dash",
         "btn_adm_reports",
@@ -115,6 +116,7 @@ BTN_ADMIN_HUBS: list[Field] = [
     ("btn_adm_hub_ops", "گروه عملیات روزانه", "text"),
     ("btn_adm_hub_people", "گروه افراد", "text"),
     ("btn_adm_hub_product", "گروه محصول و PG", "text"),
+    ("btn_adm_hub_marketing", "گروه بازاریابی", "text"),
     ("btn_adm_hub_system", "گروه سیستم", "text"),
 ]
 

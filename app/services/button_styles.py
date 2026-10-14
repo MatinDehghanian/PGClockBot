@@ -171,6 +171,7 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "adm_hub_ops", "label": "عملیات روزانه", "group": "منوی ادمین", "default": "success"},
     {"id": "adm_hub_people", "label": "افراد", "group": "منوی ادمین", "default": "success"},
     {"id": "adm_hub_product", "label": "محصول و پاسارگارد", "group": "منوی ادمین", "default": "success"},
+    {"id": "adm_hub_marketing", "label": "بازاریابی", "group": "منوی ادمین", "default": "success"},
     {"id": "adm_hub_system", "label": "سیستم", "group": "منوی ادمین", "default": ""},
     {"id": "adm_dash", "label": "داشبورد ادمین", "group": "منوی ادمین", "default": "success"},
     {"id": "adm_reports", "label": "گزارشات (ادمین)", "group": "منوی ادمین", "default": "success"},
