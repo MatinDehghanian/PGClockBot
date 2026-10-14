@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from app.cli.context import CliContext, require_confirm
 from app.cli.output import CliError, header, info, kv, ok, warn
 

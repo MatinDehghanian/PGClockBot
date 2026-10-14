@@ -222,7 +222,6 @@ async def open_notify_bot_for_user(session, user) -> tuple[Bot, bool]:
     Always returns a bot with HTML parse_mode so format_message / <b> tags render.
     """
     from app.bot import create_bot
-    from app.services.resellers import get_reseller_profile
 
     reseller_id = getattr(user, "reseller_id", None)
     if reseller_id:

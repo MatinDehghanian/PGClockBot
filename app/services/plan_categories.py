@@ -12,7 +12,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Plan, PlanCategory, ResellerPlan
 from app.services.plans_catalog import (
-    apply_catalog_owner_filter,
     catalog_owner_id,
     require_catalog_owner_id,
 )

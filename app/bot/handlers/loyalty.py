@@ -40,7 +40,7 @@ from app.services.lucky_wheel import (
     spin as wheel_spin,
     wheel_feature_enabled,
 )
-from app.services.message_variables import DOMAIN_REFERRAL, render_message_template
+from app.services.message_variables import DOMAIN_REFERRAL
 from app.services.users import get_all_settings, get_setting, on, set_setting
 from app.services.redact import user_safe_error
 
@@ -298,7 +298,6 @@ async def open_loyalty_referral_message(
     text, link, send_kw = await build_referral_text(session, db_user, uname)
     share = f"https://t.me/share/url?url={link}&text="
     from app.bot.nav_inline import present_inline_only
-    ui = await get_all_settings(session)
     await nav.set_loy_step(state, "referral")
     ref_kb = _ref_actions_keyboard(share_url=share)
     if state is not None:

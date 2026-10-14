@@ -46,7 +46,6 @@ async def nv_wallet_amount(
     reseller_owner_id: int | None = None,
 ):
     """Preset amount or custom free-text prompt (Wave C)."""
-    from app.bot import keyboards as kb
     from app.bot.handlers.wallet import WalletStates, present_topup_methods
     from app.bot.nav_inline import present_inline_only, wallet_topup_presets_keyboard
     from app.services.formatting import format_message

@@ -742,7 +742,7 @@ def register_pg_pages(
                 except (ProvisionError, PgQuotaError) as qe:
                     return _pg_form_err(getattr(qe, "message", str(qe)), modal="create")
                 pg, as_owner = await _staff_pg(session, staff)
-                created = await pg.create_user_from_template(
+                await pg.create_user_from_template(
                     {
                         "username": uname,
                         "user_template_id": tid,
@@ -809,7 +809,7 @@ def register_pg_pages(
                     return _pg_form_err(getattr(qe, "message", str(qe)), modal="create")
 
                 pg, as_owner = await _staff_pg(session, staff)
-                created = await pg.create_user(
+                await pg.create_user(
                     build_user_create_payload(
                         username=uname,
                         group_ids=ids,

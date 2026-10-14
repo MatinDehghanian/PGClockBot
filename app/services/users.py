@@ -1793,8 +1793,6 @@ async def delete_bot_user(
     await session.execute(
         update(Order).where(Order.reseller_id == user_id).values(reseller_id=None)
     )
-    from app.db.models import Ticket
-
     await session.execute(
         update(Ticket).where(Ticket.reseller_id == user_id).values(reseller_id=None)
     )

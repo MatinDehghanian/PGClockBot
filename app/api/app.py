@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
-import hmac
 import json
 import logging
 import time
 from pathlib import Path
 from typing import Optional
-from urllib.parse import parse_qsl, quote
+from urllib.parse import quote
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -17,7 +15,6 @@ from fastapi.templating import Jinja2Templates
 from itsdangerous import BadSignature, BadTimeSignature, URLSafeTimedSerializer
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.config import DATA_DIR, get_settings, normalize_pg_base_url, normalize_pg_subscription_path
@@ -30,7 +27,6 @@ from app.db.models import (
     Plan,
     ResellerProfile,
     Role,
-    UserService,
 )
 from app.db.session import SessionLocal
 from app.services.orders import (
@@ -44,7 +40,6 @@ from app.services.orders import (
 )
 from app.services.list_query import filter_by_search, normalize_search_q
 from app.services.payer_notify import notify_payer
-from app.services.pasarguard import get_pg
 from app.services.resellers import (
     setup_is_complete,
     DEFAULT_FEATURE_PERMS,
@@ -80,6 +75,7 @@ from app.services.security_policy import (
 from app.services.updates import local_version
 from app.services.message_variables import template_variable_specs
 from app.services.panel_assets import get_panel_asset_cache_key
+from app.services.settings_tab_groups import group_settings_tabs
 from app.services.users import (
     SETTINGS_DOMAIN_REDIRECTS,
     SETTING_GROUPS,
@@ -299,6 +295,14 @@ def render(request: Request, name: str, context: dict | None = None, status_code
             ctx["is_owner"] = bool(is_explicit_owner_staff(ctx.get("staff")))
         except Exception:
             ctx["is_owner"] = False
+    if ctx.get("staff") and "marketing_sections" not in ctx:
+        try:
+            from app.services.marketing_nav import marketing_sections
+
+            ctx["marketing_sections"] = marketing_sections(ctx.get("staff"))
+        except Exception:
+            logging.getLogger(__name__).warning("marketing nav resolution failed", exc_info=True)
+            ctx["marketing_sections"] = ()
     response = templates.TemplateResponse(request, name, ctx, status_code=status_code)
     try:
         from app.services.csrf import CSRF_COOKIE, ensure_csrf_token
@@ -3164,7 +3168,6 @@ def create_api_app(lifespan=None) -> FastAPI:
         btn = str(form.get("btn_wholesale") or "").strip() or "📦 فروش عمده"
         await set_setting(session, "btn_wholesale", btn, reseller_id=owner_id)
         tiers = parse_wholesale_tiers(str(form.get("wholesale_tiers") or ""))
-        import json
 
         await set_setting(
             session,
@@ -4431,6 +4434,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             "groups": groups,
             "tab_groups": tab_groups,
             "tabs": page_tabs,
+            "tab_nav": group_settings_tabs(page_tabs, tab),
             "tab": tab,
             "is_panel_settings": tab in PANEL_SETTINGS_KEYS,
             "panel_tab_label": dict(PANEL_SETTINGS_TABS).get(tab),

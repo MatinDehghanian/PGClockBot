@@ -57,7 +57,7 @@ class SidebarMenuOrderTests(unittest.TestCase):
             ">مدیریت مالی</span>",
             ">پلن‌ها</span>",
             ">پشتیبانی</span>",
-            ">پیام گروهی</span>",
+            ">بازاریابی و وفاداری</span>",
             ">تنظیمات</span>",
         ]
         positions = [chunk.find(m) for m in markers]

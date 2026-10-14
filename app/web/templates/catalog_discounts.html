@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "macros.html" import page_title %}
+{% from "_marketing_tabs.html" import marketing_tabs %}
 {% block title %}تخفیف‌ها{% endblock %}
 {% block content %}
 {% set announcement_labels = {'running': 'در صف ارسال', 'paused': 'متوقف', 'completed': 'تکمیل‌شده', 'review': 'نیازمند بررسی'} %}
@@ -10,6 +11,8 @@
     <p class="muted page-sub">تخفیف زمان‌دار یا کاهش دائمی قیمت، همراه با اطلاع‌رسانی به مشتریان</p>
   </div>
 </div>
+
+{{ marketing_tabs(marketing_sections|default(()), 'discounts') }}
 
 {% if request.query_params.get('error') %}<div class="flash warn" role="alert">{{ request.query_params.get('error') }}</div>{% endif %}
 
