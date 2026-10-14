@@ -29,14 +29,15 @@ class TestAdminHubSettingsLabels(unittest.TestCase):
             "btn_adm_hub_ops": "AAA ops",
             "btn_adm_hub_people": "BBB people",
             "btn_adm_hub_product": "CCC product",
+            "btn_adm_hub_marketing": "EEE marketing",
             "btn_adm_hub_system": "DDD system",
         }
         labels = [
             b.text for row in admin_groups_hub_keyboard(ui).inline_keyboard for b in row
         ]
         self.assertEqual(
-            labels[:4],
-            ["AAA ops", "BBB people", "CCC product", "DDD system"],
+            labels[:5],
+            ["AAA ops", "BBB people", "CCC product", "EEE marketing", "DDD system"],
         )
 
 
