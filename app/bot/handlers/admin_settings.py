@@ -484,12 +484,12 @@ async def _render_section(callback: CallbackQuery, session: AsyncSession, sec_id
         await _render_notify(callback, session)
         return
 
-    rows: list[list[InlineKeyboardButton]] = []
-    for sub in sec.get("subs") or []:
-        sub_id, title, _payload = sub[0], sub[1], sub[2]
-        rows.append(
-            [InlineKeyboardButton(text=title, callback_data=f"adm:st:sub:{sec_id}:{sub_id}")]
-        )
+    rows = kb.pack_long_list(
+        [
+            InlineKeyboardButton(text=sub[1], callback_data=f"adm:st:sub:{sec_id}:{sub[0]}")
+            for sub in sec.get("subs") or []
+        ]
+    )
     rows.append(_back_row("adm:st:hub"))
     if callback.message:
         await callback.message.edit_text(
@@ -515,7 +515,7 @@ async def _render_fields(
     extra_rows: list[list[InlineKeyboardButton]] | None = None,
 ) -> None:
     ui = await get_all_settings(session)
-    rows = [[_field_button(ui, k, lab, kind)] for k, lab, kind in fields]
+    rows = kb.pack_long_list([_field_button(ui, k, lab, kind) for k, lab, kind in fields])
     if extra_rows:
         rows.extend(extra_rows)
     rows.append(_back_row(back_cb))
@@ -639,12 +639,14 @@ async def _render_supports(callback: CallbackQuery, session: AsyncSession) -> No
 
 async def _render_notify(callback: CallbackQuery, session: AsyncSession) -> None:
     ui = await get_all_settings(session)
-    rows: list[list[InlineKeyboardButton]] = []
-    for key, title, _, default in NOTIFY_PREFS:
-        mark = "✅" if on(ui.get(key, default)) else "⬜️"
-        rows.append(
-            [InlineKeyboardButton(text=f"{mark} {title}", callback_data=f"adm:st:tog:{key}")]
-        )
+    rows = kb.pack_long_list(
+        [
+            InlineKeyboardButton(
+                text=f"{'✅' if on(ui.get(key, default)) else '⬜️'} {title}", callback_data=f"adm:st:tog:{key}"
+            )
+            for key, title, _, default in NOTIFY_PREFS
+        ]
+    )
     rows.append(_back_row("adm:st:hub"))
     if callback.message:
         await callback.message.edit_text(
@@ -748,7 +750,7 @@ async def _fields_panel(
     extra_rows: list[list[InlineKeyboardButton]] | None = None,
 ) -> Panel:
     ui = await get_all_settings(session)
-    rows = [[_field_button(ui, k, lab, kind)] for k, lab, kind in fields]
+    rows = kb.pack_long_list([_field_button(ui, k, lab, kind) for k, lab, kind in fields])
     if extra_rows:
         rows.extend(extra_rows)
     rows.append(_back_row(back_cb))

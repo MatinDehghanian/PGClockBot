@@ -494,16 +494,12 @@ async def _render_section(callback: CallbackQuery, session: AsyncSession, sec_id
             await _render_notify(callback, session, reseller_id)
             return
 
-        rows = []
-        for sub_id, label, _fields in sec.get("subs") or []:
-            rows.append(
-                [
-                    InlineKeyboardButton(
-                        text=label,
-                        callback_data=f"res:st:sub:{sec_id}:{sub_id}",
-                    )
-                ]
-            )
+        rows = kb.pack_long_list(
+            [
+                InlineKeyboardButton(text=label, callback_data=f"res:st:sub:{sec_id}:{sub_id}")
+                for sub_id, label, _fields in sec.get("subs") or []
+            ]
+        )
         rows.append([kb.back_button(None, "res:st:hub")])
         if callback.message:
             await safe_edit_text(
@@ -521,12 +517,14 @@ async def _render_notify(callback: CallbackQuery, session: AsyncSession, reselle
     perms = list(resolve_shop_permissions_from_profile(profile) or [])
     catalog = shop_notify_catalog(perms)
     prefs = await get_shop_notify_prefs(session, reseller_id)
-    rows: list[list[InlineKeyboardButton]] = []
-    for key, title, _, _default in catalog:
-        mark = "✅" if prefs.get(key) else "⬜️"
-        rows.append(
-            [InlineKeyboardButton(text=f"{mark} {title}", callback_data=f"res:st:ntog:{key}")]
-        )
+    rows = kb.pack_long_list(
+        [
+            InlineKeyboardButton(
+                text=f"{'✅' if prefs.get(key) else '⬜️'} {title}", callback_data=f"res:st:ntog:{key}"
+            )
+            for key, title, _, _default in catalog
+        ]
+    )
     if not rows:
         rows.append(
             [InlineKeyboardButton(text="— اعلانی برای دسترسی شما نیست —", callback_data="res:st:hub")]

@@ -116,6 +116,7 @@ def chunk_buttons(
 
 LIST_BUTTON_CAP = 40
 SHORT_LABEL_MAX = 20
+LONG_LIST_MIN_ITEMS = 7
 
 
 def list_overflow_line(total: int, shown: int = LIST_BUTTON_CAP) -> str:
@@ -139,6 +140,19 @@ def _pack_by_label_width(
             pending.append(button)
     rows.extend(chunk_buttons(pending, cols=2))
     return rows
+
+
+def pack_long_list(
+    buttons: list[InlineKeyboardButton],
+) -> list[list[InlineKeyboardButton]]:
+    """Rows for a list of fixed menu entries: a short list stays one per row, a long one goes two-column.
+
+    Only for entries whose label does not depend on stored values, so a button never changes width
+    between renders. Back / search rows are added by the caller and stay full width.
+    """
+    if len(buttons) < LONG_LIST_MIN_ITEMS:
+        return [[button] for button in buttons]
+    return _pack_by_label_width(buttons)
 
 
 def pack_detail_rows(
