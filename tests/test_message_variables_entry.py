@@ -1,4 +1,4 @@
-"""Message variables are reached from the bot settings pages, not from a sidebar item."""
+"""Message variables are reached from a tab of the bot settings pages, not from a sidebar item."""
 
 from __future__ import annotations
 
@@ -54,9 +54,12 @@ def _sidebar(html: str) -> str:
 
 
 class MessageVariablesEntryTests(unittest.TestCase):
-    def test_owner_settings_page_links_to_the_variables(self):
+    def test_owner_settings_page_links_to_the_variables_as_a_tab(self):
+        from app.services.settings_tab_groups import group_settings_tabs, tabs_with_message_variables
+
+        nav = group_settings_tabs(tabs_with_message_variables(SETTINGS_TABS, OWNER), "limits")
         html = _page(
-            "settings.html", "/settings", OWNER, tabs=SETTINGS_TABS, tab="messages", is_panel_settings=False
+            "settings.html", "/settings", OWNER, tabs=SETTINGS_TABS, tab="limits", is_panel_settings=False, tab_nav=nav
         )
         self.assertIn('href="/message-variables"', html.split("settings-layout", 1)[0])
         self.assertNotIn('href="/message-variables"', _sidebar(html))
@@ -67,20 +70,31 @@ class MessageVariablesEntryTests(unittest.TestCase):
         )
         self.assertNotIn('href="/message-variables"', html.split("settings-layout", 1)[0])
 
-    def test_shop_settings_page_links_to_the_variables(self):
+    def test_shop_settings_page_links_to_the_variables_as_a_tab(self):
+        from app.services.settings_tab_groups import group_settings_tabs, tabs_with_message_variables
+
+        nav = group_settings_tabs(tabs_with_message_variables(RESELLER_SETTINGS_TABS, SHOP_STAFF), "limits")
         html = _page(
             "shop_settings.html", "/shop-settings", SHOP_STAFF,
-            tabs=RESELLER_SETTINGS_TABS, tab="messages", shop_mode=True, settings_base="/shop-settings",
+            tabs=RESELLER_SETTINGS_TABS, tab="limits", shop_mode=True, settings_base="/shop-settings", tab_nav=nav,
         )
         self.assertIn('href="/message-variables"', html.split("settings-layout", 1)[0])
         self.assertNotIn('href="/message-variables"', _sidebar(html))
 
     def test_variables_page_links_back_to_the_right_settings(self):
-        owner = _page("message_variables.html", "/message-variables", OWNER, groups=[], settings_base="/settings")
-        shop = _page("message_variables.html", "/message-variables", SHOP_STAFF, groups=[], settings_base="/shop-settings")
-        self.assertIn('href="/settings"', owner.split("msg-vars-stack", 1)[0])
-        self.assertIn('href="/shop-settings"', shop.split("msg-vars-stack", 1)[0])
-        self.assertNotIn('href="/settings"', shop.split("msg-vars-stack", 1)[0])
+        from app.services.settings_tab_groups import (
+            MESSAGE_VARIABLES_TAB_KEY, group_settings_tabs, tabs_with_message_variables,
+        )
+
+        for staff, tabs, base, other in (
+            (OWNER, SETTINGS_TABS, "/settings", "/shop-settings"),
+            (SHOP_STAFF, RESELLER_SETTINGS_TABS, "/shop-settings", "/settings?tab="),
+        ):
+            nav = group_settings_tabs(tabs_with_message_variables(tabs, staff), MESSAGE_VARIABLES_TAB_KEY)
+            html = _page("message_variables.html", "/message-variables", staff, groups=[], settings_base=base, tab_nav=nav)
+            head = html.split("msg-vars-stack", 1)[0].split('<main class="main">', 1)[1]
+            self.assertIn(f'href="{base}?tab=welcome"', head)
+            self.assertNotIn(other, head)
 
     def test_settings_sidebar_item_stays_active_on_the_variables_page(self):
         html = _page("message_variables.html", "/message-variables", OWNER, groups=[], settings_base="/settings")
