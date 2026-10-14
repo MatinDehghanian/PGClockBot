@@ -294,6 +294,14 @@ def render(request: Request, name: str, context: dict | None = None, status_code
             ctx["is_owner"] = bool(is_explicit_owner_staff(ctx.get("staff")))
         except Exception:
             ctx["is_owner"] = False
+    if ctx.get("staff") and "marketing_sections" not in ctx:
+        try:
+            from app.services.marketing_nav import marketing_sections
+
+            ctx["marketing_sections"] = marketing_sections(ctx.get("staff"))
+        except Exception:
+            logging.getLogger(__name__).warning("marketing nav resolution failed", exc_info=True)
+            ctx["marketing_sections"] = ()
     response = templates.TemplateResponse(request, name, ctx, status_code=status_code)
     try:
         from app.services.csrf import CSRF_COOKIE, ensure_csrf_token
