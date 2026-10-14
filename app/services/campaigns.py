@@ -14,6 +14,7 @@ from app.db.models import BotUser, CampaignRecipient, MarketingPreference, Order
 
 AUDIENCES = {"trial": "کاربران تست بدون خرید", "expiring": "سرویس‌های نزدیک انقضا", "inactive": "مشتریان بدون خرید در بازهٔ انتخابی"}
 RECIPIENT_LIMIT = 5000
+CAMPAIGN_LIST_LIMIT = 5
 
 
 def audience_query(*, shop_id, audience, days, now=None):
@@ -99,6 +100,29 @@ async def set_marketing_preference(session, user_id, *, shop_id, enabled):
             MarketingPreference.user_id == user_id, MarketingPreference.shop_key == (shop_id or 0),
         ).values(enabled=enabled))
         await session.commit()
+
+
+async def list_recent_campaigns(session, *, shop_id, limit=CAMPAIGN_LIST_LIMIT):
+    """Newest campaigns of one shop (``None`` = platform), bounded."""
+    owner = TargetedCampaign.reseller_id.is_(None) if shop_id is None else TargetedCampaign.reseller_id == int(shop_id)
+    query = select(TargetedCampaign).where(owner).order_by(TargetedCampaign.id.desc()).limit(max(1, int(limit)))
+    return list((await session.scalars(query)).all())
+
+
+async def campaign_progress_map(session, campaign_ids):
+    """Recipient status counts for several campaigns in one query."""
+    ids = [int(campaign_id) for campaign_id in campaign_ids]
+    progress = {campaign_id: {} for campaign_id in ids}
+    if not ids:
+        return progress
+    rows = await session.execute(
+        select(CampaignRecipient.campaign_id, CampaignRecipient.status, func.count())
+        .where(CampaignRecipient.campaign_id.in_(ids))
+        .group_by(CampaignRecipient.campaign_id, CampaignRecipient.status)
+    )
+    for campaign_id, status, count in rows.all():
+        progress[int(campaign_id)][status] = int(count)
+    return progress
 
 
 async def campaign_progress(session, campaign_id):

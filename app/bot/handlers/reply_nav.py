@@ -2063,6 +2063,13 @@ async def handle_back(
             message, session, db_user, state, push=False, is_reseller_bot=is_reseller_bot
         )
         return
+    if level in {nav.NAV_ADMIN_GIFTS, nav.NAV_ADMIN_CAMPAIGNS}:
+        from app.bot.handlers.marketing_tools import open_admin_marketing_panel
+
+        await open_admin_marketing_panel(
+            level, message, session, db_user, state, push=False, is_reseller_bot=is_reseller_bot
+        )
+        return
     if level == nav.NAV_ADMIN_SYSTEM:
         await open_admin_system_hub(
             message, session, db_user, state, push=False, is_reseller_bot=is_reseller_bot

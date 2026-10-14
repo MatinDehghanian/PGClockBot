@@ -17,7 +17,9 @@ from app.services.users import get_all_settings
 
 router = Router(name="nav_marketing")
 
-MARKETING_HUB_BODY = "🎯 <b>بازاریابی</b>\nباشگاه مشتریان و پیام گروهی."
+# Panels that open below the hub and push it on the back stack.
+MARKETING_CHILD_LEVELS = frozenset({nav.NAV_ADMIN_GIFTS, nav.NAV_ADMIN_CAMPAIGNS})
+MARKETING_HUB_BODY = "🎯 <b>بازاریابی</b>\nباشگاه مشتریان، پیام گروهی، کد هدیه و کمپین‌ها."
 
 
 async def open_admin_marketing_hub(
@@ -40,6 +42,10 @@ async def open_admin_marketing_hub(
         return
     ui = await get_all_settings(session)
     if state is not None:
+        if not push and await nav.get_nav_level(state) in MARKETING_CHILD_LEVELS:
+            # Inline Back from a child panel: drop the hub entry that panel pushed so
+            # the reply-keyboard Back does not reopen this same hub.
+            await nav.pop_nav_level(state)
         await nav.set_nav_level(state, nav.NAV_ADMIN_MARKETING, push=push)
     await present_nav_panel(
         message,
