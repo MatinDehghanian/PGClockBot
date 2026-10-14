@@ -820,7 +820,7 @@ async def _link_subscription(
 ):
     from app.bot.service_import_ui import import_enabled
     from app.services.formatting import format_message
-    from app.services.service_import import ServiceImportError, import_existing_service
+    from app.services.service_import import ServiceImportError, import_existing_service, is_external_service
 
     ui = await get_all_settings(session)
     # Same checks as the in-bot flow: the service must belong to this shop's panel admin and to
@@ -844,5 +844,7 @@ async def _link_subscription(
 
     await message.answer(
         format_message("✅ اتصال سرویس", service_card(result.info)),
-        reply_markup=service_card_keyboard(int(result.service.id), ui),
+        reply_markup=service_card_keyboard(
+            int(result.service.id), ui, external=is_external_service(result.service)
+        ),
     )
