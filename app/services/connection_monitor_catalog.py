@@ -34,8 +34,8 @@ class _Host(BaseModel):
 
     id: Annotated[int, Field(ge=1, le=2147483647)]
     remark: Annotated[str, Field(max_length=4096)] = ""
-    address: Annotated[list[str], Field(min_length=1, max_length=MAX_MONITOR_ENDPOINTS)]
-    inbound_tag: Annotated[str, Field(min_length=1, max_length=256)]
+    address: Annotated[list[str], Field(max_length=256)] = Field(default_factory=list)
+    inbound_tag: Annotated[str, Field(min_length=1, max_length=256)] | None = None
     port: Annotated[int, Field(ge=1, le=65535)] | None = None
     sni: Annotated[list[str], Field(max_length=16)] = Field(default_factory=list)
     host: Annotated[list[str], Field(max_length=16)] = Field(default_factory=list)
@@ -48,8 +48,14 @@ class _Host(BaseModel):
 
     @field_validator("address", "sni", "host")
     @classmethod
-    def static_names(cls, value: list[str]) -> list[str]:
-        return sorted({static_hostname(item) for item in value})
+    def stable_names(cls, value: list[str]) -> list[str]:
+        normalized = []
+        for name in value:
+            try:
+                normalized.append(static_hostname(name))
+            except ValueError:
+                normalized.append(name)
+        return sorted(set(normalized))
 
 
 class _Inbound(BaseModel):
@@ -72,8 +78,15 @@ def _check_supported_host(host: _Host) -> None:
     unknown = extras.keys() - _HOST_METADATA - _UNSUPPORTED_HOST_FIELDS
     configured = any(_has_effect(extras.get(key)) for key in _UNSUPPORTED_HOST_FIELDS)
     # Explicit singleton values make random/default SNI and port selection observable.
-    if unknown or configured or len(host.sni) != 1 or host.port is None:
+    if unknown or configured or len(host.sni) != 1 or host.port is None or not host.inbound_tag or not host.address:
         raise MonitorConfigError(MonitorIssue.UNSUPPORTED)
+    if len(host.address) > MAX_MONITOR_ENDPOINTS:
+        raise MonitorConfigError(MonitorIssue.CAPACITY)
+    try:
+        for name in host.address + host.sni + host.host:
+            static_hostname(name)
+    except ValueError:
+        raise MonitorConfigError(MonitorIssue.UNSUPPORTED) from None
     if len(host.host) > 1 or host.allowinsecure is True:
         raise MonitorConfigError(MonitorIssue.UNSUPPORTED)
     if host.security not in {"inbound_default", "tls", "reality"}:
@@ -98,24 +111,38 @@ def _parse_catalog(hosts: object, inbounds: object) -> tuple[list[_Host], dict[s
 
 def _matches_host(host: _Host, inbound: _Inbound | None, route: NativeMonitorOutbound) -> bool:
     server, stream = route.settings.vnext[0], route.streamSettings
-    if inbound is None or inbound.protocol != route.protocol:
+    if host.is_disabled or inbound is None or inbound.protocol != route.protocol:
         return False
     network = "tcp" if inbound.network == "raw" else inbound.network
     route_network = "tcp" if stream.network == "raw" else stream.network
-    if server.address not in host.address or network != route_network:
+    if not _could_match_name(host.address, server.address) or network != route_network:
         return False
     if host.port is not None and server.port != host.port:
         return False
     security_settings = stream.realitySettings or stream.tlsSettings
     if host.security != "inbound_default" and host.security != stream.security:
         return False
-    if host.sni and security_settings.serverName not in host.sni:
+    if host.sni and not _could_match_name(host.sni, security_settings.serverName):
         return False
     if not _matches_security(host, security_settings.model_dump()):
         return False
     if stream.wsSettings:
         return _matches_ws(host, stream.wsSettings.model_dump())
     return True
+
+
+def _could_match_name(names: list[str], value: str) -> bool:
+    if not names:
+        return True
+    for name in names:
+        try:
+            if static_hostname(name) == value:
+                return True
+        except ValueError:
+            # A dynamic host might have produced this native route; never pick
+            # the static contender merely because its competitor is unsupported.
+            return True
+    return False
 
 
 def _matches_security(host: _Host, settings: dict[str, Any]) -> bool:

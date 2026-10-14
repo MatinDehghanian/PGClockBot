@@ -140,12 +140,38 @@ def test_unproven_host_settings_are_explicitly_not_ready(catalog: dict[str, Any]
     assert plan(catalog)[0].issue == MonitorIssue.UNSUPPORTED
 
 
-@pytest.mark.parametrize("field,value", [("port", True), ("port", 0), ("port", 65536), ("id", True),
-                                        ("address", ["{SERVER_IP}"]), ("sni", ["*.example"])])
+@pytest.mark.parametrize("field,value", [("port", True), ("port", 0), ("port", 65536), ("id", True)])
 def test_malformed_catalog_is_rejected_safely(catalog: dict[str, Any], field: str, value: object) -> None:
     catalog["hosts"][0][field] = value
     with pytest.raises(MonitorConfigError, match="^invalid_catalog$"):
         plan(catalog)
+
+
+@pytest.mark.parametrize("field,value", [("address", ["{SERVER_IP}"]), ("sni", ["*.example"])])
+def test_dynamic_host_values_are_not_ready(catalog: dict[str, Any], field: str, value: object) -> None:
+    catalog["hosts"][0][field] = value
+    assert plan(catalog)[0].issue == MonitorIssue.UNSUPPORTED
+
+
+def test_disabled_duplicate_host_does_not_make_a_route_ambiguous(catalog: dict[str, Any]) -> None:
+    duplicate = copy.deepcopy(catalog["hosts"][0])
+    duplicate.update(id=99, is_disabled=True)
+    catalog["hosts"].append(duplicate)
+    assert plan(catalog)[0].is_ready
+
+
+def test_unselected_unsupported_host_does_not_break_other_transports(catalog: dict[str, Any]) -> None:
+    catalog["hosts"].append({"id": 99, "inbound_tag": "vmess", "address": []})
+    catalog["inbounds"].append({"tag": "vmess", "protocol": "vmess", "network": "tcp"})
+    assert all(item.is_ready for item in plan(catalog))
+    assert plan(catalog, selected_ids=(99,))[0].issue == MonitorIssue.UNSUPPORTED
+
+
+def test_unselected_dynamic_contender_is_not_silently_ignored(catalog: dict[str, Any]) -> None:
+    duplicate = copy.deepcopy(catalog["hosts"][0])
+    duplicate.update(id=99, address=["{SERVER_IP}"])
+    catalog["hosts"].append(duplicate)
+    assert plan(catalog)[0].issue == MonitorIssue.AMBIGUOUS
 
 
 @pytest.mark.parametrize("selected", [(True,), (0,), (-1,), (2147483648,), ("41",)])

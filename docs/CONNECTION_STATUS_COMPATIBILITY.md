@@ -44,7 +44,7 @@ TLS/Reality از outbound معتبر خود پنل حفظ می‌شوند.
 بیش از ۱۲ endpoint، تمام انتخاب آماده را با دلیل ظرفیت متوقف می‌کند؛ حذف بی‌صدای هدف نداریم.
 
 فایل `tests/fixtures/connection_monitor_catalog.json` کاملاً مصنوعی است؛ UUID آن حساب
-واقعی نیست. ۶۷ تست بدون شبکه و بدون credential واقعی اجرا شدند. کانفیگ حاصل شامل
+واقعی نیست. ۷۰ تست بدون شبکه و بدون credential واقعی اجرا شدند. کانفیگ حاصل شامل
 دو endpoint Reality و یک endpoint WebSocket با `xray run -test -config …` بررسی شد.
 این اثبات syntax و پذیرش core است؛ اتصال واقعی، عبور CONNECT، نصب Linux و دسترسی از
 سرور ربات هنوز gate جداگانهٔ استقرارند. Xray هنگام validation دربارهٔ deprecation
