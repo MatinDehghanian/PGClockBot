@@ -10602,6 +10602,23 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
 }
 
 /* —— Message variables catalog (panel-aligned compact tables) —— */
+/* In-page jump links: quiet text, so they are not mistaken for the settings tabs above */
+.msg-vars-jump {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+  margin-bottom: var(--section-gap);
+  font-size: 12px;
+}
+.msg-vars-jump a {
+  color: var(--muted-fg);
+  text-decoration: none;
+}
+.msg-vars-jump a:hover,
+.msg-vars-jump a:focus-visible {
+  color: var(--foreground);
+  text-decoration: underline;
+}
 .msg-vars-stack {
   display: grid;
   gap: var(--section-gap);

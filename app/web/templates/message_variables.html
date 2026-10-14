@@ -1,17 +1,17 @@
 {% extends "base.html" %}
 {% from "macros.html" import page_title %}
+{% from "_settings_tab_nav.html" import grouped_settings_tabs %}
 {% block title %}متغیرهای پیام{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    {{ page_title('bot-settings', 'متغیرهای پیام', help='message-variables') }}
-  </div>
-  <div class="page-head-actions">
-    <a class="btn btn-ghost" href="{{ settings_base|default('/settings') }}">تنظیمات</a>
+    {{ page_title('bot-settings', 'تنظیمات ربات' if settings_base|default('/settings') == '/settings' else 'تنظیمات فروشگاه', help='message-variables') }}
   </div>
 </div>
 
-<nav class="section-tabs" role="navigation" aria-label="گروه‌های متغیر">
+{{ grouped_settings_tabs(tab_nav, 'variables', settings_base|default('/settings'), 'تب‌های تنظیمات ربات' if settings_base|default('/settings') == '/settings' else 'تب‌های تنظیمات فروشگاه') }}
+
+<nav class="msg-vars-jump" aria-label="گروه‌های متغیر">
   {% for g in groups %}
   <a href="#mv-{{ g.domain }}">{{ g.label }}</a>
   {% endfor %}
