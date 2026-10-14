@@ -116,6 +116,7 @@ def create_dispatcher() -> Dispatcher:
         reseller_plans,
         reseller_reps,
         reseller_settings,
+        service_import,
         shop,
         stale_menu,
         start,
@@ -140,6 +141,7 @@ def create_dispatcher() -> Dispatcher:
     dp.include_router(loyalty.router)
     dp.include_router(shop.router)
     dp.include_router(wallet.router)
+    dp.include_router(service_import.router)
     dp.include_router(services.router)
     from app.bot.handlers import guides
 

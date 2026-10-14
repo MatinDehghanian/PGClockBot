@@ -1292,14 +1292,18 @@ def services_list_keyboard(
     ui: dict | None = None,
     *,
     reseller_capacity_label: str | None = None,
+    allow_import: bool = False,
 ) -> InlineKeyboardMarkup:
     """Paginated-ready service list with back-to-home (inline nav)."""
     from app.bot.keyboards import services_keyboard
+    from app.bot.service_import_ui import add_existing_row
 
     base = services_keyboard(
         services, ui, reseller_capacity_label=reseller_capacity_label
     )
     rows = list(base.inline_keyboard)
+    if allow_import:
+        rows.append(add_existing_row(ui))
     rows.append(
         [
             _ikb(

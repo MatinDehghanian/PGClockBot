@@ -20,6 +20,8 @@ tests/test_update_migration_metadata.py
 # --- Tenant / shop isolation & IDOR ---
 
 tests/test_addon_general_scope.py
+tests/test_service_import.py
+tests/test_service_import_flow.py
 tests/test_admin_marketing_hub.py
 tests/test_marketing_nav.py
 tests/test_gift_code_page.py

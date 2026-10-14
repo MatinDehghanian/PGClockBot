@@ -9,15 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
 from app.bot.tg_utils import safe_edit_text
-from app.config import get_settings
 from app.db.models import BotUser, UserService
 from app.services.formatting import service_card
-from app.services.pasarguard import (
-    absolutize_subscription_url,
-    extract_sub_token,
-    get_pg,
-    user_subscription_url,
-)
 from app.services.users import get_all_settings, on
 from app.services.message_variables import DOMAIN_USER
 
@@ -825,31 +818,20 @@ async def _link_subscription(
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ):
+    from app.bot.service_import_ui import import_enabled
     from app.services.formatting import format_message
-    from app.services.pasarguard import get_pg_for_reseller
+    from app.services.service_import import ServiceImportError, import_existing_service
 
     ui = await get_all_settings(session)
-    # Shop bots must resolve subscription via the shop's PG credentials —
-    # never the platform owner token (avoids cross-tenant link/read).
-    if is_reseller_bot and reseller_owner_id:
-        try:
-            pg = await get_pg_for_reseller(session, int(reseller_owner_id))
-        except Exception:
-            await message.answer("اتصال به پنل فروشگاه ممکن نیست.")
-            await render_home(
-                message,
-                session,
-                db_user,
-                is_reseller_bot=is_reseller_bot,
-                reseller_owner_id=reseller_owner_id,
-            )
-            return
-    else:
-        pg = get_pg()
+    # Same checks as the in-bot flow: the service must belong to this shop's panel admin and to
+    # nobody else. Without «افزودن سرویس قبلی» the attachment stays view-only, as before.
+    shop_id = int(reseller_owner_id) if is_reseller_bot and reseller_owner_id else None
     try:
-        info = await pg.subscription_info(token)
-    except Exception:
-        await message.answer("لینک نامعتبر است یا سرویس پیدا نشد.")
+        result = await import_existing_service(
+            session, user=db_user, raw_link=token, shop_id=shop_id, renewable=import_enabled(ui)
+        )
+    except ServiceImportError as exc:
+        await message.answer(str(exc))
         await render_home(
             message,
             session,
@@ -858,62 +840,9 @@ async def _link_subscription(
             reseller_owner_id=reseller_owner_id,
         )
         return
-
-    existing = await session.execute(
-        select(UserService).where(
-            UserService.bot_user_id == db_user.id,
-            UserService.subscription_token == token,
-        )
-    )
-    svc = existing.scalar_one_or_none()
-    if not svc:
-        claimed = await session.execute(
-            select(UserService).where(
-                UserService.subscription_token == token,
-                UserService.bot_user_id != db_user.id,
-            ).limit(1)
-        )
-        if claimed.scalar_one_or_none() is not None:
-            await message.answer("این اشتراک قبلاً به حساب دیگری وصل شده است.")
-            await render_home(
-                message,
-                session,
-                db_user,
-                is_reseller_bot=is_reseller_bot,
-                reseller_owner_id=reseller_owner_id,
-            )
-            return
-        sub_url = user_subscription_url(info if isinstance(info, dict) else None) or (
-            absolutize_subscription_url(f"{get_settings().pg_subscription_path}/{token}")
-        )
-        svc = UserService(
-            bot_user_id=db_user.id,
-            pg_user_id=info.get("id"),
-            pg_username=info.get("username", "unknown"),
-            subscription_url=sub_url,
-            subscription_token=token or extract_sub_token(sub_url),
-            remark="linked",
-        )
-        session.add(svc)
-        await session.commit()
-
     from app.bot.nav_inline import service_card_keyboard
-    from app.bot.menu_nav import build_main_reply_keyboard
 
-    if getattr(svc, "id", None):
-        await message.answer(
-            format_message("✅ اتصال سرویس", service_card(info)),
-            reply_markup=service_card_keyboard(int(svc.id), ui),
-        )
-    else:
-        main_kb, _, _ = await build_main_reply_keyboard(
-            session,
-            db_user,
-            is_reseller_bot=is_reseller_bot,
-            reseller_owner_id=reseller_owner_id,
-            ui=ui,
-        )
-        await message.answer(
-            format_message("✅ اتصال سرویس", service_card(info)),
-            reply_markup=main_kb,
-        )
+    await message.answer(
+        format_message("✅ اتصال سرویس", service_card(result.info)),
+        reply_markup=service_card_keyboard(int(result.service.id), ui),
+    )
