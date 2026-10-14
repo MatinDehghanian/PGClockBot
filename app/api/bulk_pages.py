@@ -188,6 +188,13 @@ def register_bulk_pages(
         )
         if not ids:
             return redirect_bulk(return_to, err="هیچ سفارشی انتخاب نشده")
+        if action == "dismiss":
+            from app.services.delivery_failure_queue import dismiss_delivery_failures
+
+            ok, fail = await dismiss_delivery_failures(session, staff, ids)
+            return _bulk_result(
+                return_to, ok, fail, done="از لیست تحویل ناموفق حذف شد", none="هیچ موردی حذف نشد"
+            )
         if action != "retry":
             return redirect_bulk(return_to, err="عملیات نامعتبر")
         ok, fail = await bulk_retry_delivery(session, staff, ids)

@@ -1431,6 +1431,8 @@ def create_api_app(lifespan=None) -> FastAPI:
         require_admin=require_admin,
         get_db=get_db,
     )
+    from app.api.delivery_failure_pages import register_delivery_failure_pages
+    register_delivery_failure_pages(app, require_orders=require_perm("orders"), get_db=get_db)
     register_shop_settings(
         app,
         render=render,
