@@ -465,17 +465,38 @@ async def count_stuck_paid_orders(
 async def list_open_delivery_failures(
     session: AsyncSession, *, reseller_id: int | None = None, limit: int = 100
 ) -> list[DeliveryFailure]:
+    """Open failures, one row per order (the newest), newest attempt first."""
+    newest = select(func.max(DeliveryFailure.id)).where(DeliveryFailure.resolved_at.is_(None))
+    if reseller_id is None:
+        newest = newest.where(DeliveryFailure.reseller_id.is_(None))
+    else:
+        newest = newest.where(DeliveryFailure.reseller_id == int(reseller_id))
     q = (
         select(DeliveryFailure)
-        .where(DeliveryFailure.resolved_at.is_(None))
+        .where(DeliveryFailure.id.in_(newest.group_by(DeliveryFailure.order_id).scalar_subquery()))
         .order_by(DeliveryFailure.last_attempt_at.desc())
         .limit(limit)
     )
-    if reseller_id is None:
-        q = q.where(DeliveryFailure.reseller_id.is_(None))
-    else:
-        q = q.where(DeliveryFailure.reseller_id == int(reseller_id))
     return list((await session.execute(q)).scalars().all())
+
+
+class DeliveryNotRetryable(ValueError):
+    """The order can never be delivered again from the failure queue; the admin may dismiss it."""
+
+
+def _assert_retryable(order: Order) -> None:
+    if order.status == OrderStatus.DELIVERED.value:
+        if not order.service_id:
+            raise DeliveryNotRetryable(
+                "سرویس این سفارش دیگر وجود ندارد و چیزی برای ارسال نمانده؛ از «حذف از لیست» استفاده کنید"
+            )
+        return
+    if order.status not in {
+        OrderStatus.PAID.value,
+        OrderStatus.DELIVERING.value,
+        OrderStatus.AWAITING_APPROVAL.value,
+    }:
+        raise DeliveryNotRetryable("این سفارش برای تلاش مجدد آماده نیست؛ در صورت نیاز از «حذف از لیست» استفاده کنید")
 
 
 async def retry_delivery(session: AsyncSession, order_id: int) -> Order:
@@ -493,6 +514,9 @@ async def retry_delivery(session: AsyncSession, order_id: int) -> Order:
     ).scalar_one_or_none()
     if not order:
         raise ValueError("سفارش پیدا نشد")
+    # Checked before the try below: an order that can never be retried must not be
+    # recorded as one more failed attempt every time somebody presses the button.
+    _assert_retryable(order)
 
     async def _resend() -> None:
         user = order.__dict__.get("user") or await session.get(BotUser, order.user_id)
@@ -522,11 +546,7 @@ async def retry_delivery(session: AsyncSession, order_id: int) -> Order:
         if order.status == OrderStatus.DELIVERED.value and order.service_id:
             # Resend Telegram delivery only
             await _resend()
-        elif order.status in {
-            OrderStatus.PAID.value,
-            OrderStatus.DELIVERING.value,
-            OrderStatus.AWAITING_APPROVAL.value,
-        }:
+        else:
             if order.status != OrderStatus.PAID.value:
                 order.status = OrderStatus.PAID.value
                 await session.commit()
@@ -539,8 +559,6 @@ async def retry_delivery(session: AsyncSession, order_id: int) -> Order:
                 await record_delivery_failure(session, order=order, error=str(send_exc))
                 await session.commit()
                 raise
-        else:
-            raise ValueError("این سفارش برای تلاش مجدد آماده نیست")
         await resolve_delivery_failure(session, int(order.id))
         await session.commit()
         return order
