@@ -298,7 +298,6 @@ async def open_loyalty_referral_message(
     text, link, send_kw = await build_referral_text(session, db_user, uname)
     share = f"https://t.me/share/url?url={link}&text="
     from app.bot.nav_inline import present_inline_only
-    ui = await get_all_settings(session)
     await nav.set_loy_step(state, "referral")
     ref_kb = _ref_actions_keyboard(share_url=share)
     if state is not None:
