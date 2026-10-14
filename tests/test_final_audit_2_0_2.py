@@ -116,11 +116,25 @@ class DeliveryResellerSettingsTests(unittest.TestCase):
         self.assertIn("get_all_settings(session, reseller_id=shop_rid)", src)
 
 
-class SubLinkClaimTests(unittest.TestCase):
-    def test_start_rejects_token_bound_to_other_user(self):
-        src = Path("app/bot/handlers/start.py").read_text(encoding="utf-8")
-        self.assertIn("این اشتراک قبلاً به حساب دیگری وصل شده است", src)
-        self.assertIn("UserService.bot_user_id != db_user.id", src)
+class SubLinkClaimTests(unittest.IsolatedAsyncioTestCase):
+    async def test_start_answers_a_refused_link_with_the_services_message_and_adds_nothing(self):
+        # The ownership checks (token bound to another customer, other shop, rate limit) live in
+        # services.service_import and are tested in tests/test_service_import.py.
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock, patch
+
+        from app.bot.handlers import start
+        from app.services.service_import import GENERIC_REFUSAL, ServiceImportError
+
+        message = AsyncMock()
+        refuse = AsyncMock(side_effect=ServiceImportError(GENERIC_REFUSAL))
+        with (
+            patch.object(start, "get_all_settings", AsyncMock(return_value={})),
+            patch.object(start, "render_home", AsyncMock()),
+            patch("app.services.service_import.import_existing_service", refuse),
+        ):
+            await start._link_subscription(message, AsyncMock(), SimpleNamespace(id=1), "some-token")
+        message.answer.assert_awaited_once_with(GENERIC_REFUSAL)
 
 
 class SchedulerPanelOnlyTests(unittest.TestCase):
