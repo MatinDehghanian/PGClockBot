@@ -86,6 +86,15 @@ def is_external_service(service: UserService | None) -> bool:
     return bool(service) and (service.remark or "").strip() in {REMARK_LINKED, REMARK_IMPORTED}
 
 
+def admin_delete_pg_flag(service: UserService, *, explicit: bool) -> bool:
+    """Whether an operator's delete also removes the panel user.
+
+    A service sold by the bot always does. A linked or imported service was created elsewhere, so
+    its panel user is removed only when the operator asked for that explicitly.
+    """
+    return explicit if is_external_service(service) else True
+
+
 def parse_subscription_token(raw: str | None) -> str | None:
     """Token from a subscription link or a bare token; ``None`` for anything else."""
     text = (raw or "").strip()

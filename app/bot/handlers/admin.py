@@ -2956,15 +2956,26 @@ async def adm_users_service_delete_ask(
         return
     await callback.answer()
     label = svc.pg_username or f"#{service_id}"
+    from app.services.service_import import is_external_service
+
+    external = is_external_service(svc)
     if callback.message:
-        await safe_edit_text(
-            callback.message,
-            (
+        text = (
+            f"⚠️ <b>حذف سرویس #{service_id}</b>\n\n"
+            f"سرویس <code>{html.escape(str(label))}</code> از بیرون ربات اضافه شده است.\n"
+            "«جدا شود» فقط آن را از لیست مشتری برمی‌دارد و حساب VPN در پاسارگارد می‌ماند. "
+            "«حذف همراه حساب» حساب پاسارگارد را هم برای همیشه حذف می‌کند و برگشت‌ناپذیر است."
+            if external
+            else (
                 f"⚠️ <b>حذف سرویس #{service_id}</b>\n\n"
                 f"سرویس <code>{html.escape(str(label))}</code> و کاربر پاسارگارد مرتبط "
                 f"برای همیشه حذف شوند؟\nاین عمل برگشت‌ناپذیر است."
-            ),
-            reply_markup=kb.admin_user_service_delete_confirm(user_id, service_id),
+            )
+        )
+        await safe_edit_text(
+            callback.message,
+            text,
+            reply_markup=kb.admin_user_service_delete_confirm(user_id, service_id, external=external),
         )
 
 @router.callback_query(F.data.startswith("adm:users:svcdel:"))
@@ -2987,23 +2998,29 @@ async def adm_users_service_delete(
         await callback.answer(deny, show_alert=True)
         return
     from app.services.bot_user_admin import admin_delete_service, get_owned_service
+    from app.services.service_import import admin_delete_pg_flag, is_external_service
 
+    explicit_pg = len(parts) > 5 and parts[5] == "pg"
     try:
         svc = await get_owned_service(
             session, bot_user_id=user_id, service_id=service_id
         )
-        await admin_delete_service(session, svc, delete_pg=True)
+        detach_only = is_external_service(svc) and not explicit_pg
+        await admin_delete_service(
+            session, svc, delete_pg=admin_delete_pg_flag(svc, explicit=explicit_pg)
+        )
     except ValueError as e:
         await callback.answer(user_safe_error(e, limit=160), show_alert=True)
         return
     except Exception as e:
         await callback.answer(user_safe_error(e, limit=160), show_alert=True)
         return
-    await callback.answer("سرویس حذف شد", show_alert=True)
+    done = f"سرویس #{service_id} از لیست مشتری جدا شد؛ حساب پاسارگارد حفظ شد." if detach_only else f"سرویس #{service_id} حذف شد."
+    await callback.answer(done, show_alert=True)
     if callback.message:
         await safe_edit_text(
             callback.message,
-            f"✅ سرویس #{service_id} حذف شد.",
+            f"✅ {done}",
             reply_markup=InlineKeyboardMarkup(
                 inline_keyboard=[
                     [

@@ -283,3 +283,123 @@ class DeepLinkTests(ImportCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AdminDeleteChoiceTests(ImportCase):
+    """Operators detach external services by default; removing the panel account is an explicit choice."""
+
+    async def asyncSetUp(self):
+        await super().asyncSetUp()
+        async with self.Session() as session:
+            session.add_all([
+                UserService(id=901, bot_user_id=1, pg_user_id=901, pg_username="sold", remark="order:1"),
+                UserService(id=902, bot_user_id=1, pg_user_id=902, pg_username="old", remark="linked"),
+                UserService(id=903, bot_user_id=1, pg_user_id=903, pg_username="new", remark="imported"),
+            ])
+            await session.commit()
+
+    def test_the_rule_for_each_kind_of_service(self):
+        from app.services.service_import import admin_delete_pg_flag
+
+        for remark, explicit, expected in (
+            ("order:1", False, True), ("order:1", True, True), (None, False, True),
+            ("linked", False, False), ("linked", True, True),
+            ("imported", False, False), ("imported", True, True),
+        ):
+            self.assertEqual(admin_delete_pg_flag(SimpleNamespace(remark=remark), explicit=explicit), expected, (remark, explicit))
+
+    async def _web_delete(self, service_id: int, **form):
+        import httpx
+        from fastapi import FastAPI
+
+        from app.api.user_pages import register_user_pages
+
+        async def get_db():
+            async with self.Session() as session:
+                yield session
+
+        owner = {"role": "admin", "permissions": [], "org_principal_id": 1, "org_depth": 0,
+                 "org_parent_id": None, "org_status": "active"}
+        app = FastAPI()
+        register_user_pages(app, render=lambda *a, **k: None, require_admin=lambda: owner, get_db=get_db)
+        with patch("app.services.bot_user_admin.admin_delete_service", AsyncMock(return_value={})) as delete:
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+                response = await client.post(f"/users/1/services/{service_id}/delete", data=form)
+        return delete, response
+
+    async def test_web_delete_of_a_sold_service_still_removes_the_panel_user(self):
+        delete, _ = await self._web_delete(901)
+        self.assertTrue(delete.await_args.kwargs["delete_pg"])
+
+    async def test_web_delete_of_an_external_service_detaches_unless_the_operator_chose_otherwise(self):
+        for service_id in (902, 903):
+            delete, response = await self._web_delete(service_id)
+            self.assertFalse(delete.await_args.kwargs["delete_pg"], service_id)
+            self.assertEqual(response.status_code, 303)
+            explicit, _ = await self._web_delete(service_id, delete_pg="1")
+            self.assertTrue(explicit.await_args.kwargs["delete_pg"], service_id)
+            for junk in ("0", "true", "yes", ""):
+                delete, _ = await self._web_delete(service_id, delete_pg=junk)
+                self.assertFalse(delete.await_args.kwargs["delete_pg"], junk)
+
+    async def test_the_user_page_offers_two_separate_actions_for_external_services_only(self):
+        from app.api.app import render
+
+        async with self.Session() as session:
+            user = await session.get(BotUser, 1)
+            services = (await session.scalars(select(UserService))).all()
+            rows = [
+                SimpleNamespace(service=SimpleNamespace(id=s.id, pg_username=s.pg_username, remark=s.remark, plan=None), info=None, error=None)
+                for s in services
+            ]
+        html = _render_user_page(render, user, rows)
+        self.assertEqual(html.count('name="delete_pg" value="1"'), 2)
+        self.assertEqual(html.count("جدا کردن از مشتری"), 2)
+        self.assertEqual(html.count(">حذف سرویس<"), 1)
+
+    async def _bot(self, callback_data: str, handler):
+        from app.bot.handlers import admin
+
+        callback = _callback(callback_data)
+        user = BotUser(id=99, telegram_id=99, role="admin")
+        with patch("app.bot.auth.is_bot_owner_principal", AsyncMock(return_value=True)):
+            async with self.Session() as session:
+                with patch("app.services.bot_user_admin.admin_delete_service", AsyncMock(return_value={})) as delete:
+                    await getattr(admin, handler)(callback, session, user)
+        return callback, delete
+
+    async def test_bot_confirmation_offers_the_two_choices_for_external_services(self):
+        callback, _ = await self._bot("adm:users:svcdelask:1:903", "adm_users_service_delete_ask")
+        markup = callback.message.edit_text.await_args.kwargs["reply_markup"]
+        data = [b.callback_data for row in markup.inline_keyboard for b in row]
+        self.assertEqual(data, ["adm:users:svcdel:1:903", "adm:users:svcdel:1:903:pg", "adm:users:svc:1:903"])
+        self.assertTrue(all(len(d.encode()) <= 64 for d in data))
+
+    async def test_bot_confirmation_for_a_sold_service_is_unchanged(self):
+        callback, _ = await self._bot("adm:users:svcdelask:1:901", "adm_users_service_delete_ask")
+        markup = callback.message.edit_text.await_args.kwargs["reply_markup"]
+        data = [b.callback_data for row in markup.inline_keyboard for b in row]
+        self.assertEqual(data, ["adm:users:svcdel:1:901", "adm:users:svc:1:901"])
+
+    async def test_bot_delete_detaches_by_default_and_removes_the_panel_user_only_on_request(self):
+        for sid, data, expected in (
+            (901, "adm:users:svcdel:1:901", True),
+            (902, "adm:users:svcdel:1:902", False),
+            (903, "adm:users:svcdel:1:903", False),
+            (903, "adm:users:svcdel:1:903:pg", True),
+            (903, "adm:users:svcdel:1:903:xx", False),
+        ):
+            _, delete = await self._bot(data, "adm_users_service_delete")
+            self.assertEqual(delete.await_args.kwargs["delete_pg"], expected, data)
+
+
+def _render_user_page(render, user, rows) -> str:
+    from starlette.requests import Request
+
+    request = Request({
+        "type": "http", "asgi": {"version": "3"}, "http_version": "1.1", "method": "GET", "scheme": "https",
+        "path": "/users/1", "raw_path": b"/users/1", "query_string": b"", "headers": [(b"host", b"x.test")],
+        "client": ("127.0.0.1", 1), "server": ("x.test", 443), "state": {},
+    })
+    template = render.__globals__["templates"].env.get_template("_user_edit_body.html")
+    return template.render(request=request, user=user, services=rows, can_pg_delete=True)
