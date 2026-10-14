@@ -2849,14 +2849,15 @@
       const modeInput = document.getElementById('inbox-dismiss-mode');
       if (!modal || !keyInput || !form) return;
 
+      const radios = Array.from(form.querySelectorAll('input[data-inbox-mode]'));
+
       function selectedMode() {
-        const checked = form.querySelector('input[data-inbox-mode]:checked');
-        const v = checked && (checked.getAttribute('data-inbox-mode') || checked.value)
-          ? String(checked.getAttribute('data-inbox-mode') || checked.value)
-          : '24h';
-        return (v === 'forever') ? 'forever' : '24h';
+        const checked = radios.find((r) => r.checked);
+        return checked && checked.getAttribute('data-inbox-mode') === 'forever' ? 'forever' : '24h';
       }
 
+      /* One radio group (shared name) keeps exactly one option checked; this only mirrors it
+         into the hidden mode field and the highlight class. */
       function syncSelected() {
         const mode = selectedMode();
         if (modeInput) modeInput.value = mode;
@@ -2870,8 +2871,7 @@
         keyInput.value = alertKey || '';
         if (entityInput) entityInput.value = entityId || '';
         if (returnInput) returnInput.value = window.location.pathname + window.location.search;
-        const first = form.querySelector('input[data-inbox-mode="24h"]');
-        if (first) first.checked = true;
+        radios.forEach((r) => { r.checked = r.getAttribute('data-inbox-mode') === '24h'; });
         syncSelected();
         if (typeof openModal === 'function') openModal('modal-inbox-dismiss');
         else {
@@ -2882,14 +2882,6 @@
 
       form.addEventListener('change', (e) => {
         if (e.target && e.target.matches('input[type="radio"]')) syncSelected();
-      });
-      form.querySelectorAll('.inbox-dismiss-option').forEach((opt) => {
-        opt.addEventListener('click', () => {
-          const input = opt.querySelector('input[type="radio"]');
-          if (!input) return;
-          input.checked = true;
-          syncSelected();
-        });
       });
 
       form.addEventListener('submit', (e) => {
