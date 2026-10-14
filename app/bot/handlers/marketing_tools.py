@@ -11,9 +11,10 @@ import logging
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery
+from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.bot import menu_nav as nav
 from app.bot.auth import require_bot_owner_handler
 from app.bot.marketing_panels import (
     CAMPAIGN_ACTION_PATTERN,
@@ -46,32 +47,48 @@ GIFT_NOT_FOUND = "کد یافت نشد"
 DONE = "انجام شد"
 
 
-async def _present(
-    callback: CallbackQuery, text: str, markup, state: FSMContext | None
+async def show_gift_panel(
+    message: Message, session: AsyncSession, state: FSMContext | None, *, push: bool
 ) -> None:
-    """Edit the tapped panel in place; only send a new one if that bubble cannot be edited."""
-    if callback.message is not None:
-        await present_nav_panel(callback.message, text=text, inline=markup, state=state)
-
-
-async def _show_gift_panel(
-    callback: CallbackQuery, session: AsyncSession, state: FSMContext | None
-) -> None:
+    """Edit ``message`` into the gift-code panel and record the nav level (no access check)."""
     ui = await get_all_settings(session)
     codes = await list_gift_codes(session, shop_id=PLATFORM_SHOP, limit=GIFT_PANEL_LIMIT)
     details = {code.id: describe_code(code) for code in codes}
     text, markup = gift_codes_panel(codes, details, ui=ui, web_url=panel_page_url("/gift-codes"))
-    await _present(callback, text, markup, state)
+    await nav.set_nav_level(state, nav.NAV_ADMIN_GIFTS, push=push)
+    await present_nav_panel(message, text=text, inline=markup, state=state)
 
 
-async def _show_campaign_panel(
-    callback: CallbackQuery, session: AsyncSession, state: FSMContext | None
+async def show_campaign_panel(
+    message: Message, session: AsyncSession, state: FSMContext | None, *, push: bool
 ) -> None:
+    """Edit ``message`` into the campaign panel and record the nav level (no access check)."""
     ui = await get_all_settings(session)
     campaigns = await list_recent_campaigns(session, shop_id=PLATFORM_SHOP, limit=CAMPAIGN_LIST_LIMIT)
     progress = await campaign_progress_map(session, [campaign.id for campaign in campaigns])
     text, markup = campaigns_panel(campaigns, progress, ui=ui, web_url=panel_page_url("/campaigns"))
-    await _present(callback, text, markup, state)
+    await nav.set_nav_level(state, nav.NAV_ADMIN_CAMPAIGNS, push=push)
+    await present_nav_panel(message, text=text, inline=markup, state=state)
+
+
+async def open_admin_marketing_panel(
+    level: str,
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext | None = None,
+    *,
+    push: bool = True,
+    is_reseller_bot: bool = False,
+) -> None:
+    """Reply-navigation entry (restoring a level): same Owner gate as every admin hub."""
+    # Local import: reply_nav dispatches to this module, so a top-level import is circular.
+    from app.bot.handlers.reply_nav import _deny_unless_owner
+
+    if not await _deny_unless_owner(message, session, db_user, is_reseller_bot=is_reseller_bot):
+        return
+    show = show_gift_panel if level == nav.NAV_ADMIN_GIFTS else show_campaign_panel
+    await show(message, session, state, push=push)
 
 
 @router.callback_query(F.data == GIFT_PANEL_CALLBACK)
@@ -80,7 +97,8 @@ async def open_gift_panel(
     callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext
 ) -> None:
     await callback.answer()
-    await _show_gift_panel(callback, session, state)
+    if callback.message is not None:
+        await show_gift_panel(callback.message, session, state, push=True)
 
 
 @router.callback_query(F.data.regexp(GIFT_SET_PATTERN.pattern))
@@ -96,7 +114,8 @@ async def set_gift_state(
         session, int(match.group(1)), shop_id=PLATFORM_SHOP, active=match.group(2) == "1"
     )
     await callback.answer(DONE if changed else GIFT_NOT_FOUND, show_alert=not changed)
-    await _show_gift_panel(callback, session, state)
+    if callback.message is not None:
+        await show_gift_panel(callback.message, session, state, push=False)
 
 
 @router.callback_query(F.data == CAMPAIGN_PANEL_CALLBACK)
@@ -105,7 +124,8 @@ async def open_campaign_panel(
     callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext
 ) -> None:
     await callback.answer()
-    await _show_campaign_panel(callback, session, state)
+    if callback.message is not None:
+        await show_campaign_panel(callback.message, session, state, push=True)
 
 
 @router.callback_query(F.data.regexp(CAMPAIGN_ACTION_PATTERN.pattern))
@@ -126,4 +146,5 @@ async def change_campaign(
         await callback.answer(CAMPAIGN_NOT_FOUND, show_alert=True)
     else:
         await callback.answer(DONE)
-    await _show_campaign_panel(callback, session, state)
+    if callback.message is not None:
+        await show_campaign_panel(callback.message, session, state, push=False)
