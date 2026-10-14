@@ -565,8 +565,18 @@ class LoyaltyStaticContractTests(unittest.TestCase):
         self.assertIn("loyalty", bot_init)
         app_py = Path("app/api/app.py").read_text()
         self.assertIn("register_loyalty_pages", app_py)
-        base = Path("app/web/templates/base.html").read_text()
-        self.assertIn("/loyalty", base)
+        from app.services.marketing_nav import marketing_sections
+
+        owner = {
+            "role": "admin",
+            "permissions": [],
+            "org_principal_id": 1,
+            "org_depth": 0,
+            "org_parent_id": None,
+            "org_status": "active",
+        }
+        paths = {section.href.split("?")[0] for section in marketing_sections(owner)}
+        self.assertIn("/loyalty", paths)
         orders = Path("app/services/orders.py").read_text()
         self.assertIn("on_order_delivered", orders)
         models = Path("app/db/models.py").read_text()
