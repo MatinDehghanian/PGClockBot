@@ -178,9 +178,10 @@ class Plan(Base):
 class ServiceAddonPack(Base):
     """Customer add-on packs: extra volume (GB) or duration (days) on an existing service.
 
-    ``category_id`` scopes pricing to the same plan category as the service's
-    sales plan — VIP and economy packs can differ. NULL matches only
-    uncategorized services (strict equality).
+    ``is_general`` packs apply to every plan category of the shop. Otherwise
+    ``category_id`` ties the pack to the plan category of the service's sales
+    plan, so VIP and economy packs can be priced differently. A pack that is
+    neither general nor tied to a category matches nothing.
     """
 
     __tablename__ = "service_addon_packs"
@@ -201,6 +202,7 @@ class ServiceAddonPack(Base):
         nullable=True,
         index=True,
     )
+    is_general: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -369,6 +371,14 @@ class PaymentSettlement(Base):
 
 class UserService(Base):
     __tablename__ = "user_services"
+    __table_args__ = (
+        # A panel user can be imported into «سرویس‌های من» by one customer only.
+        Index(
+            "uq_user_services_imported_pg_user", "pg_user_id", unique=True,
+            sqlite_where=text("remark = 'imported'"),
+            postgresql_where=text("remark = 'imported'"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     bot_user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"), index=True)
@@ -406,6 +416,22 @@ class UserService(Base):
         back_populates="services", foreign_keys=[bot_user_id]
     )
     plan: Mapped[Optional["Plan"]] = relationship()
+
+
+class ServiceImportAttempt(Base):
+    """One try to add an existing service by its subscription link (rate limit and audit).
+
+    Only a hash of the token is kept; the link itself is a bearer secret.
+    """
+
+    __tablename__ = "service_import_attempts"
+    __table_args__ = (Index("ix_service_import_attempts_user_time", "bot_user_id", "created_at"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    bot_user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id", ondelete="CASCADE"))
+    token_hash: Mapped[str] = mapped_column(String(64))
+    outcome: Mapped[str] = mapped_column(String(24))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class ServiceAutomation(Base):

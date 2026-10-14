@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot import keyboards as kb
 from app.bot import menu_nav as nav
 from app.bot.menu_nav import restore_main_reply
+from app.bot.reply_keyboards import _reply_admin_marketing_entries
 from app.db.models import BotUser, Order, Role, UserService
 from app.services.formatting import format_message
 from app.services.home_overview import admin_customer_counts
@@ -221,6 +222,9 @@ class ReplyMenuTextFilter(BaseFilter):
         elif level == nav.NAV_ADMIN_PRODUCT:
             for key, label in kb._reply_admin_product_entries(ui):
                 mapping[(label or "").strip()] = key
+        elif level == nav.NAV_ADMIN_MARKETING:
+            for key, label in _reply_admin_marketing_entries(ui):
+                mapping[(label or "").strip()] = key
         elif level == nav.NAV_ADMIN_SYSTEM:
             for key, label in kb._reply_admin_system_entries(ui):
                 mapping[(label or "").strip()] = key
@@ -239,6 +243,7 @@ class ReplyMenuTextFilter(BaseFilter):
             nav.NAV_ADMIN_OPS,
             nav.NAV_ADMIN_PEOPLE,
             nav.NAV_ADMIN_PRODUCT,
+            nav.NAV_ADMIN_MARKETING,
             nav.NAV_ADMIN_SYSTEM,
             nav.NAV_LOYALTY,
             nav.NAV_ADMIN_LOYALTY,
@@ -393,6 +398,9 @@ async def open_services_list(
     )
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_SERVICES, push=push)
+    from app.bot.service_import_ui import EMPTY_LIST_HINT, empty_services_keyboard, import_enabled
+
+    allow_import = import_enabled(ui)
     if not services and not reseller_label:
         from app.services.rich_text import outbound_setting_text
 
@@ -400,10 +408,16 @@ async def open_services_list(
             ui.get("empty_services_text")
             or "هنوز سرویسی ندارید.\nاز بخش «خرید سرویس» شروع کنید."
         )
+        if allow_import:
+            await present_inline_only(
+                message, text=f"{text}\n\n{EMPTY_LIST_HINT}", inline=empty_services_keyboard(ui), **send_kw
+            )
+            return
         await message.answer(text, reply_markup=main_kb, **send_kw)
         return
     # Exactly one customer service and no reseller capacity → open card (Wave B).
-    if len(services) == 1 and not reseller_label:
+    # With «افزودن سرویس قبلی» on, the list stays so the add button is reachable.
+    if len(services) == 1 and not reseller_label and not allow_import:
         from app.bot.handlers.services import svc_view
 
         bubble = await message.answer("⏳")
@@ -456,7 +470,7 @@ async def open_services_list(
         message,
         text=body,
         inline=services_list_keyboard(
-            services, ui, reseller_capacity_label=reseller_label
+            services, ui, reseller_capacity_label=reseller_label, allow_import=allow_import
         ),
     )
     if heal_reply:
@@ -1628,7 +1642,7 @@ async def open_admin_people_hub(
     _, can_reps = await nav._platform_admin_menu_flags(
         session, db_user, is_reseller_bot=is_reseller_bot
     )
-    body = "👤 <b>افراد</b>\nکاربران، نمایندگان و باشگاه مشتریان."
+    body = "👤 <b>افراد</b>\nکاربران و نمایندگان."
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_ADMIN_PEOPLE, push=push)
     await present_nav_panel(
@@ -1687,7 +1701,7 @@ async def open_admin_system_hub(
     ):
         return
     ui = await get_all_settings(session)
-    body = "🛠 <b>سیستم</b>\nتنظیمات، پیام همگانی، بکاپ و پیش‌نمایش."
+    body = "🛠 <b>سیستم</b>\nتنظیمات، بکاپ و پیش‌نمایش."
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_ADMIN_SYSTEM, push=push)
     await present_nav_panel(
@@ -2039,6 +2053,13 @@ async def handle_back(
         return
     if level == nav.NAV_ADMIN_PRODUCT:
         await open_admin_product_hub(
+            message, session, db_user, state, push=False, is_reseller_bot=is_reseller_bot
+        )
+        return
+    if level == nav.NAV_ADMIN_MARKETING:
+        from app.bot.handlers.nav_marketing import open_admin_marketing_hub
+
+        await open_admin_marketing_hub(
             message, session, db_user, state, push=False, is_reseller_bot=is_reseller_bot
         )
         return
@@ -2661,6 +2682,7 @@ async def reply_main_nav(
         kb.REPLY_ACTION_ADM_HUB_OPS,
         kb.REPLY_ACTION_ADM_HUB_PEOPLE,
         kb.REPLY_ACTION_ADM_HUB_PRODUCT,
+        kb.REPLY_ACTION_ADM_HUB_MARKETING,
         kb.REPLY_ACTION_ADM_HUB_SYSTEM,
         kb.REPLY_ACTION_ADMIN,
         kb.REPLY_ACTION_ADMIN_DASH,
@@ -2963,6 +2985,12 @@ async def reply_main_nav(
         )
     elif action == kb.REPLY_ACTION_ADM_HUB_PRODUCT:
         await open_admin_product_hub(
+            message, session, db_user, state, is_reseller_bot=is_reseller_bot
+        )
+    elif action == kb.REPLY_ACTION_ADM_HUB_MARKETING:
+        from app.bot.handlers.nav_marketing import open_admin_marketing_hub
+
+        await open_admin_marketing_hub(
             message, session, db_user, state, is_reseller_bot=is_reseller_bot
         )
     elif action == kb.REPLY_ACTION_ADM_HUB_SYSTEM:

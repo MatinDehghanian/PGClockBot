@@ -2512,8 +2512,6 @@ async def resplan_add_set_role(
     if not groups:
         await callback.answer("گروه انتخاب نشده", show_alert=True)
         return
-    group_csv = ",".join(str(x) for x in groups)
-    mode = data.get("res_plan_mode") or "fixed"
     await state.update_data(
         res_plan_role_id=role_id,
         res_plan_create_kind="subscription",

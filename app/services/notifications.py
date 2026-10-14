@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.db.models import BotUser, Order, Payment
-from app.services.message_variables import DOMAIN_QR, render_message_template
+from app.services.message_variables import DOMAIN_QR
 from app.services.formatting import (
     format_bytes,
     format_bytes_ratio,

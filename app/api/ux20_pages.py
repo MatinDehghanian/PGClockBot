@@ -9,17 +9,15 @@ from fastapi import Depends, File, Form, Request, UploadFile
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
-from app.db.models import BotUser, ChargeCode, DeliveryFailure, Order
+from app.db.models import BotUser, ChargeCode, Order
 from app.services.authz import authz_from_staff, can_shop
 from app.services.shop_scope import is_platform_admin, shop_owner_id, ShopScopeError, assert_order_retry_in_scope, assert_bot_user_in_scope
-from app.services.users import get_all_settings, get_setting, on, set_setting
+from app.services.users import set_setting
 from app.services.ux20 import (
     create_charge_code,
     export_shop_bundle,
     import_shop_bundle,
-    list_open_delivery_failures,
     retry_delivery,
     shop_bundle_to_json,
 )

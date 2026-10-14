@@ -378,7 +378,6 @@ async def reopen_loyalty_staff(
 ) -> None:
     from app.bot.handlers.loyalty import _staff_loyalty_answer, resolve_loyalty_manage_scope
     from app.services.formatting import format_message
-    from app.services.loyalty import loyalty_enabled
 
     data = await state.get_data()
     scope_info = await resolve_loyalty_manage_scope(

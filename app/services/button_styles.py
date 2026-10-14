@@ -89,6 +89,7 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "svc_addon", "label": "حجم / زمان سرویس", "group": "زیرمنوها", "default": "primary"},
     {"id": "svc_refresh", "label": "رفرش وضعیت سرویس", "group": "زیرمنوها", "default": ""},
     {"id": "svc_delete", "label": "حذف سرویس", "group": "زیرمنوها", "default": "danger"},
+    {"id": "svc_add_existing", "label": "افزودن سرویس قبلی", "group": "زیرمنوها", "default": ""},
     {"id": "wallet_tx", "label": "تراکنش‌های کیف پول", "group": "زیرمنوها", "default": ""},
     {"id": "support_list", "label": "تیکت‌های من", "group": "زیرمنوها", "default": ""},
     # Shop flow (inline) — submenu plan rows inherit the matching kind color
@@ -171,6 +172,7 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "adm_hub_ops", "label": "عملیات روزانه", "group": "منوی ادمین", "default": "success"},
     {"id": "adm_hub_people", "label": "افراد", "group": "منوی ادمین", "default": "success"},
     {"id": "adm_hub_product", "label": "محصول و پاسارگارد", "group": "منوی ادمین", "default": "success"},
+    {"id": "adm_hub_marketing", "label": "بازاریابی", "group": "منوی ادمین", "default": "success"},
     {"id": "adm_hub_system", "label": "سیستم", "group": "منوی ادمین", "default": ""},
     {"id": "adm_dash", "label": "داشبورد ادمین", "group": "منوی ادمین", "default": "success"},
     {"id": "adm_reports", "label": "گزارشات (ادمین)", "group": "منوی ادمین", "default": "success"},

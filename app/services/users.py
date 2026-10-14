@@ -817,6 +817,7 @@ DEFAULT_SETTINGS = {
     "btn_adm_hub_ops": "🗓 عملیات روزانه",
     "btn_adm_hub_people": "👤 افراد",
     "btn_adm_hub_product": "📦 محصول و PG",
+    "btn_adm_hub_marketing": "🎯 بازاریابی",
     "btn_adm_hub_system": "🛠 سیستم",
     "btn_adm_dash": "📊 داشبورد",
     "btn_adm_reports": "📈 گزارشات",
@@ -952,6 +953,7 @@ DEFAULT_SETTINGS = {
     "action_center_expire_days": "3",
     "funnel_tracking_enabled": "1",
     "one_tap_renew_enabled": "1",
+    "service_import_enabled": "0",
 }
 DEFAULT_SETTINGS.update(button_style_defaults())
 
@@ -1144,6 +1146,7 @@ SETTING_GROUPS = {
         ("btn_adm_hub_ops", "گروه عملیات روزانه (ادمین)", "text", "هاب پنل ادمین"),
         ("btn_adm_hub_people", "گروه افراد (ادمین)", "text", "هاب پنل ادمین"),
         ("btn_adm_hub_product", "گروه محصول و PG (ادمین)", "text", "هاب پنل ادمین"),
+        ("btn_adm_hub_marketing", "گروه بازاریابی (ادمین)", "text", "هاب پنل ادمین"),
         ("btn_adm_hub_system", "گروه سیستم (ادمین)", "text", "هاب پنل ادمین"),
         ("btn_adm_dash", "دکمه داشبورد (ادمین)", "text", "هاب عملیات"),
         ("btn_adm_reports", "دکمه گزارشات (ادمین)", "text", "هاب عملیات"),
@@ -1154,9 +1157,9 @@ SETTING_GROUPS = {
         ("btn_adm_pg", "دکمه پاسارگارد (ادمین)", "text", "هاب محصول"),
         ("btn_adm_users", "دکمه کاربران (ادمین)", "text", "هاب افراد"),
         ("btn_adm_resellers", "دکمه نمایندگان (ادمین)", "text", "هاب افراد"),
-        ("btn_adm_loyalty", "دکمه باشگاه (ادمین)", "text", "هاب افراد"),
+        ("btn_adm_loyalty", "دکمه باشگاه (ادمین)", "text", "هاب بازاریابی"),
         ("btn_adm_settings", "دکمه تنظیمات (ادمین)", "text", "هاب سیستم"),
-        ("btn_adm_broadcast", "دکمه پیام گروهی (ادمین)", "text", "هاب سیستم"),
+        ("btn_adm_broadcast", "دکمه پیام گروهی (ادمین)", "text", "هاب بازاریابی"),
         ("btn_adm_backup", "دکمه بکاپ (ادمین)", "text", "هاب سیستم"),
         ("btn_adm_preview", "دکمه پیش‌نمایش کاربر (ادمین)", "text", "هاب سیستم"),
         ("btn_adm_exit_preview", "خروج از پیش‌نمایش", "text", "روی کیبورد هنگام پیش‌نمایش منوی کاربر"),
@@ -1481,6 +1484,14 @@ SETTING_GROUPS = {
         ("btn_force_join", "متن پیش‌فرض دکمه لینک کانال", "text", "اگر عنوان کانال خالی باشد"),
         ("btn_force_join_check", "متن دکمه بررسی عضویت", "text", "دکمه «عضو شدم»"),
     ],
+    "افزودن سرویس قبلی": [
+        (
+            "service_import_enabled",
+            "افزودن سرویس قبلی توسط مشتری",
+            "toggle",
+            "مشتری سرویسی را که بیرون از ربات گرفته با لینک اشتراک به «سرویس‌های من» اضافه می‌کند و از همان‌جا تمدید می‌کند. فقط سرویس‌هایی که زیر ادمین پاسارگارد همین فروشگاه هستند و به کاربر دیگری وصل نشده‌اند قابل افزودن‌اند؛ سرویس افزوده‌شده لغو و بازگشت وجه ندارد و حذفش فقط آن را از لیست برمی‌دارد.",
+        ),
+    ],
     "قوانین ورود به ربات": [
         ("terms_entry_enabled", "فعال", "toggle", "قبل از منوی اصلی — فقط کاربران"),
         (
@@ -1576,6 +1587,7 @@ TAB_SETTING_GROUPS: dict[str, list[str]] = {
         "معرف اجباری",
         "شماره تماس خرید",
         "اکانت تست",
+        "افزودن سرویس قبلی",
         "ضدتقلب رسید",
         "کانال اجباری",
         "قوانین ورود به ربات",
@@ -1791,8 +1803,6 @@ async def delete_bot_user(
     await session.execute(
         update(Order).where(Order.reseller_id == user_id).values(reseller_id=None)
     )
-    from app.db.models import Ticket
-
     await session.execute(
         update(Ticket).where(Ticket.reseller_id == user_id).values(reseller_id=None)
     )
@@ -1807,9 +1817,12 @@ async def delete_bot_user(
     if delete_pg_services:
         from app.services.bot_user_admin import ensure_pg_user_removed_or_absent
 
+        from app.services.service_import import is_external_service
+
         pg_client = get_pg()
         for svc in services:
-            if not svc.pg_user_id:
+            # Linked or imported services were not created by the bot; keep their panel users.
+            if not svc.pg_user_id or is_external_service(svc):
                 continue
             try:
                 # Confirmed PG 404 counts as removed so local cleanup can proceed.

@@ -27,7 +27,7 @@ from app.services.users import DEFAULT_SETTINGS
 
 UNREACHABLE_BEFORE = {
     "btn_buy_continue", "btn_miniapp", "btn_adm_hub_ops", "btn_adm_hub_people",
-    "btn_adm_hub_product", "btn_adm_hub_system", "btn_adm_dash",
+    "btn_adm_hub_product", "btn_adm_hub_marketing", "btn_adm_hub_system", "btn_adm_dash",
     "btn_adm_reports", "btn_adm_resellers", "btn_adm_loyalty",
     "btn_adm_backup", "btn_adm_exit_preview",
 }

@@ -15,6 +15,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.3.46": [
+        "نگهداری: رفرنس task گرم‌کردن PasarGuard؛ زمان آگاه‌به‌منطقه در لاگ آپدیت؛ حذف query بی‌استفادهٔ پروفایل نماینده در تحویل؛ import تمیز billing (#742–#745)",
+        "آپلود بکاپ ربات: خواندن غیرمسدود و پاک‌سازی مطمئن temp؛ حذف import/متغیر بلااستفاده در app و handlers (#746، #741، #747)",
+        "ریستور: restore/pre-v0.3.46-v0.3.45",
+    ],
     "0.3.45": [
         "حذف کاربر: جاروی خودکار همهٔ کلیدهای خارجی به ردیف کاربر (قبل از orders/payments) تا حذف به‌خاطر FK ناقص گیر نکند (#748)",
         "ریستور: restore/pre-v0.3.45-v0.3.44",

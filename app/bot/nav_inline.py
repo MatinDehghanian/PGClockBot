@@ -563,6 +563,7 @@ def admin_groups_hub_keyboard(
         "adm_hub_ops": "nv:adm:ops",
         "adm_hub_people": "nv:adm:people",
         "adm_hub_product": "nv:adm:product",
+        "adm_hub_marketing": "nv:adm:marketing",
         "adm_hub_system": "nv:adm:system",
     }
     buttons = [
@@ -637,7 +638,6 @@ def admin_people_hub_keyboard(
     ui: dict | None = None, *, can_manage_representatives: bool = True
 ) -> InlineKeyboardMarkup:
     from app.bot.reply_keyboards import (
-        REPLY_ACTION_ADMIN_LOYALTY,
         REPLY_ACTION_ADMIN_RESELLERS,
         REPLY_ACTION_ADMIN_USERS,
         _reply_admin_people_entries,
@@ -646,7 +646,6 @@ def admin_people_hub_keyboard(
     cb_map = {
         REPLY_ACTION_ADMIN_USERS: "nv:adm:users",
         REPLY_ACTION_ADMIN_RESELLERS: "nv:adm:resellers",
-        REPLY_ACTION_ADMIN_LOYALTY: "nv:adm:loy",
     }
     buttons = [
         _ikb(
@@ -693,10 +692,35 @@ def admin_product_hub_keyboard(
     return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:home")
 
 
+def admin_marketing_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
+    """Club and broadcast leaves — they reuse the existing ``nv:adm:*`` callbacks."""
+    from app.bot.reply_keyboards import (
+        REPLY_ACTION_ADMIN_BROADCAST,
+        REPLY_ACTION_ADMIN_LOYALTY,
+        _reply_admin_marketing_entries,
+    )
+
+    cb_map = {
+        REPLY_ACTION_ADMIN_LOYALTY: "nv:adm:loy",
+        REPLY_ACTION_ADMIN_BROADCAST: "nv:adm:broadcast",
+    }
+    buttons = [
+        _ikb(
+            text,
+            callback_data=cb_map[key],
+            ui=ui,
+            action=key,
+            style=_style(ui, key, fallback="primary"),
+        )
+        for key, text in _reply_admin_marketing_entries(ui)
+        if key in cb_map
+    ]
+    return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:home")
+
+
 def admin_system_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
     from app.bot.reply_keyboards import (
         REPLY_ACTION_ADMIN_BACKUP,
-        REPLY_ACTION_ADMIN_BROADCAST,
         REPLY_ACTION_ADMIN_PREVIEW,
         REPLY_ACTION_ADMIN_SETTINGS,
         _reply_admin_system_entries,
@@ -704,7 +728,6 @@ def admin_system_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
 
     cb_map = {
         REPLY_ACTION_ADMIN_SETTINGS: "nv:adm:settings",
-        REPLY_ACTION_ADMIN_BROADCAST: "nv:adm:broadcast",
         REPLY_ACTION_ADMIN_BACKUP: "nv:adm:backup",
         REPLY_ACTION_ADMIN_PREVIEW: "nv:adm:preview",
     }
@@ -770,7 +793,7 @@ def admin_loyalty_manage_hub_keyboard(
     ui: dict | None = None,
     *,
     include_tiers: bool = True,
-    back_callback: str = "nv:adm:people",
+    back_callback: str = "nv:adm:marketing",
 ) -> InlineKeyboardMarkup:
     from app.bot.reply_keyboards import (
         REPLY_ACTION_ADM_LOY_OVERVIEW,
@@ -1053,7 +1076,7 @@ def admin_broadcast_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup
         for key, text in _admin_broadcast_submenu_entries(ui)
         if key.startswith("bc_aud_")
     ]
-    return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:system")
+    return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:marketing")
 
 
 def admin_plans_audience_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
@@ -1269,14 +1292,18 @@ def services_list_keyboard(
     ui: dict | None = None,
     *,
     reseller_capacity_label: str | None = None,
+    allow_import: bool = False,
 ) -> InlineKeyboardMarkup:
     """Paginated-ready service list with back-to-home (inline nav)."""
     from app.bot.keyboards import services_keyboard
+    from app.bot.service_import_ui import add_existing_row
 
     base = services_keyboard(
         services, ui, reseller_capacity_label=reseller_capacity_label
     )
     rows = list(base.inline_keyboard)
+    if allow_import:
+        rows.append(add_existing_row(ui))
     rows.append(
         [
             _ikb(
