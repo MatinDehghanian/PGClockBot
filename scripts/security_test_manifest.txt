@@ -141,3 +141,7 @@ tests/test_payg_billing_mode.py
 tests/test_payg_shortfall_billing.py
 tests/test_user_purge_schema_sweep.py
 tests/test_delivery_failure_queue.py
+tests/test_service_import_config.py
+tests/test_service_import_settings_tab.py
+tests/test_service_import_approval.py
+tests/test_service_import_notify.py

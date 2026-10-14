@@ -145,6 +145,9 @@
       </div>
     </form>
   {% else %}
+    {% if tab == 'service_import' %}
+      {% include "_settings_service_import.html" %}
+    {% endif %}
     <form method="post" action="/settings?tab={{ tab }}" enctype="multipart/form-data" class="settings-form" id="settings-form">
       {% for group_name in tab_groups %}
       {% set fields = groups[group_name] %}

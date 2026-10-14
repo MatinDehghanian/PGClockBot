@@ -108,7 +108,7 @@
     <div class="pay-dest-rows" data-pay-dest-list></div>
   </div>
   {% elif kind == 'list' %}
-  {{ list_input('s_' ~ key, label, val, kind='money' if key == 'wallet_topup_presets' else 'text', help=help, placeholder='50000' if key == 'wallet_topup_presets' else '') }}
+  {{ list_input('s_' ~ key, label, val, kind='money' if key == 'wallet_topup_presets' else 'text', help=help, placeholder={'wallet_topup_presets': '50000', 'service_import_paths': '/sub', 'service_import_admins': 'admin'}.get(key, '')) }}
   {% elif kind == 'textarea' %}
   <label>{{ label }}
     <textarea name="s_{{ key }}" rows="5">{{ val }}</textarea>

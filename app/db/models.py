@@ -431,6 +431,42 @@ class ServiceImportAttempt(Base):
     bot_user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id", ondelete="CASCADE"))
     token_hash: Mapped[str] = mapped_column(String(64))
     outcome: Mapped[str] = mapped_column(String(24))
+    # Operator-facing cause of a refusal (service_import.Reason); never shown to customers.
+    reason: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ServiceImportRequest(Base):
+    """A customer's request to add an existing service while admin approval is on.
+
+    The subscription token is never stored: approval re-reads the panel user and derives the
+    link from the panel's own record.
+    """
+
+    __tablename__ = "service_import_requests"
+    __table_args__ = (
+        Index(
+            "uq_service_import_requests_open",
+            "bot_user_id",
+            "panel_user_id",
+            unique=True,
+            sqlite_where=text("status = 'pending'"),
+            postgresql_where=text("status = 'pending'"),
+        ),
+        Index("ix_service_import_requests_shop_status", "shop_id", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    bot_user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id", ondelete="CASCADE"))
+    # Owning shop (None = the platform's own customers); fixed when the request is made.
+    shop_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    panel_user_id: Mapped[int] = mapped_column(Integer)
+    panel_username: Mapped[str] = mapped_column(String(128))
+    status: Mapped[str] = mapped_column(String(16), server_default="pending")
+    reason: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    decided_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
