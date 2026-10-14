@@ -7,6 +7,9 @@
   <div>
     {{ page_title('bot-settings', 'تنظیمات فروشگاه', help='settings-bot') }}
   </div>
+  <div class="page-head-actions">
+    <a class="btn btn-ghost" href="/message-variables">متغیرهای پیام</a>
+  </div>
 </div>
 
 {{ shop_settings_tabs(tab, tabs, "/shop-settings", request.url.path) }}
