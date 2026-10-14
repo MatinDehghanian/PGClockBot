@@ -724,8 +724,18 @@ def admin_marketing_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup
     ]
     buttons.extend(
         [
-            _ikb(GIFT_BUTTON_LABEL, callback_data=GIFT_PANEL_CALLBACK, ui=ui),
-            _ikb(CAMPAIGN_BUTTON_LABEL, callback_data=CAMPAIGN_PANEL_CALLBACK, ui=ui),
+            _ikb(
+                GIFT_BUTTON_LABEL,
+                callback_data=GIFT_PANEL_CALLBACK,
+                ui=ui,
+                style=_style(ui, "adm_gift_codes"),
+            ),
+            _ikb(
+                CAMPAIGN_BUTTON_LABEL,
+                callback_data=CAMPAIGN_PANEL_CALLBACK,
+                ui=ui,
+                style=_style(ui, "adm_campaigns"),
+            ),
         ]
     )
     return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:home")

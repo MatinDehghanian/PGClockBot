@@ -160,7 +160,15 @@ class CampaignServiceTests(MarketingDbCase):
 
 
 def _callback(data: str):
-    return SimpleNamespace(data=data, message=AsyncMock(), answer=AsyncMock())
+    message = AsyncMock()
+    message.from_user = SimpleNamespace(is_bot=True)  # a bot-owned panel bubble, as on a real tap
+    return SimpleNamespace(data=data, message=message, answer=AsyncMock())
+
+
+def _state():
+    state = AsyncMock()
+    state.get_data = AsyncMock(return_value={})
+    return state
 
 
 class OwnerGateHandlerTests(MarketingDbCase):
@@ -174,9 +182,41 @@ class OwnerGateHandlerTests(MarketingDbCase):
             code_id = (await session.scalar(select(ChargeCode.id)))
             callback = _callback(f"adm:gc:set:{code_id}:0")
             with await self._owner(True), patch.object(marketing_tools, "panel_page_url", return_value=None):
-                await marketing_tools.set_gift_state(callback, session=session, db_user=BotUser(telegram_id=1))
+                await marketing_tools.set_gift_state(callback, session=session, db_user=BotUser(telegram_id=1), state=_state())
             self.assertFalse((await session.get(ChargeCode, code_id)).is_active)
             callback.message.edit_text.assert_awaited()
+            callback.message.answer.assert_not_awaited()  # same bubble, no new message
+
+    async def test_panels_edit_the_tapped_message_and_never_send_a_new_one(self):
+        async with self.Session() as session:
+            session.add(ChargeCode(code="PLAT", amount=1, reseller_id=None, is_active=True))
+            session.add(TargetedCampaign(reseller_id=None, audience="trial", days=7, text="a", created_by="t", status="draft"))
+            await session.commit()
+            campaign_id = await session.scalar(select(TargetedCampaign.id))
+            taps = [
+                (marketing_tools.open_gift_panel, marketing_tools.GIFT_PANEL_CALLBACK),
+                (marketing_tools.open_campaign_panel, marketing_tools.CAMPAIGN_PANEL_CALLBACK),
+                (marketing_tools.change_campaign, f"adm:cmp:start:{campaign_id}"),
+            ]
+            with await self._owner(True), patch.object(marketing_tools, "panel_page_url", return_value=None):
+                for handler, data in taps:
+                    callback = _callback(data)
+                    await handler(callback, session=session, db_user=BotUser(telegram_id=1), state=_state())
+                    callback.message.edit_text.assert_awaited_once()
+                    callback.message.answer.assert_not_awaited()
+                    callback.answer.assert_awaited()
+
+    async def test_every_panel_has_a_back_button_to_the_hub(self):
+        async with self.Session() as session:
+            with await self._owner(True), patch.object(marketing_tools, "panel_page_url", return_value=None):
+                for handler, data in (
+                    (marketing_tools.open_gift_panel, marketing_tools.GIFT_PANEL_CALLBACK),
+                    (marketing_tools.open_campaign_panel, marketing_tools.CAMPAIGN_PANEL_CALLBACK),
+                ):
+                    callback = _callback(data)
+                    await handler(callback, session=session, db_user=BotUser(telegram_id=1), state=_state())
+                    markup = callback.message.edit_text.await_args.kwargs["reply_markup"]
+                    self.assertEqual(_callbacks(markup)[-1], panels.MARKETING_HUB_CALLBACK)
 
     async def test_non_owner_changes_nothing(self):
         async with self.Session() as session:
@@ -188,9 +228,9 @@ class OwnerGateHandlerTests(MarketingDbCase):
             gift = _callback(f"adm:gc:set:{code_id}:0")
             campaign = _callback(f"adm:cmp:pause:{campaign_id}")
             with await self._owner(False):
-                await marketing_tools.set_gift_state(gift, session=session, db_user=BotUser(telegram_id=2))
-                await marketing_tools.change_campaign(campaign, session=session, db_user=BotUser(telegram_id=2))
-                await marketing_tools.open_gift_panel(_callback(marketing_tools.GIFT_PANEL_CALLBACK), session=session, db_user=BotUser(telegram_id=2))
+                await marketing_tools.set_gift_state(gift, session=session, db_user=BotUser(telegram_id=2), state=_state())
+                await marketing_tools.change_campaign(campaign, session=session, db_user=BotUser(telegram_id=2), state=_state())
+                await marketing_tools.open_gift_panel(_callback(marketing_tools.GIFT_PANEL_CALLBACK), session=session, db_user=BotUser(telegram_id=2), state=_state())
             await session.rollback()
             self.assertTrue((await session.get(ChargeCode, code_id)).is_active)
             self.assertEqual((await session.get(TargetedCampaign, campaign_id)).status, "running")
@@ -204,7 +244,7 @@ class OwnerGateHandlerTests(MarketingDbCase):
             code_id = await session.scalar(select(ChargeCode.id))
             callback = _callback(f"adm:gc:set:{code_id}:0")
             await marketing_tools.set_gift_state(
-                callback, session=session, db_user=BotUser(telegram_id=1), is_reseller_bot=True
+                callback, session=session, db_user=BotUser(telegram_id=1), state=_state(), is_reseller_bot=True
             )
             await session.rollback()
             self.assertTrue((await session.get(ChargeCode, code_id)).is_active)
@@ -221,7 +261,7 @@ class OwnerGateHandlerTests(MarketingDbCase):
             with await self._owner(True), patch.object(marketing_tools, "panel_page_url", return_value=None):
                 first, second, shop = (_callback(f"adm:cmp:pause:{platform_id}"), _callback(f"adm:cmp:pause:{platform_id}"), _callback(f"adm:cmp:pause:{shop_id}"))
                 for cb in (first, second, shop):
-                    await marketing_tools.change_campaign(cb, session=session, db_user=BotUser(telegram_id=1))
+                    await marketing_tools.change_campaign(cb, session=session, db_user=BotUser(telegram_id=1), state=_state())
             await session.rollback()
             self.assertEqual((await session.get(TargetedCampaign, platform_id)).status, "paused")
             self.assertEqual((await session.get(TargetedCampaign, shop_id)).status, "running")

@@ -185,6 +185,8 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "adm_pg", "label": "پاسارگارد (ادمین)", "group": "منوی ادمین", "default": "success"},
     {"id": "adm_settings", "label": "تنظیمات (ادمین)", "group": "منوی ادمین", "default": ""},
     {"id": "adm_broadcast", "label": "پیام همگانی (ادمین)", "group": "منوی ادمین", "default": ""},
+    {"id": "adm_gift_codes", "label": "کدهای هدیه (ادمین)", "group": "منوی ادمین", "default": ""},
+    {"id": "adm_campaigns", "label": "کمپین‌ها (ادمین)", "group": "منوی ادمین", "default": ""},
     {"id": "adm_backup", "label": "بکاپ / ریستور (ادمین)", "group": "منوی ادمین", "default": ""},
     {"id": "adm_preview", "label": "پیش‌نمایش منوی کاربر (ادمین)", "group": "منوی ادمین", "default": ""},
     {"id": "adm_users_list", "label": "لیست کاربران", "group": "منوی ادمین", "default": ""},

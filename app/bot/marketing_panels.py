@@ -10,6 +10,7 @@ from collections.abc import Mapping, Sequence
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from app.bot import keyboards as kb
+from app.bot.keyboards import _ikb, _style
 from app.db.models import ChargeCode, TargetedCampaign
 from app.services.campaigns import AUDIENCES
 from app.services.formatting import format_number, format_toman
@@ -52,7 +53,7 @@ def panel_page_url(path: str) -> str | None:
 def _footer_rows(ui: Mapping | None, web_url: str | None) -> list[list[InlineKeyboardButton]]:
     rows: list[list[InlineKeyboardButton]] = []
     if web_url:
-        rows.append([InlineKeyboardButton(text=WEB_BUTTON_LABEL, url=web_url)])
+        rows.append([_ikb(WEB_BUTTON_LABEL, url=web_url, ui=dict(ui or {}))])
     rows.append([kb.back_button(dict(ui or {}), MARKETING_HUB_CALLBACK)])
     return rows
 
@@ -81,7 +82,14 @@ def gift_codes_panel(
         target = 0 if code.is_active else 1
         icon = "⏸ خاموش" if code.is_active else "▶️ روشن"
         rows.append(
-            [InlineKeyboardButton(text=f"{icon}: {code.code}", callback_data=f"adm:gc:set:{code.id}:{target}")]
+            [
+                _ikb(
+                    f"{icon}: {code.code}",
+                    callback_data=f"adm:gc:set:{code.id}:{target}",
+                    ui=ui,
+                    style=_style(dict(ui or {}), "reject" if code.is_active else "confirm"),
+                )
+            ]
         )
     if not codes:
         lines.append("هنوز کدی ساخته نشده. ساخت کد از وب‌پنل انجام می‌شود.")
@@ -114,11 +122,25 @@ def campaigns_panel(
         )
         if campaign.status in {"draft", "paused"}:
             rows.append(
-                [InlineKeyboardButton(text=f"▶️ شروع/ادامه #{campaign.id}", callback_data=f"adm:cmp:start:{campaign.id}")]
+                [
+                    _ikb(
+                        f"▶️ شروع/ادامه #{campaign.id}",
+                        callback_data=f"adm:cmp:start:{campaign.id}",
+                        ui=ui,
+                        style=_style(dict(ui or {}), "confirm"),
+                    )
+                ]
             )
         elif campaign.status == "running":
             rows.append(
-                [InlineKeyboardButton(text=f"⏸ توقف #{campaign.id}", callback_data=f"adm:cmp:pause:{campaign.id}")]
+                [
+                    _ikb(
+                        f"⏸ توقف #{campaign.id}",
+                        callback_data=f"adm:cmp:pause:{campaign.id}",
+                        ui=ui,
+                        style=_style(dict(ui or {}), "reject"),
+                    )
+                ]
             )
     if not campaigns:
         lines.append("هنوز کمپینی ساخته نشده.")
