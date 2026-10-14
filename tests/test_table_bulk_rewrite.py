@@ -122,7 +122,9 @@ class BulkUiContractTests(unittest.TestCase):
         self.assertIn("/tickets/panel/bulk-action", tickets)
         plans = (ROOT / "app/web/templates/plans.html").read_text(encoding="utf-8")
         self.assertIn("/resellers/plans/bulk-action", plans)
-        self.assertIn("/plans/gift-codes/bulk-action", plans)
+        gift_codes = (ROOT / "app/web/templates/gift_codes.html").read_text(encoding="utf-8")
+        self.assertIn("/plans/gift-codes/bulk-action", gift_codes)
+        self.assertIn("data-bulk-select", gift_codes)
 
     def test_backend_exports(self):
         src = (ROOT / "app/services/table_bulk.py").read_text(encoding="utf-8")

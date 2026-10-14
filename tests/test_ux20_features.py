@@ -98,7 +98,7 @@ class Ux20TemplatePresenceTests(unittest.TestCase):
             self.assertTrue((root / name).is_file(), name)
         self.assertFalse((root / "tools.html").is_file())
         self.assertFalse((root / "_home_inbox.html").is_file())
-        self.assertFalse((root / "gift_codes.html").is_file())
+        self.assertTrue((root / "gift_codes.html").is_file())
         self.assertFalse((root / "magic_links.html").is_file())
 
     def test_home_overview_only_no_pg_open_or_old_shortcuts(self):
@@ -156,9 +156,10 @@ class Ux20TemplatePresenceTests(unittest.TestCase):
         self.assertIn("لینک‌های سریع ربات", links)
         self.assertIn("data-copy=", links)
 
-    def test_gifts_on_plans_page(self):
+    def test_plans_page_links_to_the_gift_code_page(self):
         html = Path("app/web/templates/plans.html").read_text(encoding="utf-8")
-        self.assertIn("modal-gift-codes", html)
+        self.assertNotIn("modal-gift-codes", html)
+        self.assertIn('href="/gift-codes"', html)
         self.assertIn("کد هدیه", html)
 
     def test_sidebar_no_tools_nav(self):
