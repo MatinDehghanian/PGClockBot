@@ -101,6 +101,7 @@ from app.api.funnel_pages import register_funnel_pages
 from app.api.gift_code_pages import legacy_gift_modal_redirect, register_gift_code_pages
 from app.api.home_pages import register_home_pages
 from app.api.pg_pages import register_pg_pages
+from app.api.service_import_pages import register_service_import_pages
 from app.api.panel_connection import PanelConnectionMiddleware, finish_panel_authentication
 from app.api.login_guard import (
     client_ip as _client_ip,
@@ -1484,6 +1485,7 @@ def create_api_app(lifespan=None) -> FastAPI:
     register_catalog_discounts(app, render=render, require_staff=require_staff, get_db=get_db)
     register_gift_code_pages(app, render=render, require_staff=require_staff, get_db=get_db)
     register_funnel_pages(app, render=render, require_staff=require_staff, get_db=get_db)
+    register_service_import_pages(app, require_staff=require_staff, get_db=get_db)
 
     @app.get("/settings/ssl/progress")
     async def ssl_progress(staff: dict = Depends(require_admin)):
@@ -5122,6 +5124,10 @@ def create_api_app(lifespan=None) -> FastAPI:
                     from app.services.receipt_fingerprints import normalize_dup_policy
 
                     val = normalize_dup_policy(val)
+                if key.startswith("service_import_"):
+                    from app.services.service_import_config import normalize_setting_value
+
+                    val = normalize_setting_value(key, val)
                 payload[key] = val
         if tab == "daily_report":
             from app.services.daily_report import (

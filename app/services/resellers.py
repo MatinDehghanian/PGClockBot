@@ -52,6 +52,7 @@ RESELLER_SETTINGS_TABS: list[tuple[str, str]] = [
     ("links", "لینک‌های سریع"),
     ("qr", "QR اشتراک"),
     ("limits", "محدودیت"),
+    ("service_import", "افزودن سرویس قبلی"),
     ("guides", "آموزش اتصال"),
     ("naming", "نام‌گذاری سرویس"),
     ("notifications", "نوتیفیکیشن"),
