@@ -17,10 +17,10 @@ from app.services.connection_monitor_claims import eligible_monitor_account
 from app.services.connection_monitor_panel import MonitorAccount, read_monitor_catalog
 from app.services.connection_monitor_settings import ACCOUNT_UNAVAILABLE, LOCAL_PROBE_ID, monitor_settings
 from app.services.connection_monitor_sync import apply_target_plan, initial_snapshots
-from app.services.connection_monitor_types import MAX_MONITOR_ENDPOINTS
+from app.services.connection_monitor_types import MAX_MONITOR_ENDPOINTS, MonitorConfigError, MonitorIssue
 
 
-PREFERENCES_UNAVAILABLE = "انتخاب هاست تغییر کرده یا این هاست آمادهٔ پایش نیست؛ فهرست را تازه کنید."
+PREFERENCES_UNAVAILABLE = "انتخاب هاست تغییر کرده یا این هاست آمادهٔ تست نیست؛ فهرست را تازه کنید."
 
 
 class MonitorPreferences(BaseModel):
@@ -75,7 +75,7 @@ async def save_monitor_preferences(session: AsyncSession, access: MonitorAccess,
     )
     plan = next(plan for plan in plans if plan.host_id == preferences.host_id)
     if not plan.is_ready:
-        raise ValueError(PREFERENCES_UNAVAILABLE)
+        raise MonitorConfigError(plan.issue or MonitorIssue.MISSING_ROUTE)
     guard = await session.execute(update(ConnectionMonitorState).where(
         ConnectionMonitorState.reseller_id.is_(None), ConnectionMonitorState.probe_id == LOCAL_PROBE_ID,
         ConnectionMonitorState.account_revision == account.revision, active_monitor_owner(access),

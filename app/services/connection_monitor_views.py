@@ -122,13 +122,13 @@ async def monitor_admin_page(session: AsyncSession, access: MonitorAccess, *, no
 
 async def monitor_target_view(session: AsyncSession, access: MonitorAccess, *, target_id: int, now: datetime) -> MonitorTargetView:
     if type(target_id) is not int or not 1 <= target_id <= 2147483647:
-        raise ValueError("هاست پایش یافت نشد.")
+        raise ValueError("هاست تست یافت نشد.")
     await require_monitor_owner(session, access)
     target = await session.scalar(select(ConnectionMonitorTarget).where(
         ConnectionMonitorTarget.id == target_id, ConnectionMonitorTarget.reseller_id.is_(None),
     ).limit(1))
     if target is None:
-        raise ValueError("هاست پایش یافت نشد.")
+        raise ValueError("هاست تست یافت نشد.")
     state = await session.scalar(select(ConnectionMonitorState).where(
         ConnectionMonitorState.reseller_id.is_(None), ConnectionMonitorState.probe_id == LOCAL_PROBE_ID,
     ).limit(1))

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import html
 from datetime import datetime
-from zoneinfo import ZoneInfo
 
 from aiogram.filters import BaseFilter
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
@@ -15,32 +14,11 @@ from app.db.models import BotUser
 from app.services.authz import authz_from_staff
 from app.services.connection_monitor_access import MONITOR_ACCESS_DENIED, MonitorAccess
 from app.services.connection_monitor_views import MonitorAdminPage, MonitorTargetView
-from app.services.connection_status_types import ConnectionStatus
-from app.services.daily_report import format_jalali_parts
+from app.services.connection_status_texts import REASON_LABELS, STATUS_LABELS as STATUS_LABELS, connection_check_time
 from app.services.formatting import format_number
 from app.services.org_principals import attach_org_principal_fields
 from app.services.safe_format import safe_format
 from app.services.users import get_all_settings
-
-
-STATUS_LABELS = {
-    ConnectionStatus.HEALTHY: "🟢 در دسترس", ConnectionStatus.DEGRADED: "🟠 اختلال",
-    ConnectionStatus.DOWN: "🔴 خارج از دسترس", ConnectionStatus.UNKNOWN: "⚪ نامشخص",
-    ConnectionStatus.NOT_READY: "⚪ آمادهٔ تست نیست", ConnectionStatus.PAUSED: "⏸ متوقف",
-}
-REASON_LABELS = {
-    "core_unavailable": "هستهٔ پایش در دسترس نیست.", "account_unavailable": "حساب پایش قابل تأیید نیست.",
-    "catalog_unavailable": "اطلاعات تازهٔ پنل یا حساب پایش قابل تأیید نیست.",
-    "control_unavailable": "اعتبارسنجی مقصدهای آزمایش ممکن نشد.", "proxy_failed": "درخواست HTTPS از مسیر پروکسی ناموفق بود.",
-    "fallback_destination": "اتصال از مقصد دوم تأیید شد.", "probe_unavailable": "بررسی این مسیر کامل نشد.",
-    "snapshot_invalid": "نتیجهٔ ذخیره‌شده معتبر نیست.", "monitor_paused": "پایش متوقف است.",
-    "stale": "نتیجه قدیمی است و وضعیت فعلی تأیید نشده است.", "slow_delay": "میانهٔ تأخیر بیش از دو ثانیه است.",
-    "recovering": "تأیید بازیابی یا پوشش همهٔ مسیرها هنوز کامل نیست.", "no_observation": "هنوز بررسی کامل ثبت نشده است.",
-    "invalid_catalog": "اطلاعات هاست‌ها معتبر نیست.", "host_unavailable": "هاست فعال در دسترس نیست.",
-    "out_of_scope": "هاست در محدودهٔ مجاز نیست.", "unsupported_route": "ترکیب تنظیمات این مسیر پشتیبانی نشده است.",
-    "ambiguous_route": "نگاشت هاست به مسیر یکتا نیست.", "missing_route": "کانفیگ معتبر این هاست در اشتراک پایش نیست.",
-    "endpoint_capacity": "تعداد مسیرهای مؤثر از ظرفیت پایش بیشتر است.",
-}
 
 
 class MonitorAdminLabel(BaseFilter):
@@ -66,9 +44,7 @@ def monitor_text(ui: dict[str, str], key: str) -> str:
 def checked_time(value: datetime | None) -> str:
     if value is None:
         return "هنوز نتیجهٔ معتبر ندارد"
-    date = format_jalali_parts(value)["date"]
-    local_time = value.astimezone(ZoneInfo("Asia/Tehran")).strftime("%H:%M:%S")
-    return f"<code>{date} {local_time}</code>"
+    return f"<code>{connection_check_time(value)}</code>"
 
 
 def button(label: str, data: str) -> InlineKeyboardButton:
@@ -79,7 +55,11 @@ def admin_page_text(page: MonitorAdminPage, ui: dict[str, str]) -> str:
     runtime = "فعال" if page.settings.enabled else "متوقف"
     account = "متصل" if page.settings.has_account else "تنظیم نشده"
     lines = [f"<b>{monitor_text(ui, 'connection_status_admin_title')}</b>", "بررسی از سرور ربات",
-             f"پایش: {runtime} | حساب اختصاصی: {account}"]
+             f"تست خودکار: {runtime} | Test user: {account}"]
+    if page.settings.username:
+        lines.append(f"Username: <code>{html.escape(page.settings.username)}</code>")
+    if not page.settings.has_account:
+        lines.append("۱. Test user را ثبت کنید. ۲. هاست اضافه کنید. ۳. تست‌ها را روشن کنید.")
     for target in page.targets:
         name = html.escape(target.public_name) or f"هاست {format_number(target.host_id)}"
         lines.append(f"{name}: {STATUS_LABELS[target.health.status]}")
@@ -89,12 +69,12 @@ def admin_page_text(page: MonitorAdminPage, ui: dict[str, str]) -> str:
 
 
 def admin_page_keyboard(page: MonitorAdminPage) -> InlineKeyboardMarkup:
-    rows = [[button("اتصال حساب اختصاصی", "cma:account"), button("انتخاب هاست فعال", "cma:hosts:0")],
-            [button("توقف پایش و انتشار" if page.settings.enabled else "شروع پایش", f"cma:run:{int(not page.settings.enabled)}")]]
+    rows = [[button("👤 تنظیم Test user", "cma:account"), button("➕ اضافه کردن هاست", "cma:hosts:0")],
+            [button("⏹ توقف تست‌ها" if page.settings.enabled else "▶️ شروع تست‌ها", f"cma:run:{int(not page.settings.enabled)}")]]
     rows.extend([button(target.public_name or f"هاست {format_number(target.host_id)}", f"cma:item:{target.id}")] for target in page.targets)
     if page.next_id is not None:
         rows.append([button("صفحهٔ بعد", f"cma:home:{page.next_id}")])
-    rows.append([button("بروزرسانی", "cma:home:0")])
+    rows.append([button("🔄 تازه‌سازی", "cma:home:0")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -104,21 +84,21 @@ def target_text(target: MonitorTargetView) -> str:
     delay = f"{format_number(health.delay_ms)} میلی‌ثانیه" if health.delay_ms is not None else "—"
     return "\n".join([
         f"<b>هاست {format_number(target.host_id)}</b> | {STATUS_LABELS[health.status]}",
-        "بررسی از سرور ربات", f"نام عمومی: {name}", f"انتشار عمومی: {'روشن' if target.is_public else 'خاموش'}",
-        f"ترتیب: {format_number(target.display_order)}", f"تأخیر HTTPS: {delay}",
-        f"پوشش: {format_number(health.covered)}/{format_number(health.expected)}", f"آخرین بررسی: {checked_time(health.checked_at)}",
+        "بررسی از سرور ربات", f"نام نمایشی در ربات: {name}", f"نمایش به کاربران: {'روشن' if target.is_public else 'خاموش'}",
+        f"ترتیب: {format_number(target.display_order)}", f"Real delay: {delay}",
+        f"مسیرهای بررسی‌شده: {format_number(health.covered)}/{format_number(health.expected)}", f"آخرین بررسی: {checked_time(health.checked_at)}",
         REASON_LABELS.get(target.reason, ""),
-        "بررسی دستی در صف است." if target.manual_pending else "بررسی دستی از مسیر worker انجام می‌شود.",
+        "تست در صف است؛ نتیجه بعد از اجرا نمایش داده می‌شود." if target.manual_pending else "با «تست الان» درخواست تست جدید ثبت می‌شود.",
     ])
 
 
 def target_keyboard(target: MonitorTargetView) -> InlineKeyboardMarkup:
     rows = []
     if target.test_enabled:
-        rows = [[button("بررسی اکنون", f"cma:check:{target.id}"), button("توقف و حذف از عمومی", f"cma:pause:{target.id}")],
-                [button("نام عمومی", f"cma:name:{target.id}"), button("ترتیب نمایش", f"cma:order:{target.id}")],
-                [button("عدم انتشار" if target.is_public else "انتشار عمومی", f"cma:public:{target.id}:{int(not target.is_public)}")]]
+        rows = [[button("🔄 تست الان", f"cma:check:{target.id}"), button("⏸ توقف این هاست", f"cma:pause:{target.id}")],
+                [button("✏️ نام نمایشی", f"cma:name:{target.id}"), button("ترتیب نمایش", f"cma:order:{target.id}")],
+                [button("🙈 مخفی از کاربران" if target.is_public else "👁 نمایش به کاربران", f"cma:public:{target.id}:{int(not target.is_public)}")]]
     else:
-        rows = [[button("انتخاب دوباره؛ انتشار خاموش", f"cma:select:{target.host_id}")]]
+        rows = [[button("▶️ فعال کردن تست هاست", f"cma:select:{target.host_id}")]]
     rows.append([button("بازگشت", "cma:home:0")])
     return InlineKeyboardMarkup(inline_keyboard=rows)

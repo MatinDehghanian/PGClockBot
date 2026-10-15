@@ -13,6 +13,8 @@ from aiogram.types import CallbackQuery, Chat, Message, User
 from connection_monitor_support import MonitorDatabaseCase
 
 from app.bot.connection_status_admin_ui import parse_monitor_callback
+from app.bot.connection_status_admin_ui import monitor_error
+from app.services.connection_monitor_accounts import ACCOUNT_MESSAGES, MonitorAccountError
 from app.bot.handlers import connection_status_admin as admin
 from app.bot.handlers import connection_status_admin_input as forms
 from app.bot.nav_input import CANCEL_CODE_KEY
@@ -21,6 +23,12 @@ from app.services.connection_monitor_admin import MonitorHostPage
 
 
 class MonitorAdminBotTests(MonitorDatabaseCase):
+    async def test_account_validation_failure_shows_the_actionable_reason(self) -> None:
+        with patch.object(Message, "answer", new_callable=AsyncMock) as answer:
+            async with self.Session() as session:
+                await monitor_error(self.message, session, MonitorAccountError("inactive"))
+        self.assertEqual(answer.call_args.args[0], ACCOUNT_MESSAGES["inactive"])
+
     async def asyncSetUp(self) -> None:
         await super().asyncSetUp()
         self.message = Message(message_id=100, date=datetime.now(timezone.utc), chat=Chat(id=101, type="private"),

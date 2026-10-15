@@ -24,7 +24,6 @@ from app.services.users import get_all_settings
 logger = logging.getLogger(__name__)
 
 
-
 @dataclass(frozen=True, slots=True)
 class MonitorCommand:
     action: str

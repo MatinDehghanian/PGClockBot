@@ -7,6 +7,8 @@ from app.services.connection_monitor_accounts import ACCOUNT_MESSAGES, ACCOUNT_U
 from app.services.connection_monitor_actions import INVALID_PREFERENCES
 from app.services.connection_monitor_preferences import PREFERENCES_UNAVAILABLE
 from app.services.connection_monitor_queue import QUEUE_UNAVAILABLE
+from app.services.connection_monitor_types import MonitorConfigError
+from app.services.connection_status_texts import REASON_LABELS
 from app.services.xray_probe_resources import XrayProbeError
 
 
@@ -26,6 +28,8 @@ def monitor_error_message(error: Exception) -> str:
         return ACCOUNT_MESSAGES.get(error.code, MONITOR_FAILED)
     if isinstance(error, XrayProbeError):
         return CORE_MESSAGES.get(str(error), "اجرای Xray ممکن نشد؛ تنظیمات سرور را بررسی کنید.")
+    if isinstance(error, MonitorConfigError):
+        return REASON_LABELS.get(error.issue, MONITOR_FAILED)
     if type(error) is ValueError and str(error) in SAFE_ERRORS:
         return str(error)
     return MONITOR_FAILED

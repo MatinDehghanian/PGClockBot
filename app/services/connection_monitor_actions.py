@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pydantic import ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,7 +15,35 @@ from app.services.connection_monitor_preferences import (
 )
 
 
-INVALID_PREFERENCES = "نام عمومی معتبر تا ۶۴ نویسه و ترتیب عددی بین صفر و ۲۱۴۷۴۸۳۶۴۷ لازم است."
+INVALID_PREFERENCES = "نام نمایشی را تا ۶۴ حرف و ترتیب نمایش را با عدد صحیح از صفر تا ۲۱۴۷۴۸۳۶۴۷ وارد کنید."
+
+
+class MonitorTargetEdit(BaseModel):
+    model_config = ConfigDict(strict=True, extra="forbid", hide_input_in_errors=True)
+
+    public_name: str = Field(max_length=64)
+    display_order: int = Field(ge=0, le=2147483647)
+    is_public: bool
+
+
+async def update_monitor_target(session: AsyncSession, access: MonitorAccess, *, target_id: int,
+                                changes: MonitorTargetEdit) -> int:
+    """Apply a complete web form once, resolving its host from the authorized record."""
+    if type(target_id) is not int or not 1 <= target_id <= 2147483647:
+        raise ValueError(PREFERENCES_UNAVAILABLE)
+    await require_monitor_owner(session, access)
+    target = await session.scalar(select(ConnectionMonitorTarget.pg_host_id).where(
+        ConnectionMonitorTarget.id == target_id, ConnectionMonitorTarget.reseller_id.is_(None),
+        ConnectionMonitorTarget.test_enabled.is_(True),
+    ).limit(1))
+    await session.commit()
+    if target is None:
+        raise ValueError(PREFERENCES_UNAVAILABLE)
+    try:
+        preferences = MonitorPreferences(host_id=target, **changes.model_dump())
+    except ValidationError:
+        raise ValueError(INVALID_PREFERENCES) from None
+    return await save_monitor_preferences(session, access, preferences)
 
 
 async def select_monitor_host(session: AsyncSession, access: MonitorAccess, *, host_id: int) -> int:

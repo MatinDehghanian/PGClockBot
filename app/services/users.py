@@ -16,7 +16,7 @@ from app.config import get_settings
 from app.db.models import BotUser, Role, Setting
 from app.services.button_styles import default_settings as button_style_defaults
 from app.services.button_styles import setting_group_fields as button_style_setting_fields
-from app.services.connection_status_texts import CONNECTION_STATUS_MENU_KEY, MONITOR_TEXT_DEFAULTS
+from app.services.connection_status_texts import CONNECTION_STATUS_MENU_KEY, MONITOR_TEXT_DEFAULTS, readable_monitor_texts
 from app.services.user_purge import purge_user_references
 
 logger = logging.getLogger("pgclock.users")
@@ -1030,7 +1030,7 @@ SETTING_GROUPS = {
         ("connection_status_empty", "فهرست وضعیت خالی", "textarea", "بدون متغیر"),
         ("connection_status_error", "خطای دریافت وضعیت", "textarea", "بدون متغیر"),
         ("connection_status_admin_title", "عنوان مدیریت وضعیت اتصال", "text", "بدون متغیر"),
-        ("connection_status_account_prompt", "دریافت حساب پایش", "textarea", "بدون متغیر"),
+        ("connection_status_account_prompt", "تنظیم Test user", "textarea", "بدون متغیر"),
         ("connection_status_name_prompt", "دریافت نام عمومی هاست", "text", "بدون متغیر"),
         ("connection_status_order_prompt", "دریافت ترتیب هاست", "text", "بدون متغیر"),
         ("guide_text", "متن راهنما", "textarea", "دستور /help در تلگرام"),
@@ -1761,7 +1761,7 @@ async def get_all_settings(
         data["menu_order"] = ",".join(order)
         from app.services.payment_destinations import enrich_payment_settings
 
-        data = enrich_payment_settings(data)
+        data = enrich_payment_settings(readable_monitor_texts(data))
         _SETTINGS_CACHE[cache_key] = (now, dict(data))
         return data
     result = await session.execute(select(Setting))
@@ -1769,7 +1769,7 @@ async def get_all_settings(
     data.update({r.key: r.value for r in rows})
     from app.services.payment_destinations import enrich_payment_settings
 
-    data = enrich_payment_settings(data)
+    data = enrich_payment_settings(readable_monitor_texts(data))
     _SETTINGS_CACHE[cache_key] = (now, dict(data))
     return data
 
