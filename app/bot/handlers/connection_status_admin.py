@@ -55,7 +55,7 @@ async def _prompt(callback: CallbackQuery, session: AsyncSession, access: Monito
     await session.commit()
     text = monitor_text(ui, key)
     if command.action == "account":
-        text += "\nثبت یا تغییر Test user، تست‌ها را متوقف و هاست‌ها را از فهرست کاربران مخفی می‌کند."
+        text += "\nثبت یا تغییر کاربر تست، تست‌ها را متوقف و هاست‌ها را از فهرست کاربران مخفی می‌کند."
     await ask_text(callback, state, prompt=text, cancel_code=CANCEL_CODE, fsm_state=fsm, edit=True)
 
 

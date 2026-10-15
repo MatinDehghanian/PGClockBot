@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import unittest
 from collections.abc import AsyncIterator
 from pathlib import Path
 from types import SimpleNamespace
@@ -23,7 +24,9 @@ from app.services.connection_monitor_preferences import pause_monitor_target, sa
 from app.services.connection_monitor_access import MonitorAccess
 from app.services.connection_monitor_preferences import MonitorPreferences
 from app.services.connection_status import public_connection_page
-from app.services.connection_status_texts import LEGACY_MONITOR_TEXTS, MONITOR_TEXT_DEFAULTS
+from app.services.connection_status_texts import (
+    LATIN_MIXED_MONITOR_TEXTS, LEGACY_MONITOR_TEXTS, MONITOR_TEXT_DEFAULTS, readable_monitor_texts,
+)
 from app.services.users import clear_settings_cache, get_all_settings, set_settings_bulk
 
 
@@ -88,7 +91,7 @@ class MonitorWebTests(MonitorDatabaseCase):
     async def test_empty_page_has_setup_actions_without_panel_calls_or_secrets(self) -> None:
         response = await self.client.get("/connection-status")
         self.assertEqual(response.status_code, 200, response.text)
-        self.assertIn("تنظیم Test user", response.text)
+        self.assertIn("کاربر تست", response.text)
         self.assertIn("شروع تست‌ها", response.text)
         self.assertIn("داخل ایران", response.text)
         self.assertIn('href="/connection-status"', response.text)
@@ -129,7 +132,7 @@ class MonitorWebTests(MonitorDatabaseCase):
         self.assertIn("&lt;script&gt;", response.text)
         self.assertNotIn(hostile_name, response.text)
         self.assertNotIn(TOKEN, response.text)
-        self.assertIn("Real delay", response.text)
+        self.assertIn("تأخیر واقعی", response.text)
         self.assertNotIn("منقضی", response.text)
         response = await self.client.post(f"/connection-status/targets/{target_id}/check")
         self.assertNotIn("error=", response.headers["location"])
@@ -210,7 +213,7 @@ class MonitorWebTests(MonitorDatabaseCase):
         response = await self.client.get("/connection-status?hosts=1")
         self.assertEqual(response.status_code, 200)
         self.assertIn("ارتباط با پنل برقرار نشد", response.text)
-        self.assertIn("Real delay", response.text)
+        self.assertIn("تأخیر واقعی", response.text)
         self.assertNotIn(TOKEN, response.text)
 
     async def test_invalid_values_are_rejected_without_partial_edits(self) -> None:
@@ -224,13 +227,46 @@ class MonitorWebTests(MonitorDatabaseCase):
         async with self.Session() as session:
             self.assertEqual((await session.get(ConnectionMonitorTarget, target_id)).public_name, "")
 
+    async def test_page_copy_is_persian_with_no_caption_under_the_title(self) -> None:
+        await self.select_host()
+        text = (await self.client.get("/connection-status")).text
+        for latin in ("Test user", "Real delay", "Experimental", "Username", "PasarGuard", "subscription", "password"):
+            self.assertNotIn(latin, text, latin)
+        self.assertIn("کاربر تست", text)
+        self.assertIn("تأخیر واقعی", text)
+        title_block = text.split('class="page-title"', 1)[1].split("</div>", 2)[1]
+        self.assertNotIn("<p", title_block)
+
+    async def test_missing_core_warning_is_one_readable_block_with_a_copyable_command(self) -> None:
+        await self.attach()
+        with patch("app.api.connection_status_pages.get_settings", return_value=SimpleNamespace(
+            connection_monitor_xray_path="", connection_monitor_xray_sha256="")):
+            text = (await self.client.get("/connection-status")).text
+        warning = text.split('<div class="flash warn" role="status">', 1)[1].split("</section>", 1)[0]
+        self.assertEqual(warning.count('class="flash-copy"'), 1)
+        self.assertIn('<code class="connection-command" dir="ltr">bash pgclock.sh xray</code>', warning)
+        self.assertNotIn("<bdi", warning.split("</code>", 1)[0])
+
+    async def test_username_field_is_guarded_against_load_time_focus(self) -> None:
+        text = (await self.client.get("/connection-status")).text
+        field = text.split('id="monitor-username"', 1)[1].split(">", 1)[0]
+        self.assertIn("data-focus-guard", field)
+        self.assertNotIn("autofocus", text)
+
+    async def test_host_status_badges_carry_no_telegram_emoji(self) -> None:
+        target_id = await self.select_host()
+        self.assertEqual((await self.client.post(f"/connection-status/targets/{target_id}/pause")).status_code, 303)
+        text = (await self.client.get("/connection-status")).text
+        badge = text.split('class="badge neutral">', 2)[-1].split("</span>", 1)[0]
+        self.assertEqual(badge.strip(), "متوقف")
+
     async def test_missing_core_configuration_disables_start_but_keeps_settings_visible(self) -> None:
         await self.attach()
         with patch("app.api.connection_status_pages.get_settings", return_value=SimpleNamespace(
             connection_monitor_xray_path="", connection_monitor_xray_sha256="")):
             response = await self.client.get("/connection-status")
         self.assertEqual(response.status_code, 200)
-        self.assertIn("Setup Xray", response.text)
+        self.assertIn("bash pgclock.sh xray", response.text)
         self.assertIn("خودکار آماده می‌کند", response.text)
         self.assertIn('disabled>شروع تست‌ها', response.text)
 
@@ -253,7 +289,7 @@ class MonitorWebTests(MonitorDatabaseCase):
             await session.commit()
         response = await self.client.post("/connection-status/account", data={"username": "monitor-only"})
         response = await self.client.get(response.headers["location"])
-        self.assertIn("یک user جدا", response.text)
+        self.assertIn("یک کاربر جدا", response.text)
         self.assertNotIn(TOKEN, response.text)
 
     async def test_pasting_a_long_subscription_link_never_echoes_it_in_validation_errors(self) -> None:
@@ -307,3 +343,18 @@ class MonitorWebTests(MonitorDatabaseCase):
                 }, headers={"Origin": "http://test"})
         self.assertEqual(accepted.status_code, 303, accepted.text)
         self.assertNotIn("error=", accepted.headers["location"])
+
+
+class MonitorTextDefaultsTests(unittest.TestCase):
+    def test_untouched_latin_mixed_default_is_refreshed_and_custom_text_is_kept(self) -> None:
+        key = "connection_status_account_prompt"
+        refreshed = readable_monitor_texts({key: LATIN_MIXED_MONITOR_TEXTS[key]})
+        self.assertEqual(refreshed[key], MONITOR_TEXT_DEFAULTS[key])
+        custom = readable_monitor_texts({key: "متن دلخواه مدیر"})
+        self.assertEqual(custom[key], "متن دلخواه مدیر")
+        self.assertEqual(readable_monitor_texts({}), {})
+
+    def test_new_defaults_use_persian_terms(self) -> None:
+        for value in MONITOR_TEXT_DEFAULTS.values():
+            for latin in ("Test user", "Username", "PasarGuard", "password", "token", "Real delay"):
+                self.assertNotIn(latin, value)

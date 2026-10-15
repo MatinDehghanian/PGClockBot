@@ -61,11 +61,11 @@ def admin_page_text(page: MonitorAdminPage, ui: dict[str, str]) -> str:
     runtime = "فعال" if page.settings.enabled else "متوقف"
     account = "متصل" if page.settings.has_account else "تنظیم نشده"
     lines = [f"<b>{monitor_text(ui, 'connection_status_admin_title')}</b>", "بررسی از سرور ربات",
-             f"تست خودکار: {runtime} | Test user: {account}"]
+             f"تست خودکار: {runtime} | کاربر تست: {account}"]
     if page.settings.username:
-        lines.append(f"Username: <code>{html.escape(page.settings.username)}</code>")
+        lines.append(f"نام کاربری: <code>{html.escape(page.settings.username)}</code>")
     if not page.settings.has_account:
-        lines.append("۱. Test user را ثبت کنید. ۲. هاست اضافه کنید. ۳. تست‌ها را روشن کنید.")
+        lines.append("۱. کاربر تست را ثبت کنید. ۲. هاست اضافه کنید. ۳. تست‌ها را روشن کنید.")
     for target in page.targets:
         name = html.escape(target.public_name) or f"هاست {format_number(target.host_id)}"
         lines.append(f"{name}: {STATUS_LABELS[target.health.status]}")
@@ -75,7 +75,7 @@ def admin_page_text(page: MonitorAdminPage, ui: dict[str, str]) -> str:
 
 
 def admin_page_keyboard(page: MonitorAdminPage) -> InlineKeyboardMarkup:
-    rows = [[button("👤 تنظیم Test user", "cma:account"), button("➕ اضافه کردن هاست", "cma:hosts:0")],
+    rows = [[button("👤 تنظیم کاربر تست", "cma:account"), button("➕ اضافه کردن هاست", "cma:hosts:0")],
             [button("⏹ توقف تست‌ها" if page.settings.enabled else "▶️ شروع تست‌ها", f"cma:run:{int(not page.settings.enabled)}")]]
     rows.extend([button(target.public_name or f"هاست {format_number(target.host_id)}", f"cma:item:{target.id}")] for target in page.targets)
     if page.next_id is not None:
@@ -91,7 +91,7 @@ def target_text(target: MonitorTargetView) -> str:
     return "\n".join([
         f"<b>هاست {format_number(target.host_id)}</b> | {STATUS_LABELS[health.status]}",
         "بررسی از سرور ربات", f"نام نمایشی در ربات: {name}", f"نمایش به کاربران: {'روشن' if target.is_public else 'خاموش'}",
-        f"ترتیب: {format_number(target.display_order)}", f"Real delay: {delay}",
+        f"ترتیب: {format_number(target.display_order)}", f"تأخیر واقعی: {delay}",
         f"مسیرهای بررسی‌شده: {format_number(health.covered)}/{format_number(health.expected)}", f"آخرین بررسی: {checked_time(health.checked_at)}",
         REASON_LABELS.get(target.reason, ""),
         "تست در صف است؛ نتیجه بعد از اجرا نمایش داده می‌شود." if target.manual_pending else "با «تست الان» درخواست تست جدید ثبت می‌شود.",

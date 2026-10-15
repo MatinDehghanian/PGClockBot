@@ -4408,3 +4408,41 @@ const root = document.getElementById('upd-root');
     boot();
   }
 })();
+
+/* === Focus guard ===
+   Inputs marked data-focus-guard stay read-only until the user taps, clicks or presses a key, so a
+   browser or PWA restoring focus on load cannot pop the mobile keyboard open. */
+(function initFocusGuards() {
+  var INTENT_WINDOW_MS = 800;
+  var lastIntent = 0;
+  ['pointerdown', 'touchstart', 'mousedown', 'keydown'].forEach(function (type) {
+    document.addEventListener(type, function () { lastIntent = Date.now(); }, true);
+  });
+  function guard(input) {
+    if (input.dataset.focusGuardReady === '1') return;
+    input.dataset.focusGuardReady = '1';
+    input.readOnly = true;
+    input.addEventListener('focus', function () {
+      if (Date.now() - lastIntent <= INTENT_WINDOW_MS) {
+        input.readOnly = false;
+        return;
+      }
+      requestAnimationFrame(function () {
+        if (document.activeElement === input && input.readOnly) input.blur();
+      });
+    });
+  }
+  function boot() {
+    document.querySelectorAll('input[data-focus-guard]').forEach(guard);
+  }
+  window.addEventListener('pageshow', function () {
+    document.querySelectorAll('input[data-focus-guard]').forEach(function (input) {
+      if (input.readOnly && document.activeElement === input) input.blur();
+    });
+  });
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+})();

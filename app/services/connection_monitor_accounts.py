@@ -15,21 +15,21 @@ from app.services.pasarguard import PasarGuardError, get_pg
 from app.services.service_import import parse_subscription_token
 
 
-ACCOUNT_UNAVAILABLE = "Test user تنظیم نشده یا قابل استفاده نیست؛ دوباره آن را ثبت کنید."
+ACCOUNT_UNAVAILABLE = "کاربر تست تنظیم نشده یا قابل استفاده نیست؛ دوباره آن را ثبت کنید."
 ACCOUNT_MESSAGES = {
-    "invalid_username": "فقط username معتبر Test user را بفرستید؛ لینک یا password لازم نیست.",
-    "not_found": "این username در پنل پیدا نشد؛ نام دقیق آن را از PasarGuard کپی کنید.",
-    "panel_denied": "دسترسی API ربات به این user کافی نیست؛ دسترسی اکانت متصل به پنل را بررسی کنید.",
+    "invalid_username": "فقط نام کاربری معتبر کاربر تست را بفرستید؛ لینک یا رمز عبور لازم نیست.",
+    "not_found": "این نام کاربری در پنل پیدا نشد؛ نام دقیق آن را از پاسارگارد کپی کنید.",
+    "panel_denied": "دسترسی ربات به این کاربر کافی نیست؛ دسترسی حساب متصل به پنل را بررسی کنید.",
     "panel_timeout": "پنل در زمان تعیین‌شده پاسخ نداد؛ کمی بعد دوباره تلاش کنید.",
-    "panel_unavailable": "ارتباط با پنل برقرار نشد؛ تنظیمات اتصال PasarGuard را بررسی کنید.",
-    "invalid_record": "اطلاعات Test user از پنل کامل یا معتبر نیست.",
-    "inactive": "Test user فعال نیست؛ ابتدا وضعیت آن را در پنل روی active بگذارید.",
-    "traffic_exhausted": "حجم Test user تمام شده؛ ابتدا حجم آن را در پنل افزایش دهید.",
-    "expired": "تاریخ Test user گذشته؛ ابتدا آن را در پنل تمدید کنید.",
-    "invalid_subscription": "لینک subscription این user در پاسخ پنل معتبر نیست؛ تنظیمات subscription پنل را بررسی کنید.",
-    "customer_account": "این user به سرویس مشتری وصل است؛ یک user جدا برای تست اتصال انتخاب کنید.",
-    "secret_unavailable": "ذخیره یا خواندن امن Test user ممکن نشد؛ تنظیم WEB_SECRET سرور را بررسی کنید.",
-    "account_changed": "Test user یا لینک subscription آن تغییر کرده؛ username را دوباره ثبت کنید.",
+    "panel_unavailable": "ارتباط با پنل برقرار نشد؛ تنظیمات اتصال پاسارگارد را بررسی کنید.",
+    "invalid_record": "اطلاعات کاربر تست از پنل کامل یا معتبر نیست.",
+    "inactive": "کاربر تست فعال نیست؛ ابتدا وضعیت آن را در پنل روی «فعال» بگذارید.",
+    "traffic_exhausted": "حجم کاربر تست تمام شده؛ ابتدا حجم آن را در پنل افزایش دهید.",
+    "expired": "تاریخ کاربر تست گذشته؛ ابتدا آن را در پنل تمدید کنید.",
+    "invalid_subscription": "لینک اشتراک این کاربر در پاسخ پنل معتبر نیست؛ تنظیمات اشتراک پنل را بررسی کنید.",
+    "customer_account": "این کاربر به سرویس مشتری وصل است؛ یک کاربر جدا برای تست اتصال انتخاب کنید.",
+    "secret_unavailable": "ذخیره یا خواندن امن کاربر تست ممکن نشد؛ تنظیم WEB_SECRET سرور را بررسی کنید.",
+    "account_changed": "کاربر تست یا لینک اشتراک آن تغییر کرده؛ نام کاربری را دوباره ثبت کنید.",
 }
 
 
