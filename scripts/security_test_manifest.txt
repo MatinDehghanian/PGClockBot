@@ -147,3 +147,4 @@ tests/test_service_import_approval.py
 tests/test_service_import_notify.py
 tests/test_reseller_capacity_snapshot.py
 tests/test_reseller_capacity_view.py
+tests/test_panel_alert_notifications.py
