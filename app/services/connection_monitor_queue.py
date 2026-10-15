@@ -15,7 +15,7 @@ from app.services.connection_status_types import FRESHNESS, require_aware
 
 
 MANUAL_COOLDOWN = timedelta(seconds=60)
-QUEUE_UNAVAILABLE = "پایش آماده نیست یا بررسی قبلی هنوز در انتظار اجراست؛ کمی بعد دوباره تلاش کنید."
+QUEUE_UNAVAILABLE = "تست هنوز آماده نیست یا درخواست قبلی در صف است. تست خودکار را روشن کنید و کمی بعد دوباره تلاش کنید."
 
 
 async def queue_manual_check(session: AsyncSession, access: MonitorAccess, *, target_id: int, now: datetime) -> None:

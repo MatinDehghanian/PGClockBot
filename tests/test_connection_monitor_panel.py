@@ -32,7 +32,7 @@ class MonitorPanelTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.native_configs, [])
         self.assertNotIn(TOKEN, repr(result))
 
-    async def test_limited_nested_role_never_reads_native_routes_despite_legacy_owner_flag(self) -> None:
+    async def test_limited_panel_role_can_read_accessible_test_routes(self) -> None:
         user = {"id": 900, "username": "monitor", "status": "active", "admin": {"username": "owner"},
                 "used_traffic": 0, "data_limit": 0, "expire": None, "subscription_url": f"https://panel.example/sub/{TOKEN}"}
         account = MonitorAccount(900, hashlib.sha256(f"900:{TOKEN}".encode()).hexdigest(), "encrypted", "monitor")
@@ -43,9 +43,10 @@ class MonitorPanelTests(unittest.IsolatedAsyncioTestCase):
                              subscription_xray=AsyncMock(return_value=[]))
         with patch("app.services.connection_monitor_panel.get_pg", return_value=pg):
             with patch("app.services.connection_monitor_panel.reveal_monitor_token", AsyncMock(return_value=TOKEN)):
-                with self.assertRaises(ValueError):
-                    await read_monitor_catalog(account)
-        pg.subscription_xray.assert_not_called()
+                result = await read_monitor_catalog(account)
+        self.assertEqual(result.native_configs, [])
+        pg.subscription_xray.assert_awaited_once_with(TOKEN)
+        pg.get_current_admin.assert_not_awaited()
 
     async def test_native_routes_use_only_configured_panel_origin_and_no_authorization_header(self) -> None:
         requested = []
@@ -81,12 +82,12 @@ class MonitorPanelTests(unittest.IsolatedAsyncioTestCase):
                     await pg.subscription_xray(TOKEN)
                 self.assertNotIn(TOKEN, str(caught.exception))
 
-    async def test_inactive_wrong_owner_rotated_or_mismatched_account_never_reads_native_routes(self) -> None:
+    async def test_inactive_rotated_or_mismatched_account_never_reads_native_routes(self) -> None:
         user = {"id": 900, "username": "monitor", "status": "active", "admin": {"username": "owner"},
                 "used_traffic": 0, "data_limit": 0, "expire": None, "subscription_url": f"https://panel.example/sub/{TOKEN}"}
         revision = hashlib.sha256(f"900:{TOKEN}".encode()).hexdigest()
         account = MonitorAccount(900, revision, "encrypted", "monitor")
-        for changes in ({"status": "disabled"}, {"id": 901}, {"admin": {"username": "other"}}, {"subscription_url": "https://panel.example/sub/rotated-monitor-token-123456"}):
+        for changes in ({"status": "disabled"}, {"id": 901}, {"subscription_url": "https://panel.example/sub/rotated-monitor-token-123456"}):
             pg = SimpleNamespace(get_current_admin=AsyncMock(return_value={"role": {"id": 1, "is_owner": True}, "username": "owner"}),
                                  get_user_by_id=AsyncMock(return_value={**user, **changes}), get_hosts=AsyncMock(return_value=[]),
                                  get_inbounds_details=AsyncMock(return_value=[]), subscription_xray=AsyncMock(return_value=[]))

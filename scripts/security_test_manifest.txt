@@ -14,6 +14,7 @@ tests/test_connection_monitor_admin.py
 tests/test_connection_status_admin_bot.py
 tests/test_connection_status_public.py
 tests/test_connection_status_public_bot.py
+tests/test_connection_status_menu_migration.py
 tests/test_connection_status.py
 tests/test_connection_status_authz.py
 tests/test_connection_status_concurrency.py
@@ -167,3 +168,6 @@ tests/test_reseller_capacity_snapshot.py
 tests/test_reseller_capacity_view.py
 tests/test_random_payment_card.py
 tests/test_panel_alert_notifications.py
+tests/test_stuck_order_resolution.py
+
+tests/test_connection_status_web.py
