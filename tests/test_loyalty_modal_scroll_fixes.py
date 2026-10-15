@@ -107,13 +107,9 @@ class ModalScrollLockTests(unittest.TestCase):
         self.assertIn("display: flex;", scroll_chrome)
         self.assertIn("flex-direction: column;", scroll_chrome)
         self.assertIn("gap: var(--space-3);", scroll_chrome)
-        self.assertIn("padding: var(--space-3);", scroll_chrome)
+        self.assertIn("padding: calc(var(--space-3) + var(--modal-scrollbar-room, 8px));", scroll_chrome)
         # Both edges: RTL gutter mismatch + overlay thumbs on the physical right
         self.assertIn("scrollbar-gutter: stable both-edges;", scroll_chrome)
-        self.assertIn(
-            "padding-inline: calc(var(--space-3) + var(--modal-scrollbar-room, 8px));",
-            scroll_chrome,
-        )
         base_sel = ".ui-modal-scroll {\n"
         self.assertIn(base_sel, css)
         base_scroll = css.split(base_sel, 1)[1].split("}", 1)[0]
