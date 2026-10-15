@@ -552,6 +552,7 @@ def admin_groups_hub_keyboard(
         "adm_hub_product": "nv:adm:product",
         "adm_hub_marketing": "nv:adm:marketing",
         "adm_hub_system": "nv:adm:system",
+        "connection_status_admin": "cma:home:0",
     }
     buttons = [
         _ikb(

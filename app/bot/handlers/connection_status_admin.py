@@ -55,7 +55,7 @@ async def _prompt(callback: CallbackQuery, session: AsyncSession, access: Monito
     await session.commit()
     text = monitor_text(ui, key)
     if command.action == "account":
-        text += "\nاتصال یا تغییر حساب، پایش و انتشار قبلی را خاموش می‌کند."
+        text += "\nثبت یا تغییر Test user، تست‌ها را متوقف و هاست‌ها را از فهرست کاربران مخفی می‌کند."
     await ask_text(callback, state, prompt=text, cancel_code=CANCEL_CODE, fsm_state=fsm, edit=True)
 
 
@@ -65,7 +65,7 @@ async def _host_picker(message: Message, session: AsyncSession, access: MonitorA
     if page.next_host_id is not None:
         rows.append([button("صفحهٔ بعد", f"cma:hosts:{page.next_host_id}")])
     rows.append([button("بازگشت", "cma:home:0")])
-    text = "هاست فعال را انتخاب کنید؛ پایش آن ابتدا خصوصی است." if page.choices else "هاست فعال دیگری در دسترس نیست."
+    text = "هاست موردنظر را انتخاب کنید. فعلاً فقط شما نتیجه‌اش را می‌بینید." if page.choices else "هاست فعال دیگری در دسترس نیست."
     await safe_edit_text(message, text, reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
 
 
@@ -104,8 +104,8 @@ async def monitor_admin_callback(callback: CallbackQuery, session: AsyncSession,
         elif command.action == "pause" or (command.action == "run" and command.identifier == 0):
             await session.commit()
             data = f"cma:stop:{command.identifier}" if command.action == "pause" else "cma:halt:0"
-            markup = InlineKeyboardMarkup(inline_keyboard=[[button("تأیید توقف پایش و انتشار", data)], [button("انصراف", "cma:home:0")]])
-            await safe_edit_text(callback.message, "پایش و نمایش عمومی متوقف شود؟", reply_markup=markup)
+            markup = InlineKeyboardMarkup(inline_keyboard=[[button("تأیید توقف تست‌ها و نمایش عمومی", data)], [button("انصراف", "cma:home:0")]])
+            await safe_edit_text(callback.message, "تست‌ها متوقف شوند؟ هاست‌ها از فهرست کاربران هم مخفی می‌شوند.", reply_markup=markup)
         elif command.action == "item":
             await show_monitor_target(callback.message, session, access, target_id=command.identifier)
         else:

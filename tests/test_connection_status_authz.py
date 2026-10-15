@@ -34,7 +34,7 @@ class MonitorAuthorizationTests(MonitorDatabaseCase):
             replace(self.access, is_main_bot=False),
         ]
         panel = AsyncMock()
-        with patch("app.services.connection_monitor_settings.get_pg", return_value=panel):
+        with patch("app.services.connection_monitor_accounts.get_pg", return_value=panel):
             for access in forbidden:
                 async with self.Session() as session:
                     with self.subTest(access=access):

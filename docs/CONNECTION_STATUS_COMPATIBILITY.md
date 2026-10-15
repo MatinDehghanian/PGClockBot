@@ -11,7 +11,7 @@ release تطبیق داده شد:
 ```
 
 ورودی نگاشت، فهرست کامل هاست‌های همان principal، `inbounds/details` و خروجی native
-Xray حساب اختصاصی پایش است. API جزئیات inbound برای VLESS اطلاعات Reality/TLS را
+Xray حساب اختصاصی تست اتصال است. API جزئیات inbound برای VLESS اطلاعات Reality/TLS را
 ندارد؛ بنابراین بازسازی آن از فیلدهای حدسی انجام نمی‌شود. قرارداد پنل بر اساس
 [schema هاست](https://github.com/PasarGuard/panel/blob/b56ffe369f542152c52c69733205baeaf3f6e4cd/app/models/host.py)،
 [خلاصهٔ inbound](https://github.com/PasarGuard/panel/blob/b56ffe369f542152c52c69733205baeaf3f6e4cd/app/operation/system.py)

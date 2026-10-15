@@ -229,7 +229,7 @@ class MonitorAdminTests(MonitorDatabaseCase):
                 row.status, row.checked_at, row.reason = "unknown", self.now, "core_unavailable"
             await session.commit()
             view = await monitor_target_view(session, self.access, target_id=target_id, now=self.now)
-            self.assertIn("هستهٔ پایش در دسترس نیست", target_text(view))
+            self.assertIn("Xray آماده نیست", target_text(view))
             for row in rows:
                 row.reason = "sensitive-token"
             await session.commit()

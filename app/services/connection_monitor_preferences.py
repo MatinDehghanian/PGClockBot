@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, exists, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import ConnectionMonitorSnapshot, ConnectionMonitorState, ConnectionMonitorTarget
@@ -17,10 +17,10 @@ from app.services.connection_monitor_claims import eligible_monitor_account
 from app.services.connection_monitor_panel import MonitorAccount, read_monitor_catalog
 from app.services.connection_monitor_settings import ACCOUNT_UNAVAILABLE, LOCAL_PROBE_ID, monitor_settings
 from app.services.connection_monitor_sync import apply_target_plan, initial_snapshots
-from app.services.connection_monitor_types import MAX_MONITOR_ENDPOINTS
+from app.services.connection_monitor_types import MAX_MONITOR_ENDPOINTS, MonitorConfigError, MonitorIssue
 
 
-PREFERENCES_UNAVAILABLE = "انتخاب هاست تغییر کرده یا این هاست آمادهٔ پایش نیست؛ فهرست را تازه کنید."
+PREFERENCES_UNAVAILABLE = "انتخاب هاست تغییر کرده یا این هاست آمادهٔ تست نیست؛ فهرست را تازه کنید."
 
 
 class MonitorPreferences(BaseModel):
@@ -61,7 +61,8 @@ async def owner_monitor_account(session: AsyncSession, access: MonitorAccess) ->
     return account
 
 
-async def save_monitor_preferences(session: AsyncSession, access: MonitorAccess, preferences: MonitorPreferences) -> int:
+async def save_monitor_preferences(session: AsyncSession, access: MonitorAccess, preferences: MonitorPreferences, *,
+                                   expected_target_id: int | None = None) -> int:
     account = await owner_monitor_account(session, access)
     selected = tuple((await session.scalars(select(ConnectionMonitorTarget.pg_host_id).where(
         ConnectionMonitorTarget.reseller_id.is_(None), ConnectionMonitorTarget.test_enabled.is_(True),
@@ -75,12 +76,16 @@ async def save_monitor_preferences(session: AsyncSession, access: MonitorAccess,
     )
     plan = next(plan for plan in plans if plan.host_id == preferences.host_id)
     if not plan.is_ready:
-        raise ValueError(PREFERENCES_UNAVAILABLE)
+        raise MonitorConfigError(plan.issue or MonitorIssue.MISSING_ROUTE)
     guard = await session.execute(update(ConnectionMonitorState).where(
         ConnectionMonitorState.reseller_id.is_(None), ConnectionMonitorState.probe_id == LOCAL_PROBE_ID,
         ConnectionMonitorState.account_revision == account.revision, active_monitor_owner(access),
         eligible_monitor_account(),
         *([ConnectionMonitorState.enabled.is_(True)] if preferences.is_public else []),
+        *([exists(select(ConnectionMonitorTarget.id).where(
+            ConnectionMonitorTarget.id == expected_target_id, ConnectionMonitorTarget.reseller_id.is_(None),
+            ConnectionMonitorTarget.pg_host_id == preferences.host_id, ConnectionMonitorTarget.test_enabled.is_(True),
+        ))] if expected_target_id is not None else []),
     ).values(catalog_synced_at=catalog.checked_at))
     if guard.rowcount != 1:
         await session.rollback()

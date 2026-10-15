@@ -220,6 +220,7 @@ def _reply_admin_hub_entries(ui: dict | None = None) -> list[tuple[str, str]]:
         (REPLY_ACTION_ADM_HUB_PRODUCT, _t(ui, "btn_adm_hub_product")),
         (REPLY_ACTION_ADM_HUB_MARKETING, _t(ui, "btn_adm_hub_marketing")),
         (REPLY_ACTION_ADM_HUB_SYSTEM, _t(ui, "btn_adm_hub_system")),
+        ("connection_status_admin", _t(ui, "btn_connection_status_admin")),
     ]
 
 
@@ -270,7 +271,6 @@ def _reply_admin_marketing_entries(ui: dict | None = None) -> list[tuple[str, st
 
 def _reply_admin_system_entries(ui: dict | None = None) -> list[tuple[str, str]]:
     return [
-        ("connection_status_admin", _t(ui, "btn_connection_status_admin")),
         (REPLY_ACTION_ADMIN_SETTINGS, _t(ui, "btn_adm_settings")),
         (REPLY_ACTION_ADMIN_BACKUP, _t(ui, "btn_adm_backup")),
         (REPLY_ACTION_ADMIN_PREVIEW, _t(ui, "btn_adm_preview")),
