@@ -255,7 +255,8 @@ class MonitorWebTests(MonitorDatabaseCase):
             connection_monitor_xray_path="", connection_monitor_xray_sha256="")):
             response = await self.client.get("/connection-status")
         self.assertEqual(response.status_code, 200)
-        self.assertIn("CONNECTION_MONITOR_XRAY_PATH", response.text)
+        self.assertIn("Setup Xray", response.text)
+        self.assertIn("خودکار آماده می‌کند", response.text)
         self.assertIn('disabled>شروع تست‌ها', response.text)
 
     async def test_web_rechecks_owner_after_the_panel_request(self) -> None:

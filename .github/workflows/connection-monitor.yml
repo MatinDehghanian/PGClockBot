@@ -14,6 +14,9 @@ on:
       - 'app/jobs/**'
       - 'app/bot/**'
       - 'app/cli/connection_monitor.py'
+      - 'app/cli/connection_monitor_install.py'
+      - 'app/services/panel_update.py'
+      - 'pgclock.sh'
       - 'alembic/**'
       - 'tests/test_connection_*.py'
       - 'tests/test_xray_probe.py'
@@ -60,7 +63,16 @@ jobs:
         run: python -m pytest tests/test_connection_*.py tests/test_xray_probe.py tests/test_scheduler_background_jobs.py tests/test_admin_marketing_hub.py tests/test_nav_wave_d_admin_hubs.py -q -p no:cacheprovider
 
   linux-core:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            architecture: amd64
+          - runner: ubuntu-24.04-arm
+            architecture: arm64
+    name: linux-core (${{ matrix.architecture }})
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -69,15 +81,24 @@ jobs:
           python-version: '3.12'
           cache: pip
       - run: pip install -r requirements-dev.txt
-      - name: Verify official pinned Linux archive
+      - name: Install and reuse the official pinned core
         env:
-          CORE_ARCHIVE_SHA256: 23cd9af937744d97776ee35ecad4972cf4b2109d1e0fe6be9930467608f7c8ae
+          PGCLOCK_CORE_ROOT: ${{ runner.temp }}/monitor-install
         run: |
-          mkdir -p "$RUNNER_TEMP/monitor-core"
-          curl --fail --location --retry 2 --output "$RUNNER_TEMP/monitor-core/core.zip" https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-linux-64.zip
-          echo "$CORE_ARCHIVE_SHA256  $RUNNER_TEMP/monitor-core/core.zip" | sha256sum --check
-          unzip -q "$RUNNER_TEMP/monitor-core/core.zip" -d "$RUNNER_TEMP/monitor-core"
+          mkdir -p "$PGCLOCK_CORE_ROOT"
+          printf 'WEB_SECRET=synthetic-ci-only\n' > "$PGCLOCK_CORE_ROOT/.env"
+          python -m app.cli.connection_monitor_install --root "$PGCLOCK_CORE_ROOT"
+          python -m app.cli.connection_monitor_install --root "$PGCLOCK_CORE_ROOT"
       - name: Validate three synthetic routes, readiness and process cleanup
+        env:
+          PGCLOCK_CORE_ROOT: ${{ runner.temp }}/monitor-install
         run: |
-          core_digest="$(sha256sum "$RUNNER_TEMP/monitor-core/xray" | cut -d ' ' -f 1)"
-          python -m app.cli.connection_monitor --binary "$RUNNER_TEMP/monitor-core/xray" --sha256 "$core_digest"
+          python - <<'PY'
+          import os
+          import subprocess
+          import sys
+          from pathlib import Path
+          from app.services.connection_monitor_install import HASH_KEY, PATH_KEY, _configured_core
+          values = _configured_core((Path(os.environ['PGCLOCK_CORE_ROOT']) / '.env').read_text())
+          subprocess.run([sys.executable, '-m', 'app.cli.connection_monitor', '--binary', values[PATH_KEY], '--sha256', values[HASH_KEY]], check=True)
+          PY
