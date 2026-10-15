@@ -7,6 +7,7 @@ from typing import Optional
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    CheckConstraint,
     DateTime,
     Float,
     ForeignKey,
@@ -1533,3 +1534,88 @@ class CatalogDiscount(Base):
     request_key: Mapped[str] = mapped_column(String(32))
     campaign_id: Mapped[Optional[int]] = mapped_column(ForeignKey("targeted_campaigns.id", ondelete="SET NULL"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ConnectionMonitorState(Base):
+    """Scoped account configuration and the shared local probe lease."""
+
+    __tablename__ = "connection_monitor_states"
+    __table_args__ = (
+        UniqueConstraint("reseller_id", "probe_id", name="uq_monitor_state_shop_probe"),
+        Index("uq_monitor_state_main_probe", "probe_id", unique=True,
+              sqlite_where=text("reseller_id IS NULL"), postgresql_where=text("reseller_id IS NULL")),
+        Index("ix_monitor_state_lease", "probe_id", "cycle_lease_until"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    reseller_id: Mapped[int | None] = mapped_column(ForeignKey("bot_users.id"), nullable=True)
+    probe_id: Mapped[str] = mapped_column(String(16), server_default="local")
+    enabled: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    pg_user_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    subscription_token_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
+    account_revision: Mapped[str] = mapped_column(String(64), server_default="")
+    cycle_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    cycle_lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    catalog_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ConnectionMonitorTarget(Base):
+    """A selected panel host with private-by-default publication settings."""
+
+    __tablename__ = "connection_monitor_targets"
+    __table_args__ = (
+        UniqueConstraint("reseller_id", "pg_host_id", name="uq_monitor_target_shop_host"),
+        Index("uq_monitor_target_main_host", "pg_host_id", unique=True,
+              sqlite_where=text("reseller_id IS NULL"), postgresql_where=text("reseller_id IS NULL")),
+        Index("ix_monitor_target_due", "reseller_id", "test_enabled", "next_check_at", "id"),
+        Index("ix_monitor_target_public", "reseller_id", "test_enabled", "is_public", "display_order", "id"),
+        Index("ix_monitor_target_lease", "reseller_id", "claim_until"),
+        CheckConstraint("display_order >= 0 AND display_order <= 2147483647", name="ck_monitor_target_order"),
+        CheckConstraint("endpoint_count >= 0 AND endpoint_count <= 12", name="ck_monitor_target_endpoints"),
+        CheckConstraint("NOT is_public OR (test_enabled AND length(trim(public_name)) > 0)", name="ck_monitor_target_public"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    reseller_id: Mapped[int | None] = mapped_column(ForeignKey("bot_users.id"), nullable=True)
+    pg_host_id: Mapped[int] = mapped_column(Integer)
+    test_enabled: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    is_public: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    public_name: Mapped[str] = mapped_column(String(64), server_default="")
+    display_order: Mapped[int] = mapped_column(Integer, server_default="0")
+    generation: Mapped[str] = mapped_column(String(64), server_default="")
+    endpoint_count: Mapped[int] = mapped_column(Integer, server_default="0")
+    next_check_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    claim_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    claim_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    manual_available_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    manual_pending: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+
+
+class ConnectionMonitorSnapshot(Base):
+    """Bounded latest endpoint evidence; raw configs and credentials never belong here."""
+
+    __tablename__ = "connection_monitor_snapshots"
+    __table_args__ = (
+        UniqueConstraint("target_id", "endpoint_key", "probe_id", name="uq_monitor_snapshot_endpoint"),
+        Index("ix_monitor_snapshot_scope_target", "reseller_id", "target_id", "probe_id"),
+        CheckConstraint("delay_ms IS NULL OR delay_ms >= 0", name="ck_monitor_snapshot_delay"),
+        CheckConstraint("success_streak >= 0 AND failure_streak >= 0", name="ck_monitor_snapshot_streaks"),
+        CheckConstraint("status IN ('healthy', 'degraded', 'down', 'unknown', 'not_ready', 'paused')", name="ck_monitor_snapshot_status"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    reseller_id: Mapped[int | None] = mapped_column(ForeignKey("bot_users.id"), nullable=True)
+    target_id: Mapped[int] = mapped_column(ForeignKey("connection_monitor_targets.id", ondelete="CASCADE"))
+    endpoint_key: Mapped[str] = mapped_column(String(64))
+    probe_id: Mapped[str] = mapped_column(String(16), server_default="local")
+    generation: Mapped[str] = mapped_column(String(64), server_default="")
+    status: Mapped[str] = mapped_column(String(16), server_default="unknown")
+    reason: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    destination: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    delay_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    success_streak: Mapped[int] = mapped_column(Integer, server_default="0")
+    failure_streak: Mapped[int] = mapped_column(Integer, server_default="0")
+    has_observation: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    recovery_required: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    samples_json: Mapped[str] = mapped_column(Text, server_default="[]")

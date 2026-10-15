@@ -1,7 +1,7 @@
 # Roadmap اجرای وضعیت اتصال در PGClockBot
 
 تاریخ: ۲۰۲۶/۱۰/۱۵. مبنا: `upstream/dev` و [سند پژوهش](CONNECTION_STATUS_RESEARCH.md).
-وضعیت: **مرحله‌های صفر و یک انجام شدند؛ مراحل دو تا هشت باز هستند و runtime پایش هنوز فعال نیست.**
+وضعیت: **مرحله‌های صفر تا دو انجام شدند؛ مراحل سه تا هشت باز هستند و runtime پایش هنوز فعال نیست.**
 [قرارداد رفتار](CONNECTION_STATUS_CONTRACT.md) و [baseline ثبت‌شده](CONNECTION_STATUS_BASELINE.md)
 خروجی مرحلهٔ صفر هستند.
 
@@ -129,19 +129,19 @@ lease سراسری و snapshot جدا برای هر endpoint. نام نهایی 
 
 | مدل | مسئولیت و قیود اصلی |
 | --- | --- |
-| `ConnectionMonitorState` | scope، فعال بودن قابلیت، مرجع حساب پایش و نسخهٔ آن، lease دور اجرا و cooldown؛ برای runner اولیه ردیف شناخته‌شدهٔ `local` |
+| `ConnectionMonitorState` | scope، فعال بودن قابلیت، مرجع حساب پایش و نسخهٔ آن، lease دور اجرا؛ cooldown دستی در target است. برای runner اولیه ردیف شناخته‌شدهٔ `local` |
 | `ConnectionMonitorTarget` | scope، شناسهٔ host پنل، flags، نام/ترتیب، نسخهٔ اندازه‌گیری، due و claim هدف؛ unique هر host در همان scope |
 | `ConnectionMonitorSnapshot` | target، `endpoint_key`، `probe_id`، نسل کانفیگ، وضعیت و دلیل، زمان‌ها، مقصد، delay و حداکثر پنج نمونه؛ unique این سه شناسه |
 
-- [ ] shop از principal/context معتبر گرفته شود؛ همهٔ queryها و mutationها scope داشته باشند.
-- [ ] یکتایی shop اصلی با `reseller_id IS NULL` با partial unique جدا روی SQLite و PostgreSQL
+- [x] shop از principal/context معتبر گرفته شود؛ همهٔ queryها و mutationها scope داشته باشند.
+- [x] یکتایی shop اصلی با `reseller_id IS NULL` با partial unique جدا روی SQLite و PostgreSQL
   رعایت شود؛ unique مرکب معمولی با NULL کافی نیست.
-- [ ] indexهای فهرست scope، due، lease و lookup snapshot در model و migration باشند.
-- [ ] migration از head زمان اجرای PR ساخته شود؛ شمارهٔ فعلی رزرو نشود. هر create/index
+- [x] indexهای فهرست scope، due، lease و lookup snapshot در model و migration باشند.
+- [x] migration از head زمان اجرای PR ساخته شود؛ شمارهٔ فعلی رزرو نشود. هر create/index
   قابل اجرای مجدد باشد، ستون NOT NULL default داشته باشد و downgrade داده‌های قبلی پروژه را حفظ کند.
-- [ ] `connection_status` و `connection_status_manage` به `FEATURE_PERMS` اضافه شوند؛
+- [x] `connection_status` و `connection_status_manage` به `FEATURE_PERMS` اضافه شوند؛
   نماینده‌ها پیش‌فرض مجوز نگیرند و Owner صریح جدا از `can_shop` بررسی شود.
-- [ ] داده‌های محرمانه وارد snapshot نشوند؛ شکست رمزنگاری/بازگشایی حساب را `not_ready` کند.
+- [x] داده‌های محرمانه وارد snapshot نشوند؛ شکست رمزنگاری/بازگشایی حساب را `not_ready` کند.
 
 هر worker lease سراسری `local` را قبل از شروع core بگیرد تا سقف concurrency در چند
 process هم حفظ شود. claim هدف و token نتیجه جدا باقی بمانند تا اجرای دستی، توقف و
@@ -392,4 +392,6 @@ rollback عملیاتی با خاموش کردن worker و انتشار و clean
 مرحلهٔ صفر با قرارداد و baseline ثبت‌شده تکمیل شد. مرحلهٔ یک نیز انجام شد:
 نگاشت و fixtureهای دو هاست مستقل با ۷۰ تست و validation رسمی core تکمیل شدند؛
 [ماتریس سازگاری](CONNECTION_STATUS_COMPATIBILITY.md) محدودیت‌های دقیق را ثبت می‌کند.
-واحد کار بعد مرحلهٔ ۲، مدل داده و مجوز است؛ فرم و دکمه‌ها پس از runner ساخته می‌شوند.
+مرحلهٔ ۲ هم با migration `0052_connection_monitor`، مجوز Owner، مرجع رمز‌شدهٔ حساب و
+leaseهای runtime/target روی SQLite و PostgreSQL تکمیل شد. واحد کار بعد مرحلهٔ ۳،
+مدیریت process هسته است؛ فرم و دکمه‌ها پس از runner ساخته می‌شوند.
