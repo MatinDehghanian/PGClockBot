@@ -67,4 +67,16 @@ html[data-theme="light"] .connection-command { background: rgba(0, 0, 0, 0.04); 
   .connection-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .connection-stats > .bot-conn:last-child { grid-column: 1 / -1; }
   .connection-stats > .bot-conn { padding: var(--space-1) var(--space-2); }
+
+  /* Host actions: save alone on the first row, then "test now" and "stop" side by side, all full width. */
+  .card > .connection-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .card > .connection-actions > .btn:first-child { grid-column: 1 / -1; }
+  .card > .actions.connection-actions > form:last-child:nth-child(odd) { grid-column: auto; }
+  .connection-actions form > .btn {
+    width: 100%;
+    justify-content: center;
+  }
 }
