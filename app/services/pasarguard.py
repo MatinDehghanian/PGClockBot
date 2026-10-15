@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import json
 import secrets
 import time
 from typing import Any, Optional
@@ -870,6 +871,26 @@ class PasarGuardClient:
             "GET", self._subscription_endpoint(token, "usage", subscription_url),
             auth=False, use_cache=False, resolve_api_base=False,
         )
+
+    async def subscription_xray(self, token: str) -> list[dict[str, Any]]:
+        """Read bounded native routes without caching credentials or raw error bodies."""
+        path = self._subscription_endpoint(token, "xray", None)
+        await self._ensure_safe_target()
+        payload = bytearray()
+        try:
+            async with self._client.stream("GET", path, headers={"Accept": "application/json"}) as response:
+                if response.status_code != 200:
+                    raise PasarGuardError("Monitoring subscription unavailable", response.status_code)
+                async for chunk in response.aiter_bytes(chunk_size=16384):
+                    payload.extend(chunk)
+                    if len(payload) > 2 * 1024 * 1024:
+                        raise PasarGuardError("Monitoring subscription exceeds capacity")
+            result = json.loads(payload)
+        except (httpx.HTTPError, ValueError):
+            raise PasarGuardError("Monitoring subscription unavailable") from None
+        if not isinstance(result, list) or len(result) > 1000 or any(not isinstance(item, dict) for item in result):
+            raise PasarGuardError("Monitoring subscription format unavailable")
+        return result
 
     async def subscription_wireguard_bytes(
         self, token: str, *, subscription_url: str | None = None

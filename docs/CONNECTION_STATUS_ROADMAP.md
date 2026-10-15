@@ -1,7 +1,7 @@
 # Roadmap اجرای وضعیت اتصال در PGClockBot
 
 تاریخ: ۲۰۲۶/۱۰/۱۵. مبنا: `upstream/dev` و [سند پژوهش](CONNECTION_STATUS_RESEARCH.md).
-وضعیت: **مرحله‌های صفر تا چهار انجام شدند؛ مراحل پنج تا هشت باز هستند و runtime پایش هنوز فعال نیست.**
+وضعیت: **مرحله‌های صفر تا پنج انجام شدند؛ مراحل شش تا هشت باز هستند و runtime پایش هنوز فعال نیست.**
 [قرارداد رفتار](CONNECTION_STATUS_CONTRACT.md) و [baseline ثبت‌شده](CONNECTION_STATUS_BASELINE.md)
 خروجی مرحلهٔ صفر هستند.
 
@@ -198,18 +198,18 @@ process هم حفظ شود. claim هدف و token نتیجه جدا باقی ب�
 
 ### مرحلهٔ ۵ — worker و scheduler
 
-- [ ] job با شناسهٔ ثابت در `start_background_scheduler` ثبت شود؛ نبود Telegram پایش را متوقف نکند.
-- [ ] `max_instances=1` و `coalesce=True` تنظیم شوند؛ قفل واقعی چندprocess در DB باشد.
+- [x] job با شناسهٔ ثابت در `start_background_scheduler` ثبت شود؛ نبود Telegram پایش را متوقف نکند.
+- [x] `max_instances=1` و `coalesce=True` تنظیم شوند؛ قفل واقعی چندprocess در DB باشد.
   [مستند APScheduler 3.x](https://apscheduler.readthedocs.io/en/3.x/userguide.html)
-- [ ] claim قبل از network commit شود؛ session هنگام اجرای core یا HTTP باز نماند.
-- [ ] catalog و حساب در batch خوانده شوند؛ فهرست محلی LIMIT و keyset داشته باشد.
-- [ ] در اجرای موازی هر ذخیره‌سازی session مستقل داشته باشد؛ semaphore با تعداد
+- [x] claim قبل از network commit شود؛ session هنگام اجرای core یا HTTP باز نماند.
+- [x] catalog و حساب در batch خوانده شوند؛ فهرست محلی LIMIT و keyset داشته باشد.
+- [x] در اجرای موازی هر ذخیره‌سازی session مستقل داشته باشد؛ semaphore با تعداد
   endpoint فعال کار کند، نه فقط تعداد hostها.
-- [ ] نتیجه فقط با token معتبر، نسل فعلی، target فعال و lease منقضی‌نشده نوشته شود.
-- [ ] حذف/غیرفعال شدن host یا تغییر تنظیمات مؤثر، نسل را عوض و نتایج قبلی را نامعتبر کند.
-- [ ] خطای یک هدف، دور را متوقف نکند. اتمام بودجه، توقف یا crash runner به‌عنوان قطعی
+- [x] نتیجه فقط با token معتبر، نسل فعلی، target فعال و lease منقضی‌نشده نوشته شود.
+- [x] حذف/غیرفعال شدن host یا تغییر تنظیمات مؤثر، نسل را عوض و نتایج قبلی را نامعتبر کند.
+- [x] خطای یک هدف، دور را متوقف نکند. اتمام بودجه، توقف یا crash runner به‌عنوان قطعی
   host ثبت نشود؛ freshness در زمان خواندن هم محاسبه شود، حتی اگر scheduler دیگر اجرا نشود.
-- [ ] تست دستی همان مسیر صف و claim را طی کند؛ tap تکراری فقط یک درخواست pending بسازد.
+- [x] تست دستی همان مسیر صف و claim را طی کند؛ tap تکراری فقط یک درخواست pending بسازد.
 
 پیش‌فرض اولیه: interval برابر ۶۰ ثانیه، deadline هر درخواست پنج ثانیه، concurrency چهار،
 حداکثر ۱۲ endpoint مؤثر فعال، بودجهٔ کل دور ۵۰ ثانیه و stale پس از ۱۸۰ ثانیه.
@@ -395,5 +395,7 @@ rollback عملیاتی با خاموش کردن worker و انتشار و clean
 مرحلهٔ ۲ هم با migration `0054_connection_monitor`، مجوز Owner، مرجع رمز‌شدهٔ حساب و
 leaseهای runtime/target روی SQLite و PostgreSQL تکمیل شد. مرحلهٔ ۳ با ۱۲ تست lifecycle، پنج زیرتست و اجرای سه مسیر مصنوعی روی core رسمی macOS
 تکمیل شد. مرحلهٔ ۴ هم با سنجش HTTPS محدود به پروکسی، کنترل مقصد، سیاست خالص وضعیت و ۲۳ تست
-به‌همراه ۲۵ زیرتست تکمیل شد. مرحلهٔ بعد worker و ذخیرهٔ امن نتیجه است؛ آزمایش Linux و
-اتصال زنده همچنان gate استقرار هستند.
+به‌همراه ۲۵ زیرتست تکمیل شد. مرحلهٔ ۵ با worker مستقل از تلگرام، claim دسته‌ای، کنترل نسل/lease در ذخیرهٔ snapshot
+و صف دستی با cooldown تکمیل شد. مجموعهٔ مرتبط ۱۶۰ تست و ۷۴ زیرتست روی SQLite و
+۲۹ تست و ۹ زیرتست مرتبط روی PostgreSQL پاس شد. مرحلهٔ بعد رابط ادمین است؛
+آزمایش Linux و اتصال زنده همچنان gate استقرار هستند.

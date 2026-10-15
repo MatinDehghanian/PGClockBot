@@ -11,6 +11,7 @@ from sqlalchemy import or_, select
 from app.db.models import BotUser, ResellerProfile, UserService
 from app.db.session import SessionLocal
 from app.jobs.cancellation_notifications import run_cancellation_notifications
+from app.jobs.connection_status import run_connection_status
 from app.services.formatting import format_bytes_ratio, parse_expire
 from app.services.pasarguard import get_pg
 
@@ -795,6 +796,7 @@ def start_background_scheduler() -> None:
         ("pg_admin_subscription", run_pg_admin_subscription_tick, {"minutes": 5}, 300),
         ("pending_order_cleanup", cleanup_stale_pending_orders, {"hours": 1}, 3600),
         ("scheduled_backup", run_scheduled_backup, {"minutes": 30}, 3600),
+        ("connection_status", run_connection_status, {"seconds": 60}, 60),
     )
     for job_id, func, interval, grace in jobs:
         if scheduler.get_job(job_id) is None:

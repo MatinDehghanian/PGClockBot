@@ -6,6 +6,10 @@ tests/test_connection_monitor_config.py
 tests/test_xray_probe.py
 tests/test_connection_probe.py
 tests/test_connection_status_policy.py
+tests/test_connection_monitor_panel.py
+tests/test_connection_monitor_snapshots.py
+tests/test_connection_monitor_worker.py
+tests/test_connection_monitor_queue.py
 tests/test_connection_status.py
 tests/test_connection_status_authz.py
 tests/test_connection_status_concurrency.py
