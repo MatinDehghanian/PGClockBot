@@ -35,7 +35,7 @@
     <p>وضعیت: <span class="badge {{ 'ok' if page.settings.enabled else 'neutral' }}">{{ 'روشن' if page.settings.enabled else 'خاموش' }}</span></p>
     <p class="muted">بعد از ثبت Test user و اضافه کردن هاست، تست‌ها را روشن کنید. بررسی معمولاً هر یک دقیقه انجام می‌شود. «تازه‌سازی» فقط نتیجهٔ ذخیره‌شده را نمایش می‌دهد.</p>
     {% if not binary_configured %}
-    <div class="flash warn" role="status">تنظیمات Xray کامل نیست. مدیر سرور باید <bdi dir="ltr">CONNECTION_MONITOR_XRAY_PATH</bdi> و <bdi dir="ltr">CONNECTION_MONITOR_XRAY_SHA256</bdi> را تنظیم کند.</div>
+    <div class="flash warn" role="status">Xray برای تست اتصال هنوز آماده نیست. نصب و آپدیت با اسکریپت، آن را خودکار آماده می‌کند. برای نصب قبلی یا تلاش دوباره، گزینهٔ <bdi dir="ltr">Setup Xray</bdi> را در منوی اسکریپت انتخاب کنید.</div>
     {% else %}<p class="muted">مسیر و checksum برای Xray تنظیم شده‌اند؛ معتبر بودن فایل هنگام شروع بررسی می‌شود.</p>{% endif %}
     <form method="post" action="/connection-status/runtime"{% if page.settings.enabled %} data-confirm="تست‌ها متوقف و همهٔ هاست‌ها از فهرست کاربران مخفی می‌شوند. ادامه می‌دهید؟" data-confirm-title="توقف تست‌ها" data-confirm-danger="1" data-confirm-label="توقف"{% endif %}>
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
