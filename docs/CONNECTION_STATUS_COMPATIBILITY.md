@@ -10,6 +10,11 @@ release تطبیق داده شد:
 2e93a67e8aa1936ecefb307e120830fcbd4c643ab9b1c46a2d0838d5f8409eaf
 ```
 
+نصب‌کنندهٔ ربات برای Linux/amd64 و Linux/arm64 نیز از همان release رسمی استفاده می‌کند؛
+SHA-256 آرشیو و فایل اجرایی جداگانه در `connection_monitor_distribution.py` ثابت شده‌اند.
+CI هر دو معماری را با نصب‌کننده آماده و startup/cleanup مصنوعی را بررسی می‌کند؛ live relay
+همچنان خارج از این تأیید است. فایل‌های license و README همراه binary حفظ می‌شوند.
+
 ورودی نگاشت، فهرست کامل هاست‌های همان principal، `inbounds/details` و خروجی native
 Xray حساب اختصاصی تست اتصال است. API جزئیات inbound برای VLESS اطلاعات Reality/TLS را
 ندارد؛ بنابراین بازسازی آن از فیلدهای حدسی انجام نمی‌شود. قرارداد پنل بر اساس

@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from app.config import DATA_DIR, ROOT_DIR
+from app.services.connection_monitor_install_update import setup_updated_monitor_core
 from app.services.updates import check_github_update, clear_update_cache, is_newer, local_version
 
 logger = logging.getLogger(__name__)
@@ -574,6 +575,7 @@ def _do_update(target_version: str | None) -> None:
         if code != 0:
             raise RuntimeError(f"pip install ناموفق: {out[:400]}")
         _append_log("وابستگی‌ها نصب شد")
+        setup_updated_monitor_core(root, runner=_run, log=_append_log)
 
         ver_file_ver = _read_local_version_file(root)
         new_ver = ver_file_ver or target_version

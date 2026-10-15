@@ -15,6 +15,7 @@ tests/test_connection_status_admin_bot.py
 tests/test_connection_status_public.py
 tests/test_connection_status_public_bot.py
 tests/test_connection_status_menu_migration.py
+tests/test_connection_monitor_install.py
 tests/test_connection_status.py
 tests/test_connection_status_authz.py
 tests/test_connection_status_concurrency.py
