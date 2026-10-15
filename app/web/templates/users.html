@@ -156,7 +156,6 @@
           <div class="cell-name">
             <span class="cell-name-primary">
               {% set tag = color_tag_meta(u.color_tag) if color_tag_meta is defined else none %}
-              {% if tag %}<span class="color-tag-dot" style="--tag-color: {{ tag.hex }}" title="{{ tag.title_fa }}" aria-label="تگ {{ tag.title_fa }}"></span>{% endif %}
               <span class="cell-name-text">{{ u.full_name or u.username or "—" }}</span>
               {% if row.has_alert %}<span class="alert-dot" title="اعلان سرویس" aria-label="اعلان سرویس"></span>{% endif %}
             </span>
