@@ -38,28 +38,45 @@ class PgUsersModuleTests(unittest.TestCase):
         self.assertIn("admin_pg_users.router", src)
 
     def test_callbacks_cover_panel_actions(self):
-        src = Path("app/bot/handlers/admin_pg_users.py").read_text(encoding="utf-8")
-        for needle in (
-            "adm:pg:users",
-            "adm:pg:users:p:",
-            "adm:pg:search",
-            "adm:pg:create",
-            "adm:pg:create:tpl",
-            "adm:pg:create:custom",
-            "adm:pg:u:",
-            ":link",
-            ":edit",
-            ":del",
-            "adm:pg:reset:",
-            "adm:pg:dis:",
-            "adm:pg:en:",
-            "adm:pg:rev:",
-            "build_user_create_payload",
-            "build_user_modify_payload",
-            "user_subscription_url",
-            "delete_user_by_id",
-        ):
-            self.assertIn(needle, src)
+        from aiogram.types import CallbackQuery, User
+
+        from app.bot.handlers.admin_pg_users import router
+
+        def handlers_for(data: str) -> list[str]:
+            cb = CallbackQuery(
+                id="1",
+                from_user=User(id=1, is_bot=False, first_name="a"),
+                chat_instance="c",
+                data=data,
+            )
+            return [
+                h.callback.__name__
+                for h in router.callback_query.handlers
+                if any(
+                    getattr(f, "magic", None) is not None and f.magic.resolve(cb)
+                    for f in h.filters
+                )
+            ]
+
+        expected = {
+            "adm:pg:users": "pg_users_list",
+            "adm:pg:users:p:2": "pg_users_page",
+            "adm:pg:search": "pg_search_start",
+            "adm:pg:create": "pg_create_menu",
+            "adm:pg:create:tpl": "pg_create_tpl_pick",
+            "adm:pg:create:custom": "pg_create_custom_groups",
+            "adm:pg:u:5": "pg_user_detail",
+            "adm:pg:u:5:link": "pg_user_link",
+            "adm:pg:u:5:edit": "pg_user_edit_menu",
+            "adm:pg:u:5:delask": "pg_user_del_ask",
+            "adm:pg:u:5:del": "pg_user_del",
+            "adm:pg:reset:5": "pg_reset",
+            "adm:pg:dis:5": "pg_dis",
+            "adm:pg:en:5": "pg_en",
+            "adm:pg:rev:5": "pg_rev",
+        }
+        for data, handler in expected.items():
+            self.assertEqual(handlers_for(data), [handler], data)
 
     def test_old_search_removed_from_admin(self):
         src = Path("app/bot/handlers/admin.py").read_text(encoding="utf-8")

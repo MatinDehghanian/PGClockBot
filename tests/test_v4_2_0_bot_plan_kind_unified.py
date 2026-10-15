@@ -27,11 +27,17 @@ class ShopKindFlowTests(unittest.TestCase):
         self.assertIn("shop:kind:wholesale", KEYBOARDS_SRC)
 
     def test_shop_reply_keyboard_chrome_only(self):
-        start = REPLY_KB_SRC.find("def shop_reply_keyboard")
-        self.assertGreater(start, 0)
-        block = REPLY_KB_SRC[start : start + 320]
-        self.assertIn("_submenu_footer", block)
-        self.assertNotIn("REPLY_ACTION_SHOP_CUSTOM", block)
+        import app.bot.keyboards as kb
+
+        ui = {"btn_back": "⬅️ بازگشت", "btn_menu_home": "🏠 منوی اصلی"}
+        markup = kb.shop_reply_keyboard(ui)
+        actions = kb.reply_action_map("user", ui=ui, include_submenus=True)
+        resolved = [
+            actions.get(b.text) for row in markup.keyboard for b in row
+        ]
+        # Plan kinds are inline under the message; the reply KB is back/home only.
+        self.assertEqual(resolved, [kb.REPLY_ACTION_BACK, kb.REPLY_ACTION_HOME])
+        self.assertNotIn(kb.REPLY_ACTION_SHOP_CUSTOM, resolved)
 
     def test_plans_keyboard_inline_back(self):
         self.assertIn("back_callback", KEYBOARDS_SRC)

@@ -24,9 +24,13 @@ class TermsSettingsTests(unittest.TestCase):
     def test_gates_and_tabs(self):
         self.assertEqual(set(GATES), {"entry", "buy_user", "buy_reseller"})
         tab_ids = {t[0] for t in SETTINGS_TABS}
-        self.assertIn("terms", tab_ids)
-        self.assertIn("terms", {t[0] for t in RESELLER_SETTINGS_TABS})
-        self.assertEqual(TAB_SETTING_GROUPS["terms"], ["قوانین ورود به ربات", "قوانین خرید پلن کاربر", "قوانین خرید پلن نماینده"])
+        terms_groups = ["قوانین ورود به ربات", "قوانین خرید پلن کاربر", "قوانین خرید پلن نماینده"]
+        # Rules are edited inside the «limits» tab beside the other entry gates.
+        self.assertIn("limits", tab_ids)
+        self.assertIn("limits", {t[0] for t in RESELLER_SETTINGS_TABS})
+        self.assertNotIn("terms", tab_ids)
+        self.assertEqual(TAB_SETTING_GROUPS["terms"], terms_groups)
+        self.assertTrue(set(terms_groups) <= set(TAB_SETTING_GROUPS["limits"]))
 
     def test_default_keys(self):
         for gate, meta in GATE_META.items():

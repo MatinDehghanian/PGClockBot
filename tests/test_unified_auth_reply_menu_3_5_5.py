@@ -10,6 +10,7 @@ from app.bot.keyboards import (
     REPLY_ACTION_HOME,
     REPLY_ACTION_SHOP,
     _menu_layout,
+    admin_reply_keyboard,
     main_reply_keyboard,
     reply_action_map,
 )
@@ -33,11 +34,11 @@ class ReplyKeyboardMenuTests(unittest.TestCase):
         }
         kb = main_reply_keyboard("user", has_services=False, ui=ui)
         rows = kb.keyboard
-        # 4 items → 2 compact rows + home footer
+        # 4 items → 2 compact rows + restart footer (home label is submenu-only)
         self.assertEqual(len(rows[0]), 2)
         self.assertEqual(len(rows[1]), 2)
         self.assertEqual(len(rows[-1]), 1)
-        self.assertEqual(rows[-1][0].text, "🏠 منوی اصلی")
+        self.assertEqual(rows[-1][0].text, "🔄 شروع مجدد")
         self.assertFalse(kb.is_persistent)
 
     def test_guide_faq_stripped_from_reply_keyboard(self):
@@ -89,8 +90,12 @@ class ReplyKeyboardMenuTests(unittest.TestCase):
         mapping = reply_action_map("admin", ui=ui)
         self.assertEqual(mapping["🛒 سفارش‌ها"], REPLY_ACTION_ADMIN_ORDERS)
         self.assertEqual(mapping["🗓 عملیات روزانه"], REPLY_ACTION_ADM_HUB_OPS)
-        kb = main_reply_keyboard("admin", ui=ui)
-        flat = [b.text for row in kb.keyboard for b in row]
+        main_flat = [
+            b.text for row in main_reply_keyboard("admin", ui=ui).keyboard for b in row
+        ]
+        self.assertIn("🛠 پنل ادمین", main_flat)
+        self.assertNotIn("🗓 عملیات روزانه", main_flat)
+        flat = [b.text for row in admin_reply_keyboard(ui).keyboard for b in row]
         self.assertIn("🗓 عملیات روزانه", flat)
         self.assertIn("👤 افراد", flat)
         self.assertNotIn("🛒 سفارش‌ها", flat)
@@ -157,10 +162,15 @@ class ApplyResellerPasswordTests(unittest.IsolatedAsyncioTestCase):
         profile.web_username = "shop_abc"
         profile.web_password_hash = None
         profile.pg_admin_password_enc = None
+        profile.pg_api_key_enc = None
 
         session = AsyncMock()
         mock_pg = AsyncMock()
         with (
+            patch(
+                "app.services.org_principals.get_principal_by_reseller_profile",
+                new=AsyncMock(return_value=None),
+            ),
             patch("app.services.pasarguard.get_pg", return_value=mock_pg),
             patch("app.services.pasarguard.reset_pg"),
             patch("app.services.secret_box.encrypt_secret", return_value="enc"),

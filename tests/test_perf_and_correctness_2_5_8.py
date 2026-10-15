@@ -33,6 +33,7 @@ class ShopOrderAttributionTests(unittest.IsolatedAsyncioTestCase):
             patch("app.services.orders.get_catalog_plan", new=AsyncMock(return_value=plan)),
             patch("app.services.orders.apply_discount", new=AsyncMock(return_value=(0, None))),
             patch("app.services.orders._shop_reseller_id", return_value=42),
+            patch("app.services.orders.require_purchase_contact", new=AsyncMock()),
             patch(
                 "app.services.orders.Order",
                 side_effect=lambda **kw: SimpleNamespace(**kw),

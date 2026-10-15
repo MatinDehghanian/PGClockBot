@@ -157,7 +157,8 @@ class AdminExtendCachesQuotaTests(unittest.IsolatedAsyncioTestCase):
         session.commit = AsyncMock()
 
         with patch(
-            "app.services.bot_user_admin._pg_client_for_service", return_value=pg
+            "app.services.bot_user_admin._pg_client_for_bot_service",
+            AsyncMock(return_value=pg),
         ):
             snap = await admin_extend_service(
                 session, svc, extra_days=3, extra_gb=2.0
@@ -204,7 +205,8 @@ class AdminExtendCachesQuotaTests(unittest.IsolatedAsyncioTestCase):
         session = AsyncMock()
         session.commit = AsyncMock()
         with patch(
-            "app.services.bot_user_admin._pg_client_for_service", return_value=pg
+            "app.services.bot_user_admin._pg_client_for_bot_service",
+            AsyncMock(return_value=pg),
         ):
             await admin_set_service_quota(
                 session, svc, expire_ts=exp, data_limit_bytes=lim

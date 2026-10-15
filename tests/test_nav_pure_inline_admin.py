@@ -70,7 +70,7 @@ class ResellerThinReplyTests(unittest.TestCase):
         labels = [
             b.text
             for row in reseller_hub_main_keyboard(
-                None, {"nav_mode": "inline"}
+                None, {"nav_mode": "inline", "show_restart_button": "0"}
             ).keyboard
             for b in row
         ]

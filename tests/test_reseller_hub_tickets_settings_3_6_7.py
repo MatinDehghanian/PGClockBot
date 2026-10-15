@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import unittest
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -28,21 +29,22 @@ class ResellerHubStartTests(unittest.TestCase):
         self.assertIn("پیش‌نمایش منوی کاربر", chunk)
 
     def test_hub_keyboard_has_preview(self):
-        src = (ROOT / "app/bot/reply_keyboards.py").read_text(encoding="utf-8")
-        self.assertIn("REPLY_ACTION_RES_PREVIEW", src)
-        self.assertIn("def reseller_hub_main_keyboard", src)
-        chunk = src.split("def _reseller_submenu_entries")[1].split("\ndef ")[0]
-        self.assertIn("REPLY_ACTION_RES_PREVIEW", chunk)
-        # Re-exported from keyboards for call-site compat
-        kb = (ROOT / "app/bot/keyboards.py").read_text(encoding="utf-8")
-        self.assertIn("reseller_hub_main_keyboard", kb)
+        import app.bot.keyboards as kb
 
-    def test_preview_forces_user_role(self):
-        src = (ROOT / "app/bot/menu_nav.py").read_text(encoding="utf-8")
-        self.assertIn("elif level == NAV_USER_PREVIEW:", src)
-        chunk = src.split("elif level == NAV_USER_PREVIEW:")[1].split("else:")[0]
-        self.assertIn("USER.value", chunk)
-        self.assertIn("as_user=True", chunk)
+        ui: dict = {"show_restart_button": "0"}
+        labels = [
+            b.text for row in kb.reseller_hub_main_keyboard(None, ui).keyboard for b in row
+        ]
+        preview_label = "👁 پیش‌نمایش منوی کاربر"
+        self.assertIn(preview_label, labels)
+        mapping = kb.reply_action_map(
+            "reseller",
+            ui=ui,
+            include_submenus=True,
+            is_reseller_bot=True,
+            profile=None,
+        )
+        self.assertEqual(mapping[preview_label], kb.REPLY_ACTION_RES_PREVIEW)
 
     def test_build_main_uses_hub_for_shop_staff(self):
         src = (ROOT / "app/bot/menu_nav.py").read_text(encoding="utf-8")
@@ -51,13 +53,66 @@ class ResellerHubStartTests(unittest.TestCase):
         self.assertIn("reseller_hub_main_keyboard", chunk)
 
 
-class TicketManageTests(unittest.TestCase):
-    def test_res_tickets_has_action_buttons(self):
-        src = (ROOT / "app/bot/handlers/reseller.py").read_text(encoding="utf-8")
-        chunk = src.split("async def res_tickets")[1].split("@router.")[0]
-        self.assertIn("tkt:reply:", chunk)
-        self.assertIn("tkt:close:", chunk)
-        self.assertIn("InlineKeyboardMarkup", chunk)
+class UserPreviewKeyboardTests(unittest.IsolatedAsyncioTestCase):
+    async def test_preview_forces_user_role(self):
+        from app.bot import menu_nav as nav
+
+        message = MagicMock()
+        message.answer = AsyncMock()
+        db_user = MagicMock(id=3)
+        ui = {
+            "btn_admin": "🛠 پنل ادمین",
+            "btn_adm_exit_preview": "↩️ خروج از پیش‌نمایش",
+            "show_restart_button": "0",
+        }
+        with (
+            patch.object(nav, "get_all_settings", AsyncMock(return_value=ui)),
+            patch.object(nav, "user_has_services", AsyncMock(return_value=False)),
+        ):
+            await nav.show_nav_keyboard(
+                message,
+                AsyncMock(),
+                db_user,
+                nav.NAV_USER_PREVIEW,
+                text="پیش‌نمایش",
+                is_reseller_bot=False,
+                reseller_owner_id=None,
+            )
+
+        markup = message.answer.await_args.kwargs["reply_markup"]
+        labels = [b.text for row in markup.keyboard for b in row]
+        self.assertIn("↩️ خروج از پیش‌نمایش", labels)
+        self.assertNotIn("🛠 پنل ادمین", labels)
+        self.assertNotIn("🗓 عملیات روزانه", labels)
+        self.assertIn("🟢🛒 خرید سرویس", labels)
+
+
+class TicketManageTests(unittest.IsolatedAsyncioTestCase):
+    async def test_res_tickets_has_action_buttons(self):
+        from app.bot.handlers import reseller
+
+        ticket = MagicMock(id=5, subject="مشکل اتصال")
+        customer = MagicMock(full_name="Ali", username=None, telegram_id=1)
+        result = MagicMock()
+        result.all.return_value = [(ticket, customer)]
+        session = AsyncMock()
+        session.execute = AsyncMock(return_value=result)
+        callback = AsyncMock()
+        callback.message = MagicMock()
+        callback.message.edit_text = AsyncMock()
+        with (
+            patch.object(
+                reseller, "_actor", AsyncMock(return_value=(9, MagicMock()))
+            ),
+            patch.object(reseller, "has_bot_perm", MagicMock(return_value=True)),
+            patch("app.services.users.get_all_settings", AsyncMock(return_value={})),
+        ):
+            await reseller.res_tickets(callback, session, MagicMock())
+
+        markup = callback.message.edit_text.await_args.kwargs["reply_markup"]
+        callbacks = [b.callback_data for row in markup.inline_keyboard for b in row]
+        self.assertIn("tkt:reply:5", callbacks)
+        self.assertIn("tkt:close:5", callbacks)
 
     def test_ticket_count_uses_ticket_reseller_id(self):
         src = (ROOT / "app/bot/handlers/reseller.py").read_text(encoding="utf-8")

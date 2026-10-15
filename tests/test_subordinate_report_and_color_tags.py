@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+from unittest.mock import patch
 
 from app.services.color_tags import (
     COLOR_TAGS,
@@ -81,14 +82,24 @@ class ColorTagTests(unittest.TestCase):
 
 
 class MiniAppKeyboardGuardTests(unittest.TestCase):
+    def _settings(self, public_base_url: str):
+        from app.config import Settings
+
+        return Settings(_env_file=None, public_base_url=public_base_url)
+
     def test_miniapp_requires_https(self):
-        src = open("app/bot/keyboards.py", encoding="utf-8").read()
-        self.assertIn('startswith("https://")', src)
-        start = open("app/bot/handlers/start.py", encoding="utf-8").read()
-        self.assertIn("Never let Mini App keyboard failure break /start", start)
-        cfg = open("app/config.py", encoding="utf-8").read()
-        self.assertIn("_miniapp_https_base", cfg)
-        self.assertIn("public_panel_base_url", cfg)
+        with patch("app.services.ssl_certs.https_is_active", return_value=False):
+            plain = self._settings("http://bot.example.com")
+            self.assertFalse(plain.miniapp_enabled)
+            self.assertEqual(plain.miniapp_url, "")
+            self.assertEqual(plain.miniapp_deep_url("ops"), "")
+
+            secure = self._settings("https://bot.example.com/")
+            self.assertTrue(secure.miniapp_enabled)
+            self.assertEqual(secure.miniapp_url, "https://bot.example.com/miniapp/")
+            self.assertEqual(
+                secure.miniapp_deep_url("#ops"), "https://bot.example.com/miniapp/#ops"
+            )
 
 
 class BotRiskTagKeyboardTests(unittest.TestCase):

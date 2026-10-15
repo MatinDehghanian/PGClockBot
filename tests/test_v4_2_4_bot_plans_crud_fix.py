@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import unittest
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 ADMIN_PLANS = (ROOT / "app/bot/handlers/admin_plans.py").read_text(encoding="utf-8")
@@ -16,14 +17,6 @@ class PlansCrudFixTests(unittest.TestCase):
         self.assertIn("async def _persist", ADMIN_PLANS)
         save_block = ADMIN_PLANS[ADMIN_PLANS.find("async def _save_reseller_plan") :]
         self.assertIn("await _persist(session)", save_block)
-
-    def test_reseller_delete_commits_and_cleans_billing(self):
-        self.assertIn("delete_plan_billing_rate", ADMIN_PLANS)
-        idx = ADMIN_PLANS.find("async def resplan_del(")
-        self.assertGreater(idx, 0)
-        block = ADMIN_PLANS[idx : idx + 900]
-        self.assertIn("delete_plan_billing_rate", block)
-        self.assertIn("await _persist(session)", block)
 
     def test_reseller_edit_routing_excludes_toggrp(self):
         self.assertIn(
@@ -54,6 +47,57 @@ class PlansCrudFixTests(unittest.TestCase):
         self.assertEqual(parse_bot_int("۳۰"), 30)
         self.assertEqual(parse_bot_int("١٢٣"), 123)
         self.assertAlmostEqual(parse_bot_float("۱٫۵"), 1.5)
+
+
+class ResellerPlanDeleteHandlerTests(unittest.IsolatedAsyncioTestCase):
+    """Billing-rate cleanup lives in delete_reseller_plan (covered in
+    test_v4_0_7_payg_multi_plan_rates); the handler must commit afterwards."""
+
+    async def _delete(self, *, delete_side_effect=None):
+        from app.bot.handlers import admin_plans
+
+        calls: list[str] = []
+        session = AsyncMock()
+        plan = MagicMock(id=4, is_system=False)
+        session.get = AsyncMock(return_value=plan)
+        session.commit = AsyncMock(side_effect=lambda: calls.append("commit"))
+        session.rollback = AsyncMock(side_effect=lambda: calls.append("rollback"))
+
+        async def _fake_delete(_session, _plan):
+            calls.append("delete")
+            if delete_side_effect is not None:
+                raise delete_side_effect
+
+        callback = AsyncMock()
+        callback.data = "adm:resplan:del:4"
+        callback.message = MagicMock()
+        with (
+            patch("app.bot.auth.require_bot_owner", AsyncMock(return_value=True)),
+            patch.object(admin_plans, "_is_admin", MagicMock(return_value=True)),
+            patch.object(admin_plans, "reseller_plan_mode_of", MagicMock(return_value="payg")),
+            patch.object(admin_plans, "_rerender_plans_screen", AsyncMock()),
+            patch("app.services.plans_catalog.delete_reseller_plan", _fake_delete),
+        ):
+            await admin_plans.resplan_del(
+                callback, session=session, db_user=MagicMock(), state=AsyncMock()
+            )
+        return calls, callback
+
+    async def test_reseller_delete_commits_after_service_delete(self):
+        calls, callback = await self._delete()
+
+        self.assertEqual(calls, ["delete", "commit"])
+        callback.answer.assert_awaited_with("حذف شد")
+
+    async def test_reseller_delete_blocked_rolls_back_without_commit(self):
+        from app.services.plans_catalog import PlanDeleteBlocked
+
+        calls, callback = await self._delete(
+            delete_side_effect=PlanDeleteBlocked("هنوز استفاده می‌شود")
+        )
+
+        self.assertEqual(calls, ["delete", "rollback"])
+        self.assertTrue(callback.answer.await_args.kwargs["show_alert"])
 
 
 class VersionTests(unittest.TestCase):

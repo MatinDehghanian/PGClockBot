@@ -283,7 +283,7 @@ class Phase4EBotPgCatalogTests(unittest.IsolatedAsyncioTestCase):
                 new=AsyncMock(return_value=(features, role)),
             ),
             patch(
-                "app.services.bot_pg_catalog_pilot.bot_pg_client_for_resolution",
+                "app.services.bot_pg_catalog_authz.bot_pg_client_for_resolution",
                 new=AsyncMock(return_value=(fake_pg, False)),
             ),
             patch(
@@ -868,7 +868,7 @@ class Phase4EBotPgCatalogTests(unittest.IsolatedAsyncioTestCase):
                 ),
             )
             with common[0], common[1], common[2], common[3], common[4], common[5], common[6], patch(
-                "app.services.bot_pg_user_pilot.bot_pg_client_for_resolution",
+                "app.services.bot_pg_user_authz.bot_pg_client_for_resolution",
                 new=AsyncMock(return_value=(fake_pg, False)),
             ):
                 user = await authorize_bot_pg_user_op(
@@ -879,7 +879,7 @@ class Phase4EBotPgCatalogTests(unittest.IsolatedAsyncioTestCase):
                 )
             self.assertTrue(user.allowed, user.reason)
             with common[0], common[1], common[2], common[3], common[4], common[5], common[6], patch(
-                "app.services.bot_pg_object_pilot.bot_pg_client_for_resolution",
+                "app.services.bot_pg_object_authz.bot_pg_client_for_resolution",
                 new=AsyncMock(return_value=(fake_pg, False)),
             ):
                 node = await authorize_bot_pg_object_op(
