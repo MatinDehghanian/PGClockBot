@@ -1990,6 +1990,8 @@ async def pay_card_cb(
         card_by_id,
         enabled_cards,
         inline_picker_markup,
+        pick_card,
+        random_card_enabled,
     )
 
     ui = await get_all_settings(session)
@@ -2007,7 +2009,7 @@ async def pay_card_cb(
     if not cards:
         await callback.answer("کارت بانکی تنظیم نشده — به ادمین اطلاع دهید", show_alert=True)
         return
-    if len(cards) > 1 and not dest_id:
+    if len(cards) > 1 and not dest_id and not random_card_enabled(ui):
         await callback.answer()
         markup = inline_picker_markup("card", cards, order_id=order_id, prefix="pay", ui=ui)
         if callback.message and markup:
@@ -2017,7 +2019,10 @@ async def pay_card_cb(
                 reply_markup=markup,
             )
         return
-    card = card_by_id(ui, dest_id) if dest_id else cards[0]
+    if dest_id:
+        card = card_by_id(ui, dest_id)
+    else:
+        card = pick_card(cards, f"order:{order_id}") if len(cards) > 1 else cards[0]
     if not card:
         await callback.answer("کارت نامعتبر", show_alert=True)
         return

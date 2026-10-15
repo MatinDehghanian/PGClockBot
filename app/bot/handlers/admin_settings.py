@@ -185,6 +185,7 @@ SECTIONS: dict[str, dict] = {
             ("card", "کارت به کارت", [
                 ("card_number", "شماره کارت", "text"),
                 ("card_holder", "صاحب کارت", "text"),
+                ("payment_cards_random", "نمایش کارت تصادفی", "toggle"),
                 ("card_pay_text", "راهنمای پرداخت", "textarea"),
                 *BTN_PAY_CARD,
             ]),

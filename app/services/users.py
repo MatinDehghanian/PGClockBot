@@ -679,6 +679,7 @@ DEFAULT_SETTINGS = {
         "از منوی زیر می‌توانید سرویس بخرید، وضعیت را ببینید و پشتیبانی بگیرید."
     ),
     "payment_cards": "[]",
+    "payment_cards_random": "0",
     "payment_gateways": "[]",
     "payment_crypto_wallets": "[]",
     "card_number": "",
@@ -1379,6 +1380,12 @@ SETTING_GROUPS = {
             "کارت‌ها",
             "payment_cards",
             "چند کارت — دکمه + برای افزودن. متغیرهای متن: {amount} {card} {holder}",
+        ),
+        (
+            "payment_cards_random",
+            "نمایش کارت تصادفی",
+            "toggle",
+            "اگر چند کارت فعال باشد، به‌جای انتخاب مشتری یکی از آن‌ها نشان داده می‌شود (برای هر سفارش همیشه همان کارت).",
         ),
         ("card_pay_text", "راهنمای کارت‌به‌کارت", "textarea", "متغیرها: {amount} {card} {holder}"),
         ("btn_pay_card", "متن دکمه کارت به کارت", "text", ""),
