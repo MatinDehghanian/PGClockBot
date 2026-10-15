@@ -20,9 +20,9 @@ class MonitorQueueTests(MonitorDatabaseCase):
             session.add(ConnectionMonitorState(enabled=True, pg_user_id=900, pg_username="monitor-only", subscription_token_enc="synthetic",
                                                account_revision="one", catalog_synced_at=self.now))
             session.add_all([
-                ConnectionMonitorTarget(id=10, pg_host_id=41, test_enabled=True, generation="one", endpoint_count=1,
+                ConnectionMonitorTarget(id=10, pg_host_id=41, subscription_key="A" * 43, test_enabled=True, generation="one", endpoint_count=1,
                                         next_check_at=self.now + timedelta(seconds=40)),
-                ConnectionMonitorTarget(id=20, reseller_id=2, pg_host_id=41, test_enabled=True, generation="shop", endpoint_count=1),
+                ConnectionMonitorTarget(id=20, reseller_id=2, pg_host_id=41, subscription_key="A" * 43, test_enabled=True, generation="shop", endpoint_count=1),
             ])
             await session.commit()
 

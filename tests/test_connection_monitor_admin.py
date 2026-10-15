@@ -10,12 +10,13 @@ from unittest.mock import AsyncMock, patch
 from pydantic import ValidationError
 from sqlalchemy import select
 
-from connection_monitor_support import MonitorDatabaseCase, monitor_access
+from connection_monitor_support import MonitorDatabaseCase, monitor_access, subscription_fixture_key
 
 from app.bot.connection_status_ui import admin_page_keyboard, admin_page_text, target_text
 from app.db.models import ConnectionMonitorSnapshot, ConnectionMonitorState, ConnectionMonitorTarget, OrgPrincipal
-from app.services.connection_monitor_actions import edit_monitor_target, select_monitor_host
-from app.services.connection_monitor_admin import active_monitor_hosts, set_monitor_enabled
+from app.services.connection_monitor_actions import edit_monitor_target, select_monitor_config
+from app.services.connection_monitor_admin import monitor_config_choices, set_monitor_enabled
+from app.services.connection_monitor_subscription import subscription_entries
 from app.services.connection_monitor_panel import MonitorCatalog
 from app.services.connection_monitor_preferences import MonitorPreferences, pause_monitor_target
 from app.services.connection_monitor_views import monitor_admin_page, monitor_target_view
@@ -26,7 +27,7 @@ class MonitorAdminTests(MonitorDatabaseCase):
     async def asyncSetUp(self) -> None:
         await super().asyncSetUp()
         fixture = json.loads((Path(__file__).parent / "fixtures/connection_monitor_catalog.json").read_text())
-        self.catalog = MonitorCatalog(**fixture, checked_at=datetime.now(timezone.utc))
+        self.catalog = MonitorCatalog(fixture["native_configs"], checked_at=datetime.now(timezone.utc))
         self.catalog_reader = AsyncMock(return_value=self.catalog)
         for patcher in (
             patch("app.services.connection_monitor_preferences.read_monitor_catalog", self.catalog_reader),
@@ -42,7 +43,8 @@ class MonitorAdminTests(MonitorDatabaseCase):
 
     async def select_host(self, host_id: int = 41) -> int:
         async with self.Session() as session:
-            return await select_monitor_host(session, self.access, host_id=host_id)
+            key = subscription_fixture_key(0 if host_id == 41 else 1) if host_id in (41, 72) else "Z" * 43
+            return await select_monitor_config(session, self.access, config_key=key)
 
     async def test_selection_is_private_and_does_not_hold_a_transaction_across_panel_io(self) -> None:
         async with self.Session() as session:
@@ -50,15 +52,15 @@ class MonitorAdminTests(MonitorDatabaseCase):
                 self.assertFalse(session.in_transaction())
                 return self.catalog
             self.catalog_reader.side_effect = read
-            target_id = await select_monitor_host(session, self.access, host_id=41)
+            target_id = await select_monitor_config(session, self.access, config_key=subscription_fixture_key())
             self.assertFalse(session.in_transaction())
             target = await session.get(ConnectionMonitorTarget, target_id)
             self.assertTrue(target.test_enabled)
             self.assertFalse(target.is_public)
-            self.assertEqual(target.endpoint_count, 2)
+            self.assertEqual(target.endpoint_count, 1)
             self.assertTrue(target.generation)
             snapshots = (await session.scalars(select(ConnectionMonitorSnapshot))).all()
-            self.assertEqual(len(snapshots), 2)
+            self.assertEqual(len(snapshots), 1)
             self.assertTrue(all(row.status == "unknown" for row in snapshots))
 
     async def test_name_order_and_publication_preserve_measurement_generation(self) -> None:
@@ -88,16 +90,16 @@ class MonitorAdminTests(MonitorDatabaseCase):
                     await edit_monitor_target(session, self.access, target_id=target_id, field=field, value=value)
         for host_id in (True, 0, -1, "41", 2147483648):
             with self.subTest(host_id=host_id), self.assertRaises(ValidationError):
-                MonitorPreferences(host_id=host_id)
+                MonitorPreferences(config_key=host_id)
 
     async def test_stale_picker_cannot_select_a_now_disabled_missing_or_unsupported_host(self) -> None:
-        self.catalog.hosts[0]["is_disabled"] = True
+        self.catalog.native_configs[0]["outbounds"][0]["protocol"] = "blackhole"
         with self.assertRaises(ValueError):
             await self.select_host()
         with self.assertRaises(ValueError):
             await self.select_host(999)
-        self.catalog.hosts[0]["is_disabled"] = False
-        self.catalog.hosts[0]["security"] = "none"
+        self.catalog.native_configs[0]["outbounds"][0]["protocol"] = "vless"
+        self.catalog.native_configs[0]["outbounds"][0]["streamSettings"]["security"] = "none"
         with self.assertRaises(ValueError):
             await self.select_host()
         async with self.Session() as session:
@@ -169,13 +171,14 @@ class MonitorAdminTests(MonitorDatabaseCase):
             self.assertIsNone(state.cycle_token)
 
     async def test_active_picker_is_bounded_and_admin_keyboard_callbacks_are_valid(self) -> None:
-        self.catalog.hosts.extend({"id": index, "remark": f"هاست {index}"} for index in range(100, 115))
-        self.catalog.hosts[0]["is_disabled"] = True
+        self.catalog.native_configs.extend({**self.catalog.native_configs[1], "remarks": f"کانفیگ {index}"} for index in range(100, 115))
+        self.catalog.native_configs[0]["outbounds"][0]["protocol"] = "blackhole"
         async with self.Session() as session:
-            page = await active_monitor_hosts(session, self.access)
+            page = await monitor_config_choices(session, self.access)
             self.assertEqual(len(page.choices), 10)
-            self.assertNotIn(41, {choice.host_id for choice in page.choices})
-            self.assertIsNotNone(page.next_host_id)
+            self.assertIsNotNone(page.choices[0].issue)
+            self.assertEqual([choice.position for choice in page.choices], list(range(10)))
+            self.assertIsNotNone(page.next_offset)
             overview = await monitor_admin_page(session, self.access, now=self.now)
         text = admin_page_text(overview, dict(DEFAULT_SETTINGS))
         self.assertIn("بررسی از سرور ربات", text)
@@ -184,24 +187,29 @@ class MonitorAdminTests(MonitorDatabaseCase):
         self.assertTrue(all(len(button.callback_data.encode()) <= 64 for row in markup.inline_keyboard for button in row))
 
     async def test_effective_endpoint_capacity_prevents_selection_without_partial_rows(self) -> None:
-        self.catalog.hosts[0]["address"] = ["edge-b.example", *(f"edge-{index}.example" for index in range(12))]
-        with self.assertRaises(ValueError):
-            await self.select_host()
+        self.catalog.native_configs[:] = [{**self.catalog.native_configs[0], "remarks": f"config {index}"} for index in range(13)]
+        keys = [entry.config_key for entry in subscription_entries(self.catalog.native_configs)]
         async with self.Session() as session:
-            self.assertIsNone(await session.scalar(select(ConnectionMonitorTarget.id).limit(1)))
+            session.add_all(ConnectionMonitorTarget(subscription_key=key, test_enabled=True) for key in keys[:12])
+            await session.commit()
+        with self.assertRaises(ValueError):
+            async with self.Session() as session:
+                await select_monitor_config(session, self.access, config_key=keys[12])
+        async with self.Session() as session:
+            self.assertIsNone(await session.scalar(select(ConnectionMonitorTarget.id).where(ConnectionMonitorTarget.subscription_key == keys[12]).limit(1)))
 
     async def test_selection_changed_while_waiting_for_catalog_requires_a_fresh_retry(self) -> None:
         async def concurrent_selection(account: object) -> MonitorCatalog:
             async with self.Session() as other:
-                other.add(ConnectionMonitorTarget(pg_host_id=72, test_enabled=True))
+                other.add(ConnectionMonitorTarget(subscription_key=subscription_fixture_key(1), test_enabled=True))
                 await other.commit()
             return self.catalog
         self.catalog_reader.side_effect = concurrent_selection
         with self.assertRaises(ValueError):
             await self.select_host()
         async with self.Session() as session:
-            host_ids = (await session.scalars(select(ConnectionMonitorTarget.pg_host_id))).all()
-            self.assertEqual(host_ids, [72])
+            config_keys = (await session.scalars(select(ConnectionMonitorTarget.subscription_key))).all()
+            self.assertEqual(config_keys, [subscription_fixture_key(1)])
 
     async def test_publication_requires_the_runtime_to_be_enabled(self) -> None:
         target_id = await self.select_host()

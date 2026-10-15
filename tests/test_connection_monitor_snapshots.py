@@ -22,7 +22,7 @@ class MonitorSnapshotTests(MonitorDatabaseCase):
         await super().asyncSetUp()
         async with self.Session() as session:
             session.add(ConnectionMonitorState(enabled=True, pg_user_id=900, pg_username="monitor-only", account_revision="one", subscription_token_enc="synthetic"))
-            session.add(ConnectionMonitorTarget(id=10, pg_host_id=41, test_enabled=True, generation="one", endpoint_count=2, next_check_at=self.now))
+            session.add(ConnectionMonitorTarget(id=10, pg_host_id=41, subscription_key="A" * 43, test_enabled=True, generation="one", endpoint_count=2, next_check_at=self.now))
             await session.flush()
             session.add_all([ConnectionMonitorSnapshot(target_id=10, endpoint_key=key, generation="one") for key in ("a", "b")])
             await session.commit()

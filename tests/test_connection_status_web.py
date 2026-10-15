@@ -14,7 +14,7 @@ from fastapi import FastAPI
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from connection_monitor_support import MonitorDatabaseCase, OWNER_STAFF
+from connection_monitor_support import MonitorDatabaseCase, OWNER_STAFF, subscription_fixture_key
 
 from app.api.app import create_api_app, render
 from app.api.connection_status_pages import register_connection_status_pages
@@ -22,18 +22,81 @@ from app.db.models import ConnectionMonitorSnapshot, ConnectionMonitorState, Con
 from app.services.connection_monitor_settings import set_monitor_account
 from app.services.connection_monitor_preferences import pause_monitor_target, save_monitor_preferences
 from app.services.connection_monitor_access import MonitorAccess
+from app.services.connection_monitor_accounts import ACCOUNT_MESSAGES
 from app.services.connection_monitor_preferences import MonitorPreferences
 from app.services.connection_status import public_connection_page
 from app.services.connection_status_texts import (
-    LATIN_MIXED_MONITOR_TEXTS, LEGACY_MONITOR_TEXTS, MONITOR_TEXT_DEFAULTS, readable_monitor_texts,
+    LATIN_MIXED_MONITOR_TEXTS, LEGACY_HOST_PROMPTS, LEGACY_MONITOR_TEXTS, MONITOR_TEXT_DEFAULTS, readable_monitor_texts,
 )
 from app.services.users import clear_settings_cache, get_all_settings, set_settings_bulk
+from app.services.pasarguard import PasarGuardError
 
 
 TOKEN = "synthetic-monitor-token-123456"
 
 
 class MonitorWebTests(MonitorDatabaseCase):
+    async def test_previous_host_prompts_become_config_prompts_without_overriding_custom_text(self) -> None:
+        async with self.Session() as session:
+            await set_settings_bulk(session, {**LEGACY_HOST_PROMPTS, "connection_status_name_prompt": "نام دلخواه"})
+            ui = await get_all_settings(session)
+            self.assertEqual(ui["connection_status_name_prompt"], "نام دلخواه")
+            self.assertEqual(ui["connection_status_order_prompt"], MONITOR_TEXT_DEFAULTS["connection_status_order_prompt"])
+
+    async def test_subscription_cards_show_protocol_transport_security_and_escape_native_names(self) -> None:
+        await self.attach()
+        native = self.panel.subscription_xray.return_value
+        native[0]["remarks"] = '<script>alert("name")</script>'
+        native[0]["outbounds"][0]["streamSettings"] = {
+            "network": "xhttp", "security": "tls", "tlsSettings": {"serverName": "tls.example"},
+            "xhttpSettings": {"path": "/upload", "mode": "auto"},
+        }
+        native.append({"remarks": "Shadowsocks config", "outbounds": [{
+            "tag": "proxy", "protocol": "shadowsocks", "settings": {"servers": [{
+                "address": "ss.example", "port": 8388, "method": "chacha20-ietf-poly1305", "password": "synthetic-hidden-password",
+            }]},
+        }]})
+        response = await self.client.get("/connection-status?hosts=1")
+        self.assertEqual(response.status_code, 200)
+        for label in ("vless", "xhttp", "tls", "shadowsocks", "tcp"):
+            self.assertIn(f">{label}</span>", response.text)
+        self.assertIn("&lt;script&gt;", response.text)
+        self.assertNotIn(native[0]["remarks"], response.text)
+        self.assertNotIn("synthetic-hidden-password", response.text)
+        self.assertNotIn("11111111-1111-4111-8111-111111111111", response.text)
+        self.assertIn("افزودن به تست", response.text)
+        self.assertIn("پورت 8388", response.text)
+        self.panel.get_hosts.assert_not_awaited()
+
+    async def test_unsupported_subscription_entry_keeps_its_position_with_an_explanation(self) -> None:
+        await self.attach()
+        self.panel.subscription_xray.return_value[0]["outbounds"][0]["protocol"] = "freedom"
+        response = await self.client.get("/connection-status?hosts=1")
+        self.assertEqual(response.status_code, 200)
+        self.assertLess(response.text.index("نام متغیر 1"), response.text.index("نام متغیر 2"))
+        self.assertIn("قابل تست نیست", response.text)
+        self.assertIn("disabled aria-describedby=", response.text)
+
+    async def test_config_picker_does_not_need_host_or_inbound_api_access(self) -> None:
+        await self.attach()
+        self.panel.get_hosts.side_effect = AssertionError("Subscription selection must not read panel hosts")
+        self.panel.get_inbounds_details.side_effect = AssertionError("Subscription selection must not read inbounds")
+        response = await self.client.get("/connection-status?hosts=1")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("نام متغیر 1", response.text)
+        self.assertIn("نام متغیر 2", response.text)
+        self.panel.get_hosts.assert_not_awaited()
+        self.panel.get_inbounds_details.assert_not_awaited()
+
+    async def test_config_picker_uses_subscription_names_and_order_without_panel_only_hosts(self) -> None:
+        await self.attach()
+        self.panel.subscription_xray.return_value.reverse()
+        self.panel.get_hosts.return_value.append({"id": 1, "remark": "Unrelated panel host"})
+        response = await self.client.get("/connection-status?hosts=1")
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("Unrelated panel host", response.text)
+        self.assertLess(response.text.index("نام متغیر 2"), response.text.index("نام متغیر 1"))
+
     async def asyncSetUp(self) -> None:
         await super().asyncSetUp()
         self.staff = dict(OWNER_STAFF)
@@ -82,11 +145,34 @@ class MonitorWebTests(MonitorDatabaseCase):
 
     async def select_host(self) -> int:
         await self.attach()
-        response = await self.client.post("/connection-status/hosts/41")
+        response = await self.client.post(f"/connection-status/configs/{subscription_fixture_key()}")
         self.assertEqual(response.status_code, 303)
         self.assertNotIn("error=", response.headers["location"])
         async with self.Session() as session:
             return await session.scalar(select(ConnectionMonitorTarget.id))
+
+    async def test_active_hosts_refuse_a_revoked_link_and_keep_the_account_controls_visible(self) -> None:
+        await self.attach()
+        self.panel.subscription_xray.side_effect = PasarGuardError(TOKEN, 404)
+        response = await self.client.get("/connection-status?hosts=1")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(ACCOUNT_MESSAGES["account_changed"], response.text)
+        self.assertIn("ثبت کاربر تست", response.text)
+        self.assertNotIn("نام متغیر 1", response.text)
+        self.assertNotIn(TOKEN, response.text)
+
+    async def test_active_hosts_load_after_the_panel_regenerates_the_same_users_link(self) -> None:
+        await self.attach()
+        self.panel.get_user_by_id.return_value = {
+            **self.panel.get_user_by_username.return_value,
+            "subscription_url": "https://panel.example/sub/newly-issued-token-123456",
+        }
+        response = await self.client.get("/connection-status?hosts=1")
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(ACCOUNT_MESSAGES["account_changed"], response.text)
+        self.assertIn("نام متغیر 1", response.text)
+        self.panel.subscription_xray.assert_awaited_once_with(TOKEN, subscription_url=self.panel.get_user_by_id.return_value["subscription_url"])
+        self.assertNotIn(TOKEN, response.text)
 
     async def test_empty_page_has_setup_actions_without_panel_calls_or_secrets(self) -> None:
         response = await self.client.get("/connection-status")
@@ -96,7 +182,7 @@ class MonitorWebTests(MonitorDatabaseCase):
         self.assertIn("داخل ایران", response.text)
         self.assertIn('href="/connection-status"', response.text)
         self.assertIn('name="csrf_token"', response.text)
-        self.assertIn("هنوز هاستی", response.text)
+        self.assertIn("هنوز کانفیگی", response.text)
         self.panel.get_current_admin.assert_not_called()
         self.panel.get_hosts.assert_not_called()
         self.panel.get_user_by_username.assert_not_called()
@@ -106,7 +192,7 @@ class MonitorWebTests(MonitorDatabaseCase):
         target_id = await self.select_host()
         response = await self.client.get("/connection-status?hosts=1")
         self.assertEqual(response.status_code, 200)
-        self.assertIn("هاست‌های فعال پنل", response.text)
+        self.assertIn("کانفیگ‌های اشتراک", response.text)
         self.panel.subscription_xray.assert_awaited()
         response = await self.client.post("/connection-status/runtime", data={"enabled": "1"})
         self.assertNotIn("error=", response.headers["location"])
@@ -117,8 +203,8 @@ class MonitorWebTests(MonitorDatabaseCase):
         self.assertNotIn("error=", response.headers["location"])
         async with self.Session() as session:
             target = await session.get(ConnectionMonitorTarget, target_id)
-            self.assertEqual((target.pg_host_id, target.reseller_id, target.public_name, target.display_order, target.is_public),
-                             (41, None, hostile_name, 7, True))
+            self.assertEqual((target.subscription_key, target.pg_host_id, target.reseller_id, target.public_name, target.display_order, target.is_public),
+                             (subscription_fixture_key(), None, None, hostile_name, 7, True))
             state = await session.scalar(select(ConnectionMonitorState))
             state.catalog_synced_at = self.now
             for row in (await session.scalars(select(ConnectionMonitorSnapshot))).all():
@@ -185,7 +271,7 @@ class MonitorWebTests(MonitorDatabaseCase):
             self.staff.clear()
             self.staff.update(staff)
             for path, data in (("/connection-status/account", {"username": "monitor-only"}),
-                               ("/connection-status/runtime", {"enabled": "1"}), ("/connection-status/hosts/41", {}),
+                               ("/connection-status/runtime", {"enabled": "1"}), (f"/connection-status/configs/{subscription_fixture_key()}", {}),
                                ("/connection-status/targets/1/check", {}), ("/connection-status/targets/1/pause", {}),
                                ("/connection-status/targets/1", {"public_name": "x", "display_order": "0", "is_public": "0"})):
                 with self.subTest(staff=staff, path=path):
@@ -209,7 +295,7 @@ class MonitorWebTests(MonitorDatabaseCase):
 
     async def test_panel_failure_keeps_local_status_and_returns_safe_errors(self) -> None:
         await self.select_host()
-        self.panel.get_hosts.side_effect = httpx.ConnectError(TOKEN)
+        self.panel.subscription_xray.side_effect = httpx.ConnectError(TOKEN)
         response = await self.client.get("/connection-status?hosts=1")
         self.assertEqual(response.status_code, 200)
         self.assertIn("ارتباط با پنل برقرار نشد", response.text)
@@ -229,7 +315,7 @@ class MonitorWebTests(MonitorDatabaseCase):
 
     async def test_page_copy_is_persian_with_no_caption_under_the_title(self) -> None:
         await self.select_host()
-        text = (await self.client.get("/connection-status")).text
+        text = (await self.client.get("/connection-status?hosts=1")).text
         for latin in ("Test user", "Real delay", "Experimental", "Username", "PasarGuard", "subscription", "password"):
             self.assertNotIn(latin, text, latin)
         self.assertIn("کاربر تست", text)
@@ -253,7 +339,7 @@ class MonitorWebTests(MonitorDatabaseCase):
         self.assertIn("data-focus-guard", field)
         self.assertNotIn("autofocus", text)
 
-    async def test_host_status_badges_carry_no_telegram_emoji(self) -> None:
+    async def test_status_badges_carry_no_telegram_emoji(self) -> None:
         target_id = await self.select_host()
         self.assertEqual((await self.client.post(f"/connection-status/targets/{target_id}/pause")).status_code, 303)
         text = (await self.client.get("/connection-status")).text

@@ -19,8 +19,8 @@ MONITOR_TEXT_DEFAULTS = {
     "btn_connection_status_admin": "📡 تست و وضعیت اتصال",
     "connection_status_admin_title": "📡 تست و وضعیت اتصال",
     "connection_status_account_prompt": "فقط نام کاربری یک کاربر تست موجود در پاسارگارد را بفرستید؛ مثلاً MattDev. این کاربر باید جدا از سرویس مشتری باشد. لینک، توکن یا رمز عبور نفرستید.",
-    "connection_status_name_prompt": "این هاست با چه اسمی به کاربران نمایش داده شود؟ حداکثر ۶۴ حرف وارد کنید.",
-    "connection_status_order_prompt": "ترتیب نمایش این هاست را با عدد وارد کنید؛ عدد کوچک‌تر بالاتر نمایش داده می‌شود. از صفر شروع کنید.",
+    "connection_status_name_prompt": "این کانفیگ با چه اسمی به کاربران نمایش داده شود؟ حداکثر ۶۴ حرف وارد کنید.",
+    "connection_status_order_prompt": "ترتیب نمایش این کانفیگ را با عدد وارد کنید؛ عدد کوچک‌تر بالاتر نمایش داده می‌شود. از صفر شروع کنید.",
 }
 
 
@@ -40,7 +40,8 @@ REASON_LABELS = {
     "stale": "نتیجه قدیمی است و وضعیت فعلی تأیید نشده است.", "slow_delay": "تأخیر واقعی بیشتر از دو ثانیه است.",
     "recovering": "بعضی مسیرها مشکل دارند یا اتصال هنوز کاملاً تأیید نشده.", "no_observation": "هنوز بررسی کامل ثبت نشده است.",
     "invalid_catalog": "اطلاعات هاست‌ها معتبر نیست.", "host_unavailable": "هاست فعال در دسترس نیست.",
-    "out_of_scope": "هاست در محدودهٔ مجاز نیست.", "unsupported_route": "این کانفیگ فعلاً پشتیبانی نمی‌شود؛ VLESS Reality/TCP و VLESS TLS/WebSocket قابل تست هستند.",
+    "config_unavailable": "این کانفیگ دیگر در اشتراک نیست یا محتوای آن تغییر کرده؛ دوباره از فهرست اشتراک انتخاب کنید.",
+    "out_of_scope": "هاست در محدودهٔ مجاز نیست.", "unsupported_route": "این کانفیگ با تنظیمات فعلی Xray قابل تست نیست؛ خروجی آن بدون تغییر در لیست نگه داشته شده است.",
     "ambiguous_route": "کانفیگ این هاست مشخص نیست؛ تنظیمات هاست را بررسی کنید.", "missing_route": "کانفیگ این هاست در اشتراک کاربر تست نیست.",
     "endpoint_capacity": "تعداد مسیرها بیشتر از ظرفیت تست هم‌زمان است.",
 }
@@ -54,18 +55,25 @@ LEGACY_MONITOR_TEXTS = {
     "connection_status_name_prompt": "نام عمومی این هاست را وارد کنید؛ حداکثر ۶۴ نویسه.",
     "connection_status_order_prompt": "ترتیب نمایش را به صورت عدد صحیح از صفر وارد کنید.",
 }
-# Defaults shipped in 0.4.6 that mixed Latin terms into Persian copy.
+
+# Defaults shipped in 0.4.6/0.4.7 that mixed Latin terms into Persian copy.
 LATIN_MIXED_MONITOR_TEXTS = {
     "connection_status_account_prompt": "فقط username یک Test user موجود در PasarGuard را بفرستید؛ مثلاً MattDev. این user باید جدا از سرویس مشتری باشد. لینک، token یا password نفرستید.",
+}
+
+LEGACY_HOST_PROMPTS = {
+    "connection_status_name_prompt": "این هاست با چه اسمی به کاربران نمایش داده شود؟ حداکثر ۶۴ حرف وارد کنید.",
+    "connection_status_order_prompt": "ترتیب نمایش این هاست را با عدد وارد کنید؛ عدد کوچک‌تر بالاتر نمایش داده می‌شود. از صفر شروع کنید.",
 }
 
 
 def readable_monitor_texts(settings: dict[str, str]) -> dict[str, str]:
     """Refresh untouched old defaults while retaining every custom label and menu order."""
-    for key, previous in LEGACY_MONITOR_TEXTS.items():
-        outdated = {previous, LATIN_MIXED_MONITOR_TEXTS.get(key, previous)}
-        if settings.get(key) in outdated:
-            settings[key] = MONITOR_TEXT_DEFAULTS[key]
+    for previous_texts in (LEGACY_MONITOR_TEXTS, LEGACY_HOST_PROMPTS):
+        for key, previous in previous_texts.items():
+            outdated = {previous, LATIN_MIXED_MONITOR_TEXTS.get(key, previous)}
+            if settings.get(key) in outdated:
+                settings[key] = MONITOR_TEXT_DEFAULTS[key]
     return settings
 
 

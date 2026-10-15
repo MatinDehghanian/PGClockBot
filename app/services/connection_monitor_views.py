@@ -24,7 +24,8 @@ SAFE_REASON_CODES = frozenset(item.value for item in (*MonitorIssue, *MonitorRea
 @dataclass(frozen=True, slots=True)
 class MonitorTargetView:
     id: int
-    host_id: int
+    config_key: str | None
+    config_name: str
     public_name: str
     display_order: int
     test_enabled: bool
@@ -99,7 +100,7 @@ async def target_views(session: AsyncSession, targets: list[ConnectionMonitorTar
         snapshots = tuple(by_target.get(target.id, ()))
         health = target_health(target, snapshots, runtime_ready=runtime_ready, now=now, runtime_enabled=runtime_enabled)
         reason = target_reason(target, snapshots, health=health, runtime_ready=runtime_ready, now=now)
-        views.append(MonitorTargetView(target.id, target.pg_host_id, target.public_name, target.display_order,
+        views.append(MonitorTargetView(target.id, target.subscription_key, target.config_name, target.public_name, target.display_order,
                                        target.test_enabled, target.is_public, target.manual_pending, health, reason))
     return tuple(views)
 

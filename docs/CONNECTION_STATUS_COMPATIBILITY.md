@@ -1,4 +1,35 @@
-# سازگاری نگاشت وضعیت اتصال
+# سازگاری کانفیگ‌های وضعیت اتصال
+
+## مسیر فعلی subscription
+
+منبع اجرا فقط خروجی native Xray لینک subscription همان Test user است. فهرست و worker از
+API هاست‌ها یا inboundها استفاده نمی‌کنند. نام و ترتیب از آرایهٔ subscription می‌آیند؛ badgeهای
+protocol، transport، security و port از همان outbound اصلی استخراج می‌شوند.
+
+هر config یک endpoint دارد. VLESS، VMess، Trojan و Shadowsocks با transportهای native
+شناخته‌شده پذیرفته می‌شوند. JSON اصلی با کنترل نوع، ظرفیت، آدرس/پورت و محدودیت‌های امنیتی
+بررسی و بدون بازنویسی address، SNI، path، credential یا درج default به Xray داده می‌شود.
+فقط tag برای جداسازی پروکسی‌های هم‌زمان عوض می‌شود. schema نهایی را core ثابت در startup
+کنترل می‌کند؛ قابلیت‌های نسخه‌های جدیدتر core خودکار به نسخهٔ pin‌شده اضافه نمی‌شوند.
+
+فایل `tests/fixtures/connection_monitor_native.json` شش config مصنوعی برای Reality/TCP،
+TLS/WebSocket، XHTTP/TLS، VMess/TCP، Trojan/TCP/TLS و Shadowsocks/TCP دارد. CLI و CI
+هر دو معماری Linux را با همین خروجی subscription از نظر startup/readiness/cleanup بررسی می‌کنند؛
+درخواست relay یا حساب واقعی استفاده نمی‌شود.
+
+reference به outbound دیگر (`dialerProxy`/`proxySettings`)، فایل certificate/key محلی،
+غیرفعال کردن TLS verification و protocolهای خارج از allow-list قابل اجرا نیستند. چنین configی
+با ترتیب و نام اصلی و دلیل روشن در لیست می‌ماند؛ بخش نامعتبرش حذف یا حدس زده نمی‌شود.
+routing، DNS، inbounds و outboundهای مستقیم template وارد runtime نمی‌شوند؛ default همچنان blackhole است.
+
+شناسهٔ انتخاب، hash محتوای outbound، نام اصلی و شمار تکرار config یکسان است. تغییر ترتیب
+انتخاب را عوض نمی‌کند، ولی تغییر محتوای config یا نام اصلی نیاز به انتخاب دوباره دارد؛
+configهای پویا که در هر بار دریافت محتوای تازه می‌سازند برای انتخاب پایدار مناسب نیستند.
+
+## شواهد API نگاشت قدیمی
+
+متن و ماتریس زیر به mapper خالص قدیمی مربوط‌اند که برای سازگاری API و regressionها حفظ
+شده است. این mapper در مسیر اجرایی انتخاب، فهرست یا worker جدید استفاده نمی‌شود.
 
 قابلیت **Experimental** و پیش‌فرض خاموش است. syntax و startup کانفیگ مصنوعی با Xray
 **26.3.27**، commit `d2758a0`، روی macOS/arm64 و Linux/amd64 تأیید شده‌اند؛ live relay تأیید نشده است.

@@ -11,7 +11,7 @@ import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from app.services.connection_monitor_catalog import plan_monitor_hosts
+from app.services.connection_monitor_subscription import plan_monitor_configs, subscription_entries
 from app.services.connection_monitor_types import MonitorEndpoint
 from app.services.xray_probe import run_xray_batch
 from app.services.xray_probe_resources import XrayBinary
@@ -29,7 +29,7 @@ class CoreValidation:
 async def validate_core(binary: XrayBinary, endpoints: tuple[MonitorEndpoint, ...]) -> CoreValidation:
     started = time.monotonic()
     async with run_xray_batch(binary, endpoints) as batch:
-        if not batch.is_alive or len(batch.bindings) != 3:
+        if not batch.is_alive or len(batch.bindings) != len(endpoints):
             raise ValueError("Synthetic core readiness failed")
         ready = time.monotonic()
         process = batch.process
@@ -47,9 +47,10 @@ def main() -> int:
     parser.add_argument("--sha256", required=True)
     args = parser.parse_args()
     try:
-        fixture = Path(__file__).resolve().parents[2] / "tests/fixtures/connection_monitor_catalog.json"
+        fixture = Path(__file__).resolve().parents[2] / "tests/fixtures/connection_monitor_native.json"
         catalog = json.loads(fixture.read_text(encoding="utf-8"))
-        plans = plan_monitor_hosts(**catalog, selected_ids=(41, 72), staff={"pg_is_owner": True}, account_revision="synthetic")
+        entries = subscription_entries(catalog["native_configs"])
+        plans = plan_monitor_configs(**catalog, selected_keys=tuple(entry.config_key for entry in entries), account_revision="synthetic")
         if not all(plan.is_ready for plan in plans):
             raise ValueError("Synthetic route mapping failed")
         endpoints = tuple(endpoint for plan in plans for endpoint in plan.endpoints)
