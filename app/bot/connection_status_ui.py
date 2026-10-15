@@ -28,6 +28,19 @@ STATUS_LABELS = {
     ConnectionStatus.DOWN: "🔴 خارج از دسترس", ConnectionStatus.UNKNOWN: "⚪ نامشخص",
     ConnectionStatus.NOT_READY: "⚪ آمادهٔ تست نیست", ConnectionStatus.PAUSED: "⏸ متوقف",
 }
+REASON_LABELS = {
+    "core_unavailable": "هستهٔ پایش در دسترس نیست.", "account_unavailable": "حساب پایش قابل تأیید نیست.",
+    "catalog_unavailable": "اطلاعات تازهٔ پنل یا حساب پایش قابل تأیید نیست.",
+    "control_unavailable": "اعتبارسنجی مقصدهای آزمایش ممکن نشد.", "proxy_failed": "درخواست HTTPS از مسیر پروکسی ناموفق بود.",
+    "fallback_destination": "اتصال از مقصد دوم تأیید شد.", "probe_unavailable": "بررسی این مسیر کامل نشد.",
+    "snapshot_invalid": "نتیجهٔ ذخیره‌شده معتبر نیست.", "monitor_paused": "پایش متوقف است.",
+    "stale": "نتیجه قدیمی است و وضعیت فعلی تأیید نشده است.", "slow_delay": "میانهٔ تأخیر بیش از دو ثانیه است.",
+    "recovering": "تأیید بازیابی یا پوشش همهٔ مسیرها هنوز کامل نیست.", "no_observation": "هنوز بررسی کامل ثبت نشده است.",
+    "invalid_catalog": "اطلاعات هاست‌ها معتبر نیست.", "host_unavailable": "هاست فعال در دسترس نیست.",
+    "out_of_scope": "هاست در محدودهٔ مجاز نیست.", "unsupported_route": "ترکیب تنظیمات این مسیر پشتیبانی نشده است.",
+    "ambiguous_route": "نگاشت هاست به مسیر یکتا نیست.", "missing_route": "کانفیگ معتبر این هاست در اشتراک پایش نیست.",
+    "endpoint_capacity": "تعداد مسیرهای مؤثر از ظرفیت پایش بیشتر است.",
+}
 
 
 class MonitorAdminLabel(BaseFilter):
@@ -94,6 +107,7 @@ def target_text(target: MonitorTargetView) -> str:
         "بررسی از سرور ربات", f"نام عمومی: {name}", f"انتشار عمومی: {'روشن' if target.is_public else 'خاموش'}",
         f"ترتیب: {format_number(target.display_order)}", f"تأخیر HTTPS: {delay}",
         f"پوشش: {format_number(health.covered)}/{format_number(health.expected)}", f"آخرین بررسی: {checked_time(health.checked_at)}",
+        REASON_LABELS.get(target.reason, ""),
         "بررسی دستی در صف است." if target.manual_pending else "بررسی دستی از مسیر worker انجام می‌شود.",
     ])
 

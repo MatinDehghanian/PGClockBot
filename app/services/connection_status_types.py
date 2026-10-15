@@ -28,6 +28,22 @@ class ObservationKind(StrEnum):
     NOT_READY = "not_ready"
 
 
+class MonitorReason(StrEnum):
+    CORE_UNAVAILABLE = "core_unavailable"
+    ACCOUNT_UNAVAILABLE = "account_unavailable"
+    CATALOG_UNAVAILABLE = "catalog_unavailable"
+    CONTROL_UNAVAILABLE = "control_unavailable"
+    PROXY_FAILED = "proxy_failed"
+    FALLBACK_DESTINATION = "fallback_destination"
+    PROBE_UNAVAILABLE = "probe_unavailable"
+    SNAPSHOT_INVALID = "snapshot_invalid"
+    PAUSED = "monitor_paused"
+    STALE = "stale"
+    SLOW = "slow_delay"
+    RECOVERING = "recovering"
+    NO_OBSERVATION = "no_observation"
+
+
 def require_aware(value: datetime) -> None:
     if value.tzinfo is None or value.utcoffset() is None:
         raise ValueError("Monitoring timestamps must be timezone aware")

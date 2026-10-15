@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
@@ -211,3 +211,28 @@ class MonitorAdminTests(MonitorDatabaseCase):
                 await edit_monitor_target(session, self.access, target_id=target_id, field="is_public", value=True)
             target = await session.get(ConnectionMonitorTarget, target_id)
             self.assertFalse(target.is_public)
+
+    async def test_private_diagnostics_keep_last_check_time_and_only_show_known_safe_reasons(self) -> None:
+        target_id = await self.select_host()
+        async with self.Session() as session:
+            state = await session.scalar(select(ConnectionMonitorState))
+            state.enabled, state.catalog_synced_at = True, self.now
+            rows = (await session.scalars(select(ConnectionMonitorSnapshot))).all()
+            for row in rows:
+                row.status, row.checked_at = "healthy", self.now - timedelta(seconds=180)
+            await session.commit()
+            view = await monitor_target_view(session, self.access, target_id=target_id, now=self.now)
+            self.assertEqual((view.health.status, view.reason), ("unknown", "stale"))
+            self.assertIsNotNone(view.health.checked_at)
+            self.assertIn("نتیجه قدیمی", target_text(view))
+            for row in rows:
+                row.status, row.checked_at, row.reason = "unknown", self.now, "core_unavailable"
+            await session.commit()
+            view = await monitor_target_view(session, self.access, target_id=target_id, now=self.now)
+            self.assertIn("هستهٔ پایش در دسترس نیست", target_text(view))
+            for row in rows:
+                row.reason = "sensitive-token"
+            await session.commit()
+            view = await monitor_target_view(session, self.access, target_id=target_id, now=self.now)
+            self.assertNotIn("sensitive", target_text(view))
+            self.assertIsNone(view.reason)

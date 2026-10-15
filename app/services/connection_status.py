@@ -53,10 +53,8 @@ def _published(shop_id: int | None) -> tuple[ColumnElement[bool], ...]:
 def _public_entry(target: ConnectionMonitorTarget, rows: tuple[ConnectionMonitorSnapshot, ...], *,
                    ready: bool, now: datetime) -> PublicConnectionStatus:
     health = target_health(target, rows, runtime_ready=ready, now=now)
-    current_times = [stored_utc(row.checked_at) for row in rows if row.generation == target.generation and row.checked_at is not None]
-    checked_at = min(current_times) if len(current_times) == target.endpoint_count else None
     status = health.status if health.status in (ConnectionStatus.HEALTHY, ConnectionStatus.DEGRADED, ConnectionStatus.DOWN) else ConnectionStatus.UNKNOWN
-    return PublicConnectionStatus(target.public_name, status, checked_at)
+    return PublicConnectionStatus(target.public_name, status, health.checked_at)
 
 
 async def public_connection_page(session: AsyncSession, *, now: datetime, after_id: int = 0) -> PublicConnectionPage:
