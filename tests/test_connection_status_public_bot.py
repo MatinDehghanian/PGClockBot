@@ -11,8 +11,11 @@ from connection_monitor_support import MonitorDatabaseCase
 
 from app.bot import keyboards
 from app.bot.connection_status_public_ui import public_cursor
+from app.bot.connection_status_ui import monitor_text
 from app.bot.handlers import connection_status as handler
 from app.services.connection_status import PublicConnectionPage
+from app.services.connection_status_texts import MONITOR_TEXT_DEFAULTS
+from app.services.message_variables import template_variable_specs
 from app.services.users import DEFAULT_SETTINGS
 
 
@@ -57,3 +60,9 @@ class PublicStatusBotTests(MonitorDatabaseCase):
         for raw in ("csp:next:-1", "csp:shop:2", "csp:next:1:2", "csp:next:2147483648", "csp:next:True"):
             with self.subTest(raw=raw), self.assertRaises(ValueError):
                 public_cursor(raw)
+
+    async def test_static_status_copy_has_no_dynamic_variable_metadata_or_substitution(self) -> None:
+        self.assertTrue(set(MONITOR_TEXT_DEFAULTS).isdisjoint(template_variable_specs()))
+        ui = dict(DEFAULT_SETTINGS)
+        ui["connection_status_title"] = "{token} {user_id.__class__} <b>وضعیت</b>"
+        self.assertEqual(monitor_text(ui, "connection_status_title"), "{token} {user_id.__class__} &lt;b&gt;وضعیت&lt;/b&gt;")
