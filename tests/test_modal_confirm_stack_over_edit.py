@@ -9,6 +9,8 @@ Regression for the v10.1.14 failure:
 from __future__ import annotations
 
 import json
+import os
+import shutil
 import re
 import subprocess
 import tempfile
@@ -41,6 +43,20 @@ def _fn_src(js: str, name: str) -> str:
     raise AssertionError(f"unbalanced {name}")
 
 
+def _jsdom_available() -> bool:
+    node = shutil.which("node")
+    if node is None:
+        return False
+    env = {**os.environ, "NODE_PATH": os.environ.get("NODE_PATH", "/tmp/jsdom-deps/node_modules")}
+    probe = subprocess.run(
+        [node, "-e", "require('jsdom')"], cwd="/tmp", capture_output=True, check=False, env=env, timeout=30
+    )
+    return probe.returncode == 0
+
+
+JSDOM_SKIP_REASON = "node with the jsdom package (NODE_PATH or /tmp/jsdom-deps/node_modules) is required"
+
+
 def _run_node(script: str) -> dict:
     with tempfile.TemporaryDirectory() as td:
         path = Path(td) / "proof.js"
@@ -52,6 +68,7 @@ def _run_node(script: str) -> dict:
             text=True,
             timeout=30,
             check=False,
+            env={**os.environ, "NODE_PATH": os.environ.get("NODE_PATH", "/tmp/jsdom-deps/node_modules")},
         )
         if proc.returncode != 0:
             raise AssertionError(proc.stderr or proc.stdout or "node failed")
@@ -117,6 +134,7 @@ class ModalConfirmStackStaticTests(unittest.TestCase):
         )
 
 
+@unittest.skipUnless(_jsdom_available(), JSDOM_SKIP_REASON)
 class ModalConfirmStackRuntimeProof(unittest.TestCase):
     """jsdom runtime using REAL bringModalToFront / topOpenModal from panel.js."""
 

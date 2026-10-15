@@ -263,13 +263,21 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
         self.assertNotIn("Math.min(mh, 140)", js)
 
     def test_update_warns_stay_on_page(self):
-        upd = (ROOT / "app/web/templates/_settings_update.html").read_text(encoding="utf-8")
-        self.assertIn("upd-stay-warn", upd)
-        self.assertIn("خارج نشوید", upd)
-        self.assertIn("رفرش نکنید", upd)
-        self.assertIn("چند دقیقه", upd)
-        self.assertNotIn("۲ تا ۳ دقیقه", upd)
-        self.assertIn("beforeunload", upd)
+        from jinja2 import Environment, FileSystemLoader
+
+        env = Environment(loader=FileSystemLoader(str(ROOT / "app/web/templates")), autoescape=True)
+        html = env.get_template("_settings_update.html").render(
+            update_info={"update_available": True, "remote_version": "9.9.9", "checked": True, "label": ""},
+            status={"state": "running"},
+            local_version="0.4.0",
+        )
+        self.assertIn("upd-stay-warn", html)
+        self.assertIn("خارج نشوید", html)
+        self.assertIn("رفرش نکنید", html)
+        self.assertIn("چند دقیقه", html)
+        self.assertNotIn("۲ تا ۳ دقیقه", html)
+        # The leave guard lives in panel.js now, not in the partial.
+        self.assertIn("beforeunload", JS.read_text(encoding="utf-8"))
         py = (ROOT / "app/services/panel_update.py").read_text(encoding="utf-8")
         self.assertIn("چند دقیقه", py)
         self.assertNotIn("۲ تا ۳ دقیقه", py)

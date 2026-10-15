@@ -11,6 +11,8 @@ Root causes covered:
 from __future__ import annotations
 
 import json
+import os
+import shutil
 import subprocess
 import tempfile
 import textwrap
@@ -39,6 +41,20 @@ def _fn_src(js: str, name: str) -> str:
             if depth == 0:
                 return js[start : j + 1]
     raise AssertionError(f"unbalanced {name}")
+
+
+def _jsdom_available() -> bool:
+    node = shutil.which("node")
+    if node is None:
+        return False
+    env = {**os.environ, "NODE_PATH": os.environ.get("NODE_PATH", "/tmp/jsdom-deps/node_modules")}
+    probe = subprocess.run(
+        [node, "-e", "require('jsdom')"], cwd="/tmp", capture_output=True, check=False, env=env, timeout=30
+    )
+    return probe.returncode == 0
+
+
+JSDOM_SKIP_REASON = "node with the jsdom package (NODE_PATH or /tmp/jsdom-deps/node_modules) is required"
 
 
 def _run_node(script: str) -> dict:
@@ -108,6 +124,7 @@ class DeleteSubmitStaticTests(unittest.TestCase):
         self.assertIn('name="reason"', edel)
 
 
+@unittest.skipUnless(_jsdom_available(), JSDOM_SKIP_REASON)
 class DeleteSubmitRuntimeProof(unittest.TestCase):
     def test_reason_survives_when_origin_form_is_display_none(self):
         js_src = JS.read_text(encoding="utf-8")

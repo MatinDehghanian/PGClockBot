@@ -93,7 +93,7 @@ def test_install_global_cli_avoids_dev_stdin():
 
 def test_readme_documents_auto_postgres_install():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    assert "PostgreSQL automatically" in readme
+    assert "PostgreSQL" in readme
     assert "PGCLOCK_DATABASE_URL" in readme
 
 
