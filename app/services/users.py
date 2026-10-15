@@ -16,6 +16,7 @@ from app.config import get_settings
 from app.db.models import BotUser, Role, Setting
 from app.services.button_styles import default_settings as button_style_defaults
 from app.services.button_styles import setting_group_fields as button_style_setting_fields
+from app.services.connection_status_texts import MONITOR_TEXT_DEFAULTS
 from app.services.user_purge import purge_user_references
 
 logger = logging.getLogger("pgclock.users")
@@ -961,6 +962,7 @@ DEFAULT_SETTINGS = {
     "service_import_admins": "",
 }
 DEFAULT_SETTINGS.update(button_style_defaults())
+DEFAULT_SETTINGS.update(MONITOR_TEXT_DEFAULTS)
 
 # field kinds: text | textarea | toggle | select | number | image
 # (key, label, kind, help?, options?)
@@ -1020,6 +1022,10 @@ SETTING_GROUPS = {
         ),
     ],
     "متن پیام‌ها": [
+        ("connection_status_admin_title", "عنوان مدیریت وضعیت اتصال", "text", "بدون متغیر"),
+        ("connection_status_account_prompt", "دریافت حساب پایش", "textarea", "بدون متغیر"),
+        ("connection_status_name_prompt", "دریافت نام عمومی هاست", "text", "بدون متغیر"),
+        ("connection_status_order_prompt", "دریافت ترتیب هاست", "text", "بدون متغیر"),
         ("guide_text", "متن راهنما", "textarea", "دستور /help در تلگرام"),
         ("faq_text", "متن سوالات متداول", "textarea", "قابل استفاده در پیام‌ها"),
         ("empty_services_text", "وقتی سرویسی ندارد", "textarea", "پیام بخش سرویس‌های من اگر لیست خالی باشد"),
@@ -1148,6 +1154,7 @@ SETTING_GROUPS = {
         ("btn_reseller", "دکمه نماینده", "text", "در کیبورد ربات اختصاصی نماینده"),
         ("btn_reseller_creds", "دکمه اطلاعات ورود نماینده", "text", "در ربات اصلی برای صاحب فروشگاه"),
         ("btn_admin", "دکمه ادمین", "text", ""),
+        ("btn_connection_status_admin", "دکمه مدیریت وضعیت اتصال", "text", "هاب سیستم"),
         ("btn_menu_home", "دکمه منوی اصلی (کیبورد)", "text", "خروج از پیش‌نمایش / خانه"),
         ("btn_adm_hub_ops", "گروه عملیات روزانه (ادمین)", "text", "هاب پنل ادمین"),
         ("btn_adm_hub_people", "گروه افراد (ادمین)", "text", "هاب پنل ادمین"),

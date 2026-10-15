@@ -109,10 +109,17 @@ def _validate_account_capacity(record: dict[str, Any]) -> None:
 
 
 async def _read_account(username: str) -> tuple[int, str]:
-    expected_admin = (get_settings().pg_username or "").strip().lower()
+    pg = get_pg()
     try:
         async with asyncio.timeout(5):
-            record = await get_pg().get_user_by_username(username)
+            admin = await pg.get_current_admin()
+            if not isinstance(admin, dict) or admin.get("is_owner") is not True:
+                raise ValueError(ACCOUNT_UNAVAILABLE)
+            expected_admin = str(admin.get("username") or "").strip().lower()
+            configured_admin = (get_settings().pg_username or "").strip().lower()
+            if configured_admin and configured_admin != expected_admin:
+                raise ValueError(ACCOUNT_UNAVAILABLE)
+            record = await pg.get_user_by_username(username)
     except (PasarGuardError, httpx.HTTPError, TimeoutError):
         logger.warning("Monitoring account read failed")
         raise ValueError(ACCOUNT_UNAVAILABLE) from None

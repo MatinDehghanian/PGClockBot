@@ -105,6 +105,8 @@ def create_dispatcher() -> Dispatcher:
         admin_pg_nodes,
         admin_pg_users,
         admin_settings,
+        connection_status_admin,
+        connection_status_admin_input,
         loyalty,
         nav_hubs,
         marketing_tools,
@@ -130,6 +132,7 @@ def create_dispatcher() -> Dispatcher:
 
     dp.include_router(start.router)
     dp.include_router(terms.router)
+    dp.include_router(connection_status_admin.router)
     # Reply-keyboard nav early so menu labels win over FSM amount parsers
     dp.include_router(reply_nav.router)
     dp.include_router(nav_hubs.router)
@@ -139,6 +142,7 @@ def create_dispatcher() -> Dispatcher:
     from app.bot import staff_cancel as _staff_cancel  # noqa: F401 — cancel registry
 
     dp.include_router(nav_input_mod.router)
+    dp.include_router(connection_status_admin_input.router)
     dp.include_router(purchase_contact.router)
     dp.include_router(loyalty.router)
     dp.include_router(shop.router)
@@ -171,6 +175,8 @@ def create_dispatcher() -> Dispatcher:
         admin_backup.router,
         admin_settings.router,
         admin_plans.router,
+        connection_status_admin.router,
+        connection_status_admin_input.router,
     ):
         r.message.middleware(block)
         r.callback_query.middleware(block)

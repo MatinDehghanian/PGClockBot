@@ -32,7 +32,8 @@ def panel_account(**changes: object) -> dict[str, object]:
 class MonitorSettingsTests(MonitorDatabaseCase):
     async def asyncSetUp(self) -> None:
         await super().asyncSetUp()
-        self.panel = SimpleNamespace(get_user_by_username=AsyncMock(return_value=panel_account()))
+        self.panel = SimpleNamespace(get_user_by_username=AsyncMock(return_value=panel_account()),
+                                     get_current_admin=AsyncMock(return_value={"is_owner": True, "username": "panel-owner"}))
         for patcher in [
             patch("app.services.connection_monitor_settings.get_pg", return_value=self.panel),
             patch("app.services.connection_monitor_settings.get_settings", return_value=SimpleNamespace(pg_username="panel-owner")),
@@ -60,6 +61,20 @@ class MonitorSettingsTests(MonitorDatabaseCase):
             self.panel.get_user_by_username.side_effect = read
             await set_monitor_account(session, self.access, username="monitor-only")
             self.assertFalse(session.in_transaction())
+
+    async def test_api_key_owner_without_configured_username_uses_authenticated_owner_identity(self) -> None:
+        with patch("app.services.connection_monitor_settings.get_settings", return_value=SimpleNamespace(pg_username="")):
+            async with self.Session() as session:
+                result = await set_monitor_account(session, self.access, username="monitor-only")
+        self.assertTrue(result.has_account)
+        self.assertEqual(result.pg_user_id, 900)
+
+    async def test_panel_identity_without_owner_capability_cannot_attach_an_account(self) -> None:
+        self.panel.get_current_admin.return_value = {"is_owner": False, "username": "panel-owner"}
+        async with self.Session() as session:
+            with self.assertRaisesRegex(ValueError, ACCOUNT_UNAVAILABLE):
+                await set_monitor_account(session, self.access, username="monitor-only")
+        self.panel.get_user_by_username.assert_not_called()
 
     async def test_existing_target_claims_and_publication_are_invalidated_on_account_setup(self) -> None:
         async with self.Session() as session:

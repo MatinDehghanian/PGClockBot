@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from typing import Any, Mapping
 
 from app.services.safe_format import safe_format
+from app.services.connection_status_texts import MONITOR_TEXT_DEFAULTS
 
 # Domains = where a variable is allowed to resolve.
 DOMAIN_SHOP = "shop"
@@ -102,6 +103,8 @@ _SETTING_CONTEXT_KEYS: dict[str, frozenset[str]] = {
     "psp_pay_text": frozenset({"amount", "order_id", "payment_id", "shop_title"}),
     "force_join_msg": frozenset({"channels"}),
 }
+SETTING_DOMAIN.update({key: DOMAIN_SHOP for key in MONITOR_TEXT_DEFAULTS})
+_SETTING_CONTEXT_KEYS.update({key: frozenset() for key in MONITOR_TEXT_DEFAULTS})
 
 
 @dataclass(frozen=True)
