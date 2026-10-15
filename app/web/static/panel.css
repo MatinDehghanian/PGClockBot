@@ -532,23 +532,10 @@ html[data-theme="light"] .channel-badge-dev {
   box-shadow: 0 0 0 2px color-mix(in srgb, #f97316 28%, transparent);
   flex: 0 0 auto;
 }
-/* Staff color tag — small circle beside list names */
-.color-tag-dot {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background: var(--tag-color, #64748b);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--tag-color, #64748b) 28%, transparent);
-  flex: 0 0 auto;
-}
-.cell-name-primary > .color-tag-dot {
-  flex: 0 0 auto;
-}
 .color-tag-picker {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-1);
+  gap: 6px;
   margin-top: var(--space-1);
 }
 .color-tag-option {
@@ -556,9 +543,9 @@ html[data-theme="light"] .channel-badge-dev {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 12px;
+  padding: 6px 10px;
   border-radius: 999px;
-  border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+  border: 1px solid color-mix(in srgb, var(--tag-color, var(--border, #3f3f46)) 40%, var(--border, rgba(255, 255, 255, 0.1)));
   background: color-mix(in srgb, var(--surface, #111) 88%, transparent);
   cursor: pointer;
   user-select: none;
@@ -594,23 +581,12 @@ html[data-theme="light"] .channel-badge-dev {
   background: color-mix(in srgb, var(--tag-color, #64748b) 16%, transparent);
   color: var(--tag-color, #86efac);
 }
-.color-tag-swatch {
-  width: 12px;
-  height: 12px;
-  border-radius: 999px;
-  background: var(--tag-color, #64748b);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--tag-color, #64748b) 28%, transparent);
-  flex: 0 0 auto;
-}
-.color-tag-swatch--none {
-  background: transparent;
-  border: 1.5px dashed color-mix(in srgb, var(--muted, #94a3b8) 70%, transparent);
-  box-shadow: none;
-}
+/* No swatch circle: the tag colour lives on the text and the border of each option. */
 .color-tag-label {
   font-size: 12px;
   line-height: 1.2;
-  color: var(--text, inherit);
+  font-weight: 600;
+  color: var(--tag-color, var(--text, inherit));
 }
 /* Tag filter sits in the search row, physical-left of the search button
    (between the button and the card edge), same height as the button. */
@@ -682,10 +658,6 @@ html[data-theme="light"] .channel-badge-dev {
   align-items: center;
   gap: 8px;
   justify-content: flex-start;
-}
-.ui-select-menu button.color-tag-menu-option .color-tag-swatch {
-  width: 10px;
-  height: 10px;
 }
 .ui-select-menu button.color-tag-menu-option .color-tag-menu-label {
   font-weight: 600;
@@ -6092,9 +6064,8 @@ form.settings-form > .actions.sticky-actions,
 #modal-user-edit .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-head {
   flex: 0 0 auto;
   margin: 0;
-  padding: var(--space-3);
+  padding: calc(var(--space-3) + var(--modal-scrollbar-room, 8px));
   padding-bottom: 0;
-  padding-inline: calc(var(--space-3) + var(--modal-scrollbar-room, 8px));
   box-sizing: border-box;
 }
 .ui-modal-scroll {
@@ -6118,9 +6089,8 @@ form.settings-form > .actions.sticky-actions,
   /* Stretch to panel edges so the scrollbar sits on the chrome edge,
      still clipped by the panel's border-radius (fixes Android square overflow). */
   margin: calc(-1 * var(--space-3));
-  padding: var(--space-3);
-  /* Extra inline air when a browser ignores gutter for overlay scrollbars. */
-  padding-inline: calc(var(--space-3) + var(--modal-scrollbar-room, 8px));
+  /* Extra air on every side, matching the inline room for overlay scrollbars. */
+  padding: calc(var(--space-3) + var(--modal-scrollbar-room, 8px));
   box-sizing: border-box;
 }
 .ui-modal-scroll::-webkit-scrollbar {
@@ -6146,12 +6116,12 @@ form.settings-form > .actions.sticky-actions,
   overflow-x: hidden;
   overflow-y: auto;
   scrollbar-gutter: stable both-edges;
-  /* Equal air above the title/body and below the last block */
+  /* Same air on all four sides: the inline inset (with the scrollbar room) is also used
+     above the title/body and below the last block. */
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  padding: var(--space-3);
-  padding-inline: calc(var(--space-3) + var(--modal-scrollbar-room, 8px));
+  padding: calc(var(--space-3) + var(--modal-scrollbar-room, 8px));
   box-sizing: border-box;
 }
 /* User-edit scroll uses the shared shell padding (+ --modal-scrollbar-room).

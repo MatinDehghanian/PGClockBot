@@ -392,7 +392,7 @@ rollback عملیاتی با خاموش کردن worker و انتشار و clean
 مرحلهٔ صفر با قرارداد و baseline ثبت‌شده تکمیل شد. مرحلهٔ یک نیز انجام شد:
 نگاشت و fixtureهای دو هاست مستقل با ۷۰ تست و validation رسمی core تکمیل شدند؛
 [ماتریس سازگاری](CONNECTION_STATUS_COMPATIBILITY.md) محدودیت‌های دقیق را ثبت می‌کند.
-مرحلهٔ ۲ هم با migration `0054_connection_monitor`، مجوز Owner، مرجع رمز‌شدهٔ حساب و
+مرحلهٔ ۲ هم با migration `0055_connection_monitor`، مجوز Owner، مرجع رمز‌شدهٔ حساب و
 leaseهای runtime/target روی SQLite و PostgreSQL تکمیل شد. مرحلهٔ ۳ با ۱۲ تست lifecycle، پنج زیرتست و اجرای سه مسیر مصنوعی روی core رسمی macOS
 تکمیل شد. مرحلهٔ ۴ هم با سنجش HTTPS محدود به پروکسی، کنترل مقصد، سیاست خالص وضعیت و ۲۳ تست
 به‌همراه ۲۵ زیرتست تکمیل شد. مرحلهٔ ۵ با worker مستقل از تلگرام، claim دسته‌ای، کنترل نسل/lease در ذخیرهٔ snapshot

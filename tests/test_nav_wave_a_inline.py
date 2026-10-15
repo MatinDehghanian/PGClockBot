@@ -89,13 +89,13 @@ class HubKeyboardTests(unittest.TestCase):
         self.assertIn("nv:w:tx", data)
         self.assertIn("menu:home", data)
 
-    def test_support_hub_optional_apply(self):
+    def test_support_hub_has_no_reseller_apply(self):
         from app.bot.nav_inline import support_hub_keyboard
 
-        kb = support_hub_keyboard({}, include_reseller_apply=True)
+        kb = support_hub_keyboard({})
         data = [b.callback_data for row in kb.inline_keyboard for b in row]
         self.assertIn("nv:s:new", data)
-        self.assertIn("nv:resapply", data)
+        self.assertNotIn("nv:resapply", data)
 
 
 class PresentInlineOnlyTests(unittest.IsolatedAsyncioTestCase):

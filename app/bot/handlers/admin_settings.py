@@ -16,7 +16,7 @@ from app.bot.auth import require_bot_owner
 from app.bot.nav_input import delete_user_message, finish_text_step
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser, Plan
-from app.services.notifications import NOTIFY_PREFS
+from app.services.notifications import NOTIFY_PREFS, PLATFORM_NOTIFY_PREFS
 from app.services.pasarguard import get_pg
 from app.services.support_contacts import (
     delete_support_contact,
@@ -185,6 +185,7 @@ SECTIONS: dict[str, dict] = {
             ("card", "کارت به کارت", [
                 ("card_number", "شماره کارت", "text"),
                 ("card_holder", "صاحب کارت", "text"),
+                ("payment_cards_random", "نمایش کارت تصادفی", "toggle"),
                 ("card_pay_text", "راهنمای پرداخت", "textarea"),
                 *BTN_PAY_CARD,
             ]),
@@ -644,7 +645,7 @@ async def _render_notify(callback: CallbackQuery, session: AsyncSession) -> None
             InlineKeyboardButton(
                 text=f"{'✅' if on(ui.get(key, default)) else '⬜️'} {title}", callback_data=f"adm:st:tog:{key}"
             )
-            for key, title, _, default in NOTIFY_PREFS
+            for key, title, _, default in PLATFORM_NOTIFY_PREFS
         ]
     )
     rows.append(_back_row("adm:st:hub"))
@@ -768,7 +769,7 @@ async def _settings_location_panel(
     if sec_id == "notify":
         ui = await get_all_settings(session)
         rows: list[list[InlineKeyboardButton]] = []
-        for key, title, _, default in NOTIFY_PREFS:
+        for key, title, _, default in PLATFORM_NOTIFY_PREFS:
             mark = "✅" if on(ui.get(key, default)) else "⬜️"
             rows.append(
                 [InlineKeyboardButton(text=f"{mark} {title}", callback_data=f"adm:st:tog:{key}")]

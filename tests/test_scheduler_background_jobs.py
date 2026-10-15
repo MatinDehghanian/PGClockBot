@@ -21,7 +21,7 @@ OPERATIONS = {
     "scheduled_backup",
     "connection_status",
 }
-NOTIFICATIONS = {"service_automation", "expiry", "admin_daily_report", "targeted_campaigns", "cancellation_notifications"}
+NOTIFICATIONS = {"service_automation", "expiry", "admin_daily_report", "targeted_campaigns", "cancellation_notifications", "panel_alert_notifications"}
 
 
 class BackgroundSchedulerTests(unittest.IsolatedAsyncioTestCase):

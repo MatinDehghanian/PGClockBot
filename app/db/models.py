@@ -471,6 +471,25 @@ class ServiceImportRequest(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class PanelAlertState(Base):
+    """Last state of a panel alert that is pushed to Telegram, so each change is announced once.
+
+    ``scope_key`` is ``platform`` or ``shop:<id>``; ``alert`` is the kind of alert.
+    """
+
+    __tablename__ = "panel_alert_states"
+    __table_args__ = (Index("uq_panel_alert_states_scope_alert", "scope_key", "alert", unique=True),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    scope_key: Mapped[str] = mapped_column(String(32))
+    alert: Mapped[str] = mapped_column(String(32))
+    active: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    last_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    fingerprint: Mapped[str] = mapped_column(String(64), default="", server_default="")
+    notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class ServiceAutomation(Base):
     """Per-service wallet consent; deleted catalog choices become NULL."""
 

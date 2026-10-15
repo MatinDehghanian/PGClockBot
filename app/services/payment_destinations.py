@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import uuid
@@ -15,6 +16,7 @@ from app.services.button_styles import (
 KEY_CARDS = "payment_cards"
 KEY_GATEWAYS = "payment_gateways"
 KEY_CRYPTO = "payment_crypto_wallets"
+KEY_CARDS_RANDOM = "payment_cards_random"
 
 MAX_ITEMS = 12
 
@@ -258,6 +260,21 @@ def enabled_gateways(ui: dict[str, str]) -> list[dict[str, Any]]:
 def enabled_crypto_wallets(ui: dict[str, str]) -> list[dict[str, Any]]:
     ui = enrich_payment_settings(ui)
     return [w for w in parse_payment_crypto_wallets(ui.get(KEY_CRYPTO)) if w.get("enabled", True)]
+
+
+def random_card_enabled(ui: dict[str, str]) -> bool:
+    """«نمایش کارت تصادفی»: with several cards the customer is shown one instead of choosing."""
+    return str(ui.get(KEY_CARDS_RANDOM, "0")).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def pick_card(cards: list[dict[str, Any]], seed: str) -> dict[str, Any]:
+    """One of ``cards``, spread evenly over different ``seed`` values and stable for the same seed.
+
+    The seed is the order (or top-up) the card is shown for, so a customer who taps «کارت به کارت»
+    again for the same order sees the same card instead of a different one.
+    """
+    digest = hashlib.sha256(seed.encode("utf-8")).digest()
+    return cards[int.from_bytes(digest[:8], "big") % len(cards)]
 
 
 def card_by_id(ui: dict[str, str], dest_id: str) -> dict[str, Any] | None:

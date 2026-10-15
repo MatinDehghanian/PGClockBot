@@ -156,11 +156,10 @@ class Ux20TemplatePresenceTests(unittest.TestCase):
         self.assertIn("لینک‌های سریع ربات", links)
         self.assertIn("data-copy=", links)
 
-    def test_plans_page_links_to_the_gift_code_page(self):
+    def test_plans_page_does_not_carry_the_gift_code_page_or_its_old_modal(self):
         html = Path("app/web/templates/plans.html").read_text(encoding="utf-8")
         self.assertNotIn("modal-gift-codes", html)
-        self.assertIn('href="/gift-codes"', html)
-        self.assertIn("کد هدیه", html)
+        self.assertNotIn('href="/gift-codes"', html)
 
     def test_sidebar_no_tools_nav(self):
         html = Path("app/web/templates/base.html").read_text(encoding="utf-8")
