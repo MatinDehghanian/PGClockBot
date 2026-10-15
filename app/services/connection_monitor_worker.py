@@ -1,0 +1,159 @@
+"""Bounded local monitoring cycles with committed claims and independent sessions."""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+from dataclasses import dataclass
+from datetime import datetime, timezone
+
+import httpx
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+from app.services.connection_monitor_catalog import plan_monitor_hosts
+from app.services.connection_monitor_config import MonitorBinding
+from app.services.connection_monitor_claims import (
+    MonitorCycleClaim,
+    MonitorTargetClaim,
+    claim_due_targets,
+    claim_monitor_cycle,
+    release_cycle_targets,
+    release_monitor_cycle,
+)
+from app.services.connection_monitor_panel import read_monitor_catalog
+from app.services.connection_monitor_snapshots import complete_monitor_target, invalidate_monitor_evidence
+from app.services.connection_monitor_sync import load_cycle_inputs, reconcile_monitor_plans
+from app.services.connection_monitor_types import MonitorHostPlan
+from app.services.connection_probe import probe_client, probe_control, probe_proxy
+from app.services.connection_status_types import ConnectionStatus, ObservationKind, ProbeObservation
+from app.services.pasarguard import PasarGuardError
+from app.services.xray_probe import XrayBatch, run_xray_batch
+from app.services.xray_probe_process import finish_cleanup
+from app.services.xray_probe_resources import XrayBinary, XrayProbeError
+
+
+logger = logging.getLogger(__name__)
+WORK_SECONDS = 45
+PROXY_CONCURRENCY = 4
+LEASE_CLEANUP_SECONDS = 1
+
+
+@dataclass(frozen=True, slots=True)
+class MonitorCycleResult:
+    claimed: bool
+    completed: int = 0
+    reason: str | None = None
+
+
+async def _finish_cycle(sessions: async_sessionmaker[AsyncSession], cycle: MonitorCycleClaim) -> None:
+    try:
+        async with asyncio.timeout(LEASE_CLEANUP_SECONDS):
+            async with sessions() as session:
+                await release_cycle_targets(session, cycle)
+                await release_monitor_cycle(session, cycle)
+    except (TimeoutError, SQLAlchemyError):
+        logger.warning("Monitoring lease cleanup deferred to expiry")
+
+
+async def _record_issue(sessions: async_sessionmaker[AsyncSession], cycle: MonitorCycleClaim, *,
+                         status: ConnectionStatus, reason: str) -> None:
+    async with sessions() as session:
+        await invalidate_monitor_evidence(session, cycle, status=status, reason=reason, now=datetime.now(timezone.utc))
+
+
+async def _check_target(sessions: async_sessionmaker[AsyncSession], claim: MonitorTargetClaim,
+                        batch: XrayBatch, semaphore: asyncio.Semaphore, *, control_ok: bool) -> bool:
+    async def check(binding: MonitorBinding) -> tuple[str, ProbeObservation]:
+        async with semaphore:
+            client = await asyncio.to_thread(probe_client, port=binding.port)
+            async with client:
+                observation = await probe_proxy(client, control_ok=control_ok, account_valid=True, runner_alive=lambda: batch.is_alive)
+                return binding.endpoint.endpoint_key, observation
+
+    bindings = tuple(binding for binding in batch.bindings if binding.endpoint.host_id == claim.pg_host_id)
+    try:
+        async with asyncio.TaskGroup() as group:
+            tasks = [group.create_task(check(binding)) for binding in bindings]
+        observations = dict(task.result() for task in tasks)
+        async with sessions() as session:
+            return await complete_monitor_target(session, claim, observations, now=datetime.now(timezone.utc))
+    except Exception as exc:
+        # Each target is an independent read-only network unit. Its lease remains
+        # releasable and other targets must still complete if this unit fails.
+        logger.warning("Monitoring target failed target=%s error_type=%s", claim.target_id, type(exc).__name__)
+        return await _record_target_failure(sessions, claim, bindings)
+
+
+async def _record_target_failure(sessions: async_sessionmaker[AsyncSession], claim: MonitorTargetClaim,
+                                 bindings: tuple[MonitorBinding, ...]) -> bool:
+    now = datetime.now(timezone.utc)
+    observations = {binding.endpoint.endpoint_key: ProbeObservation(ObservationKind.UNKNOWN, now, reason="probe_unavailable")
+                    for binding in bindings}
+    try:
+        async with sessions() as session:
+            return await complete_monitor_target(session, claim, observations, now=now)
+    except (SQLAlchemyError, ValueError):
+        logger.warning("Monitoring target evidence unavailable target=%s", claim.target_id)
+        return False
+
+
+async def _probe_claims(sessions: async_sessionmaker[AsyncSession], claims: tuple[MonitorTargetClaim, ...],
+                         plans: tuple[MonitorHostPlan, ...], binary: XrayBinary) -> int:
+    host_ids = {claim.pg_host_id for claim in claims}
+    endpoints = tuple(endpoint for plan in plans if plan.host_id in host_ids for endpoint in plan.endpoints)
+    semaphore = asyncio.Semaphore(PROXY_CONCURRENCY)
+    control = asyncio.create_task(probe_control())
+    try:
+        async with run_xray_batch(binary, endpoints) as batch:
+            control_ok = await control
+            async with asyncio.TaskGroup() as group:
+                tasks = [group.create_task(_check_target(sessions, claim, batch, semaphore, control_ok=control_ok)) for claim in claims]
+            return sum(task.result() for task in tasks)
+    finally:
+        control.cancel()
+        await asyncio.gather(control, return_exceptions=True)
+
+
+async def _run_work(sessions: async_sessionmaker[AsyncSession], cycle: MonitorCycleClaim, binary: XrayBinary) -> int:
+    async with sessions() as session:
+        account, selected = await load_cycle_inputs(session, cycle, now=datetime.now(timezone.utc))
+    if not selected:
+        return 0
+    try:
+        catalog = await read_monitor_catalog(account)
+    except TimeoutError:
+        raise ValueError("Monitoring catalog deadline") from None
+    plans = await asyncio.to_thread(
+        plan_monitor_hosts, hosts=catalog.hosts, inbounds=catalog.inbounds, native_configs=catalog.native_configs,
+        selected_ids=selected, staff={"pg_is_owner": True}, account_revision=account.revision,
+    )
+    async with sessions() as session:
+        if not await reconcile_monitor_plans(session, cycle, plans, now=datetime.now(timezone.utc)):
+            return 0
+        claims = await claim_due_targets(session, cycle, now=datetime.now(timezone.utc))
+    if not claims:
+        return 0
+    return await _probe_claims(sessions, claims, plans, binary)
+
+
+async def run_monitor_cycle(sessions: async_sessionmaker[AsyncSession], binary: XrayBinary) -> MonitorCycleResult:
+    async with sessions() as session:
+        cycle = await claim_monitor_cycle(session, now=datetime.now(timezone.utc))
+    if cycle is None:
+        return MonitorCycleResult(False)
+    try:
+        async with asyncio.timeout(WORK_SECONDS):
+            completed = await _run_work(sessions, cycle, binary)
+        return MonitorCycleResult(True, completed)
+    except XrayProbeError:
+        await _record_issue(sessions, cycle, status=ConnectionStatus.NOT_READY, reason="core_unavailable")
+        return MonitorCycleResult(True, reason="core_unavailable")
+    except (PasarGuardError, httpx.HTTPError, ValueError):
+        await _record_issue(sessions, cycle, status=ConnectionStatus.UNKNOWN, reason="catalog_unavailable")
+        return MonitorCycleResult(True, reason="catalog_unavailable")
+    except TimeoutError:
+        # Missing a turn never becomes a synthetic route failure.
+        return MonitorCycleResult(True, reason="cycle_deadline")
+    finally:
+        await finish_cleanup(_finish_cycle(sessions, cycle))

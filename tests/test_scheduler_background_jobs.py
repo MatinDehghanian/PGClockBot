@@ -19,6 +19,7 @@ OPERATIONS = {
     "pg_admin_subscription",
     "pending_order_cleanup",
     "scheduled_backup",
+    "connection_status",
 }
 NOTIFICATIONS = {"service_automation", "expiry", "admin_daily_report", "targeted_campaigns", "cancellation_notifications", "panel_alert_notifications"}
 
@@ -65,7 +66,7 @@ class BackgroundSchedulerTests(unittest.IsolatedAsyncioTestCase):
         jobs.start_scheduler(object())
         bot = object()
         jobs.start_scheduler(bot)
-        self.assertEqual(len(self.scheduler.get_jobs()), 10)
+        self.assertEqual(len(self.scheduler.get_jobs()), len(OPERATIONS | NOTIFICATIONS))
         for job_id in NOTIFICATIONS:
             self.assertEqual(self.scheduler.get_job(job_id).args, (bot,))
 
@@ -75,6 +76,14 @@ class BackgroundSchedulerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(job.trigger.interval.total_seconds(), 10)
         self.assertEqual(job.max_instances, 1)
         self.assertTrue(job.coalesce)
+
+    async def test_connection_monitor_runs_each_minute_without_overlapping_batches(self) -> None:
+        jobs.start_background_scheduler()
+        job = self.scheduler.get_job("connection_status")
+        self.assertEqual(job.trigger.interval.total_seconds(), 60)
+        self.assertEqual(job.max_instances, 1)
+        self.assertTrue(job.coalesce)
+        self.assertFalse(job.args)
 
     async def _check_application_startup(self, *, token):
         from app import main

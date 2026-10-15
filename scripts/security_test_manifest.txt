@@ -1,5 +1,24 @@
 
 #
+# Selected-host route identity, scope and prevention of direct fallback.
+tests/test_connection_monitor_catalog.py
+tests/test_connection_monitor_config.py
+tests/test_xray_probe.py
+tests/test_connection_probe.py
+tests/test_connection_status_policy.py
+tests/test_connection_monitor_panel.py
+tests/test_connection_monitor_snapshots.py
+tests/test_connection_monitor_worker.py
+tests/test_connection_monitor_queue.py
+tests/test_connection_monitor_admin.py
+tests/test_connection_status_admin_bot.py
+tests/test_connection_status_public.py
+tests/test_connection_status_public_bot.py
+tests/test_connection_status_menu_migration.py
+tests/test_connection_status.py
+tests/test_connection_status_authz.py
+tests/test_connection_status_concurrency.py
+tests/test_connection_status_migration.py
 # Subscription contact ownership, shop isolation and cancellation notification claims.
 tests/test_purchase_contact_and_cancellation_notices.py
 # Monetary display escaping and canonical refund form values.
@@ -150,3 +169,5 @@ tests/test_reseller_capacity_view.py
 tests/test_random_payment_card.py
 tests/test_panel_alert_notifications.py
 tests/test_stuck_order_resolution.py
+
+tests/test_connection_status_web.py

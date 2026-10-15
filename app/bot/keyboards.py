@@ -16,6 +16,7 @@ from app.services.support_contacts import (
     support_chat_url,
 )
 from app.services.users import DEFAULT_SETTINGS, on
+from app.services.connection_status_texts import CONNECTION_STATUS_MENU_KEY
 
 # Default order for user menu items (drag-and-drop in web panel edits menu_order)
 # guide/faq removed from keyboard — keep texts available via /help if needed.
@@ -23,6 +24,7 @@ from app.services.users import DEFAULT_SETTINGS, on
 DEFAULT_MENU_ORDER = [
     "shop",
     "services",
+    CONNECTION_STATUS_MENU_KEY,
     "wallet",
     "support",
     "loyalty",
@@ -278,6 +280,12 @@ def sync_show_flags_for_order(order: list[str]) -> dict[str, str]:
     return flags
 
 
+def _connection_status_buttons(key: str, ui: dict | None) -> list[InlineKeyboardButton]:
+    if key != CONNECTION_STATUS_MENU_KEY:
+        return []
+    return [_ikb(_t(ui, "btn_connection_status"), callback_data="csp:refresh", ui=ui, label_key="btn_connection_status")]
+
+
 def main_menu(
     role: str,
     *,
@@ -296,6 +304,7 @@ def main_menu(
     buttons: list[InlineKeyboardButton] = []
 
     for key in _menu_order(ui):
+        buttons.extend(_connection_status_buttons(key, ui))
         if key == "shop":
             buttons.append(
                 _ikb(

@@ -11,6 +11,7 @@ from aiogram.types import KeyboardButton, ReplyKeyboardMarkup
 
 from app.db.models import Role
 from app.services.users import on
+from app.services.connection_status_texts import CONNECTION_STATUS_MENU_KEY
 
 # Bind helpers/constants from keyboards after that module has defined them
 # (keyboards imports this module mid-file, once primitives exist).
@@ -150,6 +151,12 @@ def _restart_footer(ui: dict | None) -> list[tuple[str, str, str]]:
     return [(REPLY_ACTION_HOME, label, "btn_restart")] if label else []
 
 
+def _connection_status_entries(key: str, ui: dict | None) -> list[tuple[str, str]]:
+    if key != CONNECTION_STATUS_MENU_KEY:
+        return []
+    return [(CONNECTION_STATUS_MENU_KEY, _t(ui, "btn_connection_status"))]
+
+
 def _reply_user_entries(
     role: str,
     *,
@@ -167,6 +174,7 @@ def _reply_user_entries(
     """
     entries: list[tuple[str, str]] = []
     for key in _menu_order(ui):
+        entries.extend(_connection_status_entries(key, ui))
         if key == "shop":
             entries.append((REPLY_ACTION_SHOP, _t(ui, "btn_shop")))
         elif key == "services" and has_services:
@@ -212,6 +220,7 @@ def _reply_admin_hub_entries(ui: dict | None = None) -> list[tuple[str, str]]:
         (REPLY_ACTION_ADM_HUB_PRODUCT, _t(ui, "btn_adm_hub_product")),
         (REPLY_ACTION_ADM_HUB_MARKETING, _t(ui, "btn_adm_hub_marketing")),
         (REPLY_ACTION_ADM_HUB_SYSTEM, _t(ui, "btn_adm_hub_system")),
+        ("connection_status_admin", _t(ui, "btn_connection_status_admin")),
     ]
 
 
