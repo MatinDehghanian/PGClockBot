@@ -77,8 +77,17 @@ async def user_sees_my_services(
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ) -> bool:
-    """True when My Services should appear (VPN rows and/or reseller capacity)."""
+    """True when My Services should appear (VPN rows, reseller capacity, or the add-existing entry).
+
+    While «افزودن سرویس قبلی» is on the button is shown to everybody, because the add button
+    lives inside it and a customer without services has no other way to reach it.
+    """
     if await user_has_services(session, int(db_user.id)):
+        return True
+    from app.bot.service_import_ui import import_enabled
+    from app.services.users import get_all_settings
+
+    if import_enabled(await get_all_settings(session)):
         return True
     from app.services.reseller_access import load_reseller_my_service_profile
 
@@ -457,7 +466,9 @@ async def show_nav_keyboard(
         # Customer keyboard only — never leak admin/reseller hub buttons
         from app.db.models import Role as _Role
 
-        has = await user_has_services(session, db_user.id)
+        from app.bot.service_import_ui import import_enabled
+
+        has = await user_has_services(session, db_user.id) or import_enabled(ui)
         exit_action = (
             kb.REPLY_ACTION_RESELLER if is_reseller_bot else kb.REPLY_ACTION_ADMIN
         )
