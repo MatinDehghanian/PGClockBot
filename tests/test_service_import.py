@@ -88,6 +88,8 @@ class ImportCase(unittest.IsolatedAsyncioTestCase):
         from app.services.users import clear_settings_cache
 
         clear_settings_cache()  # settings are cached per process; every test has its own database
+        si.clear_identity_cache()
+        self.addCleanup(si.clear_identity_cache)
         self._tmpdir = tempfile.TemporaryDirectory()
         self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmpdir.name) / 'i.db'}")
         async with self.engine.begin() as conn:
