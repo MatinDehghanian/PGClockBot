@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, patch
 import httpx
 
 from app.services.connection_monitor_panel import MonitorAccount, read_monitor_catalog
+from app.services.connection_monitor_accounts import MonitorAccountError
 from app.services.pasarguard import PasarGuardClient, PasarGuardError
 
 
@@ -18,6 +19,34 @@ TOKEN = "synthetic-monitor-token-123456"
 
 
 class MonitorPanelTests(unittest.IsolatedAsyncioTestCase):
+    async def test_regenerated_subscription_url_keeps_using_the_valid_saved_token(self) -> None:
+        user = {"id": 900, "username": "monitor", "status": "active", "used_traffic": 0,
+                "data_limit": 0, "expire": None, "subscription_url": "https://panel.example/sub/newly-issued-token-123456"}
+        account = MonitorAccount(900, hashlib.sha256(f"900:{TOKEN}".encode()).hexdigest(), "encrypted", "monitor")
+        pg = SimpleNamespace(get_user_by_id=AsyncMock(return_value=user), get_hosts=AsyncMock(return_value=[]),
+                             get_inbounds_details=AsyncMock(return_value=[]), subscription_xray=AsyncMock(return_value=[]))
+        with patch("app.services.connection_monitor_panel.get_pg", return_value=pg), \
+             patch("app.services.connection_monitor_panel.reveal_monitor_token", AsyncMock(return_value=TOKEN)):
+            result = await read_monitor_catalog(account)
+        self.assertEqual(result.native_configs, [])
+        pg.subscription_xray.assert_awaited_once_with(TOKEN)
+
+    async def test_panel_rejection_of_a_revoked_saved_link_is_reported_without_token_details(self) -> None:
+        user = {"id": 900, "username": "monitor", "status": "active", "used_traffic": 0,
+                "data_limit": 0, "expire": None, "subscription_url": "https://panel.example/sub/newly-issued-token-123456"}
+        account = MonitorAccount(900, hashlib.sha256(f"900:{TOKEN}".encode()).hexdigest(), "encrypted", "monitor")
+        for status in (401, 404):
+            pg = SimpleNamespace(get_user_by_id=AsyncMock(return_value=user), get_hosts=AsyncMock(return_value=[]),
+                                 get_inbounds_details=AsyncMock(return_value=[]),
+                                 subscription_xray=AsyncMock(side_effect=PasarGuardError(TOKEN, status)))
+            with self.subTest(status=status), patch("app.services.connection_monitor_panel.get_pg", return_value=pg), \
+                 patch("app.services.connection_monitor_panel.reveal_monitor_token", AsyncMock(return_value=TOKEN)):
+                with self.assertRaises(MonitorAccountError) as caught:
+                    await read_monitor_catalog(account)
+            self.assertEqual(caught.exception.code, "account_changed")
+            self.assertNotIn(TOKEN, str(caught.exception))
+            pg.subscription_xray.assert_awaited_once_with(TOKEN)
+
     async def test_verified_account_identity_reads_native_routes_once(self) -> None:
         user = {"id": 900, "username": "monitor", "status": "active", "admin": {"username": "owner"},
                 "used_traffic": 0, "data_limit": 0, "expire": None, "subscription_url": f"https://panel.example/sub/{TOKEN}"}
@@ -82,12 +111,12 @@ class MonitorPanelTests(unittest.IsolatedAsyncioTestCase):
                     await pg.subscription_xray(TOKEN)
                 self.assertNotIn(TOKEN, str(caught.exception))
 
-    async def test_inactive_rotated_or_mismatched_account_never_reads_native_routes(self) -> None:
+    async def test_inactive_or_mismatched_account_never_reads_native_routes(self) -> None:
         user = {"id": 900, "username": "monitor", "status": "active", "admin": {"username": "owner"},
                 "used_traffic": 0, "data_limit": 0, "expire": None, "subscription_url": f"https://panel.example/sub/{TOKEN}"}
         revision = hashlib.sha256(f"900:{TOKEN}".encode()).hexdigest()
         account = MonitorAccount(900, revision, "encrypted", "monitor")
-        for changes in ({"status": "disabled"}, {"id": 901}, {"subscription_url": "https://panel.example/sub/rotated-monitor-token-123456"}):
+        for changes in ({"status": "disabled"}, {"id": 901}, {"username": "another-user"}):
             pg = SimpleNamespace(get_current_admin=AsyncMock(return_value={"role": {"id": 1, "is_owner": True}, "username": "owner"}),
                                  get_user_by_id=AsyncMock(return_value={**user, **changes}), get_hosts=AsyncMock(return_value=[]),
                                  get_inbounds_details=AsyncMock(return_value=[]), subscription_xray=AsyncMock(return_value=[]))
