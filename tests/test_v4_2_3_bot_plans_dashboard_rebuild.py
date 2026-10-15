@@ -4,13 +4,12 @@ from __future__ import annotations
 
 import unittest
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 ADMIN_PLANS = (ROOT / "app/bot/handlers/admin_plans.py").read_text(encoding="utf-8")
 KEYBOARDS = (ROOT / "app/bot/keyboards.py").read_text(encoding="utf-8")
 REPLY_KB = (ROOT / "app/bot/reply_keyboards.py").read_text(encoding="utf-8")
-REPLY_NAV = (ROOT / "app/bot/handlers/reply_nav.py").read_text(encoding="utf-8")
-MENU_NAV = (ROOT / "app/bot/menu_nav.py").read_text(encoding="utf-8")
 
 
 class PlansDashboardRebuildTests(unittest.TestCase):
@@ -48,15 +47,58 @@ class PlansDashboardRebuildTests(unittest.TestCase):
         self.assertIn("adm:resplan:view:", res_block)
         self.assertNotIn("adm:resplan:add:", res_block)
 
-    def test_reply_nav_wires_add_flow(self):
-        self.assertIn("REPLY_ACTION_ADM_PLANS_ADD", REPLY_NAV)
-        self.assertIn("send_add_plan_type_picker", REPLY_NAV)
-        self.assertIn("NAV_ADMIN_PLANS_ADD_TYPE", REPLY_NAV)
 
-    def test_nav_level_for_add_type(self):
-        self.assertIn("NAV_ADMIN_PLANS_ADD_TYPE", MENU_NAV)
-        self.assertIn("admin_plans_add_type_reply_keyboard", MENU_NAV)
+class PlansAddFlowNavTests(unittest.IsolatedAsyncioTestCase):
+    async def test_reply_nav_wires_add_flow(self):
+        from app.bot import keyboards as kb
+        from app.bot import menu_nav as nav
+        from app.bot.handlers import reply_nav
 
+        state = AsyncMock()
+        state.get_data = AsyncMock(return_value={"_adm_plans_aud": "resellers"})
+        with (
+            patch.object(reply_nav, "_deny_unless_owner", AsyncMock(return_value=True)),
+            patch.object(reply_nav, "get_all_settings", AsyncMock(return_value={})),
+            patch.object(nav, "set_nav_level", AsyncMock()) as set_level,
+            patch(
+                "app.bot.nav_inline.present_nav_panel", AsyncMock()
+            ) as present,
+        ):
+            await reply_nav.dispatch_admin_inline_reply_action(
+                AsyncMock(),
+                AsyncMock(),
+                MagicMock(),
+                state,
+                kb.REPLY_ACTION_ADM_PLANS_ADD,
+            )
+
+        set_level.assert_awaited_once_with(
+            state, nav.NAV_ADMIN_PLANS_ADD_TYPE, push=True
+        )
+        callbacks = [
+            b.callback_data
+            for row in present.await_args.kwargs["inline"].inline_keyboard
+            for b in row
+        ]
+        self.assertTrue(any(c.startswith("nv:adm:ra:") for c in callbacks))
+
+    async def test_nav_level_for_add_type(self):
+        """Back from the add-type step returns to the audience's plan panel."""
+        from app.bot import menu_nav as nav
+        from app.bot.handlers import reply_nav
+
+        state = AsyncMock()
+        state.get_data = AsyncMock(return_value={"_adm_plans_aud": "resellers"})
+        with (
+            patch.object(nav, "get_nav_level", AsyncMock(return_value=nav.NAV_ADMIN_PLANS_ADD_TYPE)),
+            patch.object(nav, "pop_nav_level", AsyncMock(return_value=nav.NAV_ADMIN_PLANS_ADD_TYPE)),
+            patch.object(reply_nav, "_deny_unless_owner", AsyncMock(return_value=True)),
+            patch.object(reply_nav, "present_admin_plans_audience", AsyncMock()) as panel,
+        ):
+            await reply_nav.handle_back(AsyncMock(), AsyncMock(), MagicMock(), state)
+
+        panel.assert_awaited_once()
+        self.assertEqual(panel.await_args.kwargs["audience"], "resellers")
 
 class VersionTests(unittest.TestCase):
     def test_version(self):

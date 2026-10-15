@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -62,13 +63,27 @@ class BotApplyFlowTests(unittest.TestCase):
         buy = src[src.find("async def resapply_buy") : src.find("async def resapply_buy") + 800]
         self.assertIn("state: FSMContext", buy)
 
-    def test_reply_nav_starts_with_mode(self):
-        src = (ROOT / "app/bot/handlers/reply_nav.py").read_text(encoding="utf-8")
-        fn = src[src.find("async def open_reseller_apply") : src.find("async def open_reseller_home")]
-        self.assertIn("resapply:mode:fixed", fn)
-        self.assertIn("resapply:mode:payg", fn)
-        self.assertIn("نوع پلن", fn)
-        self.assertNotIn("resapply:plan:", fn)
+    def test_apply_home_starts_with_mode_when_no_categories(self):
+        from app.bot.handlers import reseller
+
+        async def _plans(_session, billing_mode=None):
+            return [MagicMock()] * {None: 3, "fixed": 2, "payg": 1}[billing_mode]
+
+        async def _run():
+            with (
+                patch.object(reseller, "list_active_reseller_plans", _plans),
+                patch(
+                    "app.services.plan_categories.reseller_categories_for_menu",
+                    AsyncMock(return_value=[]),
+                ),
+            ):
+                return await reseller._resapply_home_keyboard(AsyncMock(), {})
+
+        markup = asyncio.run(_run())
+        callbacks = [b.callback_data for row in markup.inline_keyboard for b in row]
+        self.assertIn("resapply:mode:fixed", callbacks)
+        self.assertIn("resapply:mode:payg", callbacks)
+        self.assertFalse(any(c.startswith("resapply:plan:") for c in callbacks))
 
 
 class WebSplitTests(unittest.TestCase):
