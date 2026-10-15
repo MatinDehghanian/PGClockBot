@@ -603,8 +603,6 @@ async def open_support_home(
         parse_support_contacts,
         support_chat_url,
     )
-    from app.services.users import on
-
     from app.services.rich_text import outbound_setting_text
 
     _ = reseller_owner_id

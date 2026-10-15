@@ -85,7 +85,6 @@ async def user_sees_my_services(
     if await user_has_services(session, int(db_user.id)):
         return True
     from app.bot.service_import_ui import import_enabled
-    from app.services.users import get_all_settings
 
     if import_enabled(await get_all_settings(session)):
         return True
