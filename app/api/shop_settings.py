@@ -62,6 +62,7 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         if "shop" not in order:
             order.insert(0, "shop")
         catalog_meta = {
+            "connection_status": {"label": "وضعیت اتصال", "required": False},
             "shop": {"label": "خرید سرویس", "required": True},
             "services": {"label": "سرویس‌های من", "required": False},
             "wallet": {"label": "کیف پول", "required": False},

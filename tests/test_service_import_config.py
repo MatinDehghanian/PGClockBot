@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import os
 import unittest
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
@@ -127,23 +128,27 @@ class AllowedAdminTests(ConfigCase):
             await session.commit()
         self.assertEqual(await self.reason_of(6, "tok-shop-0000001", shop_id=5), Reason.IDENTITY_UNKNOWN)
 
-    async def test_the_signed_in_admin_is_cached_briefly_and_refreshable(self):
+    async def test_the_signed_in_admin_is_cached_briefly_and_refreshable(self) -> None:
         calls = 0
         original = self.platform_panel.get_current_admin
 
-        async def counting():
+        async def counting() -> dict[str, object]:
             nonlocal calls
             calls += 1
             return await original()
 
         self.platform_panel.get_current_admin = counting
-        await self.run_import(1, "tok-plat-0000001")
-        await self.run_import(2, "tok-plat-0000002")
-        self.assertEqual(calls, 1)
-        si.clear_identity_cache()
-        self.platform_users["tok-plat-0000001"]  # keep the fixture referenced
-        await self.run_import(1, "tok-plat-0000001")
-        self.assertEqual(calls, 2)
+        clock = SimpleNamespace(monotonic=Mock(return_value=1000.0))
+        with patch.object(si, "time", clock):
+            await self.run_import(1, "tok-plat-0000001")
+            await self.run_import(2, "tok-plat-0000002")
+            self.assertEqual(calls, 1)
+            si.clear_identity_cache()
+            await self.run_import(1, "tok-plat-0000001")
+            self.assertEqual(calls, 2)
+            clock.monotonic.return_value += si.IDENTITY_TTL_SECONDS
+            await self.run_import(1, "tok-plat-0000001")
+            self.assertEqual(calls, 3)
 
 
 class LinkParsingTests(ConfigCase):
