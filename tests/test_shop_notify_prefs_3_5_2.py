@@ -31,7 +31,7 @@ class CatalogAclTests(unittest.TestCase):
         self.assertIn("notify_new_ticket", ticket_only)
         self.assertNotIn("notify_account_edits", ticket_only)
         self.assertNotIn("notify_wallet_topup", ticket_only)
-        self.assertEqual(PLATFORM_ONLY_NOTIFY_KEYS, frozenset({"notify_account_edits", "notify_wallet_topup"}))
+        self.assertEqual(PLATFORM_ONLY_NOTIFY_KEYS, frozenset({"notify_account_edits", "notify_wallet_topup", "notify_panel_update"}))
 
 
 class IsolationLogicTests(unittest.IsolatedAsyncioTestCase):
