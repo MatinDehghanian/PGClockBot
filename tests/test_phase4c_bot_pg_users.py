@@ -213,7 +213,7 @@ class Phase4CBotPgUsersTests(unittest.IsolatedAsyncioTestCase):
                 new=AsyncMock(return_value=(features, role)),
             ),
             patch(
-                "app.services.bot_pg_user_pilot.bot_pg_client_for_resolution",
+                "app.services.bot_pg_user_authz.bot_pg_client_for_resolution",
                 new=AsyncMock(return_value=(fake_pg, False)),
             ),
             patch(
