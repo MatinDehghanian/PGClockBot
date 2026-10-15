@@ -1,7 +1,7 @@
 # Roadmap اجرای وضعیت اتصال در PGClockBot
 
 تاریخ: ۲۰۲۶/۱۰/۱۵. مبنا: `upstream/dev` و [سند پژوهش](CONNECTION_STATUS_RESEARCH.md).
-وضعیت: **مرحله‌های صفر تا دو انجام شدند؛ مراحل سه تا هشت باز هستند و runtime پایش هنوز فعال نیست.**
+وضعیت: **مرحله‌های صفر تا سه انجام شدند؛ مراحل چهار تا هشت باز هستند و runtime پایش هنوز فعال نیست.**
 [قرارداد رفتار](CONNECTION_STATUS_CONTRACT.md) و [baseline ثبت‌شده](CONNECTION_STATUS_BASELINE.md)
 خروجی مرحلهٔ صفر هستند.
 
@@ -150,17 +150,17 @@ process هم حفظ شود. claim هدف و token نتیجه جدا باقی ب�
 
 ### مرحلهٔ ۳ — lifecycle هستهٔ Xray
 
-- [ ] core فقط از مسیر مطلق مورد اعتماد و نسخهٔ تأییدشده اجرا شود؛ قابلیت خاموش، binary نخواهد.
-- [ ] core به ازای batch اجرا شود؛ برای هر tap یا هر درخواست HTTP process جدید ساخته نشود.
-- [ ] config از allow-list outboundهای تأییدشده ساخته شود؛ API، inbound و routing دلخواه
+- [x] core فقط از مسیر مطلق مورد اعتماد و نسخهٔ تأییدشده اجرا شود؛ قابلیت خاموش، binary نخواهد.
+- [x] core به ازای batch اجرا شود؛ برای هر tap یا هر درخواست HTTP process جدید ساخته نشود.
+- [x] config از allow-list outboundهای تأییدشده ساخته شود؛ API، inbound و routing دلخواه
   موجود در اشتراک اجرا نشوند. ورودی‌ها فقط loopback باشند.
-- [ ] تخصیص پورت و برخورد bind با retry محدود مدیریت شود؛ باز بودن یک پورت قدیمی اثبات
+- [x] تخصیص پورت و برخورد bind با retry محدود مدیریت شود؛ باز بودن یک پورت قدیمی اثبات
   آمادگی core جدید نباشد. process باید زنده باشد و ورودی متعلق به اجرای جاری باشد.
-- [ ] فایل موقت با مجوز محدود، فایل‌خوانی در thread، argv بدون secret و stdout/stderr
+- [x] فایل موقت با مجوز محدود، فایل‌خوانی در thread، argv بدون secret و stdout/stderr
   با مصرف محدود و بدون ذخیرهٔ payload خام باشند.
-- [ ] start/readiness/shutdown deadline داشته باشند؛ در cancellation، terminate، سپس در
+- [x] start/readiness/shutdown deadline داشته باشند؛ در cancellation، terminate، سپس در
   صورت نیاز kill و در پایان wait انجام شود. taskهای جانبی و فایل‌ها هم جمع شوند.
-- [ ] رفتار crash سخت والد و پاک‌سازی فرزندان با سیاست process group/systemd استقرار
+- [x] رفتار crash سخت والد و پاک‌سازی فرزندان با سیاست process group/systemd استقرار
   بررسی شود؛ صرف `finally` تضمین cleanup پس از SIGKILL نیست.
 
 مستند استاندارد برای اجرای async process و نیاز به timeout جدا:
@@ -393,5 +393,6 @@ rollback عملیاتی با خاموش کردن worker و انتشار و clean
 نگاشت و fixtureهای دو هاست مستقل با ۷۰ تست و validation رسمی core تکمیل شدند؛
 [ماتریس سازگاری](CONNECTION_STATUS_COMPATIBILITY.md) محدودیت‌های دقیق را ثبت می‌کند.
 مرحلهٔ ۲ هم با migration `0054_connection_monitor`، مجوز Owner، مرجع رمز‌شدهٔ حساب و
-leaseهای runtime/target روی SQLite و PostgreSQL تکمیل شد. واحد کار بعد مرحلهٔ ۳،
-مدیریت process هسته است؛ فرم و دکمه‌ها پس از runner ساخته می‌شوند.
+leaseهای runtime/target روی SQLite و PostgreSQL تکمیل شد. مرحلهٔ ۳ با ۱۲ تست lifecycle، پنج زیرتست و اجرای سه مسیر مصنوعی روی core رسمی macOS
+تکمیل شد. مرحلهٔ بعد سنجش HTTPS و سیاست وضعیت است؛ آزمایش Linux و اتصال زنده
+همچنان gate استقرار هستند.

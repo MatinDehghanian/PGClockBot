@@ -53,3 +53,35 @@ WebSocket پیام می‌دهد؛ پشتیبانی این ماتریس به ن�
 نگاشت یک تابع خالص است. دریافت authenticated catalog، تأیید حساب اختصاصی و فعال بودن
 آن، authorization صریح Owner، نگهداری secret و TTL به use case و worker مراحل بعد تعلق
 دارند. هیچ job، دکمه یا پایش فعال در مرحلهٔ ۱ اضافه نشده است.
+
+## lifecycle مرحلهٔ ۳
+
+همان binary رسمی روی macOS/arm64 با سه مسیر مصنوعی اجرا شد؛ پیام شروع خود child
+دریافت، زنده بودن آن بررسی و سپس terminate و wait انجام شد. SHA-256 فایل اجرایی:
+
+```text
+5d9dd24c0aba4b6cfcc6a33a5d67f854816ee17f392bf932ec8176da46f7e404
+```
+
+runner مسیر مطلق بدون symlink، executable بودن، مجوز غیرقابل‌نوشتن برای group/other،
+checksum و نسخهٔ دقیق `26.3.27` را پیش از تست بررسی می‌کند. فایل JSON در دایرکتوری
+موقت `0700` و با مجوز `0600` ساخته می‌شود؛ I/O فایل به thread منتقل شده است.
+environment هسته محدود، argv فاقد config خام و stdout/stderr بدون ذخیره یا log مصرف
+می‌شوند. هیچ generator یا کد شخص ثالث کپی نشده و dependency تازه‌ای اضافه نشده است.
+
+آمادگی به پورت باز وابسته نیست: طبق [Start در core نسخهٔ ثابت](https://github.com/XTLS/Xray-core/blob/v26.3.27/core/xray.go)،
+پیام شروع پس از موفقیت همهٔ featureها صادر می‌شود. runner همان marker را از pipe
+پردازش جاری با حافظهٔ محدود می‌خواند و exit را هم کنترل می‌کند. شکست bind حداکثر سه
+بار با پورت‌های تازه تکرار می‌شود؛ نسخهٔ نادرست اصلاً وارد این retry نمی‌شود.
+
+startup/readiness پنج ثانیه و terminate دو ثانیه مهلت دارند؛ سپس kill و wait حداکثر
+دو ثانیه اجرا می‌شوند. لغو هنگام spawn، readiness یا کار، child و فایل‌ها را پاک می‌کند.
+در SIGKILL والد، `finally` اجرا نمی‌شود: استقرار Linux باید با systemd و
+`KillMode=control-group` تمام فرزندان را هنگام توقف سرویس جمع کند. `start_new_session`
+جایگزین این سیاست نیست. پس از crash، فایل موقت ممکن است تا cleanup سیستم باقی بماند؛
+مجوز محدود آن حفظ می‌شود و اپراتور می‌تواند دایرکتوری‌های `pgclock-probe-*` متعلق به
+سرویس متوقف‌شده را حذف کند. این مورد تضمین پاک‌سازی پس از SIGKILL نیست.
+
+۱۲ تست آفلاین و پنج زیرتست، شروع ناموفق، readiness بدون marker، child مرده، retry
+محدود، خروجی حجیم، اختلاف نسخه/checksum، cancellation تکراری هنگام spawn و
+terminate/kill/wait را پوشش می‌دهند. پذیرش Linux و اتصال واقعی همچنان باز است.
