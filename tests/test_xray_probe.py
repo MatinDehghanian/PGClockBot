@@ -5,7 +5,10 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import os
+import stat
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
@@ -13,7 +16,7 @@ from unittest.mock import AsyncMock, patch
 from app.services.connection_monitor_catalog import plan_monitor_hosts
 from app.services.xray_probe import run_xray_batch
 from app.services.xray_probe_process import START_MARKER, drain_output, spawn_process, stop_process, wait_ready
-from app.services.xray_probe_resources import XrayBinary, XrayProbeError
+from app.services.xray_probe_resources import XrayBinary, XrayProbeError, prepare_resources
 
 
 class FakeProcess:
@@ -78,6 +81,57 @@ class XrayLifecycleTests(unittest.IsolatedAsyncioTestCase):
         self.socket_patch.start()
         self.addCleanup(self.socket_patch.stop)
         self.addCleanup(self.folder.cleanup)
+
+    def test_config_has_private_permissions_from_creation_with_an_unrestricted_umask(self) -> None:
+        modes: list[int] = []
+        original_open, original_chmod = os.open, os.chmod
+
+        def record_open(path: str, flags: int, mode: int = 0o777, *, dir_fd: int | None = None) -> int:
+            descriptor = original_open(path, flags, mode, dir_fd=dir_fd)
+            if Path(path).name == "config.json":
+                modes.append(stat.S_IMODE(os.fstat(descriptor).st_mode))
+            return descriptor
+
+        def record_chmod(path: Path, mode: int) -> None:
+            if Path(path).name == "config.json":
+                modes.append(stat.S_IMODE(Path(path).stat().st_mode))
+            original_chmod(path, mode)
+
+        resources = None
+        previous = os.umask(0)
+        try:
+            with patch("os.open", side_effect=record_open), patch("os.chmod", side_effect=record_chmod):
+                resources = prepare_resources(self.endpoints)
+        finally:
+            os.umask(previous)
+            if resources is not None:
+                resources.close()
+        self.assertEqual(modes, [0o600])
+
+    def test_writable_binary_parent_is_rejected(self) -> None:
+        for mode in (0o770, 0o707):
+            with self.subTest(mode=oct(mode)):
+                self.path.parent.chmod(mode)
+                try:
+                    with self.assertRaisesRegex(XrayProbeError, "^core_binary$"):
+                        self.binary.verify()
+                finally:
+                    self.path.parent.chmod(0o700)
+
+    async def test_binary_verification_and_hashing_run_outside_the_event_loop_thread(self) -> None:
+        threads: list[int] = []
+        original_verify = XrayBinary.verify
+        event_loop_thread = threading.get_ident()
+
+        def verify(binary: XrayBinary) -> Path:
+            threads.append(threading.get_ident())
+            return original_verify(binary)
+
+        children = [FakeProcess(version=b"Xray 26.3.27 (Xray)\n"), FakeProcess()]
+        with patch.object(XrayBinary, "verify", new=verify), patch("asyncio.create_subprocess_exec", side_effect=children):
+            async with run_xray_batch(self.binary, self.endpoints):
+                self.assertEqual(len(threads), 1)
+                self.assertNotEqual(threads[0], event_loop_thread)
 
     async def test_one_process_per_batch_has_private_config_and_cleanup(self) -> None:
         child = FakeProcess()

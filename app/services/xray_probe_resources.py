@@ -37,6 +37,8 @@ class XrayBinary:
             info = self.path.stat()
             if not stat.S_ISREG(info.st_mode) or info.st_mode & 0o022 or not os.access(self.path, os.X_OK):
                 raise XrayProbeError("core_binary")
+            if self.path.parent.stat().st_mode & 0o022:
+                raise XrayProbeError("core_binary")
             if info.st_size > MAX_BINARY_BYTES or not re.fullmatch(r"[0-9a-f]{64}", self.sha256):
                 raise XrayProbeError("core_checksum")
             with self.path.open("rb") as source:
@@ -65,6 +67,10 @@ class ProbeResources:
         self.folder.cleanup()
 
 
+def _open_private_config(path: str, flags: int) -> int:
+    return os.open(path, flags, 0o600)
+
+
 def prepare_resources(endpoints: tuple[MonitorEndpoint, ...]) -> ProbeResources:
     if not endpoints or len(endpoints) > MAX_MONITOR_ENDPOINTS:
         raise XrayProbeError("core_capacity")
@@ -79,8 +85,7 @@ def prepare_resources(endpoints: tuple[MonitorEndpoint, ...]) -> ProbeResources:
         config = build_monitor_config(resources.bindings)
         # The pinned core emits its startup marker only after every feature starts.
         config["log"] = {"loglevel": "warning", "access": "none"}
-        with resources.config_path.open("x", encoding="utf-8") as destination:
-            os.chmod(resources.config_path, 0o600)
+        with open(resources.config_path, "x", encoding="utf-8", opener=_open_private_config) as destination:
             json.dump(config, destination, separators=(",", ":"))
         return resources
     except BaseException:
