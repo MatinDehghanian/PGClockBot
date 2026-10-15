@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
 
 from aiogram.types import CallbackQuery, Chat, Message, User
@@ -10,11 +10,12 @@ from aiogram.types import CallbackQuery, Chat, Message, User
 from connection_monitor_support import MonitorDatabaseCase
 
 from app.bot import keyboards
-from app.bot.connection_status_public_ui import public_cursor
+from app.bot.connection_status_public_ui import public_cursor, public_status_text
 from app.bot.connection_status_ui import monitor_text
 from app.bot.handlers import connection_status as handler
-from app.services.connection_status import PublicConnectionPage
+from app.services.connection_status import PublicConnectionPage, PublicConnectionStatus
 from app.services.connection_status_texts import MONITOR_TEXT_DEFAULTS
+from app.services.connection_status_types import ConnectionStatus
 from app.services.message_variables import template_variable_specs
 from app.services.users import DEFAULT_SETTINGS
 
@@ -53,6 +54,27 @@ class PublicStatusBotTests(MonitorDatabaseCase):
         self.assertIn(ui["btn_connection_status"], [button.text for row in reply.keyboard for button in row])
         inline = keyboards.main_menu("user", has_services=False, ui=ui)
         self.assertIn("csp:refresh", [button.callback_data for row in inline.inline_keyboard for button in row])
+
+    async def test_default_customer_entry_and_title_identify_the_server_vantage(self) -> None:
+        menu = keyboards.main_menu("user", has_services=False, ui=dict(DEFAULT_SETTINGS))
+        entry = next(button for row in menu.inline_keyboard for button in row if button.callback_data == "csp:refresh")
+        self.assertIn("از دید سرور", entry.text)
+        text = public_status_text(PublicConnectionPage(()), dict(DEFAULT_SETTINGS), now=self.now)
+        self.assertIn("از دید سرور ربات", text)
+
+    async def test_public_scope_notice_remains_visible_with_custom_titles_and_all_result_states(self) -> None:
+        ui = {**DEFAULT_SETTINGS, "connection_status_title": "<b>عنوان سفارشی</b>"}
+        pages = [PublicConnectionPage(())]
+        pages.extend(PublicConnectionPage((PublicConnectionStatus("مسیر", status, checked_at),)) for status, checked_at in (
+            (ConnectionStatus.HEALTHY, self.now), (ConnectionStatus.DOWN, self.now),
+            (ConnectionStatus.UNKNOWN, self.now - timedelta(seconds=180)),
+        ))
+        for page in pages:
+            with self.subTest(entries=page.entries):
+                text = public_status_text(page, ui, now=self.now)
+                self.assertIn("فقط دسترسی از سرور ربات", text)
+                self.assertIn("اتصال شما یا دسترسی از داخل ایران را تأیید نمی‌کند", text)
+                self.assertIn("&lt;b&gt;عنوان سفارشی&lt;/b&gt;", text)
 
     async def test_refresh_callback_never_accepts_a_shop_identifier_or_unbounded_cursor(self) -> None:
         self.assertEqual(public_cursor("csp:refresh"), 0)

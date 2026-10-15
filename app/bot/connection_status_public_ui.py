@@ -15,6 +15,9 @@ from app.services.connection_status_policy import is_fresh
 from app.services.users import get_all_settings
 
 
+PUBLIC_SCOPE_NOTICE = "این وضعیت فقط دسترسی از سرور ربات را نشان می‌دهد و اتصال شما یا دسترسی از داخل ایران را تأیید نمی‌کند."
+
+
 class MonitorPublicLabel(BaseFilter):
     async def __call__(self, message: Message, session: AsyncSession) -> bool:
         if not message.text:
@@ -24,7 +27,7 @@ class MonitorPublicLabel(BaseFilter):
 
 
 def public_status_text(page: PublicConnectionPage, ui: dict[str, str], *, now: datetime) -> str:
-    lines = [f"<b>{monitor_text(ui, 'connection_status_title')}</b>", PROBE_LABEL]
+    lines = [f"<b>{monitor_text(ui, 'connection_status_title')}</b>", PROBE_LABEL, PUBLIC_SCOPE_NOTICE]
     if not page.entries:
         lines.append(monitor_text(ui, "connection_status_empty"))
     for entry in page.entries:
