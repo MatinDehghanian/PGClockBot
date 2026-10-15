@@ -20,7 +20,7 @@ OPERATIONS = {
     "pending_order_cleanup",
     "scheduled_backup",
 }
-NOTIFICATIONS = {"service_automation", "expiry", "admin_daily_report", "targeted_campaigns", "cancellation_notifications"}
+NOTIFICATIONS = {"service_automation", "expiry", "admin_daily_report", "targeted_campaigns", "cancellation_notifications", "panel_alert_notifications"}
 
 
 class BackgroundSchedulerTests(unittest.IsolatedAsyncioTestCase):
@@ -65,7 +65,7 @@ class BackgroundSchedulerTests(unittest.IsolatedAsyncioTestCase):
         jobs.start_scheduler(object())
         bot = object()
         jobs.start_scheduler(bot)
-        self.assertEqual(len(self.scheduler.get_jobs()), 9)
+        self.assertEqual(len(self.scheduler.get_jobs()), 10)
         for job_id in NOTIFICATIONS:
             self.assertEqual(self.scheduler.get_job(job_id).args, (bot,))
 

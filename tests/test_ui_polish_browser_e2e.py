@@ -1,0 +1,187 @@
+"""Browser checks for list/tag/modal polish: gift-code button, sync button width, tag picker and modal padding.
+
+Pages come from the real app (rendered by the ASGI app) and are shown by Chromium with the shipped
+panel.css and panel.js.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import os
+import socket
+import threading
+import time
+import unittest
+from pathlib import Path
+from unittest.mock import AsyncMock, patch
+
+os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
+
+import uvicorn
+from fastapi import FastAPI
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from jinja2 import Environment, FileSystemLoader
+
+from app.services.color_tags import COLOR_TAGS
+from tests.test_update_owner_only import OWNER_SESSION, RoutesHarness
+
+ROOT = Path(__file__).resolve().parents[1]
+WEB = ROOT / "app" / "web"
+MOBILE = {"width": 440, "height": 956}
+
+
+def _launch(playwright):
+    try:
+        return playwright.chromium.launch(headless=True)
+    except Exception:  # noqa: BLE001 - playwright raises a generic Error for a missing browser
+        builds = sorted(Path("/opt/pw-browsers").glob("chromium-*/chrome-linux/chrome"))
+        if not builds:
+            raise
+        return playwright.chromium.launch(headless=True, executable_path=str(builds[-1]))
+
+
+class _Pages:
+    """Serve fixed HTML pages and the real static files on a free port."""
+
+    def __init__(self, pages: dict[str, str]) -> None:
+        with socket.socket() as probe:
+            probe.bind(("127.0.0.1", 0))
+            self.port = int(probe.getsockname()[1])
+        app = FastAPI()
+        app.mount("/static", StaticFiles(directory=str(WEB / "static")), name="static")
+        for path, html in pages.items():
+            app.add_api_route(path, (lambda body=html: HTMLResponse(body)), methods=["GET"])
+        self._server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=self.port, log_level="warning"))
+        self._thread = threading.Thread(target=lambda: asyncio.run(self._server.serve()), daemon=True)
+
+    def start(self) -> None:
+        self._thread.start()
+        for _ in range(100):
+            try:
+                with socket.create_connection(("127.0.0.1", self.port), timeout=0.1):
+                    return
+            except OSError:
+                time.sleep(0.05)
+        raise RuntimeError("page server failed to start")
+
+    def stop(self) -> None:
+        self._server.should_exit = True
+        self._thread.join(timeout=5)
+
+
+def _picker_page() -> str:
+    env = Environment(loader=FileSystemLoader(str(WEB / "templates")), autoescape=True)
+    picker = env.get_template("_color_tag_picker.html").render(
+        color_tags=[{"key": t.key, "title_fa": t.title_fa, "hex": t.hex} for t in COLOR_TAGS], selected_color="yellow"
+    )
+    return (
+        '<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8">'
+        '<link rel="stylesheet" href="/static/panel.css"></head>'
+        f'<body><div id="box" style="width:272px">{picker}</div></body></html>'
+    )
+
+
+def _modal_page() -> str:
+    return (
+        '<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width,initial-scale=1">'
+        '<link rel="stylesheet" href="/static/panel.css"></head><body>'
+        '<button id="open" data-modal-open="m1">باز</button>'
+        '<div class="ui-modal" id="m1" hidden><div class="ui-modal-backdrop" data-modal-close></div>'
+        '<div class="ui-modal-panel" role="dialog" aria-modal="true"><div class="ui-modal-head"><h2>عنوان</h2>'
+        '<button class="icon-btn" data-modal-close>×</button></div>'
+        '<form class="form-stack"><label class="form-field" id="field">فیلد<input></label>'
+        '<div class="actions"><button class="btn" id="last" type="submit">ذخیره</button></div></form></div></div>'
+        '<script src="/static/panel.js"></script></body></html>'
+    )
+
+
+class AppPagesCase(RoutesHarness):
+    async def fetch(self, path: str) -> str:
+        cookie = f"session={self.signer.dumps(OWNER_SESSION)}; csrf=token"
+        response = await self.client.get(path, headers={"cookie": cookie})
+        self.assertEqual(response.status_code, 200, path)
+        return response.text
+
+
+class PlansPageTests(AppPagesCase):
+    async def test_the_plans_page_has_no_gift_code_button(self):
+        html = await self.fetch("/plans")
+        self.assertNotIn('href="/gift-codes"', html)
+
+
+class BrowserTests(AppPagesCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        try:
+            from playwright.sync_api import sync_playwright  # noqa: F401
+        except ImportError as exc:  # pragma: no cover
+            raise unittest.SkipTest(f"playwright not installed: {exc}") from exc
+
+    def _with_browser(self, pages: dict[str, str], check) -> None:
+        from playwright.sync_api import sync_playwright
+
+        server = _Pages(pages)
+        server.start()
+        try:
+            with sync_playwright() as p:
+                browser = _launch(p)
+                check(browser, f"http://127.0.0.1:{server.port}")
+                browser.close()
+        finally:
+            server.stop()
+
+    async def test_the_repair_button_spans_the_card_on_a_phone(self):
+        with patch("app.services.representative_unification.assert_live_parent_for_child", AsyncMock()):
+            html = await self.fetch("/resellers")
+
+        def check(browser, base):
+            page = browser.new_page(viewport=MOBILE)
+            page.goto(base + "/resellers")
+            sizes = page.evaluate(
+                """() => { const b = document.querySelector('form[action="/resellers/repair-capacity"] button');
+                  const form = b.closest('form').getBoundingClientRect(); const r = b.getBoundingClientRect();
+                  return [Math.round(r.width), Math.round(form.width)]; }"""
+            )
+            self.assertEqual(sizes[0], sizes[1], sizes)
+
+        await asyncio.to_thread(self._with_browser, {"/resellers": html}, check)
+
+    def test_the_tag_picker_has_no_circle_colours_each_option_and_fits_one_row(self):
+        def check(browser, base):
+            page = browser.new_page(viewport=MOBILE)
+            page.goto(base + "/picker")
+            self.assertEqual(page.locator(".color-tag-swatch").count(), 0)
+            rows = page.evaluate(
+                "() => new Set([...document.querySelectorAll('.color-tag-option')].map(e => Math.round(e.getBoundingClientRect().top))).size"
+            )
+            self.assertEqual(rows, 1)
+            colours = page.evaluate(
+                "() => [...document.querySelectorAll('.color-tag-label')].map(e => getComputedStyle(e).color)"
+            )
+            expected = ["rgb(%d, %d, %d)" % tuple(int(t.hex[i : i + 2], 16) for i in (1, 3, 5)) for t in COLOR_TAGS]
+            self.assertEqual(colours, expected)
+
+        self._with_browser({"/picker": _picker_page()}, check)
+
+    def test_a_modal_has_the_same_air_above_and_below_as_beside_its_content(self):
+        def check(browser, base):
+            page = browser.new_page(viewport=MOBILE)
+            page.goto(base + "/modal")
+            page.click("#open")
+            page.wait_for_selector("#m1.open")
+            page.wait_for_timeout(400)
+            gaps = page.evaluate(
+                """() => { const panel = document.querySelector('#m1 .ui-modal-panel').getBoundingClientRect();
+                  const scroll = document.querySelector('#m1 .ui-modal-scroll');
+                  const gutter = scroll.offsetWidth - scroll.clientWidth;
+                  const head = document.querySelector('#m1 .ui-modal-head').getBoundingClientRect();
+                  const last = document.getElementById('last').getBoundingClientRect();
+                  const field = document.getElementById('field').getBoundingClientRect();
+                  return {top: head.top - panel.top, bottom: panel.bottom - last.bottom, side: field.left - panel.left - gutter / 2}; }"""
+            )
+            self.assertAlmostEqual(gaps["top"], gaps["side"], delta=1.5, msg=gaps)
+            self.assertAlmostEqual(gaps["bottom"], gaps["side"], delta=1.5, msg=gaps)
+
+        self._with_browser({"/modal": _modal_page()}, check)

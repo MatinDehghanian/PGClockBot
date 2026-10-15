@@ -4369,7 +4369,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         staff: dict = Depends(require_admin),
         session: AsyncSession = Depends(get_db),
     ):
-        from app.services.notifications import NOTIFY_PREFS, get_notify_prefs
+        from app.services.notifications import PLATFORM_NOTIFY_PREFS, get_notify_prefs
         from app.services.updates import clear_update_cache, local_version
 
         tab = (request.query_params.get("tab") or "welcome").strip()
@@ -4477,7 +4477,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         elif tab == "notifications":
             prefs = await get_notify_prefs(session)
             ctx["notify_prefs"] = prefs
-            ctx["notify_items"] = NOTIFY_PREFS
+            ctx["notify_items"] = PLATFORM_NOTIFY_PREFS
         elif tab == "daily_report":
             from app.services.daily_report import (
                 ACTOR_OWNER,

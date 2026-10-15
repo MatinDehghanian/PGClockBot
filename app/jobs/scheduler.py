@@ -11,6 +11,7 @@ from sqlalchemy import or_, select
 from app.db.models import BotUser, ResellerProfile, UserService
 from app.db.session import SessionLocal
 from app.jobs.cancellation_notifications import run_cancellation_notifications
+from app.jobs.panel_alert_notifications import run_panel_alert_notifications
 from app.services.formatting import format_bytes_ratio, parse_expire
 from app.services.pasarguard import get_pg
 
@@ -818,6 +819,10 @@ def start_scheduler(bot: Bot) -> None:
     scheduler.add_job(
         run_cancellation_notifications, "interval", seconds=10, args=[bot], id="cancellation_notifications",
         max_instances=1, coalesce=True, misfire_grace_time=60, replace_existing=True,
+    )
+    scheduler.add_job(
+        run_panel_alert_notifications, "interval", minutes=5, args=[bot], id="panel_alert_notifications",
+        max_instances=1, coalesce=True, misfire_grace_time=300, replace_existing=True,
     )
     scheduler.add_job(
         run_targeted_campaigns_tick, "interval", minutes=1, args=[bot], id="targeted_campaigns",

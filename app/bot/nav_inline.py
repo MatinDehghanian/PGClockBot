@@ -373,7 +373,6 @@ def support_hub_keyboard(
     ui: dict | None = None,
     *,
     contact_rows: list[list[InlineKeyboardButton]] | None = None,
-    include_reseller_apply: bool = False,
 ) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = [
         [
@@ -395,18 +394,6 @@ def support_hub_keyboard(
     ]
     if contact_rows:
         rows.extend(contact_rows)
-    if include_reseller_apply:
-        rows.append(
-            [
-                _ikb(
-                    _t(ui, "btn_reseller_apply") or "🤝 درخواست نمایندگی",
-                    callback_data="nv:resapply",
-                    ui=ui,
-                    label_key="btn_reseller_apply",
-                    style=_style(ui, "reseller_apply"),
-                )
-            ]
-        )
     rows.append(
         [
             _ikb(

@@ -7,9 +7,6 @@
     {{ page_title('plans', 'پلن‌ها', help='plans') }}
   </div>
   <div class="page-head-actions">
-    {% if marketing_sections|default(())|selectattr('key', 'equalto', 'gift_codes')|list %}
-    <a class="btn btn-ghost" href="/gift-codes">کد هدیه</a>
-    {% endif %}
     <button type="button" class="btn btn-ghost" data-modal-open="modal-plan-categories">برچسب دسته</button>
     <button type="button" class="btn" id="btn-add-plan" data-modal-open="modal-plan-unified">افزودن پلن</button>
   </div>

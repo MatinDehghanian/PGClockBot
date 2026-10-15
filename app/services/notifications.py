@@ -46,6 +46,24 @@ def ticket_action_markup(ticket_id: int) -> InlineKeyboardMarkup:
 # (setting_key, title, description, default "1"|"0")
 NOTIFY_PREFS: list[tuple[str, str, str, str]] = [
     (
+        "notify_panel_update",
+        "نسخه جدید پنل",
+        "وقتی نسخه جدیدی برای آپدیت آماده می‌شود (فقط مالک اصلی)",
+        "1",
+    ),
+    (
+        "notify_panel_capacity",
+        "نزدیک پر شدن ظرفیت",
+        "وقتی سقف حجم یا کاربر ادمین فروشگاه به درصد هشدار می‌رسد؛ با کم شدن مصرف دوباره فعال می‌شود",
+        "1",
+    ),
+    (
+        "notify_panel_delivery_failures",
+        "تحویل ناموفق در انتظار",
+        "وقتی تعداد تحویل‌های ناموفق باز بیشتر می‌شود؛ حداکثر هر ۶ ساعت تکرار می‌شود",
+        "1",
+    ),
+    (
         "notify_service_cancellation",
         "درخواست لغو سرویس",
         "وقتی مشتری درخواست لغو سرویس ثبت می‌کند؛ همراه دلیل و لینک بررسی در پنل",
@@ -106,12 +124,23 @@ PLATFORM_ONLY_NOTIFY_KEYS: frozenset[str] = frozenset(
     {
         "notify_account_edits",
         "notify_wallet_topup",
+        "notify_panel_update",
     }
 )
+
+# Keys that only make sense for a reseller shop (nothing to announce for the platform itself).
+SHOP_ONLY_NOTIFY_KEYS: frozenset[str] = frozenset({"notify_panel_capacity"})
+
+# What the platform Owner sees and toggles.
+PLATFORM_NOTIFY_PREFS: list[tuple[str, str, str, str]] = [
+    item for item in NOTIFY_PREFS if item[0] not in SHOP_ONLY_NOTIFY_KEYS
+]
 
 # Shop notify key → at least one of these feature perms is required to see/toggle it.
 SHOP_NOTIFY_PERM_MAP: dict[str, frozenset[str]] = {
     "notify_service_cancellation": frozenset({"orders"}),
+    "notify_panel_capacity": frozenset({"dashboard"}),
+    "notify_panel_delivery_failures": frozenset({"orders"}),
     "notify_service_import_request": frozenset({"service_import"}),
     "notify_new_subscription": frozenset({"orders", "payments"}),
     "notify_pending_approval": frozenset({"payments"}),

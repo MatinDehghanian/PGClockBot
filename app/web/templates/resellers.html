@@ -95,7 +95,7 @@
     نمایندگانی که با پلن «ظرفیت فعلی» اعطا شده‌اند و ظرفیتشان صفر (نامحدود) ثبت شده، دوباره از سقف حجم و کاربر ادمین‌شان در پاسارگارد خوانده می‌شوند.
     ظرفیتی که قبلاً درست ثبت شده تغییر نمی‌کند و چیزی در پاسارگارد نوشته نمی‌شود.
   </p>
-  <form method="post" action="/resellers/repair-capacity"
+  <form method="post" action="/resellers/repair-capacity" class="form-stack"
         data-confirm="ظرفیت نمایندگانی که صفر ثبت شده دوباره از پاسارگارد خوانده شود؟ چیزی در پاسارگارد تغییر نمی‌کند."
         data-confirm-title="همگام‌سازی ظرفیت"
         data-confirm-label="همگام‌سازی">
@@ -166,7 +166,6 @@
           <div class="cell-name">
             <span class="cell-name-primary">
               {% set tag = color_tag_meta(u.color_tag) if color_tag_meta is defined else none %}
-              {% if tag %}<span class="color-tag-dot" style="--tag-color: {{ tag.hex }}" title="{{ tag.title_fa }}" aria-label="تگ {{ tag.title_fa }}"></span>{% endif %}
               <span class="cell-name-text">{{ u.full_name or u.username or '—' }}</span>
               {% if tag %}<span class="badge badge-risk-tag" style="--tag-color: {{ tag.hex }}">{{ tag.title_fa }}</span>{% endif %}
             </span>

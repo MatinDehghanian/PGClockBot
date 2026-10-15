@@ -990,15 +990,10 @@
               btn.appendChild(dot);
             }
           } else if (isColorTag && tagColor) {
-            const swatch = document.createElement('span');
-            swatch.className = 'color-tag-swatch';
-            swatch.style.setProperty('--tag-color', tagColor);
-            swatch.setAttribute('aria-hidden', 'true');
             const optLabel = document.createElement('span');
             optLabel.className = 'color-tag-menu-label';
             optLabel.textContent = opt.textContent;
             optLabel.style.color = tagColor;
-            btn.appendChild(swatch);
             btn.appendChild(optLabel);
             btn.classList.add('color-tag-menu-option');
           } else {
