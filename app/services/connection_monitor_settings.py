@@ -26,6 +26,7 @@ from app.services.db_safe import rollback_quiet
 from app.services.credential_policy import validate_pg_username
 from app.services.formatting import parse_expire
 from app.services.pasarguard import PasarGuardError, get_pg
+from app.services.pg_access import acl_from_admin_payload
 from app.services.pg_user_scope import pg_user_owner_username
 from app.services.secret_box import decrypt_secret, encrypt_secret
 from app.services.service_import import parse_subscription_token
@@ -114,7 +115,7 @@ async def _read_account(username: str) -> tuple[int, str]:
     try:
         async with asyncio.timeout(5):
             admin = await pg.get_current_admin()
-            if not isinstance(admin, dict) or admin.get("is_owner") is not True:
+            if not isinstance(admin, dict) or not acl_from_admin_payload(admin)[2]:
                 raise ValueError(ACCOUNT_UNAVAILABLE)
             expected_admin = str(admin.get("username") or "").strip().lower()
             configured_admin = (get_settings().pg_username or "").strip().lower()

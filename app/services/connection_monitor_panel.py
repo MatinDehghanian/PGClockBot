@@ -11,6 +11,7 @@ from typing import Any
 
 from app.services.connection_monitor_settings import ACCOUNT_UNAVAILABLE, _validate_account, reveal_monitor_token
 from app.services.pasarguard import get_pg
+from app.services.pg_access import acl_from_admin_payload
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,7 +37,7 @@ async def read_monitor_catalog(account: MonitorAccount) -> MonitorCatalog:
         admin, user, hosts, inbounds = await asyncio.gather(
             pg.get_current_admin(), pg.get_user_by_id(account.pg_user_id), pg.get_hosts(), pg.get_inbounds_details(),
         )
-        if not isinstance(admin, dict) or admin.get("is_owner") is not True or not isinstance(user, dict):
+        if not isinstance(admin, dict) or not acl_from_admin_payload(admin)[2] or not isinstance(user, dict):
             raise ValueError(ACCOUNT_UNAVAILABLE)
         if not isinstance(user.get("username"), str) or not user["username"]:
             raise ValueError(ACCOUNT_UNAVAILABLE)

@@ -33,7 +33,7 @@ class MonitorSettingsTests(MonitorDatabaseCase):
     async def asyncSetUp(self) -> None:
         await super().asyncSetUp()
         self.panel = SimpleNamespace(get_user_by_username=AsyncMock(return_value=panel_account()),
-                                     get_current_admin=AsyncMock(return_value={"is_owner": True, "username": "panel-owner"}))
+                                     get_current_admin=AsyncMock(return_value={"role": {"id": 1, "is_owner": True}, "username": "panel-owner"}))
         for patcher in [
             patch("app.services.connection_monitor_settings.get_pg", return_value=self.panel),
             patch("app.services.connection_monitor_settings.get_settings", return_value=SimpleNamespace(pg_username="panel-owner")),
@@ -71,6 +71,16 @@ class MonitorSettingsTests(MonitorDatabaseCase):
 
     async def test_panel_identity_without_owner_capability_cannot_attach_an_account(self) -> None:
         self.panel.get_current_admin.return_value = {"is_owner": False, "username": "panel-owner"}
+        async with self.Session() as session:
+            with self.assertRaisesRegex(ValueError, ACCOUNT_UNAVAILABLE):
+                await set_monitor_account(session, self.access, username="monitor-only")
+        self.panel.get_user_by_username.assert_not_called()
+
+    async def test_limited_nested_role_overrides_legacy_owner_flags_during_setup(self) -> None:
+        self.panel.get_current_admin.return_value = {
+            "username": "panel-owner", "is_owner": True, "is_sudo": True,
+            "role": {"id": 2, "is_owner": False, "permissions": {}},
+        }
         async with self.Session() as session:
             with self.assertRaisesRegex(ValueError, ACCOUNT_UNAVAILABLE):
                 await set_monitor_account(session, self.access, username="monitor-only")
