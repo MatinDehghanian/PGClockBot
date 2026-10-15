@@ -2,7 +2,7 @@
 
 قابلیت **Experimental** است؛ تست اتصال و انتشار به‌صورت پیش‌فرض خاموش‌اند و live test انجام
 نشده است. این سند رفتار محصول و معیار تست را مشخص می‌کند. task list و نتیجهٔ بررسی‌ها
-در [PR #777](https://github.com/Mrclocks/PGClockBot/pull/777) ثبت می‌شوند.
+در [PR #790](https://github.com/Mrclocks/PGClockBot/pull/790) ثبت می‌شوند.
 
 ## دامنه و دسترسی
 

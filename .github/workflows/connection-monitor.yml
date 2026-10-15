@@ -5,6 +5,9 @@ on:
     branches: [dev]
     paths:
       - 'app/services/connection_*.py'
+      - 'app/api/connection_status_pages.py'
+      - 'app/web/templates/connection_status.html'
+      - 'app/web/static/connection-status.css'
       - 'app/services/xray_probe*.py'
       - 'app/services/pasarguard.py'
       - 'app/db/models.py'
