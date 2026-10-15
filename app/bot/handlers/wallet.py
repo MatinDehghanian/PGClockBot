@@ -457,6 +457,8 @@ async def wtop_choose_method(
         enabled_gateways,
         gateway_by_id,
         inline_picker_markup,
+        pick_card,
+        random_card_enabled,
     )
 
     ui = await get_all_settings(session)
@@ -521,7 +523,7 @@ async def wtop_choose_method(
         if not items:
             await callback.answer("کارت تنظیم نشده", show_alert=True)
             return
-        if len(items) > 1 and not dest_id:
+        if len(items) > 1 and not dest_id and not random_card_enabled(ui):
             await callback.answer()
             markup = inline_picker_markup("card", items, order_id=0, prefix="wtop", ui=ui)
             if callback.message and markup:
@@ -531,7 +533,10 @@ async def wtop_choose_method(
                     reply_markup=markup,
                 )
             return
-        card = card_by_id(ui, dest_id) if dest_id else items[0]
+        if dest_id:
+            card = card_by_id(ui, dest_id)
+        else:
+            card = pick_card(items, f"topup:{db_user.id}:{amount}") if len(items) > 1 else items[0]
         if not card:
             await callback.answer("کارت نامعتبر", show_alert=True)
             return
