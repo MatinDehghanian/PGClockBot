@@ -46,8 +46,8 @@ TLS/Reality از outbound معتبر خود پنل حفظ می‌شوند.
 فایل `tests/fixtures/connection_monitor_catalog.json` کاملاً مصنوعی است؛ UUID آن حساب
 واقعی نیست. ۷۰ تست بدون شبکه و بدون credential واقعی اجرا شدند. کانفیگ حاصل شامل
 دو endpoint Reality و یک endpoint WebSocket با `xray run -test -config …` بررسی شد.
-این اثبات syntax و پذیرش core است؛ اتصال واقعی، عبور CONNECT، نصب Linux و دسترسی از
-سرور ربات هنوز gate جداگانهٔ استقرارند. Xray هنگام validation دربارهٔ deprecation
+این اثبات syntax و پذیرش core است؛ اتصال واقعی، عبور CONNECT و دسترسی از
+سرور ربات در این تحویل skip شده‌اند. Xray هنگام validation دربارهٔ deprecation
 WebSocket پیام می‌دهد؛ پشتیبانی این ماتریس به نسخهٔ بررسی‌شده محدود است.
 
 نگاشت یک تابع خالص است. دریافت authenticated catalog، تأیید حساب اختصاصی و فعال بودن
@@ -84,7 +84,8 @@ startup/readiness پنج ثانیه و terminate دو ثانیه مهلت دار
 
 ۱۲ تست آفلاین و پنج زیرتست، شروع ناموفق، readiness بدون marker، child مرده، retry
 محدود، خروجی حجیم، اختلاف نسخه/checksum، cancellation تکراری هنگام spawn و
-terminate/kill/wait را پوشش می‌دهند. پذیرش Linux و اتصال واقعی همچنان باز است.
+terminate/kill/wait را پوشش می‌دهند. startup روی Linux نیز در CI تأیید شد؛ اتصال واقعی
+با test user در سرور مقصد در این تحویل skip شده است.
 
 ## بررسی تکرارپذیر CI
 
@@ -105,5 +106,15 @@ workflow مستقل [Connection monitoring compatibility](../.github/workflows/c
 
 اجرای محلی همین CLI روی macOS/arm64: سه endpoint، startup برابر `0.0924s`، cleanup
 برابر `0.0025s` و بیشینهٔ RSS فرزندان `29664 KiB` ثبت شد. اعداد مربوط به startup مصنوعی
-در این محیط هستند؛ ظرفیت و اتصال production هنوز اندازه‌گیری نشده‌اند. نتیجهٔ Linux
-فقط پس از قبولی job آن تأیید می‌شود؛ افزودن workflow به‌تنهایی قبولی این gate نیست.
+در این محیط هستند؛ ظرفیت و اتصال production هنوز اندازه‌گیری نشده‌اند.
+
+[job تأیید Linux/amd64](https://github.com/Mrclocks/PGClockBot/actions/runs/38719627589/job/116370700334)
+با Python 3.12.15 نیز پاس شد: سه endpoint، startup برابر `0.049s`، cleanup برابر
+`0.0007s`، بیشینهٔ RSS فرزندان `35612 KiB` و child جمع‌شده ثبت شد. checksum آرشیو
+رسمی پیش از اجرا تأیید شد. این نتیجه فقط mapping، پذیرش کانفیگ، readiness و cleanup
+را پوشش می‌دهد؛ سنجش HTTPS زنده از حساب اختصاصی هنوز انجام نشده است.
+
+unit ساخته‌شده توسط نصب‌کنندهٔ پروژه `KillMode` را override نمی‌کند؛ طبق
+[مستند systemd](https://github.com/systemd/systemd/blob/main/man/systemd.kill.xml)
+پیش‌فرض آن `control-group` است. override واحد سرویس روی سرور مقصد و جمع شدن child
+پس از crash سخت باید در پذیرش استقرار بررسی شوند؛ به `finally` پس از SIGKILL تکیه نمی‌شود.
