@@ -2,6 +2,8 @@
 #
 # Selected-host route identity, scope and prevention of direct fallback.
 tests/test_connection_monitor_catalog.py
+tests/test_connection_monitor_subscription.py
+tests/test_connection_monitor_subscription_migration.py
 tests/test_connection_monitor_config.py
 tests/test_xray_probe.py
 tests/test_connection_probe.py

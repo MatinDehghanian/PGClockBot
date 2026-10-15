@@ -29,7 +29,7 @@ class MonitorCycleClaim:
 @dataclass(frozen=True, slots=True)
 class MonitorTargetClaim:
     target_id: int
-    pg_host_id: int
+    config_key: str
     generation: str
     expires_at: datetime
     cycle: MonitorCycleClaim
@@ -97,15 +97,16 @@ async def claim_monitor_target(session: AsyncSession, cycle: MonitorCycleClaim, 
     result = await session.execute(update(ConnectionMonitorTarget).where(
         ConnectionMonitorTarget.id == target_id, ConnectionMonitorTarget.reseller_id.is_(None),
         ConnectionMonitorTarget.test_enabled.is_(True), ConnectionMonitorTarget.generation != "",
+        ConnectionMonitorTarget.subscription_key.is_not(None),
         ConnectionMonitorTarget.endpoint_count > 0, ConnectionMonitorTarget.next_check_at <= now,
         or_(ConnectionMonitorTarget.claim_until.is_(None), ConnectionMonitorTarget.claim_until <= now),
         current_monitor_cycle(cycle, now=now),
     ).values(claim_token=token, claim_until=cycle.expires_at).returning(
-        ConnectionMonitorTarget.id, ConnectionMonitorTarget.pg_host_id, ConnectionMonitorTarget.generation,
+        ConnectionMonitorTarget.id, ConnectionMonitorTarget.subscription_key, ConnectionMonitorTarget.generation,
     ))
     row = result.first()
     await session.commit()
-    return MonitorTargetClaim(row.id, row.pg_host_id, row.generation, cycle.expires_at, cycle, token) if row else None
+    return MonitorTargetClaim(row.id, row.subscription_key, row.generation, cycle.expires_at, cycle, token) if row else None
 
 
 async def release_monitor_target(session: AsyncSession, claim: MonitorTargetClaim) -> None:
@@ -122,18 +123,19 @@ async def claim_due_targets(session: AsyncSession, cycle: MonitorCycleClaim, *, 
     due = select(ConnectionMonitorTarget.id).where(
         ConnectionMonitorTarget.reseller_id.is_(None), ConnectionMonitorTarget.test_enabled.is_(True),
         ConnectionMonitorTarget.generation != "", ConnectionMonitorTarget.endpoint_count > 0,
+        ConnectionMonitorTarget.subscription_key.is_not(None),
         ConnectionMonitorTarget.next_check_at <= now,
         or_(ConnectionMonitorTarget.claim_until.is_(None), ConnectionMonitorTarget.claim_until <= now),
     ).order_by(ConnectionMonitorTarget.next_check_at, ConnectionMonitorTarget.id).limit(MAX_MONITOR_ENDPOINTS)
     result = await session.execute(update(ConnectionMonitorTarget).where(
         ConnectionMonitorTarget.id.in_(due), current_monitor_cycle(cycle, now=now),
     ).values(claim_token=token, claim_until=cycle.expires_at).returning(
-        ConnectionMonitorTarget.id, ConnectionMonitorTarget.pg_host_id,
+        ConnectionMonitorTarget.id, ConnectionMonitorTarget.subscription_key,
         ConnectionMonitorTarget.generation, ConnectionMonitorTarget.next_check_at,
     ))
     rows = sorted(result.all(), key=lambda row: (row.next_check_at, row.id))
     await session.commit()
-    return tuple(MonitorTargetClaim(row.id, row.pg_host_id, row.generation, cycle.expires_at, cycle, token) for row in rows)
+    return tuple(MonitorTargetClaim(row.id, row.subscription_key, row.generation, cycle.expires_at, cycle, token) for row in rows)
 
 
 async def release_cycle_targets(session: AsyncSession, cycle: MonitorCycleClaim) -> None:

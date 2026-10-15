@@ -32,7 +32,7 @@ async def update_monitor_target(session: AsyncSession, access: MonitorAccess, *,
     if type(target_id) is not int or not 1 <= target_id <= 2147483647:
         raise ValueError(PREFERENCES_UNAVAILABLE)
     await require_monitor_owner(session, access)
-    target = await session.scalar(select(ConnectionMonitorTarget.pg_host_id).where(
+    target = await session.scalar(select(ConnectionMonitorTarget.subscription_key).where(
         ConnectionMonitorTarget.id == target_id, ConnectionMonitorTarget.reseller_id.is_(None),
         ConnectionMonitorTarget.test_enabled.is_(True),
     ).limit(1))
@@ -40,23 +40,23 @@ async def update_monitor_target(session: AsyncSession, access: MonitorAccess, *,
     if target is None:
         raise ValueError(PREFERENCES_UNAVAILABLE)
     try:
-        preferences = MonitorPreferences(host_id=target, **changes.model_dump())
+        preferences = MonitorPreferences(config_key=target, **changes.model_dump())
     except ValidationError:
         raise ValueError(INVALID_PREFERENCES) from None
     return await save_monitor_preferences(session, access, preferences, expected_target_id=target_id)
 
 
-async def select_monitor_host(session: AsyncSession, access: MonitorAccess, *, host_id: int) -> int:
+async def select_monitor_config(session: AsyncSession, access: MonitorAccess, *, config_key: str) -> int:
     try:
-        preferences = MonitorPreferences(host_id=host_id)
+        preferences = MonitorPreferences(config_key=config_key)
     except ValidationError:
         raise ValueError(PREFERENCES_UNAVAILABLE) from None
     await require_monitor_owner(session, access)
     target = await session.scalar(select(ConnectionMonitorTarget).where(
-        ConnectionMonitorTarget.reseller_id.is_(None), ConnectionMonitorTarget.pg_host_id == host_id,
+        ConnectionMonitorTarget.reseller_id.is_(None), ConnectionMonitorTarget.subscription_key == config_key,
     ).limit(1))
     if target is not None:
-        preferences = MonitorPreferences(host_id=host_id, public_name=target.public_name, display_order=target.display_order,
+        preferences = MonitorPreferences(config_key=config_key, public_name=target.public_name, display_order=target.display_order,
                                          is_public=target.is_public if target.test_enabled else False)
     await session.commit()
     return await save_monitor_preferences(session, access, preferences)
@@ -75,7 +75,7 @@ async def edit_monitor_target(session: AsyncSession, access: MonitorAccess, *, t
     ).limit(1))
     if target is None:
         raise ValueError(PREFERENCES_UNAVAILABLE)
-    values = {"host_id": target.pg_host_id, "public_name": target.public_name,
+    values = {"config_key": target.subscription_key, "public_name": target.public_name,
               "display_order": target.display_order, "is_public": target.is_public, field: value}
     await session.commit()
     try:

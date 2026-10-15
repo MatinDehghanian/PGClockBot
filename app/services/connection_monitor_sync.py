@@ -12,10 +12,10 @@ from app.db.models import ConnectionMonitorSnapshot, ConnectionMonitorState, Con
 from app.services.connection_monitor_claims import MonitorCycleClaim, current_monitor_cycle
 from app.services.connection_monitor_panel import MonitorAccount
 from app.services.connection_monitor_settings import ACCOUNT_UNAVAILABLE, LOCAL_PROBE_ID
-from app.services.connection_monitor_types import MAX_MONITOR_ENDPOINTS, MonitorHostPlan, MonitorIssue
+from app.services.connection_monitor_types import MAX_MONITOR_ENDPOINTS, MonitorConfigPlan, MonitorIssue
 
 
-async def load_cycle_inputs(session: AsyncSession, cycle: MonitorCycleClaim, *, now: datetime) -> tuple[MonitorAccount, tuple[int, ...]]:
+async def load_cycle_inputs(session: AsyncSession, cycle: MonitorCycleClaim, *, now: datetime) -> tuple[MonitorAccount, tuple[str, ...]]:
     state = await session.scalar(select(ConnectionMonitorState).where(
         ConnectionMonitorState.id == cycle.state_id, ConnectionMonitorState.reseller_id.is_(None),
         current_monitor_cycle(cycle, now=now),
@@ -23,21 +23,22 @@ async def load_cycle_inputs(session: AsyncSession, cycle: MonitorCycleClaim, *, 
     if state is None:
         raise ValueError(ACCOUNT_UNAVAILABLE)
     account = MonitorAccount(state.pg_user_id, state.account_revision, state.subscription_token_enc, state.pg_username)
-    host_ids = tuple((await session.scalars(select(ConnectionMonitorTarget.pg_host_id).where(
+    config_keys = tuple((await session.scalars(select(ConnectionMonitorTarget.subscription_key).where(
         ConnectionMonitorTarget.reseller_id.is_(None), ConnectionMonitorTarget.test_enabled.is_(True),
+        ConnectionMonitorTarget.subscription_key.is_not(None),
     ).order_by(ConnectionMonitorTarget.id).limit(MAX_MONITOR_ENDPOINTS + 1))).all())
     await session.commit()
-    return account, host_ids
+    return account, config_keys
 
 
-def plan_generation(plan: MonitorHostPlan) -> str:
+def plan_generation(plan: MonitorConfigPlan) -> str:
     if not plan.is_ready:
         return ""
     series = ":".join(sorted(endpoint.generation for endpoint in plan.endpoints))
     return hashlib.sha256(series.encode()).hexdigest()
 
 
-def apply_target_plan(target: ConnectionMonitorTarget, plan: MonitorHostPlan, *, now: datetime) -> bool:
+def apply_target_plan(target: ConnectionMonitorTarget, plan: MonitorConfigPlan, *, now: datetime) -> bool:
     generation = plan_generation(plan)
     changed = target.generation != generation or target.endpoint_count != len(plan.endpoints)
     target.generation = generation
@@ -46,7 +47,7 @@ def apply_target_plan(target: ConnectionMonitorTarget, plan: MonitorHostPlan, *,
         target.is_public = False
         target.claim_token = None
         target.claim_until = None
-        if plan.issue in (MonitorIssue.HOST_UNAVAILABLE, MonitorIssue.OUT_OF_SCOPE):
+        if plan.issue in (MonitorIssue.HOST_UNAVAILABLE, MonitorIssue.CONFIG_UNAVAILABLE, MonitorIssue.OUT_OF_SCOPE):
             target.test_enabled = False
     if changed:
         target.claim_token = None
@@ -55,7 +56,7 @@ def apply_target_plan(target: ConnectionMonitorTarget, plan: MonitorHostPlan, *,
     return changed
 
 
-def initial_snapshots(target: ConnectionMonitorTarget, plan: MonitorHostPlan) -> list[ConnectionMonitorSnapshot]:
+def initial_snapshots(target: ConnectionMonitorTarget, plan: MonitorConfigPlan) -> list[ConnectionMonitorSnapshot]:
     if plan.is_ready:
         return [ConnectionMonitorSnapshot(
             reseller_id=None, target_id=target.id, endpoint_key=endpoint.endpoint_key,
@@ -68,7 +69,7 @@ def initial_snapshots(target: ConnectionMonitorTarget, plan: MonitorHostPlan) ->
 
 
 async def reconcile_monitor_plans(session: AsyncSession, cycle: MonitorCycleClaim,
-                                  plans: tuple[MonitorHostPlan, ...], *, now: datetime) -> bool:
+                                  plans: tuple[MonitorConfigPlan, ...], *, now: datetime) -> bool:
     guard = await session.execute(update(ConnectionMonitorState).where(
         ConnectionMonitorState.id == cycle.state_id, ConnectionMonitorState.reseller_id.is_(None),
         current_monitor_cycle(cycle, now=now),
@@ -81,10 +82,10 @@ async def reconcile_monitor_plans(session: AsyncSession, cycle: MonitorCycleClai
     ).order_by(ConnectionMonitorTarget.id).limit(MAX_MONITOR_ENDPOINTS + 1))).all()
     if len(targets) > MAX_MONITOR_ENDPOINTS:
         raise ValueError("Monitoring capacity exceeded")
-    by_host = {plan.host_id: plan for plan in plans}
+    by_config = {plan.config_key: plan for plan in plans}
     changed_ids, snapshots = [], []
     for target in targets:
-        plan = by_host.get(target.pg_host_id, MonitorHostPlan(target.pg_host_id, issue=MonitorIssue.INVALID_CATALOG))
+        plan = by_config.get(target.subscription_key, MonitorConfigPlan(target.subscription_key or "", issue=MonitorIssue.CONFIG_UNAVAILABLE))
         # Unsupported targets also need a diagnostic row on their first sync.
         if apply_target_plan(target, plan, now=now) or not plan.is_ready:
             changed_ids.append(target.id)

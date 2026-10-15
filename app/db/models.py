@@ -1617,11 +1617,15 @@ class ConnectionMonitorState(Base):
 
 
 class ConnectionMonitorTarget(Base):
-    """A selected panel host with private-by-default publication settings."""
+    """A selected subscription config with private-by-default publication settings."""
 
     __tablename__ = "connection_monitor_targets"
     __table_args__ = (
         UniqueConstraint("reseller_id", "pg_host_id", name="uq_monitor_target_shop_host"),
+        Index("uq_monitor_target_shop_config", "reseller_id", "subscription_key", unique=True),
+        Index("uq_monitor_target_main_config", "subscription_key", unique=True,
+              sqlite_where=text("reseller_id IS NULL AND subscription_key IS NOT NULL"),
+              postgresql_where=text("reseller_id IS NULL AND subscription_key IS NOT NULL")),
         Index("uq_monitor_target_main_host", "pg_host_id", unique=True,
               sqlite_where=text("reseller_id IS NULL"), postgresql_where=text("reseller_id IS NULL")),
         Index("ix_monitor_target_due", "reseller_id", "test_enabled", "next_check_at", "id"),
@@ -1634,7 +1638,9 @@ class ConnectionMonitorTarget(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     reseller_id: Mapped[int | None] = mapped_column(ForeignKey("bot_users.id"), nullable=True)
-    pg_host_id: Mapped[int] = mapped_column(Integer)
+    pg_host_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    subscription_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    config_name: Mapped[str] = mapped_column(String(128), server_default="")
     test_enabled: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     is_public: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     public_name: Mapped[str] = mapped_column(String(64), server_default="")

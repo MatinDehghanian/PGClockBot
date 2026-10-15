@@ -13,6 +13,7 @@ from app.services.connection_monitor_catalog import plan_monitor_hosts
 from app.services.connection_monitor_config import MonitorBinding, build_monitor_config
 from app.services.connection_monitor_types import MonitorConfigError
 from app.services.connection_monitor_validation import validate_native_outbound
+from app.services.connection_monitor_native import validate_subscription_outbound
 
 
 @pytest.fixture
@@ -46,6 +47,12 @@ def test_reality_and_websocket_security_are_preserved(catalog: dict[str, Any]) -
                 assert route["streamSettings"][key][nested_key] == nested_value
             if not isinstance(value, dict):
                 assert route["streamSettings"][key] == value
+
+
+def test_native_outbound_is_preserved_without_inserting_defaults(catalog: dict[str, Any]) -> None:
+    for native in catalog["native_configs"]:
+        original = native["outbounds"][0]
+        assert validate_subscription_outbound(original) == original
 
 
 @pytest.mark.parametrize("field,value", [

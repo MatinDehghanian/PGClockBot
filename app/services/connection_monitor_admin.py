@@ -16,38 +16,29 @@ from app.services.connection_monitor_access import MonitorAccess, active_monitor
 from app.services.connection_monitor_panel import read_monitor_catalog
 from app.services.connection_monitor_preferences import PREFERENCES_UNAVAILABLE, owner_monitor_account
 from app.services.connection_monitor_settings import ACCOUNT_UNAVAILABLE, monitor_settings, reveal_monitor_token
+from app.services.connection_monitor_subscription import MonitorConfigEntry, subscription_entries
 from app.services.connection_monitor_types import MAX_CATALOG_ITEMS
 from app.services.xray_probe_resources import XrayBinary
 
 
-@dataclass(frozen=True, slots=True)
-class MonitorHostChoice:
-    host_id: int
-    name: str
+CONFIG_PAGE_SIZE = 10
 
 
 @dataclass(frozen=True, slots=True)
-class MonitorHostPage:
-    choices: tuple[MonitorHostChoice, ...]
-    next_host_id: int | None
+class MonitorConfigPage:
+    choices: tuple[MonitorConfigEntry, ...]
+    next_offset: int | None
+    total_count: int = 0
 
 
-async def active_monitor_hosts(session: AsyncSession, access: MonitorAccess, *, after_id: int = 0) -> MonitorHostPage:
-    if type(after_id) is not int or not 0 <= after_id <= 2147483647:
+async def monitor_config_choices(session: AsyncSession, access: MonitorAccess, *, offset: int = 0) -> MonitorConfigPage:
+    if type(offset) is not int or not 0 <= offset <= MAX_CATALOG_ITEMS:
         raise ValueError(PREFERENCES_UNAVAILABLE)
     account = await owner_monitor_account(session, access)
     catalog = await read_monitor_catalog(account)
-    if not isinstance(catalog.hosts, list) or len(catalog.hosts) > MAX_CATALOG_ITEMS:
-        raise ValueError(PREFERENCES_UNAVAILABLE)
-    choices = []
-    for host in catalog.hosts:
-        if not isinstance(host, dict) or type(host.get("id")) is not int or not 1 <= host["id"] <= 2147483647:
-            raise ValueError(PREFERENCES_UNAVAILABLE)
-        if host["id"] > after_id and host.get("is_disabled", False) is False:
-            name = host.get("remark")
-            choices.append(MonitorHostChoice(host["id"], name[:64] if isinstance(name, str) and name else str(host["id"])))
-    choices.sort(key=lambda item: item.host_id)
-    return MonitorHostPage(tuple(choices[:10]), choices[9].host_id if len(choices) > 10 else None)
+    choices = await asyncio.to_thread(subscription_entries, catalog.native_configs)
+    end = offset + CONFIG_PAGE_SIZE
+    return MonitorConfigPage(choices[offset:end], end if len(choices) > end else None, len(choices))
 
 
 async def set_monitor_enabled(session: AsyncSession, access: MonitorAccess, *, enabled: bool) -> None:

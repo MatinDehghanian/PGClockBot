@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import ConnectionMonitorSnapshot, ConnectionMonitorState, ConnectionMonitorTarget
 from app.services.connection_monitor_access import MonitorAccess, active_monitor_owner, require_monitor_owner
-from app.services.connection_monitor_catalog import plan_monitor_hosts
+from app.services.connection_monitor_subscription import CONFIG_KEY_PATTERN, plan_monitor_configs, subscription_entries
 from app.services.connection_monitor_claims import eligible_monitor_account
 from app.services.connection_monitor_panel import MonitorAccount, read_monitor_catalog
 from app.services.connection_monitor_settings import ACCOUNT_UNAVAILABLE, LOCAL_PROBE_ID, monitor_settings
@@ -20,16 +20,16 @@ from app.services.connection_monitor_sync import apply_target_plan, initial_snap
 from app.services.connection_monitor_types import MAX_MONITOR_ENDPOINTS, MonitorConfigError, MonitorIssue
 
 
-PREFERENCES_UNAVAILABLE = "انتخاب هاست تغییر کرده یا این هاست آمادهٔ تست نیست؛ فهرست را تازه کنید."
+PREFERENCES_UNAVAILABLE = "کانفیگ انتخاب‌شده تغییر کرده یا آمادهٔ تست نیست؛ لیست subscription را تازه کنید."
 
 
 class MonitorPreferences(BaseModel):
     model_config = ConfigDict(strict=True, extra="forbid", hide_input_in_errors=True)
 
-    host_id: Annotated[int, Field(ge=1, le=2147483647)]
+    config_key: Annotated[str, Field(pattern="^" + CONFIG_KEY_PATTERN + "$")]
     public_name: Annotated[str, Field(max_length=64)] = ""
     is_public: bool = False
-    display_order: Annotated[int, Field(ge=0, le=2147483647)] = 0
+    display_order: Annotated[int, Field(ge=0, le=2147483647)] | None = None
 
     @field_validator("public_name")
     @classmethod
@@ -64,19 +64,22 @@ async def owner_monitor_account(session: AsyncSession, access: MonitorAccess) ->
 async def save_monitor_preferences(session: AsyncSession, access: MonitorAccess, preferences: MonitorPreferences, *,
                                    expected_target_id: int | None = None) -> int:
     account = await owner_monitor_account(session, access)
-    selected = tuple((await session.scalars(select(ConnectionMonitorTarget.pg_host_id).where(
+    selected = tuple((await session.scalars(select(ConnectionMonitorTarget.subscription_key).where(
         ConnectionMonitorTarget.reseller_id.is_(None), ConnectionMonitorTarget.test_enabled.is_(True),
+        ConnectionMonitorTarget.subscription_key.is_not(None),
     ).order_by(ConnectionMonitorTarget.id).limit(MAX_MONITOR_ENDPOINTS + 1))).all())
     await session.commit()
-    chosen = tuple(dict.fromkeys((*selected, preferences.host_id)))
+    chosen = tuple(dict.fromkeys((*selected, preferences.config_key)))
     catalog = await read_monitor_catalog(account)
     plans = await asyncio.to_thread(
-        plan_monitor_hosts, hosts=catalog.hosts, inbounds=catalog.inbounds, native_configs=catalog.native_configs,
-        selected_ids=chosen, staff={"pg_is_owner": True}, account_revision=account.revision,
+        plan_monitor_configs, native_configs=catalog.native_configs,
+        selected_keys=chosen, account_revision=account.revision,
     )
-    plan = next(plan for plan in plans if plan.host_id == preferences.host_id)
+    plan = next(plan for plan in plans if plan.config_key == preferences.config_key)
     if not plan.is_ready:
         raise MonitorConfigError(plan.issue or MonitorIssue.MISSING_ROUTE)
+    entries = await asyncio.to_thread(subscription_entries, catalog.native_configs)
+    entry = next(entry for entry in entries if entry.config_key == preferences.config_key)
     guard = await session.execute(update(ConnectionMonitorState).where(
         ConnectionMonitorState.reseller_id.is_(None), ConnectionMonitorState.probe_id == LOCAL_PROBE_ID,
         ConnectionMonitorState.account_revision == account.revision, active_monitor_owner(access),
@@ -84,7 +87,7 @@ async def save_monitor_preferences(session: AsyncSession, access: MonitorAccess,
         *([ConnectionMonitorState.enabled.is_(True)] if preferences.is_public else []),
         *([exists(select(ConnectionMonitorTarget.id).where(
             ConnectionMonitorTarget.id == expected_target_id, ConnectionMonitorTarget.reseller_id.is_(None),
-            ConnectionMonitorTarget.pg_host_id == preferences.host_id, ConnectionMonitorTarget.test_enabled.is_(True),
+            ConnectionMonitorTarget.subscription_key == preferences.config_key, ConnectionMonitorTarget.test_enabled.is_(True),
         ))] if expected_target_id is not None else []),
     ).values(catalog_synced_at=catalog.checked_at))
     if guard.rowcount != 1:
@@ -93,19 +96,20 @@ async def save_monitor_preferences(session: AsyncSession, access: MonitorAccess,
     targets = (await session.scalars(select(ConnectionMonitorTarget).where(
         ConnectionMonitorTarget.reseller_id.is_(None), ConnectionMonitorTarget.test_enabled.is_(True),
     ).order_by(ConnectionMonitorTarget.id).limit(MAX_MONITOR_ENDPOINTS + 1))).all()
-    if tuple(target.pg_host_id for target in targets) != selected:
+    if tuple(target.subscription_key for target in targets if target.subscription_key is not None) != selected:
         await session.rollback()
         raise ValueError(PREFERENCES_UNAVAILABLE)
     target = await session.scalar(select(ConnectionMonitorTarget).where(
-        ConnectionMonitorTarget.reseller_id.is_(None), ConnectionMonitorTarget.pg_host_id == preferences.host_id,
+        ConnectionMonitorTarget.reseller_id.is_(None), ConnectionMonitorTarget.subscription_key == preferences.config_key,
     ).limit(1))
     is_new = target is None
     if target is None:
-        target = ConnectionMonitorTarget(pg_host_id=preferences.host_id, generation="", endpoint_count=0)
+        target = ConnectionMonitorTarget(subscription_key=preferences.config_key, generation="", endpoint_count=0)
         session.add(target)
     target.test_enabled = True
     target.public_name, target.is_public = preferences.public_name, preferences.is_public
-    target.display_order = preferences.display_order
+    target.config_name = entry.name
+    target.display_order = preferences.display_order if preferences.display_order is not None else entry.position
     changed = apply_target_plan(target, plan, now=datetime.now(timezone.utc))
     await session.flush()
     if changed or is_new:

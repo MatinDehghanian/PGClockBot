@@ -18,8 +18,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.services.authz import authz_from_staff
 from app.services.connection_monitor_access import MonitorAccess, require_monitor_owner
-from app.services.connection_monitor_actions import MonitorTargetEdit, select_monitor_host, update_monitor_target
-from app.services.connection_monitor_admin import active_monitor_hosts, set_monitor_enabled
+from app.services.connection_monitor_actions import MonitorTargetEdit, select_monitor_config, update_monitor_target
+from app.services.connection_monitor_admin import monitor_config_choices, set_monitor_enabled
 from app.services.connection_monitor_errors import monitor_error_message
 from app.services.connection_monitor_preferences import pause_monitor_target
 from app.services.connection_monitor_queue import queue_manual_check
@@ -64,7 +64,7 @@ def register_connection_status_pages(app: FastAPI, *, render: Callable, require_
         hosts, host_error = None, None
         if request.query_params.get("hosts") == "1":
             try:
-                hosts = await active_monitor_hosts(session, access, after_id=host_after)
+                hosts = await monitor_config_choices(session, access, offset=host_after)
             except EXPECTED_ERRORS as exc:
                 await rollback_quiet(session)
                 logger.warning("Connection host list failed type=%s reason=%s", type(exc).__name__, getattr(exc, "code", "catalog_failed"))
@@ -87,10 +87,10 @@ def register_connection_status_pages(app: FastAPI, *, render: Callable, require_
                                  access: MonitorAccess = Depends(require_access), session: AsyncSession = Depends(get_db)) -> Response:
         return await _action_result(session, set_monitor_enabled(session, access, enabled=enabled == "1"))
 
-    @app.post(STATUS_PATH + "/hosts/{host_id}")
-    async def connection_select(host_id: int, access: MonitorAccess = Depends(require_access),
+    @app.post(STATUS_PATH + "/configs/{config_key}")
+    async def connection_select(config_key: str, access: MonitorAccess = Depends(require_access),
                                 session: AsyncSession = Depends(get_db)) -> Response:
-        return await _action_result(session, select_monitor_host(session, access, host_id=host_id))
+        return await _action_result(session, select_monitor_config(session, access, config_key=config_key))
 
     @app.post(STATUS_PATH + "/targets/{target_id}")
     async def connection_target(target_id: int, display_order: Annotated[int, Form(ge=0, le=2147483647)],
