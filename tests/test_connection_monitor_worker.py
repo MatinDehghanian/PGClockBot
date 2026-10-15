@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import json
+import threading
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -18,8 +19,9 @@ from connection_monitor_support import MonitorDatabaseCase
 
 from app.db.models import ConnectionMonitorSnapshot, ConnectionMonitorState, ConnectionMonitorTarget, UserService
 from app.services.connection_monitor_config import MonitorBinding
+from app.services.connection_monitor_catalog import plan_monitor_hosts
 from app.services.connection_monitor_panel import MonitorAccount, MonitorCatalog
-from app.services.connection_monitor_types import MonitorEndpoint
+from app.services.connection_monitor_types import MonitorEndpoint, MonitorHostPlan
 from app.services.connection_monitor_worker import run_monitor_cycle
 from app.services.connection_status_types import ObservationKind, ProbeObservation
 from app.services.xray_probe_resources import XrayBinary, XrayProbeError
@@ -214,3 +216,24 @@ class MonitorWorkerTests(MonitorDatabaseCase):
         async with self.Session() as session:
             rows = (await session.scalars(select(ConnectionMonitorSnapshot))).all()
             self.assertTrue(all(row.status == "unknown" and row.failure_streak == 0 and row.delay_ms is None for row in rows))
+
+    async def test_catalog_planning_leaves_the_event_loop_responsive(self) -> None:
+        entered, released = threading.Event(), threading.Event()
+
+        def plan(**kwargs: object) -> tuple[MonitorHostPlan, ...]:
+            entered.set()
+            if not released.wait(timeout=2):
+                raise AssertionError("Catalog planning blocked the event loop")
+            return plan_monitor_hosts(**kwargs)
+
+        with patch("app.services.connection_monitor_worker.plan_monitor_hosts", side_effect=plan):
+            task = asyncio.create_task(run_monitor_cycle(self.Session, self.binary))
+            try:
+                self.assertTrue(await asyncio.to_thread(entered.wait, 3))
+                released.set()
+                self.assertEqual((await task).completed, 2)
+            finally:
+                released.set()
+                if not task.done():
+                    task.cancel()
+                    await asyncio.gather(task, return_exceptions=True)

@@ -66,7 +66,8 @@ async def _check_target(sessions: async_sessionmaker[AsyncSession], claim: Monit
                         batch: XrayBatch, semaphore: asyncio.Semaphore, *, control_ok: bool) -> bool:
     async def check(binding: MonitorBinding) -> tuple[str, ProbeObservation]:
         async with semaphore:
-            async with probe_client(port=binding.port) as client:
+            client = await asyncio.to_thread(probe_client, port=binding.port)
+            async with client:
                 observation = await probe_proxy(client, control_ok=control_ok, account_valid=True, runner_alive=lambda: batch.is_alive)
                 return binding.endpoint.endpoint_key, observation
 
@@ -123,8 +124,10 @@ async def _run_work(sessions: async_sessionmaker[AsyncSession], cycle: MonitorCy
         catalog = await read_monitor_catalog(account)
     except TimeoutError:
         raise ValueError("Monitoring catalog deadline") from None
-    plans = plan_monitor_hosts(hosts=catalog.hosts, inbounds=catalog.inbounds, native_configs=catalog.native_configs,
-                               selected_ids=selected, staff={"pg_is_owner": True}, account_revision=account.revision)
+    plans = await asyncio.to_thread(
+        plan_monitor_hosts, hosts=catalog.hosts, inbounds=catalog.inbounds, native_configs=catalog.native_configs,
+        selected_ids=selected, staff={"pg_is_owner": True}, account_revision=account.revision,
+    )
     async with sessions() as session:
         if not await reconcile_monitor_plans(session, cycle, plans, now=datetime.now(timezone.utc)):
             return 0

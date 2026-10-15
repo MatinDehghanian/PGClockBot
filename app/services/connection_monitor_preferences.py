@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
 from typing import Annotated
 
@@ -68,8 +69,10 @@ async def save_monitor_preferences(session: AsyncSession, access: MonitorAccess,
     await session.commit()
     chosen = tuple(dict.fromkeys((*selected, preferences.host_id)))
     catalog = await read_monitor_catalog(account)
-    plans = plan_monitor_hosts(hosts=catalog.hosts, inbounds=catalog.inbounds, native_configs=catalog.native_configs,
-                               selected_ids=chosen, staff={"pg_is_owner": True}, account_revision=account.revision)
+    plans = await asyncio.to_thread(
+        plan_monitor_hosts, hosts=catalog.hosts, inbounds=catalog.inbounds, native_configs=catalog.native_configs,
+        selected_ids=chosen, staff={"pg_is_owner": True}, account_revision=account.revision,
+    )
     plan = next(plan for plan in plans if plan.host_id == preferences.host_id)
     if not plan.is_ready:
         raise ValueError(PREFERENCES_UNAVAILABLE)

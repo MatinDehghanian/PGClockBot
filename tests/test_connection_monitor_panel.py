@@ -53,6 +53,7 @@ class MonitorPanelTests(unittest.IsolatedAsyncioTestCase):
         payloads = (httpx.Response(302, headers={"Location": "https://external.example"}),
                     httpx.Response(403, text=TOKEN), httpx.Response(200, text=TOKEN),
                     httpx.Response(200, json={"secret": TOKEN}), httpx.Response(200, content=b"x" * (2*1024*1024+1)),
+                    httpx.Response(200, text="[" * 2000 + "]" * 2000),
                     httpx.Response(200, json=[{}] * 1001))
         for response in payloads:
             pg = object.__new__(PasarGuardClient)

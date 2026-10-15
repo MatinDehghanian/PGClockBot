@@ -70,7 +70,8 @@ async def request_destination(client: httpx.AsyncClient, destination: ProbeDesti
 
 
 async def probe_control(*, transport: httpx.AsyncBaseTransport | None = None) -> bool:
-    async with probe_client(port=None, transport=transport) as client:
+    client = await asyncio.to_thread(probe_client, port=None, transport=transport)
+    async with client:
         for destination in PROBE_DESTINATIONS:
             if (await request_destination(client, destination)).delay_ms is not None:
                 return True

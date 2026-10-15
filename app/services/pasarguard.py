@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import json
+import asyncio
 import secrets
 import time
 from typing import Any, Optional
@@ -885,8 +886,8 @@ class PasarGuardClient:
                     payload.extend(chunk)
                     if len(payload) > 2 * 1024 * 1024:
                         raise PasarGuardError("Monitoring subscription exceeds capacity")
-            result = json.loads(payload)
-        except (httpx.HTTPError, ValueError):
+            result = await asyncio.to_thread(json.loads, payload)
+        except (httpx.HTTPError, ValueError, RecursionError):
             raise PasarGuardError("Monitoring subscription unavailable") from None
         if not isinstance(result, list) or len(result) > 1000 or any(not isinstance(item, dict) for item in result):
             raise PasarGuardError("Monitoring subscription format unavailable")
