@@ -192,7 +192,8 @@ class WizardAndKeyboardSurfaceTests(unittest.TestCase):
         self.assertIn("🤝 نمایندگان", shown)
         main_hidden = [b.text for row in main_reply_keyboard("admin", ui=ui, can_manage_representatives=False).keyboard for b in row]
         self.assertNotIn("🤝 نمایندگان", main_hidden)
-        self.assertIn("👤 افراد", main_hidden)
+        # The admin main menu only carries the entry to the admin hub.
+        self.assertIn("🛠 پنل ادمین", main_hidden)
 
     def test_sidebar_owner_resellers_uses_capability(self) -> None:
         base = (ROOT / "app/web/templates/base.html").read_text(encoding="utf-8")
