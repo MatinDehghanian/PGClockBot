@@ -1206,36 +1206,7 @@ async def maybe_warn_reseller_capacity(
     except Exception:
         logger.debug("capacity_warned_at commit failed", exc_info=True)
         return False
-    # Best-effort Telegram nudge to shop owner (optional)
-    try:
-        from app.db.models import BotUser
-        from app.services.reseller_bots import open_notify_bot_for_reseller
-
-        owner = await session.get(BotUser, int(profile.user_id))
-        if not owner:
-            return True
-        bot, should_close = await open_notify_bot_for_reseller(session, int(profile.user_id))
-        if bot is None:
-            return True
-        try:
-            hot = []
-            for key, label in (("users", "کاربر"), ("traffic", "حجم")):
-                m = pg_limits.get(key) or {}
-                pct = capacity_used_pct(m)
-                if pct is not None and pct >= float(threshold):
-                    hot.append(f"{label}: {pct:.0f}٪")
-            detail = "، ".join(hot) if hot else f"≥{threshold:.0f}٪"
-            await bot.send_message(
-                int(owner.telegram_id),
-                f"⚠️ ظرفیت پنل پاسارگارد نزدیک پر شدن است ({detail}).\n"
-                "از وب‌پنل → خانه وضعیت سهمیه را بررسی کنید.",
-                parse_mode="HTML",
-            )
-        finally:
-            if should_close:
-                await bot.session.close()
-    except Exception:
-        logger.debug("capacity warn telegram failed", exc_info=True)
+    # The Telegram message is sent by the panel alert job (panel_alert_notifications).
     return True
 
 
