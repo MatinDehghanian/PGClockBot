@@ -41,11 +41,16 @@ async def read_monitor_catalog(account: MonitorAccount) -> MonitorCatalog:
                 pg.get_user_by_id(account.pg_user_id), pg.get_hosts(), pg.get_inbounds_details(),
             )
             validated = validate_monitor_account(user, username=account.username)
-            revision = hashlib.sha256(f"{validated.user_id}:{validated.token}".encode()).hexdigest()
-            if (validated.user_id != account.pg_user_id or not secrets.compare_digest(token, validated.token)
-                    or not secrets.compare_digest(revision, account.revision)):
+            revision = hashlib.sha256(f"{validated.user_id}:{token}".encode()).hexdigest()
+            if validated.user_id != account.pg_user_id or not secrets.compare_digest(revision, account.revision):
                 raise MonitorAccountError("account_changed")
-            native = await pg.subscription_xray(token)
+            # Panel URLs contain an issuance timestamp; a new alias does not revoke this token.
+            try:
+                native = await pg.subscription_xray(token, subscription_url=user["subscription_url"])
+            except PasarGuardError as exc:
+                if exc.status_code in (401, 404):
+                    raise MonitorAccountError("account_changed") from None
+                raise
     except (PasarGuardError, httpx.HTTPError, TimeoutError) as exc:
         raise panel_account_error(exc) from None
     return MonitorCatalog(hosts, inbounds, native, datetime.now(timezone.utc))

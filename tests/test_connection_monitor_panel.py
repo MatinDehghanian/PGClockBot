@@ -19,6 +19,19 @@ TOKEN = "synthetic-monitor-token-123456"
 
 
 class MonitorPanelTests(unittest.IsolatedAsyncioTestCase):
+    async def test_stored_revision_mismatch_is_rejected_before_reading_routes(self) -> None:
+        user = {"id": 900, "username": "monitor", "status": "active", "used_traffic": 0,
+                "data_limit": 0, "expire": None, "subscription_url": f"https://panel.example/sub/{TOKEN}"}
+        account = MonitorAccount(900, "old-revision", "encrypted", "monitor")
+        pg = SimpleNamespace(get_user_by_id=AsyncMock(return_value=user), get_hosts=AsyncMock(return_value=[]),
+                             get_inbounds_details=AsyncMock(return_value=[]), subscription_xray=AsyncMock())
+        with patch("app.services.connection_monitor_panel.get_pg", return_value=pg), \
+             patch("app.services.connection_monitor_panel.reveal_monitor_token", AsyncMock(return_value=TOKEN)):
+            with self.assertRaises(MonitorAccountError) as caught:
+                await read_monitor_catalog(account)
+        self.assertEqual(caught.exception.code, "account_changed")
+        pg.subscription_xray.assert_not_awaited()
+
     async def test_regenerated_subscription_url_keeps_using_the_valid_saved_token(self) -> None:
         user = {"id": 900, "username": "monitor", "status": "active", "used_traffic": 0,
                 "data_limit": 0, "expire": None, "subscription_url": "https://panel.example/sub/newly-issued-token-123456"}
@@ -29,7 +42,7 @@ class MonitorPanelTests(unittest.IsolatedAsyncioTestCase):
              patch("app.services.connection_monitor_panel.reveal_monitor_token", AsyncMock(return_value=TOKEN)):
             result = await read_monitor_catalog(account)
         self.assertEqual(result.native_configs, [])
-        pg.subscription_xray.assert_awaited_once_with(TOKEN)
+        pg.subscription_xray.assert_awaited_once_with(TOKEN, subscription_url=user["subscription_url"])
 
     async def test_panel_rejection_of_a_revoked_saved_link_is_reported_without_token_details(self) -> None:
         user = {"id": 900, "username": "monitor", "status": "active", "used_traffic": 0,
@@ -45,7 +58,7 @@ class MonitorPanelTests(unittest.IsolatedAsyncioTestCase):
                     await read_monitor_catalog(account)
             self.assertEqual(caught.exception.code, "account_changed")
             self.assertNotIn(TOKEN, str(caught.exception))
-            pg.subscription_xray.assert_awaited_once_with(TOKEN)
+            pg.subscription_xray.assert_awaited_once_with(TOKEN, subscription_url=user["subscription_url"])
 
     async def test_verified_account_identity_reads_native_routes_once(self) -> None:
         user = {"id": 900, "username": "monitor", "status": "active", "admin": {"username": "owner"},
@@ -57,7 +70,7 @@ class MonitorPanelTests(unittest.IsolatedAsyncioTestCase):
         with patch("app.services.connection_monitor_panel.get_pg", return_value=pg):
             with patch("app.services.connection_monitor_panel.reveal_monitor_token", AsyncMock(return_value=TOKEN)):
                 result = await read_monitor_catalog(account)
-        pg.subscription_xray.assert_awaited_once_with(TOKEN)
+        pg.subscription_xray.assert_awaited_once_with(TOKEN, subscription_url=user["subscription_url"])
         self.assertEqual(result.native_configs, [])
         self.assertNotIn(TOKEN, repr(result))
 
@@ -74,7 +87,7 @@ class MonitorPanelTests(unittest.IsolatedAsyncioTestCase):
             with patch("app.services.connection_monitor_panel.reveal_monitor_token", AsyncMock(return_value=TOKEN)):
                 result = await read_monitor_catalog(account)
         self.assertEqual(result.native_configs, [])
-        pg.subscription_xray.assert_awaited_once_with(TOKEN)
+        pg.subscription_xray.assert_awaited_once_with(TOKEN, subscription_url=user["subscription_url"])
         pg.get_current_admin.assert_not_awaited()
 
     async def test_native_routes_use_only_configured_panel_origin_and_no_authorization_header(self) -> None:
@@ -92,6 +105,21 @@ class MonitorPanelTests(unittest.IsolatedAsyncioTestCase):
             pg._client = client
             self.assertEqual(await pg.subscription_xray(TOKEN), [{"outbounds": []}])
         self.assertEqual(str(requested[0].url), f"https://panel.example/custom/{TOKEN}/xray")
+        self.assertNotIn("Authorization", requested[0].headers)
+
+    async def test_current_subscription_prefix_uses_the_saved_token_and_configured_origin(self) -> None:
+        requested = []
+        def handler(request: httpx.Request) -> httpx.Response:
+            requested.append(request)
+            return httpx.Response(200, json=[])
+        pg = object.__new__(PasarGuardClient)
+        pg.settings = SimpleNamespace(pg_subscription_path="/old-path")
+        pg.base_url = "https://panel.example/dashboard"
+        pg._ensure_safe_target = AsyncMock()
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            pg._client = client
+            await pg.subscription_xray(TOKEN, subscription_url="https://another-origin.example/current-path/newly-issued-token-123456")
+        self.assertEqual(str(requested[0].url), f"https://panel.example/current-path/{TOKEN}/xray")
         self.assertNotIn("Authorization", requested[0].headers)
 
     async def test_bad_native_payloads_and_errors_are_bounded_and_do_not_expose_token(self) -> None:
