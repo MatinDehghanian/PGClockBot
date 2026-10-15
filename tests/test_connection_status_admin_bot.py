@@ -15,6 +15,8 @@ from connection_monitor_support import MonitorDatabaseCase
 from app.bot.connection_status_admin_ui import parse_monitor_callback
 from app.bot.connection_status_admin_ui import monitor_error
 from app.services.connection_monitor_accounts import ACCOUNT_MESSAGES, MonitorAccountError
+from app.bot.connection_status_ui import MonitorAdminLabel
+from app.services.connection_status_texts import LEGACY_MONITOR_TEXTS, MONITOR_TEXT_DEFAULTS
 from app.bot.handlers import connection_status_admin as admin
 from app.bot.handlers import connection_status_admin_input as forms
 from app.bot.nav_input import CANCEL_CODE_KEY
@@ -23,6 +25,16 @@ from app.services.connection_monitor_admin import MonitorHostPage
 
 
 class MonitorAdminBotTests(MonitorDatabaseCase):
+    async def test_old_default_menu_button_still_opens_settings_without_overriding_custom_labels(self) -> None:
+        old_button = self.message.model_copy(update={"text": LEGACY_MONITOR_TEXTS["btn_connection_status_admin"]})
+        matcher = MonitorAdminLabel()
+        async with self.Session() as session:
+            with patch("app.bot.connection_status_ui.get_all_settings", AsyncMock(return_value=MONITOR_TEXT_DEFAULTS)):
+                self.assertTrue(await matcher(old_button, session))
+            with patch("app.bot.connection_status_ui.get_all_settings", AsyncMock(return_value={"btn_connection_status_admin": "هاست‌ها"})):
+                self.assertFalse(await matcher(old_button, session))
+                self.assertTrue(await matcher(self.message.model_copy(update={"text": "هاست‌ها"}), session))
+
     async def test_account_validation_failure_shows_the_actionable_reason(self) -> None:
         with patch.object(Message, "answer", new_callable=AsyncMock) as answer:
             async with self.Session() as session:

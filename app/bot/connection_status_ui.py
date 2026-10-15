@@ -14,7 +14,9 @@ from app.db.models import BotUser
 from app.services.authz import authz_from_staff
 from app.services.connection_monitor_access import MONITOR_ACCESS_DENIED, MonitorAccess
 from app.services.connection_monitor_views import MonitorAdminPage, MonitorTargetView
-from app.services.connection_status_texts import REASON_LABELS, STATUS_LABELS as STATUS_LABELS, connection_check_time
+from app.services.connection_status_texts import (
+    LEGACY_MONITOR_TEXTS, MONITOR_TEXT_DEFAULTS, REASON_LABELS, STATUS_LABELS as STATUS_LABELS, connection_check_time,
+)
 from app.services.formatting import format_number
 from app.services.org_principals import attach_org_principal_fields
 from app.services.safe_format import safe_format
@@ -26,7 +28,11 @@ class MonitorAdminLabel(BaseFilter):
         if is_reseller_bot or not message.text:
             return False
         ui = await get_all_settings(session)
-        return message.text.strip() == ui["btn_connection_status_admin"].strip()
+        label = ui["btn_connection_status_admin"].strip()
+        accepted = {label}
+        if label == MONITOR_TEXT_DEFAULTS["btn_connection_status_admin"]:
+            accepted.add(LEGACY_MONITOR_TEXTS["btn_connection_status_admin"])
+        return message.text.strip() in accepted
 
 
 async def bot_monitor_access(session: AsyncSession, user: BotUser, *, is_reseller_bot: bool) -> MonitorAccess:
