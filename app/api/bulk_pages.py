@@ -190,11 +190,14 @@ def register_bulk_pages(
             return redirect_bulk(return_to, err="هیچ سفارشی انتخاب نشده")
         if action == "dismiss":
             from app.services.delivery_failure_queue import dismiss_delivery_failures
+            from app.services.stuck_order_resolution import count_still_stuck
 
             ok, fail = await dismiss_delivery_failures(session, staff, ids)
-            return _bulk_result(
-                return_to, ok, fail, done="از لیست تحویل ناموفق حذف شد", none="هیچ موردی حذف نشد"
-            )
+            still = await count_still_stuck(session, ids) if ok else 0
+            done = "ردیف خطا از لیست حذف شد"
+            if still:
+                done += f"؛ {still} سفارش هنوز بدون سرویس است و در لیست «گیرکرده» می‌ماند"
+            return _bulk_result(return_to, ok, fail, done=done, none="هیچ موردی حذف نشد")
         if action != "retry":
             return redirect_bulk(return_to, err="عملیات نامعتبر")
         ok, fail = await bulk_retry_delivery(session, staff, ids)
