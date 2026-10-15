@@ -8,6 +8,46 @@
 
 .connection-setup > .card { margin-bottom: 0; }
 
+.connection-config-summary, .connection-config-details {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.connection-config-summary { margin-block: var(--space-2); }
+.connection-config-list { list-style: none; padding: 0; margin: 0; }
+.connection-config-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  align-items: center;
+  border-top: 1px solid var(--border);
+}
+.connection-config-rank {
+  display: grid;
+  place-items: center;
+  min-width: var(--space-4);
+  height: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--control-radius);
+  background: var(--control-bg);
+  color: var(--muted-fg);
+  font-variant-numeric: tabular-nums;
+}
+.connection-config-body { min-width: 0; }
+.connection-config-body h3 { margin: 0 0 var(--space-1); overflow-wrap: anywhere; }
+.connection-config-details { justify-content: flex-end; }
+.connection-config-details .badge { font-family: ui-monospace, monospace; }
+.connection-config-protocol { color: var(--primary-fg); background: var(--control-bg); border-color: var(--border); }
+.connection-config-note { margin: var(--space-1) 0 0; font-size: .85rem; }
+.connection-config-port { font-size: .8rem; font-variant-numeric: tabular-nums; }
+.connection-config-action form { margin: 0; }
+
 @media (max-width: 760px) {
   .connection-setup { grid-template-columns: minmax(0, 1fr); }
+  .connection-config-row { gap: var(--space-1_5); align-items: start; }
+  .connection-config-action { grid-column: 2 / -1; }
+  .connection-config-action .btn { width: 100%; }
 }

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import json
 import secrets
 import tempfile
 import unittest
@@ -16,12 +17,18 @@ from app.db import Base
 from app.db.models import BotUser, OrgPrincipal
 from app.services.authz import authz_from_staff
 from app.services.connection_monitor_access import MonitorAccess
+from app.services.connection_monitor_subscription import subscription_entries
 
 
 OWNER_STAFF = {
     "role": "admin", "org_principal_id": 1, "org_depth": 0,
     "org_parent_id": None, "org_status": "active",
 }
+
+
+def subscription_fixture_key(index: int = 0) -> str:
+    fixture = json.loads((Path(__file__).parent / "fixtures/connection_monitor_catalog.json").read_text())
+    return subscription_entries(fixture["native_configs"])[index].config_key
 
 
 def monitor_access(**changes: object) -> MonitorAccess:

@@ -13,6 +13,7 @@ from app.bot.auth import resolve_bot_owner_principal
 from app.db.models import BotUser
 from app.services.authz import authz_from_staff
 from app.services.connection_monitor_access import MONITOR_ACCESS_DENIED, MonitorAccess
+from app.services.connection_monitor_admin import MonitorConfigPage
 from app.services.connection_monitor_views import MonitorAdminPage, MonitorTargetView
 from app.services.connection_status_texts import (
     LEGACY_MONITOR_TEXTS, MONITOR_TEXT_DEFAULTS, REASON_LABELS, STATUS_LABELS as STATUS_LABELS, connection_check_time,
@@ -65,19 +66,19 @@ def admin_page_text(page: MonitorAdminPage, ui: dict[str, str]) -> str:
     if page.settings.username:
         lines.append(f"Username: <code>{html.escape(page.settings.username)}</code>")
     if not page.settings.has_account:
-        lines.append("۱. Test user را ثبت کنید. ۲. هاست اضافه کنید. ۳. تست‌ها را روشن کنید.")
+        lines.append("۱. Test user را ثبت کنید. ۲. از subscription کانفیگ انتخاب کنید. ۳. تست‌ها را روشن کنید.")
     for target in page.targets:
-        name = html.escape(target.public_name) or f"هاست {format_number(target.host_id)}"
+        name = html.escape(target.public_name or target.config_name) or f"کانفیگ {format_number(target.id)}"
         lines.append(f"{name}: {STATUS_LABELS[target.health.status]}")
     if not page.targets:
-        lines.append("هنوز هاستی انتخاب نشده است.")
+        lines.append("هنوز کانفیگی انتخاب نشده است.")
     return "\n".join(lines)
 
 
 def admin_page_keyboard(page: MonitorAdminPage) -> InlineKeyboardMarkup:
-    rows = [[button("👤 تنظیم Test user", "cma:account"), button("➕ اضافه کردن هاست", "cma:hosts:0")],
+    rows = [[button("👤 تنظیم Test user", "cma:account"), button("➕ انتخاب کانفیگ", "cma:hosts:0")],
             [button("⏹ توقف تست‌ها" if page.settings.enabled else "▶️ شروع تست‌ها", f"cma:run:{int(not page.settings.enabled)}")]]
-    rows.extend([button(target.public_name or f"هاست {format_number(target.host_id)}", f"cma:item:{target.id}")] for target in page.targets)
+    rows.extend([button(target.public_name or target.config_name or f"کانفیگ {format_number(target.id)}", f"cma:item:{target.id}")] for target in page.targets)
     if page.next_id is not None:
         rows.append([button("صفحهٔ بعد", f"cma:home:{page.next_id}")])
     rows.append([button("🔄 تازه‌سازی", "cma:home:0")])
@@ -89,7 +90,7 @@ def target_text(target: MonitorTargetView) -> str:
     health = target.health
     delay = f"{format_number(health.delay_ms)} میلی‌ثانیه" if health.delay_ms is not None else "—"
     return "\n".join([
-        f"<b>هاست {format_number(target.host_id)}</b> | {STATUS_LABELS[health.status]}",
+        f"<b>{html.escape(target.config_name) or 'کانفیگ ' + format_number(target.id)}</b> | {STATUS_LABELS[health.status]}",
         "بررسی از سرور ربات", f"نام نمایشی در ربات: {name}", f"نمایش به کاربران: {'روشن' if target.is_public else 'خاموش'}",
         f"ترتیب: {format_number(target.display_order)}", f"Real delay: {delay}",
         f"مسیرهای بررسی‌شده: {format_number(health.covered)}/{format_number(health.expected)}", f"آخرین بررسی: {checked_time(health.checked_at)}",
@@ -101,10 +102,25 @@ def target_text(target: MonitorTargetView) -> str:
 def target_keyboard(target: MonitorTargetView) -> InlineKeyboardMarkup:
     rows = []
     if target.test_enabled:
-        rows = [[button("🔄 تست الان", f"cma:check:{target.id}"), button("⏸ توقف این هاست", f"cma:pause:{target.id}")],
+        rows = [[button("🔄 تست الان", f"cma:check:{target.id}"), button("⏸ توقف این کانفیگ", f"cma:pause:{target.id}")],
                 [button("✏️ نام نمایشی", f"cma:name:{target.id}"), button("ترتیب نمایش", f"cma:order:{target.id}")],
                 [button("🙈 مخفی از کاربران" if target.is_public else "👁 نمایش به کاربران", f"cma:public:{target.id}:{int(not target.is_public)}")]]
+    elif target.config_key:
+        rows = [[button("▶️ فعال کردن تست کانفیگ", f"cma:pick:{target.config_key}")]]
     else:
-        rows = [[button("▶️ فعال کردن تست هاست", f"cma:select:{target.host_id}")]]
+        rows = [[button("انتخاب دوباره از subscription", "cma:hosts:0")]]
     rows.append([button("بازگشت", "cma:home:0")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def config_picker_text(page: MonitorConfigPage) -> str:
+    lines = ["<b>کانفیگ‌های subscription</b>", "ترتیب همان subscription است؛ config موردنظر را از دکمه‌های زیر انتخاب کنید."]
+    for choice in page.choices:
+        details = choice.details
+        protocol = " · ".join(part for part in (details.protocol, details.transport, details.security) if part)
+        status = "⚪ فعلاً قابل تست نیست" if choice.issue else "آمادهٔ انتخاب"
+        lines.extend([f"\n<b>{format_number(choice.position + 1)}. {html.escape(choice.name)}</b>",
+                      f"<code>{html.escape(protocol)}</code> · {status}"])
+    if not page.choices:
+        lines.append("کانفیگ دیگری در subscription نیست.")
+    return "\n".join(lines)

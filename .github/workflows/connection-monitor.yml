@@ -25,6 +25,7 @@ on:
       - 'tests/test_nav_wave_d_admin_hubs.py'
       - 'tests/connection_monitor_support.py'
       - 'tests/fixtures/connection_monitor_catalog.json'
+      - 'tests/fixtures/connection_monitor_native.json'
       - 'requirements*.txt'
       - '.github/workflows/connection-monitor.yml'
   workflow_dispatch:

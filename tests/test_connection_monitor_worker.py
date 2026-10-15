@@ -13,15 +13,15 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from sqlalchemy import event, select
+from sqlalchemy import delete, event, select
 
-from connection_monitor_support import MonitorDatabaseCase
+from connection_monitor_support import MonitorDatabaseCase, subscription_fixture_key
 
 from app.db.models import ConnectionMonitorSnapshot, ConnectionMonitorState, ConnectionMonitorTarget, UserService
 from app.services.connection_monitor_config import MonitorBinding
-from app.services.connection_monitor_catalog import plan_monitor_hosts
+from app.services.connection_monitor_subscription import plan_monitor_configs, subscription_entries
 from app.services.connection_monitor_panel import MonitorAccount, MonitorCatalog
-from app.services.connection_monitor_types import MonitorEndpoint, MonitorHostPlan
+from app.services.connection_monitor_types import MonitorEndpoint, MonitorConfigPlan
 from app.services.connection_monitor_worker import run_monitor_cycle
 from app.services.connection_status_types import ObservationKind, ProbeObservation
 from app.services.xray_probe_resources import XrayBinary, XrayProbeError
@@ -42,7 +42,7 @@ class MonitorWorkerTests(MonitorDatabaseCase):
 
         async def catalog(account: MonitorAccount) -> MonitorCatalog:
             self.assertFalse(self.open_connections, "Panel I/O must not hold DB connections")
-            return MonitorCatalog(**copy.deepcopy(self.catalog), checked_at=datetime.now(timezone.utc))
+            return MonitorCatalog(copy.deepcopy(self.catalog["native_configs"]), checked_at=datetime.now(timezone.utc))
 
         @asynccontextmanager
         async def core(binary: XrayBinary, endpoints: tuple[MonitorEndpoint, ...]) -> AsyncIterator[SimpleNamespace]:
@@ -78,7 +78,7 @@ class MonitorWorkerTests(MonitorDatabaseCase):
             self.addCleanup(patcher.stop)
         async with self.Session() as session:
             session.add(ConnectionMonitorState(enabled=True, pg_user_id=900, pg_username="monitor-only", account_revision="one", subscription_token_enc="synthetic"))
-            session.add_all([ConnectionMonitorTarget(pg_host_id=host_id, test_enabled=True, next_check_at=self.now) for host_id in (41, 72)])
+            session.add_all([ConnectionMonitorTarget(subscription_key=subscription_fixture_key(index), test_enabled=True, next_check_at=self.now) for index in range(2)])
             await session.commit()
 
     async def test_one_core_batch_persists_complete_coverage_and_releases_all_leases(self) -> None:
@@ -89,7 +89,7 @@ class MonitorWorkerTests(MonitorDatabaseCase):
             snapshots = (await session.scalars(select(ConnectionMonitorSnapshot))).all()
             targets = (await session.scalars(select(ConnectionMonitorTarget))).all()
             state = await session.scalar(select(ConnectionMonitorState))
-            self.assertEqual(len(snapshots), 3)
+            self.assertEqual(len(snapshots), 2)
             self.assertTrue(all(row.status == "healthy" for row in snapshots))
             self.assertTrue(all(row.claim_token is None for row in targets))
             self.assertIsNone(state.cycle_token)
@@ -120,23 +120,23 @@ class MonitorWorkerTests(MonitorDatabaseCase):
         self.assertEqual(self.started, 0)
 
     async def test_multi_address_host_respects_four_endpoint_concurrency(self) -> None:
-        self.catalog["hosts"][0]["address"] = ["edge-b.example", *(f"edge-{index}.example" for index in range(11))]
-        self.catalog["hosts"] = self.catalog["hosts"][:1]
+        self.catalog["native_configs"] = [{**self.catalog["native_configs"][0], "remarks": f"config {index}"} for index in range(12)]
         async with self.Session() as session:
-            target = await session.scalar(select(ConnectionMonitorTarget).where(ConnectionMonitorTarget.pg_host_id == 72))
-            target.test_enabled = False
+            await session.execute(delete(ConnectionMonitorTarget))
+            session.add_all(ConnectionMonitorTarget(subscription_key=entry.config_key, test_enabled=True, next_check_at=self.now)
+                            for entry in subscription_entries(self.catalog["native_configs"]))
             await session.commit()
         result = await run_monitor_cycle(self.Session, self.binary)
-        self.assertEqual(result.completed, 1)
+        self.assertEqual(result.completed, 12)
         self.assertEqual(self.peak, 4)
         self.assertEqual(self.active, 0)
 
     async def test_removed_host_is_paused_and_unpublished_without_starting_a_route_for_it(self) -> None:
-        self.catalog["hosts"] = self.catalog["hosts"][:1]
+        self.catalog["native_configs"] = self.catalog["native_configs"][:1]
         result = await run_monitor_cycle(self.Session, self.binary)
         self.assertEqual(result.completed, 1)
         async with self.Session() as session:
-            removed = await session.scalar(select(ConnectionMonitorTarget).where(ConnectionMonitorTarget.pg_host_id == 72))
+            removed = await session.scalar(select(ConnectionMonitorTarget).where(ConnectionMonitorTarget.subscription_key == subscription_fixture_key(1)))
             self.assertFalse(removed.test_enabled)
             self.assertFalse(removed.is_public)
             self.assertEqual(removed.generation, "")
@@ -179,7 +179,7 @@ class MonitorWorkerTests(MonitorDatabaseCase):
         async def delayed(account: MonitorAccount) -> MonitorCatalog:
             entered.set()
             await released.wait()
-            return MonitorCatalog(**self.catalog, checked_at=datetime.now(timezone.utc))
+            return MonitorCatalog(self.catalog["native_configs"], checked_at=datetime.now(timezone.utc))
 
         with patch("app.services.connection_monitor_worker.read_monitor_catalog", side_effect=delayed):
             first = asyncio.create_task(run_monitor_cycle(self.Session, self.binary))
@@ -220,13 +220,13 @@ class MonitorWorkerTests(MonitorDatabaseCase):
     async def test_catalog_planning_leaves_the_event_loop_responsive(self) -> None:
         entered, released = threading.Event(), threading.Event()
 
-        def plan(**kwargs: object) -> tuple[MonitorHostPlan, ...]:
+        def plan(**kwargs: object) -> tuple[MonitorConfigPlan, ...]:
             entered.set()
             if not released.wait(timeout=2):
                 raise AssertionError("Catalog planning blocked the event loop")
-            return plan_monitor_hosts(**kwargs)
+            return plan_monitor_configs(**kwargs)
 
-        with patch("app.services.connection_monitor_worker.plan_monitor_hosts", side_effect=plan):
+        with patch("app.services.connection_monitor_worker.plan_monitor_configs", side_effect=plan):
             task = asyncio.create_task(run_monitor_cycle(self.Session, self.binary))
             try:
                 self.assertTrue(await asyncio.to_thread(entered.wait, 3))

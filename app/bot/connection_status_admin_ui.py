@@ -17,6 +17,7 @@ from app.db.models import BotUser
 from app.services.connection_monitor_access import MonitorAccess
 from app.services.connection_monitor_views import monitor_admin_page, monitor_target_view
 from app.services.connection_monitor_errors import monitor_error_message
+from app.services.connection_monitor_subscription import validate_config_key
 from app.services.db_safe import rollback_quiet
 from app.services.users import get_all_settings
 
@@ -29,17 +30,20 @@ class MonitorCommand:
     action: str
     identifier: int = 0
     flag: bool = False
+    config_key: str = ""
 
 
 def parse_monitor_callback(raw: str) -> MonitorCommand:
     parts = raw.split(":")
-    arity = {"account": 2, "home": 3, "hosts": 3, "item": 3, "select": 3,
+    arity = {"account": 2, "home": 3, "hosts": 3, "item": 3, "pick": 3,
              "check": 3, "pause": 3, "stop": 3, "name": 3, "order": 3,
              "run": 3, "halt": 3, "public": 4}
     if len(parts) < 2 or parts[0] != "cma" or arity.get(parts[1]) != len(parts):
         raise ValueError("درخواست نامعتبر است.")
     if len(parts) == 2:
         return MonitorCommand(parts[1])
+    if parts[1] == "pick":
+        return MonitorCommand("pick", config_key=validate_config_key(parts[2]))
     if not parts[2].isascii() or not parts[2].isdecimal() or len(parts[2]) > 10:
         raise ValueError("شناسه نامعتبر است.")
     identifier = int(parts[2])

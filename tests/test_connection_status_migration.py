@@ -39,7 +39,7 @@ class MonitorMigrations:
 class MonitorMigrationTests(unittest.IsolatedAsyncioTestCase):
     async def test_upgrade_repeat_constraints_downgrade_preserves_existing_rows(self) -> None:
         modules = []
-        for name in ("0055_connection_monitor", "0056_monitor_account_identity"):
+        for name in ("0055_connection_monitor", "0056_monitor_account_identity", "0058_monitor_subscription_configs"):
             spec = importlib.util.spec_from_file_location(name, ROOT / f"alembic/versions/{name}.py")
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)

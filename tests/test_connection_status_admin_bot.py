@@ -17,17 +17,35 @@ from app.bot.nav_inline import admin_groups_hub_keyboard
 from app.bot.connection_status_admin_ui import parse_monitor_callback
 from app.bot.connection_status_admin_ui import monitor_error
 from app.services.connection_monitor_accounts import ACCOUNT_MESSAGES, MonitorAccountError
-from app.bot.connection_status_ui import MonitorAdminLabel
+from app.bot.connection_status_ui import MonitorAdminLabel, config_picker_text
 from app.services.connection_status_texts import LEGACY_MONITOR_TEXTS, MONITOR_TEXT_DEFAULTS
 from app.bot.handlers import connection_status_admin as admin
 from app.bot.handlers import connection_status_admin_input as forms
 from app.bot.nav_input import CANCEL_CODE_KEY
 from app.db.models import BotUser, ConnectionMonitorTarget
-from app.services.connection_monitor_admin import MonitorHostPage
+from app.services.connection_monitor_admin import MonitorConfigPage
+from app.services.connection_monitor_subscription import subscription_entries
 from app.services.users import DEFAULT_SETTINGS
 
 
 class MonitorAdminBotTests(MonitorDatabaseCase):
+    async def test_picker_formats_protocol_details_and_uses_bounded_content_key_callbacks(self) -> None:
+        native = {"remarks": "<b>My config</b>", "outbounds": [{
+            "tag": "proxy", "protocol": "shadowsocks", "settings": {"servers": [{
+                "address": "ss.example", "port": 443, "method": "chacha20-ietf-poly1305", "password": "synthetic-only-password",
+            }]},
+        }]}
+        entries = subscription_entries([native])
+        text = config_picker_text(MonitorConfigPage(entries, None, 1))
+        self.assertIn("shadowsocks · tcp", text)
+        self.assertIn("&lt;b&gt;My config&lt;/b&gt;", text)
+        self.assertNotIn("synthetic-only-password", text)
+        data = "cma:pick:" + entries[0].config_key
+        self.assertLessEqual(len(data.encode()), 64)
+        self.assertEqual(parse_monitor_callback(data).config_key, entries[0].config_key)
+        with self.assertRaises(ValueError):
+            parse_monitor_callback("cma:pick:41")
+
     async def test_admin_panel_has_a_direct_status_button_in_both_navigation_modes(self) -> None:
         ui = {**DEFAULT_SETTINGS, "btn_connection_status_admin": "تست هاست‌ها"}
         reply = keyboards.admin_reply_keyboard(ui)
@@ -95,15 +113,15 @@ class MonitorAdminBotTests(MonitorDatabaseCase):
 
     async def test_callback_acknowledges_before_a_slow_catalog_operation(self) -> None:
         with patch.object(CallbackQuery, "answer", new_callable=AsyncMock) as answer:
-            async def picker(*args: object, **kwargs: object) -> MonitorHostPage:
+            async def picker(*args: object, **kwargs: object) -> MonitorConfigPage:
                 self.assertEqual(answer.await_count, 1)
-                return MonitorHostPage((), None)
+                return MonitorConfigPage((), None)
             with patch.object(admin, "bot_monitor_access", AsyncMock(return_value=self.access)):
-                with patch.object(admin, "active_monitor_hosts", side_effect=picker):
+                with patch.object(admin, "monitor_config_choices", side_effect=picker):
                     with patch.object(admin, "safe_edit_text", new_callable=AsyncMock) as render:
                         async with self.Session() as session:
                             await admin.monitor_admin_callback(self.callback("cma:hosts:0"), session, self.user, self.state)
-                        self.assertIn("هاست فعال دیگری", render.call_args.args[1])
+                        self.assertIn("کانفیگ دیگری", render.call_args.args[1])
 
     async def test_invalid_callback_never_mutates_settings_or_leaks_input(self) -> None:
         invalid = ("cma:public:-1:1", "cma:item:2147483648", "cma:item:True", "cma:public:10:2",

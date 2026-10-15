@@ -11,7 +11,7 @@ import httpx
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.services.connection_monitor_catalog import plan_monitor_hosts
+from app.services.connection_monitor_subscription import plan_monitor_configs
 from app.services.connection_monitor_config import MonitorBinding
 from app.services.connection_monitor_claims import (
     MonitorCycleClaim,
@@ -24,7 +24,7 @@ from app.services.connection_monitor_claims import (
 from app.services.connection_monitor_panel import read_monitor_catalog
 from app.services.connection_monitor_snapshots import complete_monitor_target, invalidate_monitor_evidence
 from app.services.connection_monitor_sync import load_cycle_inputs, reconcile_monitor_plans
-from app.services.connection_monitor_types import MonitorHostPlan
+from app.services.connection_monitor_types import MonitorConfigPlan
 from app.services.connection_probe import probe_client, probe_control, probe_proxy
 from app.services.connection_status_types import ConnectionStatus, ObservationKind, ProbeObservation
 from app.services.pasarguard import PasarGuardError
@@ -71,7 +71,7 @@ async def _check_target(sessions: async_sessionmaker[AsyncSession], claim: Monit
                 observation = await probe_proxy(client, control_ok=control_ok, account_valid=True, runner_alive=lambda: batch.is_alive)
                 return binding.endpoint.endpoint_key, observation
 
-    bindings = tuple(binding for binding in batch.bindings if binding.endpoint.host_id == claim.pg_host_id)
+    bindings = tuple(binding for binding in batch.bindings if binding.endpoint.config_key == claim.config_key)
     try:
         async with asyncio.TaskGroup() as group:
             tasks = [group.create_task(check(binding)) for binding in bindings]
@@ -99,9 +99,9 @@ async def _record_target_failure(sessions: async_sessionmaker[AsyncSession], cla
 
 
 async def _probe_claims(sessions: async_sessionmaker[AsyncSession], claims: tuple[MonitorTargetClaim, ...],
-                         plans: tuple[MonitorHostPlan, ...], binary: XrayBinary) -> int:
-    host_ids = {claim.pg_host_id for claim in claims}
-    endpoints = tuple(endpoint for plan in plans if plan.host_id in host_ids for endpoint in plan.endpoints)
+                         plans: tuple[MonitorConfigPlan, ...], binary: XrayBinary) -> int:
+    config_keys = {claim.config_key for claim in claims}
+    endpoints = tuple(endpoint for plan in plans if plan.config_key in config_keys for endpoint in plan.endpoints)
     semaphore = asyncio.Semaphore(PROXY_CONCURRENCY)
     control = asyncio.create_task(probe_control())
     try:
@@ -125,8 +125,8 @@ async def _run_work(sessions: async_sessionmaker[AsyncSession], cycle: MonitorCy
     except TimeoutError:
         raise ValueError("Monitoring catalog deadline") from None
     plans = await asyncio.to_thread(
-        plan_monitor_hosts, hosts=catalog.hosts, inbounds=catalog.inbounds, native_configs=catalog.native_configs,
-        selected_ids=selected, staff={"pg_is_owner": True}, account_revision=account.revision,
+        plan_monitor_configs, native_configs=catalog.native_configs,
+        selected_keys=selected, account_revision=account.revision,
     )
     async with sessions() as session:
         if not await reconcile_monitor_plans(session, cycle, plans, now=datetime.now(timezone.utc)):

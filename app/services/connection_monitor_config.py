@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.services.connection_monitor_types import MAX_MONITOR_ENDPOINTS, MonitorConfigError, MonitorEndpoint, MonitorIssue
-from app.services.connection_monitor_validation import validate_native_outbound
+from app.services.connection_monitor_native import validate_subscription_outbound
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,7 +32,7 @@ def build_monitor_config(bindings: tuple[MonitorBinding, ...]) -> dict[str, Any]
     }
     for index, binding in enumerate(bindings):
         inbound_tag, outbound_tag = f"probe-in-{index}", f"probe-out-{index}"
-        outbound = validate_native_outbound(binding.endpoint.outbound()).config()
+        outbound = validate_subscription_outbound(binding.endpoint.outbound())
         outbound["tag"] = outbound_tag
         config["outbounds"].append(outbound)
         config["inbounds"].append({
