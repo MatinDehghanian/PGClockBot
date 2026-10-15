@@ -268,6 +268,8 @@
       <p class="muted">ادمین پاسارگارد: <strong dir="ltr">{{ uname }}</strong>
         — دسترسی «ادمین فرعی» حذف می‌شود و مسیر «نماینده» (پنل ربات + فروشگاه) جایگزین می‌شود.
         هر ادمین فقط یکی از این دو مسیر را می‌تواند داشته باشد. محدودیت‌های نقش پاسارگارد و پلن نمایندگی همچنان اعمال می‌شوند.</p>
+      {% set live_usage = (admin_usage or {}).get(uname|lower) or {} %}
+      <p class="muted">سقف فعلی این ادمین در پاسارگارد (مصرف/سقف): کاربران <strong dir="ltr">{{ live_usage.get('users_text') or '—' }}</strong> · حجم <strong dir="ltr">{{ live_usage.get('traffic_text') or '—' }}</strong>. با پلن «ظرفیت فعلی» همین سقف ثبت می‌شود؛ اگر خوانده نشود، اعطا انجام نمی‌شود.</p>
       {% set grant_plans = (reseller_plans or [])|selectattr('plan_kind', 'in', ['subscription', 'current_capacity'])|list %}
       {% if not grant_plans %}
       {% set grant_plans = (reseller_plans or [])|rejectattr('plan_kind', 'in', ['addon_volume', 'addon_users'])|list %}
@@ -320,6 +322,8 @@
       <p class="muted">ادمین پاسارگارد: <strong dir="ltr">{{ uname }}</strong>
         — منوی پاسارگارد از نقش ادمین؛ فروشگاه/ربات از پلن نمایندگی.
         اگر این ادمین قبلاً ادمین فرعی باشد، ابتدا آن دسترسی را حذف کنید.</p>
+      {% set live_usage = (admin_usage or {}).get(uname|lower) or {} %}
+      <p class="muted">سقف فعلی این ادمین در پاسارگارد (مصرف/سقف): کاربران <strong dir="ltr">{{ live_usage.get('users_text') or '—' }}</strong> · حجم <strong dir="ltr">{{ live_usage.get('traffic_text') or '—' }}</strong>. با پلن «ظرفیت فعلی» همین سقف ثبت می‌شود؛ اگر خوانده نشود، اعطا انجام نمی‌شود.</p>
       {% set grant_plans = (reseller_plans or [])|selectattr('plan_kind', 'in', ['subscription', 'current_capacity'])|list %}
       {% if not grant_plans %}
       {% set grant_plans = (reseller_plans or [])|rejectattr('plan_kind', 'in', ['addon_volume', 'addon_users'])|list %}

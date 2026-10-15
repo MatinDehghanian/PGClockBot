@@ -197,6 +197,8 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         tab_groups = TAB_SETTING_GROUPS.get(tab, [])
         # Hide platform-only fields from reseller menu tab
         groups = {name: SETTING_GROUPS[name] for name in tab_groups if name in SETTING_GROUPS}
+        if tab == "service_import":
+            groups.pop("مسیرها و ادمین‌های مجاز", None)
         if tab == "menu":
             for name, fields in list(groups.items()):
                 groups[name] = [f for f in fields if f[0] != "show_reseller_apply"]
@@ -389,7 +391,10 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
                 status_code=303,
             )
 
-        known = keys_for_tab(tab)
+        from app.services.service_import_config import PLATFORM_ONLY_KEYS
+
+        # Subscription paths and extra panel admins describe the one panel: Owner only.
+        known = keys_for_tab(tab) - PLATFORM_ONLY_KEYS
         if tab == "menu":
             known = known | {"menu_order"}
             known.discard("show_reseller_apply")
@@ -437,6 +442,10 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
                     from app.services.receipt_fingerprints import normalize_dup_policy
 
                     val = normalize_dup_policy(val)
+                if key.startswith("service_import_"):
+                    from app.services.service_import_config import normalize_setting_value
+
+                    val = normalize_setting_value(key, val)
                 payload[key] = val
 
         if tab == "daily_report":

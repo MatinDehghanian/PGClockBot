@@ -16,8 +16,10 @@
   justify-content: space-between;
   gap: var(--space-1);
   width: 100%;
-  min-height: 48px;
-  padding: var(--space-1) var(--space-1_5);
+  min-height: var(--btn-h);
+  padding-block: 0;
+  padding-inline: var(--space-2);
+  box-sizing: border-box;
   border: 1px solid var(--border);
   border-radius: var(--control-radius);
   background: var(--control-bg);
@@ -59,10 +61,12 @@
   border-radius: var(--control-radius);
   font-size: 13px;
 }
+/* Same up/down chevron as the panel's select, drawn as an image so it centres exactly. */
 .list-editor-caret {
   flex: 0 0 auto;
-  color: var(--muted-fg);
-  font-size: 20px;
+  width: 14px;
+  height: 14px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='M4.5 6L8 3l3.5 3' stroke='%23a1a1aa' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M4.5 10L8 13l3.5-3' stroke='%23a1a1aa' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 14px 14px no-repeat;
   transition: transform var(--motion-fast);
 }
 .list-editor.is-open .list-editor-caret {

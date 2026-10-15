@@ -819,9 +819,15 @@ async def _link_subscription(
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ):
-    from app.bot.service_import_ui import import_enabled
+    from app.bot.service_import_ui import announce_new_request, import_enabled
     from app.services.formatting import format_message
-    from app.services.service_import import ServiceImportError, import_existing_service, is_external_service
+    from app.services.service_import import (
+        PENDING_NOTICE,
+        ImportOutcome,
+        ServiceImportError,
+        import_existing_service,
+        is_external_service,
+    )
 
     await delete_user_message(message)  # the link is a bearer secret, keep it out of the chat
     ui = await get_all_settings(session)
@@ -841,6 +847,10 @@ async def _link_subscription(
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
         )
+        return
+    if result.outcome == ImportOutcome.PENDING_APPROVAL:
+        await message.answer(format_message("⏳ در انتظار تأیید", PENDING_NOTICE))
+        await announce_new_request(message, session, db_user, result)
         return
     from app.bot.nav_inline import service_card_keyboard
 

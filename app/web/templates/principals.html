@@ -5,11 +5,6 @@
 <div class="page-head">
   <div>
     {{ page_title('users', 'نمایندگان من', help='resellers') }}
-    {% if actor_kind == 'owner' %}
-    <p class="muted">نمایندگان سازمان با نقش پاسارگارد خودشان. نمایندگان فروشگاه در مسیر جدا هستند.</p>
-    {% else %}
-    <p class="muted">نمایندگانی که با نقش پاسارگارد شما ساخته می‌شوند. سلسله‌مراتب توسط سرور تعیین می‌شود.</p>
-    {% endif %}
   </div>
   {% if can_create %}
   <button type="button" class="btn" data-modal-open="modal-principal-create">افزودن نماینده</button>

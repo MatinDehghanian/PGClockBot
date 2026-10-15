@@ -27,12 +27,14 @@ class TokenNeverReachesTheLogTests(ImportCase):
         # The logger is replaced instead of captured: other tests may switch logging off for the process.
         with patch.object(si, "logger") as log:
             self.assertEqual(await self.refused(1, SECRET), si.PANEL_UNAVAILABLE)
-        log.warning.assert_called_once()
-        call = log.warning.call_args
-        self.assertNotIn("exc_info", call.kwargs)
-        rendered = str(call.args[0]) % tuple(call.args[1:])
-        self.assertNotIn(SECRET, rendered)
-        self.assertIn("503", rendered)
+        self.assertGreaterEqual(log.warning.call_count, 1)
+        rendered = []
+        for call in log.warning.call_args_list:
+            self.assertNotIn("exc_info", call.kwargs)
+            rendered.append(str(call.args[0]) % tuple(call.args[1:]))
+        self.assertTrue(any("503" in line for line in rendered))
+        for line in rendered:
+            self.assertNotIn(SECRET, line)
         self.assertFalse(log.exception.called)
 
 
@@ -41,10 +43,10 @@ class FailedAttemptLimitHoldsUnderBurstTests(ImportCase):
         calls = 0
         original = self.platform_panel.subscription_info
 
-        async def counting(token: str) -> dict:
+        async def counting(token: str, **kwargs) -> dict:
             nonlocal calls
             calls += 1
-            return await original(token)
+            return await original(token, **kwargs)
 
         self.platform_panel.subscription_info = counting
         results = await asyncio.gather(

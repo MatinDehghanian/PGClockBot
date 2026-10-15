@@ -29,8 +29,8 @@ class AccordionFlashTests(unittest.TestCase):
         )
 
     def test_scroll_into_view_only_visible_active(self):
-        start = JS.index("function setOpenSection")
-        end = JS.index("setOpenSection(activeSectionKey())", start)
+        start = JS.index("function setOpenSections")
+        end = JS.index("setOpenSections(rules.defaultOpenKeys", start)
         body = JS[start:end]
         self.assertIn(":not(.is-collapsed) .nav-item.active", body)
 

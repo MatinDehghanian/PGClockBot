@@ -293,7 +293,7 @@
     state.toggle.setAttribute("aria-expanded", "false");
     state.toggle.setAttribute("aria-controls", id + "-panel");
     state.summary = element("span", "list-editor-summary");
-    const caret = element("span", "list-editor-caret", "⌄");
+    const caret = element("span", "list-editor-caret");
     caret.setAttribute("aria-hidden", "true");
     state.toggle.append(state.summary, caret);
     state.panel = element("div", "list-editor-panel");

@@ -112,6 +112,8 @@ class ProvisionPasswordKeepTests(unittest.IsolatedAsyncioTestCase):
                 new=AsyncMock(return_value=SimpleNamespace(id=55, role="user")),
             ),
             patch("app.services.resellers.make_reseller", new=_fake_make),
+            # This test is about the password; the subscription step is not under test here.
+            patch("app.services.pg_admin_subscription.start_or_refresh_subscription", new=AsyncMock()),
         ):
             profile, _hint, err = await provision_existing_pg_admin(
                 session,

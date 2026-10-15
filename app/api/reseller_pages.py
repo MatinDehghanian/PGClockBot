@@ -637,16 +637,21 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             from app.services.formatting import format_expire_short
             from app.services.pg_admin_subscription import get_subscription
 
+            from app.db.models import ResellerPlan
+            from app.services.pg_admin_subscription import is_current_capacity_plan
+            from app.services.reseller_capacity_view import build_capacity_view, live_capacity_from_overview
+
             sub = await get_subscription(session, profile.pg_admin_username)
             if sub is not None:
-                extra = int(sub.extra_gb_purchased or 0)
-                base = int(sub.base_gb or 0)
+                plan = await session.get(ResellerPlan, int(sub.plan_id)) if sub.plan_id else None
                 exp = sub.expires_at
                 pg_subscription = {
                     "expires_at": format_expire_short(exp) if exp else None,
-                    "extra_gb": extra,
-                    "base_gb": base,
-                    "total_gb": base + extra,
+                    **build_capacity_view(
+                        sub,
+                        current_capacity=is_current_capacity_plan(plan),
+                        live=live_capacity_from_overview(pg_limits),
+                    ),
                 }
         from app.services.color_tags import color_tags_for_ui
 
@@ -948,6 +953,30 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         except Exception as e:
             return _redirect_reseller_edit(user_id, err=f"تغییر ظرفیت ناموفق: {e}")
         return _redirect_reseller_edit(user_id, ok="ظرفیت اشتراک به‌روز شد")
+
+    @app.post("/resellers/{user_id}/subscription/sync")
+    async def reseller_subscription_sync(
+        user_id: int,
+        staff: dict = Depends(require_admin),
+        session: AsyncSession = Depends(get_db),
+    ):
+        from app.services.platform_identity import is_explicit_owner_staff
+        from app.services.reseller_capacity_view import sync_reseller_capacity
+
+        if not is_explicit_owner_staff(staff):
+            return _redirect_reseller_edit(user_id, err="فقط مالک اصلی می‌تواند ظرفیت را از پاسارگارد همگام کند")
+        profile = (
+            await session.execute(select(ResellerProfile).where(ResellerProfile.user_id == user_id))
+        ).scalar_one_or_none()
+        if not profile:
+            return RedirectResponse(f"/resellers?err={_q('نماینده یافت نشد')}", status_code=303)
+        try:
+            gb, users = await sync_reseller_capacity(session, profile)
+        except ValueError as e:
+            return _redirect_reseller_edit(user_id, err=str(e))
+        gb_text = f"{gb} گیگ" if gb else "حجم نامحدود"
+        users_text = f"{users} کاربر" if users else "کاربر نامحدود"
+        return _redirect_reseller_edit(user_id, ok=f"ظرفیت از پاسارگارد خوانده شد: {gb_text} · {users_text}")
 
     @app.post("/resellers/{user_id}/delete")
     async def reseller_delete(

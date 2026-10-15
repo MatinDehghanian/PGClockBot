@@ -174,13 +174,40 @@
     </li>
     <li>
       <span class="payg-meta-label">حجم کل</span>
-      <span class="payg-meta-value num-ratio">{{ pg_subscription.total_gb }} گیگ</span>
+      <span class="payg-meta-value num-ratio">{{ pg_subscription.total_gb_text }}</span>
     </li>
     <li>
       <span class="payg-meta-label">حجم اضافه</span>
-      <span class="payg-meta-value num-ratio">{{ pg_subscription.extra_gb }} گیگ</span>
+      <span class="payg-meta-value num-ratio">{{ pg_subscription.extra_gb_text }}</span>
     </li>
+    <li>
+      <span class="payg-meta-label">کاربران کل</span>
+      <span class="payg-meta-value num-ratio">{{ pg_subscription.total_users_text }}</span>
+    </li>
+    <li>
+      <span class="payg-meta-label">کاربران اضافه</span>
+      <span class="payg-meta-value num-ratio">{{ pg_subscription.extra_users_text }}</span>
+    </li>
+    {% if pg_subscription.can_sync %}
+    <li>
+      <span class="payg-meta-label">سقف فعلی در پاسارگارد</span>
+      <span class="payg-meta-value num-ratio">{{ pg_subscription.live_gb_text }} · {{ pg_subscription.live_users_text }}</span>
+    </li>
+    {% endif %}
   </ul>
+  {% if pg_subscription.can_sync %}
+  {% if pg_subscription.differs %}
+  <div class="flash warn">ظرفیت ثبت‌شده با سقف فعلی ادمین در پاسارگارد یکی نیست. اگر سقف پاسارگارد درست است، «همگام‌سازی از پاسارگارد» را بزنید.</div>
+  {% endif %}
+  <form method="post" action="/resellers/{{ user.id }}/subscription/sync" class="form-stack"
+        data-confirm="ظرفیت ثبت‌شده این نماینده برابر سقف فعلی ادمین در پاسارگارد شود؟ چیزی در پاسارگارد تغییر نمی‌کند."
+        data-confirm-title="همگام‌سازی ظرفیت"
+        data-confirm-label="همگام‌سازی">
+    <div class="actions">
+      <button class="btn btn-ghost btn-sm" type="submit">همگام‌سازی از پاسارگارد</button>
+    </div>
+  </form>
+  {% endif %}
   <form method="post" action="/resellers/{{ user.id }}/subscription/adjust" class="form-stack"
         data-confirm="ظرفیت اشتراک نماینده تغییر کند؟ (مثبت = افزایش، منفی = کاهش)"
         data-confirm-title="تغییر ظرفیت اشتراک"

@@ -2849,14 +2849,15 @@
       const modeInput = document.getElementById('inbox-dismiss-mode');
       if (!modal || !keyInput || !form) return;
 
+      const radios = Array.from(form.querySelectorAll('input[data-inbox-mode]'));
+
       function selectedMode() {
-        const checked = form.querySelector('input[data-inbox-mode]:checked');
-        const v = checked && (checked.getAttribute('data-inbox-mode') || checked.value)
-          ? String(checked.getAttribute('data-inbox-mode') || checked.value)
-          : '24h';
-        return (v === 'forever') ? 'forever' : '24h';
+        const checked = radios.find((r) => r.checked);
+        return checked && checked.getAttribute('data-inbox-mode') === 'forever' ? 'forever' : '24h';
       }
 
+      /* One radio group (shared name) keeps exactly one option checked; this only mirrors it
+         into the hidden mode field and the highlight class. */
       function syncSelected() {
         const mode = selectedMode();
         if (modeInput) modeInput.value = mode;
@@ -2870,8 +2871,7 @@
         keyInput.value = alertKey || '';
         if (entityInput) entityInput.value = entityId || '';
         if (returnInput) returnInput.value = window.location.pathname + window.location.search;
-        const first = form.querySelector('input[data-inbox-mode="24h"]');
-        if (first) first.checked = true;
+        radios.forEach((r) => { r.checked = r.getAttribute('data-inbox-mode') === '24h'; });
         syncSelected();
         if (typeof openModal === 'function') openModal('modal-inbox-dismiss');
         else {
@@ -2882,14 +2882,6 @@
 
       form.addEventListener('change', (e) => {
         if (e.target && e.target.matches('input[type="radio"]')) syncSelected();
-      });
-      form.querySelectorAll('.inbox-dismiss-option').forEach((opt) => {
-        opt.addEventListener('click', () => {
-          const input = opt.querySelector('input[type="radio"]');
-          if (!input) return;
-          input.checked = true;
-          syncSelected();
-        });
       });
 
       form.addEventListener('submit', (e) => {
@@ -4282,7 +4274,8 @@ const root = document.getElementById('upd-root');
 })();
 
 /* === Sidebar section accordion (no work-mode tabs) ===
-   Only the section that owns the current page stays open; others stay collapsed. */
+   Web panel and bot sections start open together; the PasarGuard section is exclusive
+   with them (rules in nav-accordion.js). A page inside PasarGuard opens only that section. */
 (function initNavWorkModes() {
   function boot() {
     var nav = document.querySelector('[data-side-nav]');
@@ -4322,32 +4315,47 @@ const root = document.getElementById('upd-root');
       return sectionFromPath(location.pathname, location.search);
     }
 
-    function setOpenSection(openKey) {
-      var sections = nav.querySelectorAll('.nav-section[data-nav-mode]');
-      var found = false;
-      if (openKey) {
-        for (var i = 0; i < sections.length; i++) {
-          if (sections[i].getAttribute('data-nav-mode') === openKey) found = true;
-        }
-        if (!found && sections.length) openKey = sections[0].getAttribute('data-nav-mode');
+    /* Fallback keeps the sidebar usable when a cached page and an older script mix. */
+    var rules = window.PGClockNavAccordion || {
+      defaultOpenKeys: function (active, all) { return all; },
+      afterToggle: function (open, key) {
+        return open.indexOf(key) < 0 ? open.concat(key) : open.filter(function (k) { return k !== key; });
       }
-      for (var j = 0; j < sections.length; j++) {
-        var section = sections[j];
-        var key = section.getAttribute('data-nav-mode');
+    };
+
+    function sectionKeys() {
+      var keys = [];
+      nav.querySelectorAll('.nav-section[data-nav-mode]').forEach(function (section) {
+        keys.push(section.getAttribute('data-nav-mode'));
+      });
+      return keys;
+    }
+
+    function openSectionKeys() {
+      var keys = [];
+      nav.querySelectorAll('.nav-section[data-nav-mode]:not(.is-collapsed)').forEach(function (section) {
+        keys.push(section.getAttribute('data-nav-mode'));
+      });
+      return keys;
+    }
+
+    function setOpenSections(openKeys, scrollToActive) {
+      nav.querySelectorAll('.nav-section[data-nav-mode]').forEach(function (section) {
         var btn = section.querySelector('[data-nav-collapse]');
-        var collapsed = !openKey || key !== openKey;
+        var collapsed = openKeys.indexOf(section.getAttribute('data-nav-mode')) < 0;
         section.classList.toggle('is-collapsed', collapsed);
         if (btn) btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
-      }
-      /* Only scroll when the active link is in the *open* section — scrolling a
+      });
+      /* Only scroll when the active link is in an *open* section — scrolling a
          display:none item in a just-collapsed accordion caused sidebar jump/lag. */
+      if (!scrollToActive) return;
       var active = nav.querySelector('.nav-section[data-nav-mode]:not(.is-collapsed) .nav-item.active');
       if (active && typeof active.scrollIntoView === 'function') {
         try { active.scrollIntoView({ block: 'nearest' }); } catch (_) {}
       }
     }
 
-    setOpenSection(activeSectionKey());
+    setOpenSections(rules.defaultOpenKeys(activeSectionKey(), sectionKeys()), true);
 
     nav.addEventListener('click', function (e) {
       var btn = e.target.closest('[data-nav-collapse]');
@@ -4356,14 +4364,7 @@ const root = document.getElementById('upd-root');
       var key = btn.getAttribute('data-nav-collapse');
       var section = btn.closest('.nav-section');
       if (!section || !key) return;
-      /* Exclusive accordion: opening one closes the rest; collapsing the
-         open one is allowed so the user can peek without leaving the page. */
-      if (section.classList.contains('is-collapsed')) {
-        setOpenSection(key);
-      } else {
-        section.classList.add('is-collapsed');
-        btn.setAttribute('aria-expanded', 'false');
-      }
+      setOpenSections(rules.afterToggle(openSectionKeys(), key, sectionKeys()), false);
       /* Drop sticky focus chrome after tap (iOS/PWA) */
       if (typeof btn.blur === 'function') btn.blur();
     });

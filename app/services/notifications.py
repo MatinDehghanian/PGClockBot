@@ -52,6 +52,12 @@ NOTIFY_PREFS: list[tuple[str, str, str, str]] = [
         "1",
     ),
     (
+        "notify_service_import_request",
+        "درخواست افزودن سرویس قبلی",
+        "وقتی «افزودن سرویس قبلی» روی تأیید ادمین است و مشتری درخواست جدید ثبت می‌کند؛ همراه لینک بررسی در پنل",
+        "1",
+    ),
+    (
         "notify_new_subscription",
         "اشتراک جدید",
         "وقتی سرویس/اشتراک جدید تحویل شد (خرید کیف‌پول یا تأیید پرداخت)",
@@ -106,6 +112,7 @@ PLATFORM_ONLY_NOTIFY_KEYS: frozenset[str] = frozenset(
 # Shop notify key → at least one of these feature perms is required to see/toggle it.
 SHOP_NOTIFY_PERM_MAP: dict[str, frozenset[str]] = {
     "notify_service_cancellation": frozenset({"orders"}),
+    "notify_service_import_request": frozenset({"service_import"}),
     "notify_new_subscription": frozenset({"orders", "payments"}),
     "notify_pending_approval": frozenset({"payments"}),
     "notify_new_order": frozenset({"orders"}),
