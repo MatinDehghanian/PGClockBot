@@ -21,10 +21,12 @@ from app.db.models import ConnectionMonitorSnapshot, ConnectionMonitorState, Con
 from app.services.connection_monitor_settings import set_monitor_account
 from app.services.connection_monitor_preferences import pause_monitor_target, save_monitor_preferences
 from app.services.connection_monitor_access import MonitorAccess
+from app.services.connection_monitor_accounts import ACCOUNT_MESSAGES
 from app.services.connection_monitor_preferences import MonitorPreferences
 from app.services.connection_status import public_connection_page
 from app.services.connection_status_texts import LEGACY_MONITOR_TEXTS, MONITOR_TEXT_DEFAULTS
 from app.services.users import clear_settings_cache, get_all_settings, set_settings_bulk
+from app.services.pasarguard import PasarGuardError
 
 
 TOKEN = "synthetic-monitor-token-123456"
@@ -84,6 +86,29 @@ class MonitorWebTests(MonitorDatabaseCase):
         self.assertNotIn("error=", response.headers["location"])
         async with self.Session() as session:
             return await session.scalar(select(ConnectionMonitorTarget.id))
+
+    async def test_active_hosts_refuse_a_revoked_link_and_keep_the_account_controls_visible(self) -> None:
+        await self.attach()
+        self.panel.subscription_xray.side_effect = PasarGuardError(TOKEN, 404)
+        response = await self.client.get("/connection-status?hosts=1")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(ACCOUNT_MESSAGES["account_changed"], response.text)
+        self.assertIn("ثبت Test user", response.text)
+        self.assertNotIn("نام متغیر {USERNAME}", response.text)
+        self.assertNotIn(TOKEN, response.text)
+
+    async def test_active_hosts_load_after_the_panel_regenerates_the_same_users_link(self) -> None:
+        await self.attach()
+        self.panel.get_user_by_id.return_value = {
+            **self.panel.get_user_by_username.return_value,
+            "subscription_url": "https://panel.example/sub/newly-issued-token-123456",
+        }
+        response = await self.client.get("/connection-status?hosts=1")
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(ACCOUNT_MESSAGES["account_changed"], response.text)
+        self.assertIn("نام متغیر {USERNAME}", response.text)
+        self.panel.subscription_xray.assert_awaited_once_with(TOKEN, subscription_url=self.panel.get_user_by_id.return_value["subscription_url"])
+        self.assertNotIn(TOKEN, response.text)
 
     async def test_empty_page_has_setup_actions_without_panel_calls_or_secrets(self) -> None:
         response = await self.client.get("/connection-status")

@@ -873,9 +873,9 @@ class PasarGuardClient:
             auth=False, use_cache=False, resolve_api_base=False,
         )
 
-    async def subscription_xray(self, token: str) -> list[dict[str, Any]]:
+    async def subscription_xray(self, token: str, *, subscription_url: str | None = None) -> list[dict[str, Any]]:
         """Read bounded native routes without caching credentials or raw error bodies."""
-        path = self._subscription_endpoint(token, "xray", None)
+        path = self._subscription_endpoint(token, "xray", subscription_url)
         await self._ensure_safe_target()
         payload = bytearray()
         try:
