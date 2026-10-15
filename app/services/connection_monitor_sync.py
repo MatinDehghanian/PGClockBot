@@ -22,7 +22,7 @@ async def load_cycle_inputs(session: AsyncSession, cycle: MonitorCycleClaim, *, 
     ).limit(1))
     if state is None:
         raise ValueError(ACCOUNT_UNAVAILABLE)
-    account = MonitorAccount(state.pg_user_id, state.account_revision, state.subscription_token_enc)
+    account = MonitorAccount(state.pg_user_id, state.account_revision, state.subscription_token_enc, state.pg_username)
     host_ids = tuple((await session.scalars(select(ConnectionMonitorTarget.pg_host_id).where(
         ConnectionMonitorTarget.reseller_id.is_(None), ConnectionMonitorTarget.test_enabled.is_(True),
     ).order_by(ConnectionMonitorTarget.id).limit(MAX_MONITOR_ENDPOINTS + 1))).all())

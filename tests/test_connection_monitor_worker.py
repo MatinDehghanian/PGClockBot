@@ -16,7 +16,7 @@ from sqlalchemy import event, select
 
 from connection_monitor_support import MonitorDatabaseCase
 
-from app.db.models import ConnectionMonitorSnapshot, ConnectionMonitorState, ConnectionMonitorTarget
+from app.db.models import ConnectionMonitorSnapshot, ConnectionMonitorState, ConnectionMonitorTarget, UserService
 from app.services.connection_monitor_config import MonitorBinding
 from app.services.connection_monitor_panel import MonitorAccount, MonitorCatalog
 from app.services.connection_monitor_types import MonitorEndpoint
@@ -75,7 +75,7 @@ class MonitorWorkerTests(MonitorDatabaseCase):
             patcher.start()
             self.addCleanup(patcher.stop)
         async with self.Session() as session:
-            session.add(ConnectionMonitorState(enabled=True, pg_user_id=900, account_revision="one", subscription_token_enc="synthetic"))
+            session.add(ConnectionMonitorState(enabled=True, pg_user_id=900, pg_username="monitor-only", account_revision="one", subscription_token_enc="synthetic"))
             session.add_all([ConnectionMonitorTarget(pg_host_id=host_id, test_enabled=True, next_check_at=self.now) for host_id in (41, 72)])
             await session.commit()
 
@@ -100,6 +100,16 @@ class MonitorWorkerTests(MonitorDatabaseCase):
         async with self.Session() as session:
             state = await session.scalar(select(ConnectionMonitorState))
             state.enabled = False
+            await session.commit()
+        with patch("app.services.connection_monitor_worker.read_monitor_catalog", new_callable=AsyncMock) as panel:
+            result = await run_monitor_cycle(self.Session, self.binary)
+            panel.assert_not_called()
+        self.assertFalse(result.claimed)
+        self.assertEqual(self.started, 0)
+
+    async def test_legacy_customer_username_stops_the_worker_before_panel_or_core_io(self) -> None:
+        async with self.Session() as session:
+            session.add(UserService(bot_user_id=5, pg_user_id=None, pg_username="MONITOR-ONLY"))
             await session.commit()
         with patch("app.services.connection_monitor_worker.read_monitor_catalog", new_callable=AsyncMock) as panel:
             result = await run_monitor_cycle(self.Session, self.binary)

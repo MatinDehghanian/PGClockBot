@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 import httpx
-from sqlalchemy import Integer, exists, insert, literal, select, update
+from sqlalchemy import Integer, exists, func, insert, literal, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,6 +23,7 @@ from app.services.connection_monitor_access import (
     require_monitor_owner,
 )
 from app.services.db_safe import rollback_quiet
+from app.services.credential_policy import validate_pg_username
 from app.services.formatting import parse_expire
 from app.services.pasarguard import PasarGuardError, get_pg
 from app.services.pg_user_scope import pg_user_owner_username
@@ -63,7 +64,7 @@ async def monitor_settings(session: AsyncSession, access: MonitorAccess) -> Moni
         state = await session.scalar(query)
     if state is None:
         raise ValueError(MONITOR_ACCESS_DENIED)
-    result = MonitorSettings(state.id, state.enabled, state.pg_user_id, bool(state.subscription_token_enc))
+    result = MonitorSettings(state.id, state.enabled, state.pg_user_id, bool(state.subscription_token_enc and state.pg_username))
     await session.commit()
     return result
 
@@ -129,6 +130,9 @@ async def _read_account(username: str) -> tuple[int, str]:
 async def set_monitor_account(session: AsyncSession, access: MonitorAccess, *, username: str) -> MonitorSettings:
     if not isinstance(username, str) or not 1 <= len(username) <= 128 or username != username.strip():
         raise ValueError(ACCOUNT_UNAVAILABLE)
+    cleaned, error = validate_pg_username(username)
+    if error or cleaned != username:
+        raise ValueError(ACCOUNT_UNAVAILABLE)
     settings = await monitor_settings(session, access)
     user_id, token = await _read_account(username)
     encrypted = await asyncio.to_thread(encrypt_secret, token)
@@ -136,12 +140,14 @@ async def set_monitor_account(session: AsyncSession, access: MonitorAccess, *, u
         raise ValueError(ACCOUNT_UNAVAILABLE)
     # This is an exclusion check only: a monitoring account must not be sold or
     # attached to any customer, including a different shop. No customer row leaves DB.
-    customer_account = exists(select(UserService.id).where(UserService.pg_user_id == user_id))
+    customer_account = exists(select(UserService.id).where(or_(
+        UserService.pg_user_id == user_id, func.lower(UserService.pg_username) == username.lower(),
+    )))
     result = await session.execute(update(ConnectionMonitorState).where(
         ConnectionMonitorState.id == settings.id, ConnectionMonitorState.reseller_id.is_(None),
         active_monitor_owner(access), ~customer_account,
     ).values(
-        pg_user_id=user_id, subscription_token_enc=encrypted,
+        pg_user_id=user_id, pg_username=username, subscription_token_enc=encrypted,
         account_revision=hashlib.sha256(f"{user_id}:{token}".encode()).hexdigest(), enabled=False,
         cycle_token=None, cycle_lease_until=None, catalog_synced_at=None,
     ))

@@ -37,7 +37,7 @@ class MonitorAdminTests(MonitorDatabaseCase):
             patcher.start()
             self.addCleanup(patcher.stop)
         async with self.Session() as session:
-            session.add(ConnectionMonitorState(pg_user_id=900, account_revision="one", subscription_token_enc="encrypted"))
+            session.add(ConnectionMonitorState(pg_user_id=900, pg_username="monitor-only", account_revision="one", subscription_token_enc="encrypted"))
             await session.commit()
 
     async def select_host(self, host_id: int = 41) -> int:

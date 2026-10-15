@@ -52,10 +52,10 @@ async def owner_monitor_account(session: AsyncSession, access: MonitorAccess) ->
         ConnectionMonitorState.probe_id == LOCAL_PROBE_ID,
         eligible_monitor_account(),
     ).limit(1))
-    if state is None or not state.pg_user_id or not state.subscription_token_enc or not state.account_revision:
+    if state is None or not state.pg_user_id or not state.pg_username or not state.subscription_token_enc or not state.account_revision:
         await session.rollback()
         raise ValueError(ACCOUNT_UNAVAILABLE)
-    account = MonitorAccount(state.pg_user_id, state.account_revision, state.subscription_token_enc)
+    account = MonitorAccount(state.pg_user_id, state.account_revision, state.subscription_token_enc, state.pg_username)
     await session.commit()
     return account
 

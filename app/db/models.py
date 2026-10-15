@@ -373,6 +373,7 @@ class PaymentSettlement(Base):
 class UserService(Base):
     __tablename__ = "user_services"
     __table_args__ = (
+        Index("ix_user_services_pg_username_lower", text("lower(pg_username)")),
         # A panel user can be imported into «سرویس‌های من» by one customer only.
         Index(
             "uq_user_services_imported_pg_user", "pg_user_id", unique=True,
@@ -1607,6 +1608,7 @@ class ConnectionMonitorState(Base):
     probe_id: Mapped[str] = mapped_column(String(16), server_default="local")
     enabled: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     pg_user_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    pg_username: Mapped[str | None] = mapped_column(String(128), nullable=True)
     subscription_token_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
     account_revision: Mapped[str] = mapped_column(String(64), server_default="")
     cycle_token: Mapped[str | None] = mapped_column(String(64), nullable=True)

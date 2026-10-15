@@ -17,7 +17,7 @@ class MonitorQueueTests(MonitorDatabaseCase):
     async def asyncSetUp(self) -> None:
         await super().asyncSetUp()
         async with self.Session() as session:
-            session.add(ConnectionMonitorState(enabled=True, pg_user_id=900, subscription_token_enc="synthetic",
+            session.add(ConnectionMonitorState(enabled=True, pg_user_id=900, pg_username="monitor-only", subscription_token_enc="synthetic",
                                                account_revision="one", catalog_synced_at=self.now))
             session.add_all([
                 ConnectionMonitorTarget(id=10, pg_host_id=41, test_enabled=True, generation="one", endpoint_count=1,

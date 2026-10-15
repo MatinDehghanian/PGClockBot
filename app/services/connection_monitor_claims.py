@@ -6,7 +6,7 @@ import secrets
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import exists, or_, select, update
+from sqlalchemy import exists, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -56,8 +56,11 @@ def eligible_monitor_account() -> ColumnElement[bool]:
     owner = exists(select(OrgPrincipal.id).where(
         OrgPrincipal.depth == 0, OrgPrincipal.parent_id.is_(None), OrgPrincipal.status == "active",
     ))
-    sold_account = exists(select(UserService.id).where(UserService.pg_user_id == ConnectionMonitorState.pg_user_id))
-    return owner & ~sold_account
+    sold_account = exists(select(UserService.id).where(or_(
+        UserService.pg_user_id == ConnectionMonitorState.pg_user_id,
+        func.lower(UserService.pg_username) == func.lower(ConnectionMonitorState.pg_username),
+    )))
+    return owner & ConnectionMonitorState.pg_username.is_not(None) & (ConnectionMonitorState.pg_username != "") & ~sold_account
 
 
 async def claim_monitor_cycle(session: AsyncSession, *, now: datetime) -> MonitorCycleClaim | None:

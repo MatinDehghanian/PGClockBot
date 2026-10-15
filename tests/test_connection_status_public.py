@@ -12,7 +12,7 @@ from sqlalchemy import Connection, event, select
 from connection_monitor_support import MonitorDatabaseCase
 
 from app.bot.connection_status_public_ui import public_status_text
-from app.db.models import ConnectionMonitorSnapshot, ConnectionMonitorState, ConnectionMonitorTarget, OrgPrincipal
+from app.db.models import ConnectionMonitorSnapshot, ConnectionMonitorState, ConnectionMonitorTarget, OrgPrincipal, UserService
 from app.services.connection_status import PublicConnectionPage, public_connection_page
 from app.services.users import DEFAULT_SETTINGS, reset_shop_reseller_id, set_shop_reseller_id
 
@@ -21,7 +21,7 @@ class PublicConnectionTests(MonitorDatabaseCase):
     async def asyncSetUp(self) -> None:
         await super().asyncSetUp()
         async with self.Session() as session:
-            session.add_all([ConnectionMonitorState(reseller_id=shop_id, enabled=True, pg_user_id=900 + index,
+            session.add_all([ConnectionMonitorState(reseller_id=shop_id, enabled=True, pg_user_id=900 + index, pg_username=f"monitor-{index}",
                                                    subscription_token_enc="encrypted-sensitive-token", account_revision="one", catalog_synced_at=self.now)
                              for index, shop_id in enumerate((None, 2, 3))])
             session.add_all([
@@ -111,6 +111,13 @@ class PublicConnectionTests(MonitorDatabaseCase):
             owner.status = "disabled"
             await session.commit()
         self.assertEqual((await self.page(2)).entries, ())
+
+    async def test_monitoring_account_reused_by_a_legacy_customer_is_hidden_immediately(self) -> None:
+        async with self.Session() as session:
+            session.add(UserService(bot_user_id=5, pg_user_id=None, pg_username="MONITOR-0"))
+            await session.commit()
+        self.assertEqual((await self.page()).entries, ())
+        self.assertEqual(len((await self.page(2)).entries), 1)
 
     async def test_stale_catalog_and_malformed_snapshot_are_unknown_without_leaking_payload(self) -> None:
         async with self.Session() as session:

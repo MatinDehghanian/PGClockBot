@@ -27,8 +27,8 @@ class MonitorClaimTests(MonitorDatabaseCase):
         await super().asyncSetUp()
         async with self.Session() as session:
             session.add_all([
-                ConnectionMonitorState(enabled=True, pg_user_id=900, subscription_token_enc="synthetic", account_revision="one"),
-                ConnectionMonitorState(reseller_id=2, enabled=True, pg_user_id=901,
+                ConnectionMonitorState(enabled=True, pg_user_id=900, pg_username="monitor-only", subscription_token_enc="synthetic", account_revision="one"),
+                ConnectionMonitorState(reseller_id=2, enabled=True, pg_user_id=901, pg_username="shop-monitor",
                                        subscription_token_enc="shop-synthetic", account_revision="shop"),
                 ConnectionMonitorTarget(id=10, pg_host_id=41, test_enabled=True, generation="generation-one",
                                         endpoint_count=1, next_check_at=self.now),
@@ -140,7 +140,7 @@ class MonitorClaimTests(MonitorDatabaseCase):
         for values in ({"enabled": False}, {"pg_user_id": None}, {"subscription_token_enc": None}, {"account_revision": ""}):
             async with self.Session() as session:
                 await session.execute(update(ConnectionMonitorState).where(ConnectionMonitorState.reseller_id.is_(None)).values(
-                    enabled=True, pg_user_id=900, subscription_token_enc="synthetic", account_revision="one"))
+                    enabled=True, pg_user_id=900, pg_username="monitor-only", subscription_token_enc="synthetic", account_revision="one"))
                 await session.execute(update(ConnectionMonitorState).where(ConnectionMonitorState.reseller_id.is_(None)).values(**values))
                 await session.commit()
             self.assertIsNone(await self.cycle())

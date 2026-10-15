@@ -76,6 +76,14 @@ class MonitorSettingsTests(MonitorDatabaseCase):
                 await set_monitor_account(session, self.access, username="monitor-only")
         self.panel.get_user_by_username.assert_not_called()
 
+    async def test_hostile_account_names_never_become_panel_paths(self) -> None:
+        async with self.Session() as session:
+            for username in ("../admin", "user/other", "user?token=secret", "user\\name", "user\nname"):
+                with self.subTest(username=username), self.assertRaisesRegex(ValueError, ACCOUNT_UNAVAILABLE):
+                    await set_monitor_account(session, self.access, username=username)
+        self.panel.get_current_admin.assert_not_called()
+        self.panel.get_user_by_username.assert_not_called()
+
     async def test_existing_target_claims_and_publication_are_invalidated_on_account_setup(self) -> None:
         async with self.Session() as session:
             session.add_all([
@@ -139,6 +147,23 @@ class MonitorSettingsTests(MonitorDatabaseCase):
                     with self.assertRaisesRegex(ValueError, ACCOUNT_UNAVAILABLE) as caught:
                         await set_monitor_account(session, self.access, username="monitor-only")
                     self.assertNotIn(TOKEN, str(caught.exception))
+
+    async def test_legacy_customer_account_without_panel_id_is_excluded_by_case_insensitive_username(self) -> None:
+        for customer in (4, 5):
+            async with self.Session() as session:
+                service = UserService(bot_user_id=customer, pg_user_id=None, pg_username="MONITOR-ONLY", remark="legacy-sold")
+                session.add(service)
+                await session.commit()
+                service_id = service.id
+            async with self.Session() as session:
+                with self.assertRaisesRegex(ValueError, ACCOUNT_UNAVAILABLE):
+                    await set_monitor_account(session, self.access, username="monitor-only")
+            async with self.Session() as session:
+                service = await session.get(UserService, service_id)
+                self.assertEqual(service.remark, "legacy-sold")
+                self.assertIsNone(service.pg_user_id)
+                await session.delete(service)
+                await session.commit()
 
     async def test_panel_timeout_is_a_safe_setup_failure(self) -> None:
         self.panel.get_user_by_username.side_effect = TimeoutError(TOKEN)

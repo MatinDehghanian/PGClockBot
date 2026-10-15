@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from dataclasses import replace
 from datetime import timedelta
 
-from sqlalchemy import select
+from sqlalchemy import insert, select, text
 
 from connection_monitor_support import MonitorDatabaseCase
 
-from app.db.models import ConnectionMonitorSnapshot, ConnectionMonitorState, ConnectionMonitorTarget, OrgPrincipal
+from app.db.models import ConnectionMonitorSnapshot, ConnectionMonitorState, ConnectionMonitorTarget, OrgPrincipal, UserService
 from app.services.connection_monitor_claims import MonitorTargetClaim, claim_due_targets, claim_monitor_cycle
 from app.services.connection_monitor_snapshots import complete_monitor_target, snapshot_health
 from app.services.connection_status_types import ObservationKind, ProbeObservation
@@ -20,7 +21,7 @@ class MonitorSnapshotTests(MonitorDatabaseCase):
     async def asyncSetUp(self) -> None:
         await super().asyncSetUp()
         async with self.Session() as session:
-            session.add(ConnectionMonitorState(enabled=True, pg_user_id=900, account_revision="one", subscription_token_enc="synthetic"))
+            session.add(ConnectionMonitorState(enabled=True, pg_user_id=900, pg_username="monitor-only", account_revision="one", subscription_token_enc="synthetic"))
             session.add(ConnectionMonitorTarget(id=10, pg_host_id=41, test_enabled=True, generation="one", endpoint_count=2, next_check_at=self.now))
             await session.flush()
             session.add_all([ConnectionMonitorSnapshot(target_id=10, endpoint_key=key, generation="one") for key in ("a", "b")])
@@ -70,6 +71,12 @@ class MonitorSnapshotTests(MonitorDatabaseCase):
         self.observations["b"] = replace(partial, checked_at=self.now + timedelta(seconds=1))
         self.assertFalse(await self.complete())
 
+    async def test_account_attached_to_a_legacy_customer_during_network_cannot_write_results(self) -> None:
+        async with self.Session() as session:
+            session.add(UserService(bot_user_id=5, pg_user_id=None, pg_username="MONITOR-ONLY"))
+            await session.commit()
+        self.assertFalse(await self.complete())
+
     async def test_malformed_sample_windows_become_unknown_without_exposing_payload(self) -> None:
         async with self.Session() as session:
             row = await session.scalar(select(ConnectionMonitorSnapshot).limit(1))
@@ -78,3 +85,18 @@ class MonitorSnapshotTests(MonitorDatabaseCase):
                 health = snapshot_health(row)
                 self.assertEqual(health.status, "unknown")
                 self.assertNotIn("sensitive", repr(health))
+
+    async def test_customer_account_exclusion_can_use_both_identity_indexes(self) -> None:
+        async with self.Session() as session:
+            await session.execute(insert(UserService), [
+                {"bot_user_id": 4, "pg_user_id": index + 1000, "pg_username": f"historical-{index}"}
+                for index in range(5000)
+            ])
+            await session.commit()
+            await session.execute(text("ANALYZE user_services"))
+            query = "SELECT id FROM user_services WHERE pg_user_id = :user_id OR lower(pg_username) = :username"
+            prefix = "EXPLAIN QUERY PLAN " if self.engine.dialect.name == "sqlite" else "EXPLAIN (FORMAT JSON) "
+            result = await session.execute(text(prefix + query), {"user_id": 6000, "username": "monitor-only"})
+            plan = json.dumps([tuple(row) for row in result.all()])
+            self.assertIn("ix_user_services_pg_user_id", plan)
+            self.assertIn("ix_user_services_pg_username_lower", plan)

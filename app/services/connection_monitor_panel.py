@@ -18,6 +18,7 @@ class MonitorAccount:
     pg_user_id: int
     revision: str
     encrypted_token: str = field(repr=False)
+    username: str = field(repr=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,7 +40,7 @@ async def read_monitor_catalog(account: MonitorAccount) -> MonitorCatalog:
             raise ValueError(ACCOUNT_UNAVAILABLE)
         if not isinstance(user.get("username"), str) or not user["username"]:
             raise ValueError(ACCOUNT_UNAVAILABLE)
-        user_id, current_token = _validate_account(user, username=user.get("username"), expected_admin=str(admin.get("username") or "").lower())
+        user_id, current_token = _validate_account(user, username=account.username, expected_admin=str(admin.get("username") or "").lower())
         revision = hashlib.sha256(f"{user_id}:{current_token}".encode()).hexdigest()
         if user_id != account.pg_user_id or not secrets.compare_digest(token, current_token) or not secrets.compare_digest(revision, account.revision):
             raise ValueError(ACCOUNT_UNAVAILABLE)

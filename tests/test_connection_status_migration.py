@@ -7,7 +7,9 @@ import os
 import secrets
 import tempfile
 import unittest
+from dataclasses import dataclass
 from pathlib import Path
+from types import ModuleType
 
 import sqlalchemy as sa
 from alembic.migration import MigrationContext
@@ -21,11 +23,28 @@ from app.db.models import ConnectionMonitorSnapshot, ConnectionMonitorState, Con
 ROOT = Path(__file__).resolve().parents[1]
 
 
+@dataclass(frozen=True, slots=True)
+class MonitorMigrations:
+    modules: tuple[ModuleType, ...]
+
+    def upgrade(self) -> None:
+        for module in self.modules:
+            module.upgrade()
+
+    def downgrade(self) -> None:
+        for module in reversed(self.modules):
+            module.downgrade()
+
+
 class MonitorMigrationTests(unittest.IsolatedAsyncioTestCase):
     async def test_upgrade_repeat_constraints_downgrade_preserves_existing_rows(self) -> None:
-        spec = importlib.util.spec_from_file_location("monitor_migration", ROOT / "alembic/versions/0055_connection_monitor.py")
-        migration = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(migration)
+        modules = []
+        for name in ("0055_connection_monitor", "0056_monitor_account_identity"):
+            spec = importlib.util.spec_from_file_location(name, ROOT / f"alembic/versions/{name}.py")
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            modules.append(module)
+        migration = MonitorMigrations(tuple(modules))
         with tempfile.TemporaryDirectory(prefix="pgclock-monitor-migration-") as folder:
             url = os.environ.get("PGCLOCK_CONNECTION_TEST_URL") or f"sqlite+aiosqlite:///{Path(folder) / 'existing.db'}"
             engine = create_async_engine(url)
@@ -41,14 +60,20 @@ class MonitorMigrationTests(unittest.IsolatedAsyncioTestCase):
             finally:
                 await engine.dispose()
 
-    def check_migration(self, conn: sa.Connection, migration: object) -> None:
+    def check_migration(self, conn: sa.Connection, migration: MonitorMigrations) -> None:
         conn.execute(sa.text("CREATE TABLE bot_users (id INTEGER PRIMARY KEY)"))
         conn.execute(sa.text("CREATE TABLE user_services (id INTEGER PRIMARY KEY, pg_username TEXT)"))
         conn.execute(sa.text("INSERT INTO bot_users (id) VALUES (2), (3)"))
         conn.execute(sa.text("INSERT INTO user_services VALUES (1, 'existing-service')"))
         with Operations.context(MigrationContext.configure(conn)):
+            migration.modules[0].upgrade()
+            conn.execute(sa.text("INSERT INTO connection_monitor_states (probe_id, enabled, pg_user_id, subscription_token_enc) VALUES ('legacy', true, 900, 'encrypted-unchanged')"))
             migration.upgrade()
+            self.assertEqual(conn.execute(sa.text("SELECT enabled, subscription_token_enc, pg_username FROM connection_monitor_states WHERE probe_id = 'legacy'")).one(), (False, "encrypted-unchanged", None))
+            conn.execute(sa.text("UPDATE connection_monitor_states SET enabled = true, pg_username = 'monitor-only' WHERE probe_id = 'legacy'"))
             migration.upgrade()
+            self.assertTrue(conn.execute(sa.text("SELECT enabled FROM connection_monitor_states WHERE probe_id = 'legacy'")).scalar_one())
+            conn.execute(sa.text("DELETE FROM connection_monitor_states WHERE probe_id = 'legacy'"))
             for model in (ConnectionMonitorState, ConnectionMonitorTarget, ConnectionMonitorSnapshot):
                 columns = sa.inspect(conn).get_columns(model.__tablename__)
                 self.assertEqual({column["name"] for column in columns}, set(model.__table__.columns.keys()))
