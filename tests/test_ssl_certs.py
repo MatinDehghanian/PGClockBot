@@ -132,7 +132,7 @@ class UpdateCopyTests(unittest.TestCase):
     def test_update_template_has_progress_ui(self):
         src = Path("app/web/templates/_settings_update.html").read_text(encoding="utf-8")
         self.assertIn("upd-start", src)
-        self.assertIn("rollback-version", src)
+        self.assertNotIn("rollback-version", src)
         self.assertIn("progress-wrap", src)
         self.assertNotIn("update-details", src)
         self.assertNotIn("get.sh", src)

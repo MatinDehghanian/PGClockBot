@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""In-panel self-update + rollback with persisted progress for the web UI."""
+"""In-panel self-update with persisted progress for the web UI."""
 
 import json
 import logging
@@ -11,7 +11,6 @@ import subprocess
 import sys
 import threading
 import time
-import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -22,10 +21,8 @@ from app.services.updates import check_github_update, clear_update_cache, is_new
 logger = logging.getLogger(__name__)
 
 STATUS_FILE = DATA_DIR / "panel_update.json"
-SNAPSHOTS_FILE = DATA_DIR / "update_snapshots.json"
 _LOCK = threading.RLock()
 _THREAD: threading.Thread | None = None
-MAX_SNAPSHOTS = 1
 
 # systemd often has a short PATH — resolve absolute binaries
 from app.util_which import env_with_path, which as _which
@@ -74,18 +71,16 @@ def _now() -> str:
 def _default_status() -> dict[str, Any]:
     return {
         "state": "idle",  # idle | running | done | error
-        "mode": "update",  # update | rollback
         "percent": 0,
         "step": "",
         "step_key": "",
-        "message": "آماده برای آپدیت یا بازگشت",
+        "message": "آماده برای آپدیت",
         "log": [],
         "started_at": None,
         "finished_at": None,
         "from_version": local_version(),
         "to_version": None,
         "error": None,
-        "snapshot_id": None,
         "awaiting_restart": False,
         "restart_required": False,
         "pre_boot_id": None,
@@ -412,85 +407,6 @@ def _looks_like_version(value: str | None) -> bool:
     return bool(normalize_version_tag(value))
 
 
-def _git_head() -> tuple[str, str]:
-    git = _git_bin()
-    if not git:
-        return "", "main"
-    root = _repo_root()
-    code, sha = _run([git, "rev-parse", "HEAD"], cwd=root)
-    sha = (sha or "").strip()
-    _, branch = _run([git, "rev-parse", "--abbrev-ref", "HEAD"], cwd=root)
-    branch = (branch or "main").strip() or "main"
-    if branch == "HEAD":
-        branch = "detached"
-    if code != 0 or not sha:
-        return "", branch
-    return sha, branch
-
-
-def list_snapshots() -> list[dict[str, Any]]:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    if not SNAPSHOTS_FILE.exists():
-        return []
-    try:
-        raw = json.loads(SNAPSHOTS_FILE.read_text(encoding="utf-8"))
-        if isinstance(raw, list):
-            items = [x for x in raw if isinstance(x, dict) and x.get("sha")]
-            # Keep only the newest rollback point
-            if len(items) > MAX_SNAPSHOTS:
-                items = items[:MAX_SNAPSHOTS]
-                _save_snapshots(items)
-            return items
-    except Exception:
-        pass
-    return []
-
-
-def _save_snapshots(items: list[dict[str, Any]]) -> None:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    tmp = SNAPSHOTS_FILE.with_suffix(".tmp")
-    tmp.write_text(json.dumps(items[:MAX_SNAPSHOTS], ensure_ascii=False, indent=2), encoding="utf-8")
-    tmp.replace(SNAPSHOTS_FILE)
-
-
-def create_snapshot(*, reason: str = "before_update") -> dict[str, Any] | None:
-    """Save current HEAD so the admin can roll back later (only one point kept)."""
-    root = _repo_root()
-    if not (root / ".git").exists():
-        return None
-    try:
-        sha, branch = _git_head()
-    except Exception as e:
-        logger.warning("snapshot skipped: %s", e)
-        return None
-    if not sha:
-        return None
-    items = list_snapshots()
-    # Avoid duplicate consecutive same sha
-    if items and items[0].get("sha") == sha:
-        return items[0]
-    snap = {
-        "id": uuid.uuid4().hex[:12],
-        "sha": sha,
-        "short_sha": sha[:7],
-        "version": local_version(),
-        "branch": branch,
-        "reason": reason,
-        "created_at": _now(),
-        "label": f"v{local_version()} · {sha[:7]}",
-    }
-    # Newest only — drop older rollback points
-    _save_snapshots([snap])
-    return snap
-
-
-def get_snapshot(snapshot_id: str) -> dict[str, Any] | None:
-    for item in list_snapshots():
-        if item.get("id") == snapshot_id or item.get("sha") == snapshot_id:
-            return item
-    return None
-
-
 def _read_local_version_file(root: Path) -> str | None:
     ver_file = root / "VERSION"
     if not ver_file.exists():
@@ -531,9 +447,9 @@ def _finish_ok(message: str, *, awaiting_restart: bool = False, restart_required
 def _finish_error(err: Exception | str) -> None:
     msg = str(err)
     if isinstance(err, Exception):
-        logger.exception("panel update/rollback failed: %s", msg)
+        logger.exception("panel update failed: %s", msg)
     else:
-        logger.error("panel update/rollback failed: %s", msg)
+        logger.error("panel update failed: %s", msg)
     write_status(
         {
             "state": "error",
@@ -552,7 +468,6 @@ def _do_update(target_version: str | None) -> None:
         write_status(
             {
                 "state": "running",
-                "mode": "update",
                 "percent": 0,
                 "error": None,
                 "finished_at": None,
@@ -560,7 +475,6 @@ def _do_update(target_version: str | None) -> None:
                 "from_version": local_version(),
                 "to_version": target_version,
                 "log": [],
-                "snapshot_id": None,
                 "awaiting_restart": False,
                 "restart_required": False,
                 "pre_boot_id": None,
@@ -578,14 +492,7 @@ def _do_update(target_version: str | None) -> None:
         else:
             _append_log("git در دسترس نیست — از آرشیو zip استفاده می‌شود")
 
-        _set_step("backup", "ثبت نقطه بازگشت + پشتیبان .env")
-        snap = create_snapshot(reason="before_update") if git else None
-        if snap:
-            write_status({"snapshot_id": snap["id"]})
-            _append_log(f"نقطه بازگشت ذخیره شد: {snap['label']}")
-        else:
-            _append_log("هشدار: نقطه بازگشت git ساخته نشد")
-
+        _set_step("backup", "پشتیبان .env")
         env_path = root / ".env"
         if env_path.exists():
             bak = root / f".env.bak.{datetime.now().astimezone().strftime('%Y%m%d%H%M%S')}"
@@ -693,251 +600,6 @@ def _do_update(target_version: str | None) -> None:
         _finish_error(e)
 
 
-def _do_rollback(snapshot_id: str) -> None:
-    try:
-        snap = get_snapshot(snapshot_id)
-        if not snap:
-            raise RuntimeError("نقطه بازگشت پیدا نشد")
-        sha = snap["sha"]
-        root = _repo_root()
-        git = _ensure_git()
-        if not git:
-            raise RuntimeError(
-                "برای بازگشت به نسخه قبلی به git نیاز است. نصب کنید: apt install -y git"
-            )
-        write_status(
-            {
-                "state": "running",
-                "mode": "rollback",
-                "percent": 0,
-                "error": None,
-                "finished_at": None,
-                "started_at": _now(),
-                "from_version": local_version(),
-                "to_version": snap.get("version"),
-                "log": [],
-                "snapshot_id": snap.get("id"),
-                "awaiting_restart": False,
-                "restart_required": False,
-                "pre_boot_id": None,
-                "step": "",
-                "step_key": "",
-                "message": "شروع بازگشت…",
-            }
-        )
-        _set_step("prepare", f"شروع بازگشت به {snap.get('label')}")
-        _append_log(f"root={root}")
-        _append_log(f"git={git}")
-
-        if not (root / ".git").exists():
-            raise RuntimeError(f"مخزن git پیدا نشد: {root}")
-
-        # Snapshot current state before rolling back (so they can undo the undo)
-        _set_step("backup", "ثبت وضعیت فعلی قبل از بازگشت")
-        pre = create_snapshot(reason="before_rollback")
-        if pre:
-            _append_log(f"وضعیت فعلی هم ذخیره شد: {pre['label']}")
-
-        env_path = root / ".env"
-        if env_path.exists():
-            bak = root / f".env.bak.rollback.{datetime.now().astimezone().strftime('%Y%m%d%H%M%S')}"
-            shutil.copy2(env_path, bak)
-            _append_log(f"پشتیبان env: {bak.name}")
-
-        _set_step("fetch", "بررسی دسترسی به کامیت…")
-        code, out = _run([git, "cat-file", "-t", sha], cwd=root, timeout=30)
-        if code != 0 or "commit" not in (out or ""):
-            _run([git, "fetch", "--all", "--tags"], cwd=root, timeout=180)
-            code, out = _run([git, "cat-file", "-t", sha], cwd=root, timeout=30)
-            if code != 0:
-                raise RuntimeError(f"کامیت {sha[:7]} در دسترس نیست")
-
-        _set_step("pull", f"بازگردانی کد به {sha[:7]}…")
-        code, out = _run([git, "reset", "--hard", sha], cwd=root, timeout=120)
-        if code != 0:
-            raise RuntimeError(f"reset ناموفق: {out[:300]}")
-        _run(
-            [
-                git,
-                "clean",
-                "-fd",
-                "--exclude=.env",
-                "--exclude=data",
-                "--exclude=.venv",
-                "--exclude=.env.bak.*",
-            ],
-            cwd=root,
-            timeout=60,
-        )
-        _append_log(f"کد به {sha[:7]} برگشت")
-
-        _set_step("deps", "نصب دوباره وابستگی‌ها…")
-        code, out = _pip_install()
-        if code != 0:
-            raise RuntimeError(f"pip install ناموفق: {out[:400]}")
-
-        new_ver = _read_local_version_file(root) or snap.get("version")
-        write_status({"to_version": new_ver})
-
-        _set_step("restart", "راه‌اندازی مجدد…")
-        ok, note = _restart_service()
-        _append_log(note)
-        if not ok:
-            _finish_ok(
-                f"بازگشت به {new_ver or sha[:7]} انجام شد؛ ریستارت خودکار ممکن نشد — "
-                "sudo systemctl restart pgclockbot",
-                restart_required=True,
-            )
-            return
-        time.sleep(0.4)
-        _finish_ok(
-            f"بازگشت به نسخه {new_ver or sha[:7]} انجام شد — سرویس در حال راه‌اندازی مجدد است. "
-            "ممکن است چند دقیقه طول بکشد؛ از صفحه خارج نشوید و رفرش نکنید. صفحه به‌صورت خودکار تازه می‌شود.",
-            awaiting_restart=True,
-        )
-    except Exception as e:
-        _finish_error(e)
-
-
-def _git_checkout_tag(root: Path, git: str, tag: str) -> bool:
-    """Fetch tags and hard-reset onto ``tag``. Returns True on success."""
-    code, out = _run([git, "fetch", "--tags", "--force", "--prune", "origin"], cwd=root, timeout=180)
-    if out:
-        _append_log(out.splitlines()[-1][:200])
-    if code != 0:
-        _append_log(f"git fetch --tags ناموفق: {(out or '')[:160]}")
-        return False
-    # Prefer explicit refs/tags/<tag>, then bare tag name.
-    for ref in (f"refs/tags/{tag}", tag):
-        code, out = _run([git, "rev-parse", "--verify", ref], cwd=root, timeout=30)
-        if code != 0:
-            continue
-        code2, out2 = _run(
-            [git, "checkout", "-f", "-B", f"rollback-{tag.lstrip('vV')}", ref],
-            cwd=root,
-            timeout=120,
-        )
-        if code2 != 0:
-            _append_log(f"checkout {ref} ناموفق: {(out2 or '')[:160]}")
-            continue
-        _run(
-            [
-                git,
-                "clean",
-                "-fd",
-                "--exclude=.env",
-                "--exclude=data",
-                "--exclude=.venv",
-                "--exclude=.env.bak.*",
-            ],
-            cwd=root,
-            timeout=60,
-        )
-        _append_log(f"کد روی تگ {tag} قرار گرفت")
-        return True
-    return False
-
-
-def _do_rollback_to_version(version: str) -> None:
-    """Roll the install back to a published GitHub release/tag."""
-    from app.services.updates import normalize_version_tag
-
-    try:
-        ver = normalize_version_tag(version)
-        if not ver:
-            raise RuntimeError("نسخه بازگشت نامعتبر است")
-        tag = f"v{ver}"
-        root = _repo_root()
-        write_status(
-            {
-                "state": "running",
-                "mode": "rollback",
-                "percent": 0,
-                "error": None,
-                "finished_at": None,
-                "started_at": _now(),
-                "from_version": local_version(),
-                "to_version": ver,
-                "log": [],
-                "snapshot_id": None,
-                "awaiting_restart": False,
-                "restart_required": False,
-                "pre_boot_id": None,
-                "step": "",
-                "step_key": "",
-                "message": f"شروع بازگشت به {tag}…",
-            }
-        )
-        _set_step("prepare", f"شروع بازگشت به {tag}")
-        _append_log(f"root={root}")
-
-        git = _ensure_git()
-        if git:
-            _append_log(f"git={git}")
-        else:
-            _append_log("git در دسترس نیست — از آرشیو zip استفاده می‌شود")
-
-        _set_step("backup", "ثبت نقطه بازگشت + پشتیبان .env")
-        snap = create_snapshot(reason="before_rollback") if git else None
-        if snap:
-            write_status({"snapshot_id": snap["id"]})
-            _append_log(f"وضعیت فعلی ذخیره شد: {snap['label']}")
-
-        env_path = root / ".env"
-        if env_path.exists():
-            bak = root / f".env.bak.rollback.{datetime.now().astimezone().strftime('%Y%m%d%H%M%S')}"
-            shutil.copy2(env_path, bak)
-            _append_log(f"پشتیبان env: {bak.name}")
-
-        use_git = bool(git and (root / ".git").exists())
-        if use_git:
-            _set_step("fetch", f"دریافت تگ {tag}…")
-            if not _git_checkout_tag(root, git, tag):
-                _append_log("سوییچ به آرشیو zip…")
-                use_git = False
-            else:
-                _set_step("pull", f"اعمال نسخه {tag}…")
-
-        if not use_git:
-            _set_step("fetch", f"دانلود آرشیو {tag}…")
-            _update_via_archive(root, ref=tag)
-            _set_step("pull", "اعمال فایل‌ها…")
-            _append_log(f"کد از آرشیو {tag} اعمال شد")
-
-        from app.services.update_channel import set_deployed_channel
-
-        # Published release tags track the stable channel.
-        set_deployed_channel("main")
-        _append_log("کانال نصب‌شده: پایدار (main)")
-
-        _set_step("deps", "نصب دوباره وابستگی‌ها…")
-        code, out = _pip_install()
-        if code != 0:
-            raise RuntimeError(f"pip install ناموفق: {out[:400]}")
-
-        new_ver = _read_local_version_file(root) or ver
-        write_status({"to_version": new_ver})
-
-        _set_step("restart", "راه‌اندازی مجدد…")
-        ok, note = _restart_service()
-        _append_log(note)
-        if not ok:
-            _finish_ok(
-                f"بازگشت به {new_ver} انجام شد؛ ریستارت خودکار ممکن نشد — "
-                "sudo systemctl restart pgclockbot",
-                restart_required=True,
-            )
-            return
-        time.sleep(0.4)
-        _finish_ok(
-            f"بازگشت به نسخه {new_ver} انجام شد — سرویس در حال راه‌اندازی مجدد است. "
-            "ممکن است چند دقیقه طول بکشد؛ از صفحه خارج نشوید و رفرش نکنید. صفحه به‌صورت خودکار تازه می‌شود.",
-            awaiting_restart=True,
-        )
-    except Exception as e:
-        _finish_error(e)
-
-
 def _parse_iso(value: str | None) -> float | None:
     if not value:
         return None
@@ -959,37 +621,27 @@ def _thread_alive() -> bool:
     return bool(t is not None and t.is_alive())
 
 
-def _start_thread(target, *args) -> dict[str, Any]:
+def _start_update_thread(target_version: str | None) -> dict[str, Any]:
     global _THREAD
     with _LOCK:
         if _THREAD is not None and _THREAD.is_alive():
-            return {"ok": False, "error": "یک عملیات آپدیت/بازگشت در حال اجراست"}
+            return {"ok": False, "error": "یک عملیات آپدیت در حال اجراست"}
         # Mark running immediately so /update/status never returns stale awaiting.
-        mode = "update" if target is _do_update else "rollback"
         seed = _default_status()
         seed.update(
             {
                 "state": "running",
-                "mode": mode,
                 "started_at": _now(),
                 "message": "شروع عملیات…",
                 "awaiting_restart": False,
                 "restart_required": False,
                 "pre_boot_id": None,
                 "log": [],
+                "to_version": target_version,
             }
         )
-        if mode == "update" and args:
-            seed["to_version"] = args[0]
-        if mode == "rollback" and args:
-            # snapshot id or target version string
-            arg0 = str(args[0] or "").strip()
-            if target is _do_rollback_to_version:
-                seed["to_version"] = arg0.lstrip("vV")
-            else:
-                seed["snapshot_id"] = arg0
         _replace_status(seed)
-        _THREAD = threading.Thread(target=target, args=args, name="panel-update", daemon=True)
+        _THREAD = threading.Thread(target=_do_update, args=(target_version,), name="panel-update", daemon=True)
         _THREAD.start()
     return {"ok": True, "status": read_status()}
 
@@ -1020,7 +672,6 @@ def resolve_stale_update_status() -> dict[str, Any]:
     st = read_status()
     local = local_version()
     to_ver = str(st.get("to_version") or "").strip()
-    mode = str(st.get("mode") or "update")
 
     # Zombie running (process restarted mid-update, thread gone).
     if st.get("state") == "running":
@@ -1059,15 +710,7 @@ def resolve_stale_update_status() -> dict[str, Any]:
         pre_boot = st.get("pre_boot_id")
 
         restarted = bool(pre_boot and cur_boot and str(pre_boot) != str(cur_boot))
-        version_ok = False
-        if to_ver:
-            if mode == "rollback":
-                # Rollback target should match (not merely local >= target).
-                version_ok = not is_newer(to_ver, local) and not is_newer(local, to_ver)
-            else:
-                version_ok = is_same_or_newer(local, to_ver)
-        else:
-            version_ok = restarted
+        version_ok = is_same_or_newer(local, to_ver) if to_ver else restarted
 
         if restarted and version_ok:
             return clear_idle_status()
@@ -1120,43 +763,7 @@ def start_update(target_version: str | None = None) -> dict[str, Any]:
                 "error": "سرویس در حال راه‌اندازی مجدد است؛ چند دقیقه صبر کنید یا صفحه را تازه کنید.",
                 "status": st,
             }
-    return _start_thread(_do_update, target_version)
-
-
-def start_rollback(snapshot_id: str) -> dict[str, Any]:
-    if not get_snapshot(snapshot_id):
-        return {"ok": False, "error": "نقطه بازگشت معتبر نیست"}
-    st = resolve_stale_update_status()
-    if st.get("state") == "running" and _thread_alive():
-        return {"ok": False, "error": "یک عملیات در حال اجراست", "status": st}
-    return _start_thread(_do_rollback, snapshot_id)
-
-
-def start_rollback_to_version(version: str, *, allowed: list[str] | None = None) -> dict[str, Any]:
-    """Roll back to a published version (must be in ``allowed`` when provided)."""
-    from app.services.updates import _parse_ver, normalize_version_tag
-
-    ver = normalize_version_tag(version)
-    if not ver:
-        return {"ok": False, "error": "نسخه بازگشت نامعتبر است"}
-    if allowed is not None:
-        allowed_norm = {normalize_version_tag(x) for x in allowed if normalize_version_tag(x)}
-        if ver not in allowed_norm:
-            return {"ok": False, "error": "فقط از میان ۳ نسخهٔ اخیر گیت‌هاب می‌توانید برگردید"}
-    if _parse_ver(local_version()) == _parse_ver(ver):
-        return {"ok": False, "error": "همین الان روی این نسخه هستید"}
-    st = resolve_stale_update_status()
-    if st.get("state") == "running" and _thread_alive():
-        return {"ok": False, "error": "یک عملیات در حال اجراست", "status": st}
-    if st.get("awaiting_restart"):
-        age = _age_seconds(st.get("finished_at")) or 0
-        if age < AWAITING_RESTART_TIMEOUT_SEC:
-            return {
-                "ok": False,
-                "error": "سرویس در حال راه‌اندازی مجدد است؛ چند دقیقه صبر کنید.",
-                "status": st,
-            }
-    return _start_thread(_do_rollback_to_version, ver)
+    return _start_update_thread(target_version)
 
 
 def _degraded_update_page_context(*, error: str | None = None) -> dict[str, Any]:
@@ -1184,9 +791,6 @@ def _degraded_update_page_context(*, error: str | None = None) -> dict[str, Any]
         "status": status,
         "local_version": local,
         "steps": [{"key": k, "label": lab, "percent": pct} for k, lab, pct in STEPS],
-        "snapshots": list_snapshots(),
-        "rollback_versions": [],
-        "can_rollback": False,
         "show_ops": bool(
             status.get("awaiting_restart")
             or status.get("restart_required")
@@ -1233,8 +837,6 @@ async def _update_page_context_impl(*, force_check: bool = False) -> dict[str, A
         get_update_channel,
         migration_preflight,
     )
-    from app.services.updates import fetch_recent_versions
-
     channel = get_update_channel()
     info = await check_github_update(force=force_check, channel=channel)
     status = resolve_stale_update_status()
@@ -1251,7 +853,6 @@ async def _update_page_context_impl(*, force_check: bool = False) -> dict[str, A
         remote_notes = await fetch_remote_release_notes(
             force=force_check, channel=channel
         )
-    rollback_versions = await fetch_recent_versions(limit=3, force=force_check)
     preflight = await migration_preflight(channel, force=force_check)
     ch_ctx = channel_context(channel)
     badge = badge_context()
@@ -1284,9 +885,6 @@ async def _update_page_context_impl(*, force_check: bool = False) -> dict[str, A
         "status": status,
         "local_version": local,
         "steps": [{"key": k, "label": lab, "percent": pct} for k, lab, pct in STEPS],
-        "snapshots": list_snapshots(),
-        "rollback_versions": rollback_versions,
-        "can_rollback": bool(rollback_versions),
         "show_ops": show_ops,
         "changelog": changelog,
         "update_channel": ch_ctx["channel"],
