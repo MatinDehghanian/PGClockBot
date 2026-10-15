@@ -3,7 +3,7 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--section-gap);
   margin-bottom: var(--section-gap);
-  align-items: start;
+  align-items: stretch;
 }
 
 .connection-setup > .card { margin-bottom: 0; }
@@ -50,4 +50,75 @@
   .connection-config-row { gap: var(--space-1_5); align-items: start; }
   .connection-config-action { grid-column: 2 / -1; }
   .connection-config-action .btn { width: 100%; }
+}
+
+.connection-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.connection-card-head > h2 {
+  margin: 0;
+  min-width: 0;
+}
+
+.connection-card-head > .badge { flex: 0 0 auto; }
+
+/* A card's own action row sits in the card's flex gap, not on top of it. */
+.card > .actions,
+.card > form > .actions {
+  margin-top: 0;
+}
+
+.connection-actions form { margin: 0; }
+
+.flash-copy > strong,
+.flash-copy > span,
+.flash-copy > code {
+  display: block;
+}
+
+.flash-copy > code + *,
+.flash-copy > span + code { margin-top: var(--space-1); }
+
+.connection-command {
+  width: fit-content;
+  max-width: 100%;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--foreground);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+html[data-theme="light"] .connection-command { background: rgba(0, 0, 0, 0.04); }
+
+/* Equal-height result tiles: three on desktop, two plus a full-width one on phones. */
+.connection-stats {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.connection-stats > .bot-conn { min-height: 52px; }
+
+@media (max-width: 760px) {
+  .connection-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .connection-stats > .bot-conn:last-child { grid-column: 1 / -1; }
+  .connection-stats > .bot-conn { padding: var(--space-1) var(--space-2); }
+
+  /* Host actions: save alone on the first row, then "test now" and "stop" side by side, all full width. */
+  .card > .connection-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .card > .connection-actions > .btn:first-child { grid-column: 1 / -1; }
+  .card > .actions.connection-actions > form:last-child:nth-child(odd) { grid-column: auto; }
+  .connection-actions form > .btn {
+    width: 100%;
+    justify-content: center;
+  }
 }

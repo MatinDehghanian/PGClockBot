@@ -19,7 +19,7 @@ SAFE_ERRORS = frozenset({
 })
 CORE_MESSAGES = {
     "core_binary": "فایل Xray آماده نیست؛ مسیر CONNECTION_MONITOR_XRAY_PATH و دسترسی فایل و پوشه را بررسی کنید.",
-    "core_checksum": "checksum فایل Xray معتبر نیست؛ مقدار CONNECTION_MONITOR_XRAY_SHA256 را بررسی کنید.",
+    "core_checksum": "مقدار SHA-256 فایل Xray معتبر نیست؛ تنظیم CONNECTION_MONITOR_XRAY_SHA256 را بررسی کنید.",
 }
 
 

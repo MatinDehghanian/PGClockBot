@@ -1030,7 +1030,7 @@ SETTING_GROUPS = {
         ("connection_status_empty", "فهرست وضعیت خالی", "textarea", "بدون متغیر"),
         ("connection_status_error", "خطای دریافت وضعیت", "textarea", "بدون متغیر"),
         ("connection_status_admin_title", "عنوان مدیریت وضعیت اتصال", "text", "بدون متغیر"),
-        ("connection_status_account_prompt", "تنظیم Test user", "textarea", "بدون متغیر"),
+        ("connection_status_account_prompt", "تنظیم کاربر تست", "textarea", "بدون متغیر"),
         ("connection_status_name_prompt", "دریافت نام عمومی هاست", "text", "بدون متغیر"),
         ("connection_status_order_prompt", "دریافت ترتیب هاست", "text", "بدون متغیر"),
         ("guide_text", "متن راهنما", "textarea", "دستور /help در تلگرام"),

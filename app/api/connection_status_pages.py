@@ -25,7 +25,7 @@ from app.services.connection_monitor_preferences import pause_monitor_target
 from app.services.connection_monitor_queue import queue_manual_check
 from app.services.connection_monitor_settings import set_monitor_account
 from app.services.connection_monitor_views import monitor_admin_page
-from app.services.connection_status_texts import REASON_LABELS, STATUS_LABELS, connection_check_time
+from app.services.connection_status_texts import PLAIN_STATUS_LABELS, REASON_LABELS, connection_check_time
 from app.services.db_safe import rollback_quiet
 from app.services.pasarguard import PasarGuardError
 
@@ -72,7 +72,7 @@ def register_connection_status_pages(app: FastAPI, *, render: Callable, require_
         deployment = get_settings()
         return render(request, "connection_status.html", {
             "staff": staff, "page": page, "hosts": hosts, "host_error": host_error,
-            "status_labels": STATUS_LABELS, "reason_labels": REASON_LABELS,
+            "status_labels": PLAIN_STATUS_LABELS, "reason_labels": REASON_LABELS,
             "checked_time": connection_check_time,
             "binary_configured": bool(deployment.connection_monitor_xray_path and deployment.connection_monitor_xray_sha256),
         })

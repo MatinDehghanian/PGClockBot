@@ -20,7 +20,7 @@ from app.services.connection_monitor_sync import apply_target_plan, initial_snap
 from app.services.connection_monitor_types import MAX_MONITOR_ENDPOINTS, MonitorConfigError, MonitorIssue
 
 
-PREFERENCES_UNAVAILABLE = "کانفیگ انتخاب‌شده تغییر کرده یا آمادهٔ تست نیست؛ لیست subscription را تازه کنید."
+PREFERENCES_UNAVAILABLE = "کانفیگ انتخاب‌شده تغییر کرده یا آمادهٔ تست نیست؛ فهرست اشتراک را تازه کنید."
 
 
 class MonitorPreferences(BaseModel):
