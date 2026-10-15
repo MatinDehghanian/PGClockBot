@@ -66,3 +66,16 @@ class PublicStatusBotTests(MonitorDatabaseCase):
         ui = dict(DEFAULT_SETTINGS)
         ui["connection_status_title"] = "{token} {user_id.__class__} <b>وضعیت</b>"
         self.assertEqual(monitor_text(ui, "connection_status_title"), "{token} {user_id.__class__} &lt;b&gt;وضعیت&lt;/b&gt;")
+
+    async def test_status_entry_respects_menu_visibility_and_custom_position(self) -> None:
+        ui = {**DEFAULT_SETTINGS, "menu_order": "wallet,connection_status,shop", "show_restart_button": "0"}
+        expected = [ui["btn_wallet"], ui["btn_connection_status"], ui["btn_shop"]]
+        reply = keyboards.main_reply_keyboard("user", has_services=False, ui=ui)
+        inline = keyboards.main_menu("user", has_services=False, ui=ui)
+        self.assertEqual([button.text for row in reply.keyboard for button in row], expected)
+        self.assertEqual([button.text for row in inline.inline_keyboard for button in row], expected)
+        ui["menu_order"] = "wallet,shop"
+        reply = keyboards.main_reply_keyboard("user", has_services=False, ui=ui)
+        inline = keyboards.main_menu("user", has_services=False, ui=ui)
+        self.assertNotIn(ui["btn_connection_status"], [button.text for row in reply.keyboard for button in row])
+        self.assertNotIn(ui["btn_connection_status"], [button.text for row in inline.inline_keyboard for button in row])

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 
+CONNECTION_STATUS_MENU_KEY = "connection_status"
+
 MONITOR_TEXT_DEFAULTS = {
     "btn_connection_status": "📡 وضعیت اتصال",
     "connection_status_title": "وضعیت اتصال",
