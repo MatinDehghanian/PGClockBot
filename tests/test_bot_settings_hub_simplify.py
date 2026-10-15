@@ -12,19 +12,20 @@ class BotSettingsHubIATests(unittest.TestCase):
         from app.bot.keyboards import _admin_settings_submenu_entries
 
         self.assertEqual(
-            HUB_ORDER, ["shop", "menu", "pay", "support", "access", "notify"]
+            HUB_ORDER,
+            ["shop", "menu", "pay", "support", "access", "limits", "guides", "notify"],
         )
         self.assertNotIn("service", HUB_ORDER)
         self.assertIn("service", SECTIONS)  # deep plans callbacks still resolve
         self.assertIn("access", SECTIONS)
         self.assertEqual(SECTIONS["shop"]["title"], "فروشگاه")
-        self.assertEqual(SECTIONS["menu"]["title"], "منو")
+        self.assertEqual(SECTIONS["menu"]["title"], "ظاهر و دکمه‌ها")
         self.assertEqual(SECTIONS["access"]["title"], "دسترسی")
 
         labels = [lab for _, lab in _admin_settings_submenu_entries()]
         self.assertEqual(
             labels,
-            ["فروشگاه", "منو", "پرداخت", "پشتیبان‌ها", "دسترسی", "اعلان‌ها", "🌐 وب‌پنل"],
+            [SECTIONS[sec]["title"] for sec in HUB_ORDER] + ["🌐 وب‌پنل"],
         )
         self.assertNotIn("سرویس و دسترسی", labels)
         self.assertNotIn("فروشگاه و متون", labels)
@@ -35,7 +36,17 @@ class BotSettingsHubIATests(unittest.TestCase):
 
         self.assertEqual(
             HUB_ORDER,
-            ["shop", "menu", "pay", "support", "access", "notify", "bot"],
+            [
+                "shop",
+                "menu",
+                "pay",
+                "support",
+                "access",
+                "limits",
+                "guides",
+                "notify",
+                "bot",
+            ],
         )
         self.assertEqual(SECTIONS["notify"]["title"], "اعلان‌ها")
         self.assertEqual(SECTIONS["bot"]["title"], "ربات")
@@ -48,6 +59,8 @@ class BotSettingsHubIATests(unittest.TestCase):
                 "پرداخت",
                 "پشتیبان‌ها",
                 "دسترسی",
+                "محدودیت",
+                "آموزش اتصال",
                 "اعلان‌ها",
                 "ربات",
                 "🌐 وب‌پنل",
@@ -63,12 +76,13 @@ class BotSettingsHubIATests(unittest.TestCase):
             if isinstance(sub[2], list)
             for f in sub[2]
         }
-        self.assertIn("force_join_enabled", access_keys)
         self.assertIn("qr_enabled", access_keys)
+        self.assertNotIn("force_join_enabled", access_keys)
         service_subs = {s[0] for s in SECTIONS["service"]["subs"]}
         self.assertNotIn("qr", service_subs)
         self.assertNotIn("force", service_subs)
-        self.assertEqual(_owner_screen_for_key("force_join_enabled"), ("access", "force"))
+        # Forced channel membership lives with the other entry gates in «limits».
+        self.assertEqual(_owner_screen_for_key("force_join_enabled"), ("limits", "force"))
         self.assertEqual(_owner_screen_for_key("show_sub_link_in_text"), ("access", "qr"))
 
     def test_shop_catalog_button_groups(self):

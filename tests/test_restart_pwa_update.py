@@ -64,14 +64,24 @@ class UpdateWiringTests(unittest.TestCase):
         self.assertIn("start_update", src)
         self.assertNotIn("start_rollback", src)
         self.assertNotIn("آپدیت از داخل پنل حذف شده است", src)
-        tpl = Path("app/web/templates/_settings_update.html").read_text(encoding="utf-8")
-        self.assertIn("/update/start", tpl)
+        from jinja2 import Environment, FileSystemLoader
+
+        from app.api import app as app_module
+
+        paths = {getattr(route, "path", "") for route in app_module.create_api_app().routes}
+        self.assertIn("/update/start", paths)
+        self.assertNotIn("/update/rollback", paths)
         # Restart confirmation needs version/boot_id/pid — public /health is minimal
-        self.assertIn("/health/detail", tpl)
-        self.assertNotIn("fetch('/health?", tpl)
-        self.assertNotIn('fetch("/health?', tpl)
-        self.assertIn("upd-start", tpl)
-        self.assertNotIn("/update/rollback", tpl)
+        self.assertIn("/health/detail", paths)
+
+        env = Environment(loader=FileSystemLoader("app/web/templates"), autoescape=True)
+        html = env.get_template("_settings_update.html").render(
+            update_info={"update_available": True, "remote_version": "9.9.9", "checked": True, "label": ""},
+            status={"state": "idle"},
+            local_version="0.4.0",
+        )
+        self.assertIn('id="upd-start"', html)
+        self.assertNotIn("rollback", html)
 
     def test_pwa_tab_wired(self):
         from app.services.users import PANEL_SETTINGS_TABS, SETTINGS_TABS, TAB_SETTING_GROUPS

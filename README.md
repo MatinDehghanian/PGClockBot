@@ -59,6 +59,21 @@ bash <(curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockBot/main/get
 
 بعد از نصب، راه‌اندازی در مرورگر کامل می‌شود: `http://SERVER_IP:9000/` (یا دامنهٔ شما).
 
+### پایگاه داده (PostgreSQL)
+نصب تازه فقط با **PostgreSQL** انجام می‌شود (SQLite برای نصب جدید ساخته نمی‌شود). اسکریپت نصب
+در صورت نبود، PostgreSQL محلی را به‌صورت خودکار آماده می‌کند، سرویس را روشن می‌کند، کاربر و پایگاه
+داده می‌سازد و `DATABASE_URL` را در `.env` می‌نویسد. `postgresql-client` هم برای پشتیبان‌گیری نصب می‌شود.
+
+برای استفاده از PostgreSQL بیرونی یا مدیریت‌شده، پیش از نصب آدرس آن را بدهید؛ مقدار باید با
+`postgresql://`، `postgresql+asyncpg://` یا `postgres://` شروع شود و از سرور قابل دسترس باشد:
+
+```bash
+PGCLOCK_DATABASE_URL='postgresql+asyncpg://USER:PASS@HOST:5432/DBNAME' bash pgclock.sh install
+```
+
+اگر `.env` قبلی هنوز به SQLite اشاره می‌کند، نصب متوقف می‌شود و از شما می‌خواهد `DATABASE_URL`
+را به PostgreSQL تغییر دهید.
+
 ### منوی اسکریپت (`pgclock.sh`)
 دستور بالا منو را باز می‌کند. داخل پوشهٔ پروژه هم:
 

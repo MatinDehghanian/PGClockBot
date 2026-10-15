@@ -119,14 +119,15 @@ class BotSettingsHubIATestsRegression(unittest.TestCase):
         from app.bot.handlers.admin_settings import HUB_ORDER
 
         self.assertEqual(
-            HUB_ORDER, ["shop", "menu", "pay", "support", "access", "notify"]
+            HUB_ORDER,
+            ["shop", "menu", "pay", "support", "access", "limits", "guides", "notify"],
         )
         self.assertNotIn("service", HUB_ORDER)
 
-    def test_access_still_owns_force_join_buttons(self):
+    def test_limits_owns_force_join_buttons(self):
         from app.bot.handlers.admin_settings import FIELDS, _owner_screen_for_key
 
-        self.assertEqual(_owner_screen_for_key("btn_force_join"), ("access", "force"))
+        self.assertEqual(_owner_screen_for_key("btn_force_join"), ("limits", "force"))
         self.assertIn("btn_force_join_check", FIELDS)
 
 

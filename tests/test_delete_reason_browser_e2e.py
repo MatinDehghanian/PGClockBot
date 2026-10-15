@@ -27,6 +27,16 @@ ROOT = Path(__file__).resolve().parents[1]
 PANEL_JS = ROOT / "app" / "web" / "static" / "panel.js"
 
 
+def _launch(playwright):
+    try:
+        return playwright.chromium.launch(headless=True)
+    except Exception:  # noqa: BLE001 - playwright raises a generic Error for a missing browser
+        builds = sorted(Path("/opt/pw-browsers").glob("chromium-*/chrome-linux/chrome"))
+        if not builds:
+            raise
+        return playwright.chromium.launch(headless=True, executable_path=str(builds[-1]))
+
+
 def _free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind(("127.0.0.1", 0))
@@ -219,7 +229,7 @@ class DeleteReasonBrowserE2E(unittest.TestCase):
         server.start()
         try:
             with sync_playwright() as p:
-                browser = p.chromium.launch(headless=True)
+                browser = _launch(p)
                 page = browser.new_page()
                 posts: list[dict] = []
 
@@ -288,7 +298,7 @@ class DeleteReasonBrowserE2E(unittest.TestCase):
         server.start()
         try:
             with sync_playwright() as p:
-                browser = p.chromium.launch(headless=True)
+                browser = _launch(p)
                 page = browser.new_page()
                 page.goto(f"http://127.0.0.1:{server.port}/", wait_until="networkidle")
                 page.click("#open-ops")

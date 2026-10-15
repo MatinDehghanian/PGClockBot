@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import unittest
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -113,17 +114,59 @@ class ShopChromeReplyTests(unittest.TestCase):
         self.assertFalse(any("بازگشت" in t for t in texts))
 
 
-class CancelBroadcastSkipTests(unittest.TestCase):
-    def test_global_cancel_skips_fsm_to_state_handlers(self):
-        src = (ROOT / "app/bot/handlers/reply_nav.py").read_text(encoding="utf-8")
-        self.assertIn("aiogram.dispatcher.event.bases", src)
-        chunk = src.split("async def global_cancel_restore")[1].split("@router.")[0]
-        self.assertIn("if current is not None", chunk)
-        self.assertIn("SkipHandler", chunk)
-        admin = (ROOT / "app/bot/handlers/admin.py").read_text(encoding="utf-8")
-        chunk = admin.split("async def adm_broadcast_send")[1].split("async def")[0]
-        self.assertIn("is_cancel_text", chunk)
-        self.assertIn("admin_broadcast_reply_keyboard", chunk)
+class CancelBroadcastSkipTests(unittest.IsolatedAsyncioTestCase):
+    async def test_global_cancel_skips_fsm_to_state_handlers(self):
+        from aiogram.dispatcher.event.bases import SkipHandler
+
+        from app.bot.handlers.reply_nav import global_cancel_restore
+
+        state = AsyncMock()
+        state.get_state = AsyncMock(return_value="AdminStates:broadcast_text")
+        with patch(
+            "app.bot.handlers.reply_nav.restore_main_reply", AsyncMock()
+        ) as restore:
+            with self.assertRaises(SkipHandler):
+                await global_cancel_restore(
+                    AsyncMock(), AsyncMock(), MagicMock(), state
+                )
+        restore.assert_not_awaited()
+
+    async def test_global_cancel_outside_fsm_restores_main_menu(self):
+        from app.bot.handlers.reply_nav import global_cancel_restore
+
+        state = AsyncMock()
+        state.get_state = AsyncMock(return_value=None)
+        with patch(
+            "app.bot.handlers.reply_nav.restore_main_reply", AsyncMock()
+        ) as restore:
+            await global_cancel_restore(AsyncMock(), AsyncMock(), MagicMock(), state)
+        restore.assert_awaited_once()
+
+    async def test_broadcast_cancel_reopens_hub_without_sending(self):
+        from app.bot.handlers.admin import adm_broadcast_send
+        from app.bot.handlers.reply_nav import open_admin_broadcast_hub
+
+        message = MagicMock()
+        message.text = "انصراف"
+        message.answer = AsyncMock()
+        state = AsyncMock()
+        db_user = MagicMock()
+        with (
+            patch("app.bot.auth.require_bot_owner", AsyncMock(return_value=True)),
+            patch("app.bot.handlers.admin._is_admin", MagicMock(return_value=True)),
+            patch("app.bot.nav_input.try_legacy_cancel", AsyncMock(return_value=False)),
+            patch("app.bot.nav_chrome.answer_staff_nav", AsyncMock()) as staff_nav,
+            patch("app.services.broadcast.send_broadcast", AsyncMock()) as send,
+        ):
+            await adm_broadcast_send(
+                message, state, session=AsyncMock(), db_user=db_user
+            )
+
+        send.assert_not_awaited()
+        staff_nav.assert_awaited_once()
+        kwargs = staff_nav.await_args.kwargs
+        self.assertIs(kwargs["reopen_panel"], open_admin_broadcast_hub)
+        self.assertTrue(kwargs["clear_state"])
 
 
 if __name__ == "__main__":

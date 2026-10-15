@@ -249,7 +249,7 @@ class PanelSettingsNavPolishTests(unittest.TestCase):
         self.assertNotIn("•••• یا توکن جدید", bot)
         self.assertNotIn("•••• یا رمز جدید", bot)
         self.assertIn('placeholder="توکن جدید"', bot)
-        self.assertIn('placeholder="رمز جدید"', bot)
+        self.assertIn('placeholder="خالی بماند تا رمز فعلی حفظ شود"', bot)
         self.assertIn("خالی بماند تا توکن فعلی حفظ شود", bot)
         self.assertIn("خالی بماند تا رمز فعلی حفظ شود", bot)
         css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")

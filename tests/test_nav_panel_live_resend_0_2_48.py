@@ -144,10 +144,19 @@ class PreviewExitResendTests(unittest.IsolatedAsyncioTestCase):
         state.get_data = AsyncMock(return_value={})
 
         with (
+            # Nested preview taps change the nav level; the sticky flag decides.
             patch(
                 "app.bot.handlers.reply_nav.nav.get_nav_level",
-                AsyncMock(return_value=nav.NAV_USER_PREVIEW),
+                AsyncMock(return_value=nav.NAV_SHOP),
             ),
+            patch(
+                "app.bot.handlers.reply_nav.nav.is_user_preview_active",
+                AsyncMock(return_value=True),
+            ),
+            patch(
+                "app.bot.handlers.reply_nav.nav.set_user_preview_active",
+                AsyncMock(),
+            ) as set_preview,
             patch(
                 "app.bot.nav_inline.clear_nav_panel",
                 AsyncMock(),
@@ -179,6 +188,7 @@ class PreviewExitResendTests(unittest.IsolatedAsyncioTestCase):
         clear.assert_awaited()
         heal.assert_awaited()
         home.assert_awaited()
+        set_preview.assert_awaited_once_with(state, False)
 
 
 if __name__ == "__main__":

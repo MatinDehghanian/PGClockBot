@@ -118,10 +118,18 @@ class TestResellerThinReply(unittest.TestCase):
             "btn_reseller": "مدیریت من",
             "btn_adm_preview": "پیش‌نمایش من",
         }
-        markup = reseller_hub_main_keyboard(None, ui)
+        markup = reseller_hub_main_keyboard(None, {**ui, "show_restart_button": "0"})
         labels = [btn.text for row in markup.keyboard for btn in row]
         self.assertEqual(set(labels), {"مدیریت من", "پیش‌نمایش من"})
         self.assertEqual(len(labels), 2)
+
+    def test_thin_hub_adds_only_restart_footer_when_enabled(self):
+        ui = {"btn_reseller": "مدیریت من", "btn_adm_preview": "پیش‌نمایش من"}
+        markup = reseller_hub_main_keyboard(None, {**ui, "show_restart_button": "1"})
+        rows = [[btn.text for btn in row] for row in markup.keyboard]
+        self.assertEqual(rows[0], ["مدیریت من", "پیش‌نمایش من"])
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(len(rows[1]), 1)
 
 
 class TestStickyUserPreviewFlag(unittest.IsolatedAsyncioTestCase):

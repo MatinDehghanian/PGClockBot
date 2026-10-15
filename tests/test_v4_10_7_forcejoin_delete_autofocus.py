@@ -7,6 +7,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
+from tests.test_delete_reason_browser_e2e import _Server, _launch
+
 ROOT = Path(__file__).resolve().parents[1]
 JS = (ROOT / "app/web/static/panel.js").read_text(encoding="utf-8")
 USERS = (ROOT / "app/web/templates/users.html").read_text(encoding="utf-8")
@@ -116,8 +118,29 @@ class NoAutofocusTests(unittest.TestCase):
         self.assertIn("pageshow", block)
 
     def test_confirm_open_does_not_focus_reason(self):
-        self.assertIn("Do not autofocus reason", JS)
-        self.assertNotIn("reasonInput.focus()", JS.split("openModal('modal-confirm')")[1].split("formEl.addEventListener")[0])
+        # Opening the delete-confirm modal must not move focus into the reason
+        # field, otherwise mobile keyboards pop up without a user tap.
+        try:
+            from playwright.sync_api import sync_playwright
+        except ImportError as exc:  # pragma: no cover
+            self.skipTest(f"playwright not installed: {exc}")
+
+        server = _Server()
+        server.start()
+        try:
+            with sync_playwright() as p:
+                browser = _launch(p)
+                page = browser.new_page()
+                page.goto(f"http://127.0.0.1:{server.port}/", wait_until="networkidle")
+                page.click("#open-ops")
+                page.click("#delete-btn")
+                page.wait_for_selector("#confirm-reason", timeout=8000)
+                page.wait_for_timeout(300)
+                focused_id = page.evaluate("() => (document.activeElement || {}).id || ''")
+                browser.close()
+        finally:
+            server.stop()
+        self.assertNotEqual(focused_id, "confirm-reason")
 
     def test_login_has_no_autofocus(self):
         self.assertNotIn("autofocus", LOGIN)
