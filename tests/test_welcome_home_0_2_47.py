@@ -27,15 +27,12 @@ class ShopKindTrialFirstTests(unittest.TestCase):
 
 
 class SupportResellerApplyScopeTests(unittest.TestCase):
-    def test_hub_includes_apply_only_when_flag_true(self):
+    def test_hub_never_offers_reseller_apply(self):
         from app.bot.nav_inline import support_hub_keyboard
 
-        with_apply = support_hub_keyboard({}, include_reseller_apply=True)
-        without = support_hub_keyboard({}, include_reseller_apply=False)
-        data_with = [b.callback_data for row in with_apply.inline_keyboard for b in row]
-        data_without = [b.callback_data for row in without.inline_keyboard for b in row]
-        self.assertIn("nv:resapply", data_with)
-        self.assertNotIn("nv:resapply", data_without)
+        data = [b.callback_data for row in support_hub_keyboard({}).inline_keyboard for b in row]
+        self.assertIn("nv:s:new", data)
+        self.assertNotIn("nv:resapply", data)
 
 
 class OpenSupportHomeShopBotTests(unittest.IsolatedAsyncioTestCase):
@@ -50,7 +47,7 @@ class OpenSupportHomeShopBotTests(unittest.IsolatedAsyncioTestCase):
         captured = {}
 
         def _capture_kb(*_a, **kw):
-            captured["include"] = kw.get("include_reseller_apply")
+            captured["kwargs"] = sorted(kw)
             return MagicMock()
 
         with (
@@ -99,7 +96,7 @@ class OpenSupportHomeShopBotTests(unittest.IsolatedAsyncioTestCase):
                 reseller_owner_id=5,
             )
 
-        self.assertFalse(captured.get("include"))
+        self.assertNotIn("include_reseller_apply", captured["kwargs"])
 
 
 class RenderHomeEditFallbackTests(unittest.IsolatedAsyncioTestCase):

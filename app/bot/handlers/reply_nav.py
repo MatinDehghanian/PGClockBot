@@ -603,8 +603,6 @@ async def open_support_home(
         parse_support_contacts,
         support_chat_url,
     )
-    from app.services.users import on
-
     from app.services.rich_text import outbound_setting_text
 
     _ = reseller_owner_id
@@ -623,26 +621,12 @@ async def open_support_home(
             contact_rows.append(
                 [InlineKeyboardButton(text=f"💬 گفتگو با {title}", url=url)]
             )
-    order_keys = {
-        p.strip() for p in (ui.get("menu_order") or "").split(",") if p.strip()
-    }
-    # Platform bot only — never offer reseller apply on a shop bot.
-    show_apply = (
-        not is_reseller_bot
-        and on(ui.get("show_reseller_apply"))
-        and "reseller_apply" in order_keys
-        and db_user.role == Role.USER.value
-    )
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_SUPPORT, push=push)
     await present_inline_only(
         message,
         text=text,
-        inline=support_hub_keyboard(
-            ui,
-            contact_rows=contact_rows or None,
-            include_reseller_apply=show_apply,
-        ),
+        inline=support_hub_keyboard(ui, contact_rows=contact_rows or None),
         **send_kw,
     )
     return

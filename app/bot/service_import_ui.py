@@ -6,12 +6,12 @@ from collections.abc import Mapping
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-from app.bot.keyboards import _ikb, _style
+from app.bot.keyboards import _ikb, _style, _t
 from app.services.service_import import SETTING_KEY
 from app.services.users import on
 
 ADD_CALLBACK = "svc:add"
-ADD_BUTTON_LABEL = "➕ افزودن سرویس قبلی"
+ADD_BUTTON_LABEL = "🔗 اتصال اشتراک قبلی"
 EMPTY_LIST_HINT = "اگر سرویسی بیرون از ربات گرفته‌اید، با لینک اشتراک آن را اضافه کنید."
 
 
@@ -24,7 +24,9 @@ def add_existing_row(ui: dict | None) -> list[InlineKeyboardButton]:
 
 
 def empty_services_keyboard(ui: dict | None) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[add_existing_row(ui)])
+    """Customer without services: buy a new one, or connect one bought before."""
+    buy = [_ikb(_t(ui, "btn_shop"), callback_data="shop:list", ui=ui, style=_style(ui, "shop", fallback="primary"), label_key="btn_shop")]
+    return InlineKeyboardMarkup(inline_keyboard=[buy, add_existing_row(ui)])
 
 
 async def announce_new_request(message, session, user, result) -> None:
