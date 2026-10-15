@@ -107,6 +107,7 @@ def create_dispatcher() -> Dispatcher:
         admin_settings,
         connection_status_admin,
         connection_status_admin_input,
+        connection_status,
         loyalty,
         nav_hubs,
         marketing_tools,
@@ -132,6 +133,7 @@ def create_dispatcher() -> Dispatcher:
 
     dp.include_router(start.router)
     dp.include_router(terms.router)
+    dp.include_router(connection_status.router)
     dp.include_router(connection_status_admin.router)
     # Reply-keyboard nav early so menu labels win over FSM amount parsers
     dp.include_router(reply_nav.router)

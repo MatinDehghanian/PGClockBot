@@ -1022,6 +1022,9 @@ SETTING_GROUPS = {
         ),
     ],
     "متن پیام‌ها": [
+        ("connection_status_title", "عنوان وضعیت اتصال مشتری", "text", "بدون متغیر"),
+        ("connection_status_empty", "فهرست وضعیت خالی", "textarea", "بدون متغیر"),
+        ("connection_status_error", "خطای دریافت وضعیت", "textarea", "بدون متغیر"),
         ("connection_status_admin_title", "عنوان مدیریت وضعیت اتصال", "text", "بدون متغیر"),
         ("connection_status_account_prompt", "دریافت حساب پایش", "textarea", "بدون متغیر"),
         ("connection_status_name_prompt", "دریافت نام عمومی هاست", "text", "بدون متغیر"),
@@ -1155,6 +1158,7 @@ SETTING_GROUPS = {
         ("btn_reseller_creds", "دکمه اطلاعات ورود نماینده", "text", "در ربات اصلی برای صاحب فروشگاه"),
         ("btn_admin", "دکمه ادمین", "text", ""),
         ("btn_connection_status_admin", "دکمه مدیریت وضعیت اتصال", "text", "هاب سیستم"),
+        ("btn_connection_status", "دکمه وضعیت اتصال مشتری", "text", "منوی اصلی"),
         ("btn_menu_home", "دکمه منوی اصلی (کیبورد)", "text", "خروج از پیش‌نمایش / خانه"),
         ("btn_adm_hub_ops", "گروه عملیات روزانه (ادمین)", "text", "هاب پنل ادمین"),
         ("btn_adm_hub_people", "گروه افراد (ادمین)", "text", "هاب پنل ادمین"),

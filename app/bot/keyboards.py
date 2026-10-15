@@ -400,6 +400,7 @@ def main_menu(
             )
         # miniapp: MenuButton Open only — never cataloged here
 
+    buttons.append(_ikb(_t(ui, "btn_connection_status"), callback_data="csp:refresh", ui=ui, label_key="btn_connection_status"))
     # compact = pair left-to-right like the web-panel live preview; classic = one per row
     full_width: list[InlineKeyboardButton] = []
     if role == Role.RESELLER.value:

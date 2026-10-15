@@ -12,6 +12,8 @@ tests/test_connection_monitor_worker.py
 tests/test_connection_monitor_queue.py
 tests/test_connection_monitor_admin.py
 tests/test_connection_status_admin_bot.py
+tests/test_connection_status_public.py
+tests/test_connection_status_public_bot.py
 tests/test_connection_status.py
 tests/test_connection_status_authz.py
 tests/test_connection_status_concurrency.py

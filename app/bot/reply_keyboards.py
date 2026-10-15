@@ -189,6 +189,7 @@ def _reply_user_entries(
                 )
         elif key == "services" and not has_services:
             continue
+    entries.append(("connection_status", _t(ui, "btn_connection_status")))
     if role == Role.RESELLER.value:
         entries.append((REPLY_ACTION_RESELLER, _t(ui, "btn_reseller")))
         if show_reseller_creds:
