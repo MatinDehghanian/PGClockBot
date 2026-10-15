@@ -19,6 +19,7 @@ from starlette.requests import Request
 from app.api import app as app_module
 from app.db import Base
 from app.db.models import BotUser, ResellerProfile
+from app.services import panel_update as pu
 from app.services.panel_inbox import build_inbox_context
 from app.services.setup_wizard import ensure_web_secret
 
@@ -36,7 +37,6 @@ UPDATE_ROUTES = (
     ("GET", "/update/status"),
     ("GET", "/update"),
     ("POST", "/update/start"),
-    ("POST", "/update/rollback"),
     ("POST", "/update/channel"),
     ("POST", "/update/clear"),
 )
@@ -75,11 +75,8 @@ class RoutesHarness(unittest.IsolatedAsyncioTestCase):
             patcher.start()
             self.addCleanup(patcher.stop)
         self.start_update = MagicMock(return_value={"ok": True})
-        self.start_rollback = MagicMock(return_value={"ok": True})
         for target, mock in (
             ("app.services.panel_update.start_update", self.start_update),
-            ("app.services.panel_update.start_rollback", self.start_rollback),
-            ("app.services.panel_update.start_rollback_to_version", self.start_rollback),
         ):
             patcher = patch(target, mock)
             patcher.start()
@@ -113,7 +110,6 @@ class UpdateAndBackupRoutesTests(RoutesHarness):
             self.assertEqual(response.status_code, 303, (method, path))
             self.assertEqual(response.headers["location"], "/home", (method, path))
         self.start_update.assert_not_called()
-        self.start_rollback.assert_not_called()
 
     async def test_other_staff_roles_cannot_use_them_either(self):
         for payload in (PRINCIPAL_SESSION, PG_STAFF_SESSION):
@@ -122,7 +118,26 @@ class UpdateAndBackupRoutesTests(RoutesHarness):
                 self.assertEqual(response.status_code, 303, (payload["role"], method, path))
                 self.assertTrue(response.headers["location"].startswith("/login"), (payload["role"], method, path))
         self.start_update.assert_not_called()
-        self.start_rollback.assert_not_called()
+
+    async def test_the_removed_rollback_endpoint_answers_nothing_even_for_the_owner(self):
+        for body in ({"version": "0.4.0"}, {"snapshot_id": "abc"}, {}):
+            response = await self.client.request(
+                "POST", "/update/rollback", json=body,
+                headers={"cookie": f"session={self.signer.dumps(OWNER_SESSION)}; csrf=token",
+                         "x-csrf-token": "token", "origin": "http://panel.test"},
+            )
+            self.assertIn(response.status_code, {404, 405}, body)
+        self.start_update.assert_not_called()
+
+    async def test_the_update_tab_offers_an_update_and_no_version_rollback(self):
+        context = pu._degraded_update_page_context()
+        with patch("app.services.panel_update.update_page_context", AsyncMock(return_value=context)):
+            response = await self.call(OWNER_SESSION, "GET", "/settings?tab=update")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('id="upd-start"', response.text)
+        self.assertIn('id="upd-channel"', response.text)
+        self.assertNotIn("rollback", response.text.lower())
+        self.assertNotIn("راه برگشت", response.text)
 
     async def test_without_a_session_nothing_runs(self):
         for method, path in UPDATE_ROUTES:

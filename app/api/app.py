@@ -97,6 +97,7 @@ from app.services.web_auth import (
     verify_web_admin,
 )
 from app.api.catalog_discounts import register_catalog_discounts
+from app.api.connection_status_pages import register_connection_status_pages
 from app.api.funnel_pages import register_funnel_pages
 from app.api.gift_code_pages import legacy_gift_modal_redirect, register_gift_code_pages
 from app.api.home_pages import register_home_pages
@@ -1490,6 +1491,7 @@ def create_api_app(lifespan=None) -> FastAPI:
     register_gift_code_pages(app, render=render, require_staff=require_staff, get_db=get_db)
     register_funnel_pages(app, render=render, require_staff=require_staff, get_db=get_db)
     register_service_import_pages(app, require_staff=require_staff, get_db=get_db)
+    register_connection_status_pages(app, render=render, require_staff=require_staff, get_db=get_db)
 
     @app.get("/settings/ssl/progress")
     async def ssl_progress(staff: dict = Depends(require_admin)):
@@ -4187,29 +4189,6 @@ def create_api_app(lifespan=None) -> FastAPI:
         if force:
             clear_idle_status()
         return start_update(target_version=target)
-
-    @app.post("/update/rollback")
-    async def update_rollback(
-        request: Request,
-        staff: dict = Depends(require_admin),
-    ):
-        from app.services.panel_update import start_rollback, start_rollback_to_version
-        from app.services.updates import fetch_recent_versions
-
-        body = {}
-        try:
-            body = await request.json()
-        except Exception:
-            body = {}
-        version = str((body or {}).get("version") or "").strip()
-        if version:
-            recent = await fetch_recent_versions(limit=3, force=True)
-            allowed = [str(x.get("version") or "") for x in recent]
-            return start_rollback_to_version(version, allowed=allowed)
-        snapshot_id = str((body or {}).get("snapshot_id") or "").strip()
-        if not snapshot_id:
-            return {"ok": False, "error": "نسخه بازگشت مشخص نشده"}
-        return start_rollback(snapshot_id)
 
     @app.get("/notifications", response_class=HTMLResponse)
     async def notifications_page(staff: dict = Depends(require_admin)):

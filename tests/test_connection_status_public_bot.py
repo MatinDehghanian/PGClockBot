@@ -6,11 +6,14 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
 
 from aiogram.types import CallbackQuery, Chat, Message, User
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.storage.base import StorageKey
+from aiogram.fsm.storage.memory import MemoryStorage
 
 from connection_monitor_support import MonitorDatabaseCase
 
 from app.bot import keyboards
-from app.bot.connection_status_public_ui import public_cursor, public_status_text
+from app.bot.connection_status_public_ui import MonitorPublicLabel, public_cursor, public_status_text
 from app.bot.connection_status_ui import monitor_text
 from app.bot.handlers import connection_status as handler
 from app.services.connection_status import PublicConnectionPage, PublicConnectionStatus
@@ -21,6 +24,24 @@ from app.services.users import DEFAULT_SETTINGS
 
 
 class PublicStatusBotTests(MonitorDatabaseCase):
+    async def test_customer_can_open_saved_status_by_tapping_the_menu_label(self) -> None:
+        ui = {**DEFAULT_SETTINGS, "btn_connection_status": "وضعیت هاست‌ها"}
+        message = self.message().model_copy(update={"text": ui["btn_connection_status"]})
+        storage = MemoryStorage()
+        self.addAsyncCleanup(storage.close)
+        state = FSMContext(storage, StorageKey(bot_id=1, chat_id=101, user_id=101))
+        await state.set_state("previous_input")
+        with patch("app.bot.connection_status_public_ui.get_all_settings", AsyncMock(return_value=ui)), \
+             patch.object(handler, "get_all_settings", AsyncMock(return_value=ui)), \
+             patch.object(handler, "public_connection_page", AsyncMock(return_value=PublicConnectionPage(()))) as read, \
+             patch.object(Message, "answer", new_callable=AsyncMock) as answer:
+            async with self.Session() as session:
+                self.assertTrue(await MonitorPublicLabel()(message, session))
+                await handler.connection_status(message, session, state)
+            self.assertEqual(read.await_count, 1)
+            self.assertIn(ui["connection_status_empty"], answer.call_args.args[0])
+            self.assertIsNone(await state.get_state())
+
     def message(self) -> Message:
         return Message(message_id=1, date=datetime.now(timezone.utc), chat=Chat(id=101, type="private"),
                        from_user=User(id=101, is_bot=False, first_name="Customer"), text="وضعیت")

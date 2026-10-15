@@ -41,6 +41,22 @@ class PanelUpdatePathEnvTests(unittest.TestCase):
         self.assertIn("ok", out)
 
 
+class NoVersionRollbackTests(unittest.TestCase):
+    def test_update_service_exposes_no_rollback_or_snapshot_entry_points(self):
+        for name in ("start_rollback", "start_rollback_to_version", "create_snapshot", "list_snapshots", "get_snapshot"):
+            self.assertFalse(hasattr(pu, name), name)
+
+    def test_update_page_context_carries_no_rollback_data(self):
+        context = pu._degraded_update_page_context()
+        for key in ("rollback_versions", "can_rollback", "snapshots"):
+            self.assertNotIn(key, context)
+
+    def test_default_status_has_no_mode_or_snapshot(self):
+        status = pu._default_status()
+        self.assertNotIn("mode", status)
+        self.assertNotIn("snapshot_id", status)
+
+
 class StaleUpdateStatusTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -112,6 +128,25 @@ class StaleUpdateStatusTests(unittest.TestCase):
         with patch("app.runtime.BOOT_ID", "same-boot"):
             out = pu.resolve_stale_update_status()
         self.assertTrue(out.get("awaiting_restart"))
+
+    def test_status_file_left_by_an_older_rollback_still_resolves(self):
+        self._write(
+            {
+                "state": "done",
+                "awaiting_restart": True,
+                "mode": "rollback",
+                "snapshot_id": "abc123",
+                "to_version": "1.7.35",
+                "pre_boot_id": "old-boot",
+                "finished_at": self._iso_ago(5),
+                "log": ["waiting"],
+                "step_key": "restart",
+            }
+        )
+        with patch("app.runtime.BOOT_ID", "new-boot"):
+            out = pu.resolve_stale_update_status()
+        self.assertEqual(out["state"], "idle")
+        self.assertFalse(out.get("awaiting_restart"))
 
     def test_resolve_times_out_awaiting(self):
         self._write(

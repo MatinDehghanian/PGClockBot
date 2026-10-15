@@ -3719,8 +3719,6 @@ const root = document.getElementById('upd-root');
   const toEl = document.getElementById('upd-to');
   const fromEl = document.getElementById('upd-from');
   const ops = document.getElementById('upd-ops');
-  const rollbackBtn = document.getElementById('rollback-start');
-  const rollbackSelect = document.getElementById('rollback-version');
   const channelSelect = document.getElementById('upd-channel');
   const migrationFlash = document.getElementById('upd-migration-flash');
   const versionFlash = document.getElementById('upd-version-flash');
@@ -3806,8 +3804,6 @@ const root = document.getElementById('upd-root');
         startBtn.textContent = retry ? 'تلاش دوباره' : (canStart ? 'شروع آپدیت' : 'آپدیتی نیست');
       }
     }
-    if (rollbackBtn) rollbackBtn.disabled = !!busy;
-    if (rollbackSelect) rollbackSelect.disabled = !!busy;
     if (channelSelect) channelSelect.disabled = !!busy || channelBusy;
     if (busy) setBlockLeave(true);
   }
@@ -4034,9 +4030,8 @@ const root = document.getElementById('upd-root');
         : (st.state === 'running' ? 'در حال اعمال…' : 'آماده');
     }
     if (stateEl) stateEl.textContent = st.message || st.state || '';
-    const modeLabel = st.mode === 'rollback' ? 'بازگشت' : 'آپدیت';
     if (st.state === 'running') {
-      setBusy(true, 'در حال ' + modeLabel + '…');
+      setBusy(true, 'در حال آپدیت…');
       showOps(true);
     } else if (st.state === 'error' || st.restart_required) {
       showOps(true);
@@ -4203,51 +4198,6 @@ const root = document.getElementById('upd-root');
       } finally {
         channelBusy = false;
         channelSelect.disabled = false;
-      }
-    });
-  }
-
-  if (rollbackBtn && rollbackSelect) {
-    rollbackBtn.addEventListener('click', async () => {
-      const ver = (rollbackSelect.value || '').trim();
-      if (!ver) return;
-      const ask = (window.panelConfirm
-        ? window.panelConfirm({
-            title: 'بازگشت نسخه',
-            message: 'بازگشت به نسخه v' + ver + '؟ سرویس بعد از اعمال دوباره راه‌اندازی می‌شود.',
-            warn: true,
-            confirmLabel: 'شروع بازگشت',
-          })
-        : Promise.resolve({ ok: window.confirm('بازگشت به نسخه v' + ver + '؟') }));
-      const result = await ask;
-      if (!result || !result.ok) return;
-      showOps(true);
-      setBusy(true, 'شروع بازگشت…');
-      waitingRestart = false;
-      sawDown = false;
-      baselineBoot = null;
-      baselinePid = null;
-      expectedVersion = ver;
-      if (toEl) toEl.textContent = ver;
-      try {
-        const tok = csrfToken();
-        const res = await fetch('/update/rollback', {
-          method: 'POST',
-          credentials: 'same-origin',
-          headers: updateFetchHeaders(),
-          body: JSON.stringify({ version: ver, csrf_token: tok || undefined })
-        });
-        const data = await readUpdateResponse(res);
-        if (!data.ok) {
-          if (stateEl) stateEl.textContent = data.error || 'بازگشت ممکن نشد';
-          setBusy(false);
-          return;
-        }
-        if (data.status) applyStatus(data.status);
-        startPolling();
-      } catch (e) {
-        if (stateEl) stateEl.textContent = 'خطا در شروع بازگشت — اتصال یا نشست را بررسی کنید';
-        setBusy(false);
       }
     });
   }

@@ -26,6 +26,7 @@ class AdminHubKeyboardTests(unittest.TestCase):
                 "nv:adm:product",
                 "nv:adm:marketing",
                 "nv:adm:system",
+                "cma:home:0",
                 "menu:home",
             ],
         )

@@ -9,9 +9,11 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
-from app.services.connection_monitor_settings import ACCOUNT_UNAVAILABLE, _validate_account, reveal_monitor_token
-from app.services.pasarguard import get_pg
-from app.services.pg_access import acl_from_admin_payload
+import httpx
+
+from app.services.connection_monitor_accounts import MonitorAccountError, panel_account_error, validate_monitor_account
+from app.services.connection_monitor_settings import reveal_monitor_token
+from app.services.pasarguard import PasarGuardError, get_pg
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,17 +35,17 @@ class MonitorCatalog:
 async def read_monitor_catalog(account: MonitorAccount) -> MonitorCatalog:
     pg = get_pg()
     token = await reveal_monitor_token(account.encrypted_token)
-    async with asyncio.timeout(10):
-        admin, user, hosts, inbounds = await asyncio.gather(
-            pg.get_current_admin(), pg.get_user_by_id(account.pg_user_id), pg.get_hosts(), pg.get_inbounds_details(),
-        )
-        if not isinstance(admin, dict) or not acl_from_admin_payload(admin)[2] or not isinstance(user, dict):
-            raise ValueError(ACCOUNT_UNAVAILABLE)
-        if not isinstance(user.get("username"), str) or not user["username"]:
-            raise ValueError(ACCOUNT_UNAVAILABLE)
-        user_id, current_token = _validate_account(user, username=account.username, expected_admin=str(admin.get("username") or "").lower())
-        revision = hashlib.sha256(f"{user_id}:{current_token}".encode()).hexdigest()
-        if user_id != account.pg_user_id or not secrets.compare_digest(token, current_token) or not secrets.compare_digest(revision, account.revision):
-            raise ValueError(ACCOUNT_UNAVAILABLE)
-        native = await pg.subscription_xray(token)
+    try:
+        async with asyncio.timeout(10):
+            user, hosts, inbounds = await asyncio.gather(
+                pg.get_user_by_id(account.pg_user_id), pg.get_hosts(), pg.get_inbounds_details(),
+            )
+            validated = validate_monitor_account(user, username=account.username)
+            revision = hashlib.sha256(f"{validated.user_id}:{validated.token}".encode()).hexdigest()
+            if (validated.user_id != account.pg_user_id or not secrets.compare_digest(token, validated.token)
+                    or not secrets.compare_digest(revision, account.revision)):
+                raise MonitorAccountError("account_changed")
+            native = await pg.subscription_xray(token)
+    except (PasarGuardError, httpx.HTTPError, TimeoutError) as exc:
+        raise panel_account_error(exc) from None
     return MonitorCatalog(hosts, inbounds, native, datetime.now(timezone.utc))

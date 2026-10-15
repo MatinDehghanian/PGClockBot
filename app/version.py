@@ -1,6 +1,6 @@
 """App version — bump when releasing so the panel can detect updates."""
 
-__version__ = "0.4.5"
+__version__ = "0.4.6"
 
 # GitHub repo used for update checks
 GITHUB_REPO = "Mrclocks/PGClockBot"
@@ -12,4 +12,3 @@ GITHUB_RELEASE_NOTES_URL = (
 )
 GITHUB_REPO_URL = f"https://github.com/{GITHUB_REPO}"
 GITHUB_RELEASES_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases"
-GITHUB_TAGS_API = f"https://api.github.com/repos/{GITHUB_REPO}/tags"

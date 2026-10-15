@@ -12,11 +12,13 @@ from connection_monitor_support import MonitorDatabaseCase
 
 from app.db.models import ConnectionMonitorState, ConnectionMonitorTarget, OrgPrincipal, UserService
 from app.services.connection_monitor_settings import (
-    ACCOUNT_UNAVAILABLE,
     monitor_settings,
     reveal_monitor_token,
     set_monitor_account,
 )
+from app.services.connection_monitor_accounts import MonitorAccountError
+from app.services.connection_monitor_errors import monitor_error_message
+from app.services.pasarguard import PasarGuardError
 from app.services.secret_box import decrypt_secret
 
 
@@ -35,12 +37,56 @@ class MonitorSettingsTests(MonitorDatabaseCase):
         self.panel = SimpleNamespace(get_user_by_username=AsyncMock(return_value=panel_account()),
                                      get_current_admin=AsyncMock(return_value={"role": {"id": 1, "is_owner": True}, "username": "panel-owner"}))
         for patcher in [
-            patch("app.services.connection_monitor_settings.get_pg", return_value=self.panel),
-            patch("app.services.connection_monitor_settings.get_settings", return_value=SimpleNamespace(pg_username="panel-owner")),
+            patch("app.services.connection_monitor_accounts.get_pg", return_value=self.panel),
             patch("app.services.secret_box._root_secret", return_value=b"synthetic-monitor-tests-secret-never-production"),
         ]:
             patcher.start()
             self.addCleanup(patcher.stop)
+
+    async def test_setup_accepts_accessible_test_user_without_panel_owner_endpoint(self) -> None:
+        self.panel.get_current_admin.side_effect = PermissionError("Owner endpoint is unavailable")
+        self.panel.get_user_by_username.return_value = panel_account(admin={"username": "another-admin"})
+        async with self.Session() as session:
+            result = await set_monitor_account(session, self.access, username="monitor-only")
+        self.assertTrue(result.has_account)
+        self.panel.get_current_admin.assert_not_awaited()
+
+    async def test_setup_keeps_the_canonical_panel_username_when_case_differs(self) -> None:
+        self.panel.get_user_by_username.return_value = panel_account(username="Monitor-Only", admin=None)
+        async with self.Session() as session:
+            await set_monitor_account(session, self.access, username="monitor-only")
+            stored = await session.scalar(select(ConnectionMonitorState))
+            self.assertEqual(stored.pg_username, "Monitor-Only")
+
+    async def test_setup_returns_specific_safe_panel_errors(self) -> None:
+        for status, code in ((404, "not_found"), (401, "panel_denied"), (403, "panel_denied"), (503, "panel_unavailable")):
+            self.panel.get_user_by_username.side_effect = PasarGuardError(TOKEN, status, {"detail": TOKEN})
+            async with self.Session() as session:
+                with self.subTest(status=status), self.assertRaises(MonitorAccountError) as caught:
+                    await set_monitor_account(session, self.access, username="monitor-only")
+            self.assertEqual(caught.exception.code, code)
+            self.assertNotIn(TOKEN, monitor_error_message(caught.exception))
+            self.assertNotEqual(monitor_error_message(caught.exception), monitor_error_message(RuntimeError(TOKEN)))
+
+    async def test_setup_explains_inactive_expired_and_exhausted_test_users(self) -> None:
+        for changes, code in (({"status": "disabled"}, "inactive"),
+                              ({"expire": "2020-01-01T00:00:00Z"}, "expired"),
+                              ({"used_traffic": 1, "data_limit": 1}, "traffic_exhausted"),
+                              ({"subscription_url": ""}, "invalid_subscription")):
+            self.panel.get_user_by_username.return_value = panel_account(**changes)
+            async with self.Session() as session:
+                with self.subTest(code=code), self.assertRaises(MonitorAccountError) as caught:
+                    await set_monitor_account(session, self.access, username="monitor-only")
+            self.assertEqual(caught.exception.code, code)
+
+    async def test_test_user_role_is_not_used_to_bypass_customer_account_exclusion(self) -> None:
+        self.panel.get_user_by_username.return_value = panel_account(admin=None)
+        async with self.Session() as session:
+            session.add(UserService(bot_user_id=5, pg_username="MONITOR-ONLY", remark="sold"))
+            await session.commit()
+            with self.assertRaises(MonitorAccountError) as caught:
+                await set_monitor_account(session, self.access, username="monitor-only")
+            self.assertEqual(caught.exception.code, "customer_account")
 
     async def test_setup_is_disabled_by_default_and_never_stores_or_returns_plaintext(self) -> None:
         async with self.Session() as session:
@@ -62,34 +108,18 @@ class MonitorSettingsTests(MonitorDatabaseCase):
             await set_monitor_account(session, self.access, username="monitor-only")
             self.assertFalse(session.in_transaction())
 
-    async def test_api_key_owner_without_configured_username_uses_authenticated_owner_identity(self) -> None:
-        with patch("app.services.connection_monitor_settings.get_settings", return_value=SimpleNamespace(pg_username="")):
+    async def test_panel_role_does_not_restrict_an_accessible_test_user(self) -> None:
+        for admin in ({"is_owner": False}, {"role": {"is_owner": False}, "is_owner": True}):
+            self.panel.get_current_admin.return_value = admin
             async with self.Session() as session:
                 result = await set_monitor_account(session, self.access, username="monitor-only")
-        self.assertTrue(result.has_account)
-        self.assertEqual(result.pg_user_id, 900)
-
-    async def test_panel_identity_without_owner_capability_cannot_attach_an_account(self) -> None:
-        self.panel.get_current_admin.return_value = {"is_owner": False, "username": "panel-owner"}
-        async with self.Session() as session:
-            with self.assertRaisesRegex(ValueError, ACCOUNT_UNAVAILABLE):
-                await set_monitor_account(session, self.access, username="monitor-only")
-        self.panel.get_user_by_username.assert_not_called()
-
-    async def test_limited_nested_role_overrides_legacy_owner_flags_during_setup(self) -> None:
-        self.panel.get_current_admin.return_value = {
-            "username": "panel-owner", "is_owner": True, "is_sudo": True,
-            "role": {"id": 2, "is_owner": False, "permissions": {}},
-        }
-        async with self.Session() as session:
-            with self.assertRaisesRegex(ValueError, ACCOUNT_UNAVAILABLE):
-                await set_monitor_account(session, self.access, username="monitor-only")
-        self.panel.get_user_by_username.assert_not_called()
+            self.assertTrue(result.has_account)
+        self.panel.get_current_admin.assert_not_awaited()
 
     async def test_hostile_account_names_never_become_panel_paths(self) -> None:
         async with self.Session() as session:
             for username in ("../admin", "user/other", "user?token=secret", "user\\name", "user\nname"):
-                with self.subTest(username=username), self.assertRaisesRegex(ValueError, ACCOUNT_UNAVAILABLE):
+                with self.subTest(username=username), self.assertRaises(ValueError):
                     await set_monitor_account(session, self.access, username=username)
         self.panel.get_current_admin.assert_not_called()
         self.panel.get_user_by_username.assert_not_called()
@@ -118,7 +148,7 @@ class MonitorSettingsTests(MonitorDatabaseCase):
 
         self.panel.get_user_by_username.side_effect = revoke
         async with self.Session() as session:
-            with self.assertRaisesRegex(ValueError, ACCOUNT_UNAVAILABLE):
+            with self.assertRaises(ValueError):
                 await set_monitor_account(session, self.access, username="monitor-only")
             self.assertFalse(session.in_transaction())
         async with self.Session() as session:
@@ -132,7 +162,7 @@ class MonitorSettingsTests(MonitorDatabaseCase):
                 await session.commit()
                 service_id = service.id
             async with self.Session() as session:
-                with self.assertRaisesRegex(ValueError, ACCOUNT_UNAVAILABLE):
+                with self.assertRaises(ValueError):
                     await set_monitor_account(session, self.access, username="monitor-only")
                 self.assertFalse(session.in_transaction())
             async with self.Session() as session:
@@ -144,7 +174,7 @@ class MonitorSettingsTests(MonitorDatabaseCase):
     async def test_invalid_account_states_and_numbers_fail_without_leaking_payload(self) -> None:
         changes = [
             {"status": "on_hold"}, {"status": "disabled"}, {"id": True}, {"id": 0}, {"id": 2147483648},
-            {"username": "different-account"}, {"admin": {"username": "other-shop"}}, {"admin": None},
+            {"username": "different-account"},
             {"used_traffic": True}, {"used_traffic": -1}, {"data_limit": -1}, {"data_limit": 2**63},
             {"used_traffic": 10, "data_limit": 10}, {"expire": "2020-01-01T00:00:00Z"},
             {"expire": float("nan")}, {"expire": 10**100}, {"expire": "2099-01-01T00:00:00"},
@@ -154,7 +184,7 @@ class MonitorSettingsTests(MonitorDatabaseCase):
             with self.subTest(change=change):
                 self.panel.get_user_by_username.return_value = panel_account(**change)
                 async with self.Session() as session:
-                    with self.assertRaisesRegex(ValueError, ACCOUNT_UNAVAILABLE) as caught:
+                    with self.assertRaises(ValueError) as caught:
                         await set_monitor_account(session, self.access, username="monitor-only")
                     self.assertNotIn(TOKEN, str(caught.exception))
 
@@ -166,7 +196,7 @@ class MonitorSettingsTests(MonitorDatabaseCase):
                 await session.commit()
                 service_id = service.id
             async with self.Session() as session:
-                with self.assertRaisesRegex(ValueError, ACCOUNT_UNAVAILABLE):
+                with self.assertRaises(ValueError):
                     await set_monitor_account(session, self.access, username="monitor-only")
             async with self.Session() as session:
                 service = await session.get(UserService, service_id)
@@ -178,17 +208,19 @@ class MonitorSettingsTests(MonitorDatabaseCase):
     async def test_panel_timeout_is_a_safe_setup_failure(self) -> None:
         self.panel.get_user_by_username.side_effect = TimeoutError(TOKEN)
         async with self.Session() as session:
-            with self.assertRaisesRegex(ValueError, ACCOUNT_UNAVAILABLE) as caught:
+            with self.assertRaises(ValueError) as caught:
                 await set_monitor_account(session, self.access, username="monitor-only")
             self.assertNotIn(TOKEN, str(caught.exception))
+            self.assertIsInstance(caught.exception, MonitorAccountError)
+            self.assertEqual(caught.exception.code, "panel_timeout")
 
     async def test_unreadable_or_unencryptable_secret_stops_setup(self) -> None:
         with patch("app.services.connection_monitor_settings.encrypt_secret", return_value=None):
             async with self.Session() as session:
-                with self.assertRaisesRegex(ValueError, ACCOUNT_UNAVAILABLE):
+                with self.assertRaises(ValueError):
                     await set_monitor_account(session, self.access, username="monitor-only")
         with patch("app.services.connection_monitor_settings.decrypt_secret", return_value=None):
-            with self.assertRaisesRegex(ValueError, ACCOUNT_UNAVAILABLE):
+            with self.assertRaises(ValueError):
                 await reveal_monitor_token("unreadable")
 
     async def test_repeated_settings_initialization_keeps_one_state(self) -> None:

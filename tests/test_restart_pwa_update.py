@@ -62,8 +62,7 @@ class UpdateWiringTests(unittest.TestCase):
     def test_update_api_enabled(self):
         src = Path("app/api/app.py").read_text(encoding="utf-8")
         self.assertIn("start_update", src)
-        self.assertIn("start_rollback", src)
-        self.assertIn("start_rollback_to_version", src)
+        self.assertNotIn("start_rollback", src)
         self.assertNotIn("آپدیت از داخل پنل حذف شده است", src)
         from jinja2 import Environment, FileSystemLoader
 
@@ -71,7 +70,7 @@ class UpdateWiringTests(unittest.TestCase):
 
         paths = {getattr(route, "path", "") for route in app_module.create_api_app().routes}
         self.assertIn("/update/start", paths)
-        self.assertIn("/update/rollback", paths)
+        self.assertNotIn("/update/rollback", paths)
         # Restart confirmation needs version/boot_id/pid — public /health is minimal
         self.assertIn("/health/detail", paths)
 
@@ -80,10 +79,9 @@ class UpdateWiringTests(unittest.TestCase):
             update_info={"update_available": True, "remote_version": "9.9.9", "checked": True, "label": ""},
             status={"state": "idle"},
             local_version="0.4.0",
-            rollback_versions=[{"version": "0.3.0", "label": "0.3.0"}],
         )
         self.assertIn('id="upd-start"', html)
-        self.assertIn("rollback-version", html)
+        self.assertNotIn("rollback", html)
 
     def test_pwa_tab_wired(self):
         from app.services.users import PANEL_SETTINGS_TABS, SETTINGS_TABS, TAB_SETTING_GROUPS
