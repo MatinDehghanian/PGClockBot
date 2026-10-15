@@ -12,6 +12,8 @@ from aiogram.types import CallbackQuery, Chat, Message, User
 
 from connection_monitor_support import MonitorDatabaseCase
 
+from app.bot import keyboards
+from app.bot.nav_inline import admin_groups_hub_keyboard
 from app.bot.connection_status_admin_ui import parse_monitor_callback
 from app.bot.connection_status_admin_ui import monitor_error
 from app.services.connection_monitor_accounts import ACCOUNT_MESSAGES, MonitorAccountError
@@ -22,9 +24,41 @@ from app.bot.handlers import connection_status_admin_input as forms
 from app.bot.nav_input import CANCEL_CODE_KEY
 from app.db.models import BotUser, ConnectionMonitorTarget
 from app.services.connection_monitor_admin import MonitorHostPage
+from app.services.users import DEFAULT_SETTINGS
 
 
 class MonitorAdminBotTests(MonitorDatabaseCase):
+    async def test_admin_panel_has_a_direct_status_button_in_both_navigation_modes(self) -> None:
+        ui = {**DEFAULT_SETTINGS, "btn_connection_status_admin": "تست هاست‌ها"}
+        reply = keyboards.admin_reply_keyboard(ui)
+        self.assertIn("تست هاست‌ها", [button.text for row in reply.keyboard for button in row])
+        inline = admin_groups_hub_keyboard(ui)
+        entry = next(button for row in inline.inline_keyboard for button in row if button.text == "تست هاست‌ها")
+        self.assertEqual(entry.callback_data, "cma:home:0")
+        with patch.object(CallbackQuery, "answer", new_callable=AsyncMock), \
+             patch.object(admin, "bot_monitor_access", AsyncMock(return_value=self.access)), \
+             patch.object(admin, "show_monitor_home", new_callable=AsyncMock) as show:
+            async with self.Session() as session:
+                await admin.monitor_admin_callback(self.callback(entry.callback_data), session, self.user, self.state)
+            self.assertEqual(show.await_count, 1)
+            self.assertEqual(show.call_args.kwargs, {"after_id": 0})
+
+    async def test_customer_and_reseller_home_do_not_offer_private_status_controls(self) -> None:
+        for role in ("user", "reseller"):
+            with self.subTest(role=role):
+                reply = keyboards.main_reply_keyboard(role, ui=dict(DEFAULT_SETTINGS))
+                self.assertNotIn(DEFAULT_SETTINGS["btn_connection_status_admin"], [button.text for row in reply.keyboard for button in row])
+
+    async def test_direct_admin_button_rechecks_access_before_reading_private_status(self) -> None:
+        with patch.object(CallbackQuery, "answer", new_callable=AsyncMock), \
+             patch.object(Message, "answer", new_callable=AsyncMock), \
+             patch.object(admin, "bot_monitor_access", AsyncMock(side_effect=ValueError("دسترسی مجاز نیست"))) as authorize, \
+             patch.object(admin, "show_monitor_home", new_callable=AsyncMock) as show:
+            async with self.Session() as session:
+                await admin.monitor_admin_callback(self.callback("cma:home:0"), session, self.user, self.state, is_reseller_bot=True)
+            self.assertTrue(authorize.call_args.kwargs["is_reseller_bot"])
+            show.assert_not_called()
+
     async def test_old_default_menu_button_still_opens_settings_without_overriding_custom_labels(self) -> None:
         old_button = self.message.model_copy(update={"text": LEGACY_MONITOR_TEXTS["btn_connection_status_admin"]})
         matcher = MonitorAdminLabel()
