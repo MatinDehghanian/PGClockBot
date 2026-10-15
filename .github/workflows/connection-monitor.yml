@@ -18,6 +18,8 @@ on:
       - 'tests/test_connection_*.py'
       - 'tests/test_xray_probe.py'
       - 'tests/test_scheduler_background_jobs.py'
+      - 'tests/test_admin_marketing_hub.py'
+      - 'tests/test_nav_wave_d_admin_hubs.py'
       - 'tests/connection_monitor_support.py'
       - 'tests/fixtures/connection_monitor_catalog.json'
       - 'requirements*.txt'
@@ -55,7 +57,7 @@ jobs:
           cache: pip
       - run: pip install -r requirements-dev.txt
       - name: Check scoped monitoring behavior on PostgreSQL
-        run: python -m pytest tests/test_connection_*.py tests/test_xray_probe.py tests/test_scheduler_background_jobs.py -q -p no:cacheprovider
+        run: python -m pytest tests/test_connection_*.py tests/test_xray_probe.py tests/test_scheduler_background_jobs.py tests/test_admin_marketing_hub.py tests/test_nav_wave_d_admin_hubs.py -q -p no:cacheprovider
 
   linux-core:
     runs-on: ubuntu-latest
