@@ -6,7 +6,7 @@
 <div class="page-head">
   <div>
     {{ page_title('activity', 'تست و وضعیت اتصال') }}
-    <p class="muted">هاست‌های موردنظر را تست کنید و انتخاب کنید کدام نتیجه در ربات به کاربران نمایش داده شود.</p>
+    <p class="muted">برای شروع، Test user را ثبت کنید، هاست اضافه کنید و بعد تست‌ها را روشن کنید.</p>
   </div>
   <a class="btn btn-ghost" href="/connection-status">تازه‌سازی نتیجه‌ها</a>
 </div>
@@ -17,7 +17,7 @@
 
 <div class="connection-setup">
   <section class="card" aria-labelledby="test-user-title">
-    <h2 id="test-user-title">۱. تنظیم Test user</h2>
+    <h2 id="test-user-title">تنظیم Test user</h2>
     <p>حساب فعلی: {% if page.settings.has_account %}<bdi dir="ltr">{{ page.settings.username }}</bdi>{% else %}<span class="badge neutral">تنظیم نشده</span>{% endif %}</p>
     <p class="muted">یک user فعال در PasarGuard انتخاب کنید که مخصوص تست باشد و به سرویس مشتری وصل نباشد. Owner بودن اکانت پنل لازم نیست؛ API ربات باید به این user دسترسی داشته باشد.</p>
     <form method="post" action="/connection-status/account" class="form-stack"
@@ -31,7 +31,7 @@
     </form>
   </section>
   <section class="card" aria-labelledby="test-runtime-title">
-    <h2 id="test-runtime-title">۲. تست خودکار</h2>
+    <h2 id="test-runtime-title">تست خودکار</h2>
     <p>وضعیت: <span class="badge {{ 'ok' if page.settings.enabled else 'neutral' }}">{{ 'روشن' if page.settings.enabled else 'خاموش' }}</span></p>
     <p class="muted">بعد از ثبت Test user و اضافه کردن هاست، تست‌ها را روشن کنید. بررسی معمولاً هر یک دقیقه انجام می‌شود. «تازه‌سازی» فقط نتیجهٔ ذخیره‌شده را نمایش می‌دهد.</p>
     {% if not binary_configured %}
@@ -47,7 +47,7 @@
 </div>
 
 <section class="card" id="host-picker" aria-labelledby="host-picker-title">
-  <h2 id="host-picker-title">۳. انتخاب هاست‌ها</h2>
+  <h2 id="host-picker-title">انتخاب هاست‌ها</h2>
   <p class="muted">فقط هاست‌های فعال پنل قابل انتخاب‌اند. هر هاست تازه در ابتدا فقط برای ادمین نمایش داده می‌شود. سقف هر دور ۱۲ مسیر است؛ هاست چندآدرسی چند مسیر حساب می‌شود.</p>
   {% if page.settings.has_account %}<a class="btn btn-ghost" href="/connection-status?hosts=1#host-picker">دریافت هاست‌های فعال از پنل</a>{% else %}<p class="muted">ابتدا Test user را ثبت کنید.</p>{% endif %}
   {% if host_error %}<div class="flash warn" role="alert">{{ host_error }}</div>{% endif %}

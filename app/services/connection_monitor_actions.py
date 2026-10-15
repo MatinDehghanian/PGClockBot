@@ -43,7 +43,7 @@ async def update_monitor_target(session: AsyncSession, access: MonitorAccess, *,
         preferences = MonitorPreferences(host_id=target, **changes.model_dump())
     except ValidationError:
         raise ValueError(INVALID_PREFERENCES) from None
-    return await save_monitor_preferences(session, access, preferences)
+    return await save_monitor_preferences(session, access, preferences, expected_target_id=target_id)
 
 
 async def select_monitor_host(session: AsyncSession, access: MonitorAccess, *, host_id: int) -> int:
@@ -82,4 +82,4 @@ async def edit_monitor_target(session: AsyncSession, access: MonitorAccess, *, t
         preferences = MonitorPreferences.model_validate(values)
     except ValidationError:
         raise ValueError(INVALID_PREFERENCES) from None
-    return await save_monitor_preferences(session, access, preferences)
+    return await save_monitor_preferences(session, access, preferences, expected_target_id=target_id)

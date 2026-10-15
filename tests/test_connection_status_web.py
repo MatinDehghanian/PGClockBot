@@ -19,6 +19,9 @@ from app.api.app import create_api_app, render
 from app.api.connection_status_pages import register_connection_status_pages
 from app.db.models import ConnectionMonitorSnapshot, ConnectionMonitorState, ConnectionMonitorTarget, OrgPrincipal, UserService
 from app.services.connection_monitor_settings import set_monitor_account
+from app.services.connection_monitor_preferences import pause_monitor_target, save_monitor_preferences
+from app.services.connection_monitor_access import MonitorAccess
+from app.services.connection_monitor_preferences import MonitorPreferences
 from app.services.connection_status import public_connection_page
 from app.services.connection_status_texts import LEGACY_MONITOR_TEXTS, MONITOR_TEXT_DEFAULTS
 from app.services.users import clear_settings_cache, get_all_settings, set_settings_bulk
@@ -153,6 +156,24 @@ class MonitorWebTests(MonitorDatabaseCase):
         async with self.Session() as session:
             target = await session.get(ConnectionMonitorTarget, target_id)
             self.assertEqual((target.display_order, target.public_name, target.is_public), (5, "", False))
+
+    async def test_a_stale_edit_form_cannot_restart_a_host_paused_during_the_request(self) -> None:
+        target_id = await self.select_host()
+
+        async def pause_before_save(session: AsyncSession, access: MonitorAccess, preferences: MonitorPreferences,
+                                    *, expected_target_id: int | None = None) -> int:
+            async with self.Session() as other:
+                await pause_monitor_target(other, access, target_id=target_id)
+            return await save_monitor_preferences(session, access, preferences, expected_target_id=expected_target_id)
+
+        with patch("app.services.connection_monitor_actions.save_monitor_preferences", side_effect=pause_before_save):
+            response = await self.client.post(f"/connection-status/targets/{target_id}", data={
+                "public_name": "stale edit", "display_order": "9", "is_public": "0",
+            })
+        self.assertIn("error=", response.headers["location"])
+        async with self.Session() as session:
+            target = await session.get(ConnectionMonitorTarget, target_id)
+            self.assertEqual((target.test_enabled, target.is_public, target.public_name), (False, False, ""))
 
     async def test_reseller_customer_legacy_admin_and_disabled_owner_cannot_read_or_mutate(self) -> None:
         for staff in ({"role": "reseller", "bot_user_id": 2, "permissions": ["connection_status_manage"]},
