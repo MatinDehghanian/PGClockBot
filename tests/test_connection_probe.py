@@ -33,6 +33,12 @@ class UnreadBody(httpx.AsyncByteStream):
 
 
 class ProbeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_real_http_proxy_transport_initializes_and_closes_without_sending_requests(self) -> None:
+        client = await asyncio.to_thread(probe_client, port=18080)
+        async with client:
+            self.assertFalse(client.is_closed)
+        self.assertTrue(client.is_closed)
+
     async def test_204_is_success_without_reading_body_and_closes_stream(self) -> None:
         body = UnreadBody()
         requests: list[httpx.Request] = []
