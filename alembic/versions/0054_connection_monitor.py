@@ -1,7 +1,7 @@
 """Persist selected-host monitoring without enabling probes or publication.
 
-Revision ID: 0052_connection_monitor
-Revises: 0051_service_import
+Revision ID: 0054_connection_monitor
+Revises: 0053_service_import_requests
 """
 
 from __future__ import annotations
@@ -10,8 +10,8 @@ import sqlalchemy as sa
 from alembic import op
 
 
-revision: str = "0052_connection_monitor"
-down_revision: str | None = "0051_service_import"
+revision: str = "0054_connection_monitor"
+down_revision: str | None = "0053_service_import_requests"
 branch_labels: str | None = None
 depends_on: str | None = None
 

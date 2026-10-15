@@ -392,6 +392,6 @@ rollback عملیاتی با خاموش کردن worker و انتشار و clean
 مرحلهٔ صفر با قرارداد و baseline ثبت‌شده تکمیل شد. مرحلهٔ یک نیز انجام شد:
 نگاشت و fixtureهای دو هاست مستقل با ۷۰ تست و validation رسمی core تکمیل شدند؛
 [ماتریس سازگاری](CONNECTION_STATUS_COMPATIBILITY.md) محدودیت‌های دقیق را ثبت می‌کند.
-مرحلهٔ ۲ هم با migration `0052_connection_monitor`، مجوز Owner، مرجع رمز‌شدهٔ حساب و
+مرحلهٔ ۲ هم با migration `0054_connection_monitor`، مجوز Owner، مرجع رمز‌شدهٔ حساب و
 leaseهای runtime/target روی SQLite و PostgreSQL تکمیل شد. واحد کار بعد مرحلهٔ ۳،
 مدیریت process هسته است؛ فرم و دکمه‌ها پس از runner ساخته می‌شوند.

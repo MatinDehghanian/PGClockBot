@@ -23,7 +23,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class MonitorMigrationTests(unittest.IsolatedAsyncioTestCase):
     async def test_upgrade_repeat_constraints_downgrade_preserves_existing_rows(self) -> None:
-        spec = importlib.util.spec_from_file_location("monitor_migration", ROOT / "alembic/versions/0052_connection_monitor.py")
+        spec = importlib.util.spec_from_file_location("monitor_migration", ROOT / "alembic/versions/0054_connection_monitor.py")
         migration = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(migration)
         with tempfile.TemporaryDirectory(prefix="pgclock-monitor-migration-") as folder:
