@@ -62,8 +62,7 @@ class UpdateWiringTests(unittest.TestCase):
     def test_update_api_enabled(self):
         src = Path("app/api/app.py").read_text(encoding="utf-8")
         self.assertIn("start_update", src)
-        self.assertIn("start_rollback", src)
-        self.assertIn("start_rollback_to_version", src)
+        self.assertNotIn("start_rollback", src)
         self.assertNotIn("آپدیت از داخل پنل حذف شده است", src)
         tpl = Path("app/web/templates/_settings_update.html").read_text(encoding="utf-8")
         self.assertIn("/update/start", tpl)
@@ -72,8 +71,7 @@ class UpdateWiringTests(unittest.TestCase):
         self.assertNotIn("fetch('/health?", tpl)
         self.assertNotIn('fetch("/health?', tpl)
         self.assertIn("upd-start", tpl)
-        self.assertIn("rollback-version", tpl)
-        self.assertIn("/update/rollback", tpl)
+        self.assertNotIn("/update/rollback", tpl)
 
     def test_pwa_tab_wired(self):
         from app.services.users import PANEL_SETTINGS_TABS, SETTINGS_TABS, TAB_SETTING_GROUPS

@@ -4589,7 +4589,7 @@ form.settings-form > .actions.sticky-actions,
   font-size: 13px;
   line-height: 1.5;
 }
-.rollback-row {
+.update-field-row {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
@@ -4606,7 +4606,7 @@ form.settings-form > .actions.sticky-actions,
   font-size: 12px;
   line-height: 1.5;
 }
-.rollback-field {
+.update-field {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
@@ -4616,7 +4616,7 @@ form.settings-form > .actions.sticky-actions,
   font-size: 13px;
   color: var(--muted-fg);
 }
-.rollback-field select {
+.update-field select {
   width: 100%;
   margin-top: 0;
   /* RTL panel: value on the right (start), chevron on the opposite (physical left) */
@@ -4627,12 +4627,12 @@ form.settings-form > .actions.sticky-actions,
   padding-right: var(--space-2);
   background-position: left var(--space-2) center;
 }
-.rollback-row > .btn {
+.update-field-row > .btn {
   flex: 0 0 auto;
   align-self: flex-end;
 }
 @media (max-width: 560px) {
-  .rollback-row > .btn { width: 100%; }
+  .update-field-row > .btn { width: 100%; }
 }
 .snap-list { display: flex; flex-direction: column; gap: var(--space-1); margin-top: var(--space-1); }
 .snap-row {

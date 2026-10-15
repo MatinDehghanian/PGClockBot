@@ -12,4 +12,3 @@ GITHUB_RELEASE_NOTES_URL = (
 )
 GITHUB_REPO_URL = f"https://github.com/{GITHUB_REPO}"
 GITHUB_RELEASES_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases"
-GITHUB_TAGS_API = f"https://api.github.com/repos/{GITHUB_REPO}/tags"

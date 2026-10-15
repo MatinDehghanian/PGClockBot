@@ -78,7 +78,7 @@ def set_update_channel(channel: object | None) -> str:
 
 
 def set_deployed_channel(channel: object | None) -> str:
-    """Persist DEPLOYED_CHANNEL after a successful channel deploy/rollback."""
+    """Persist DEPLOYED_CHANNEL after a successful channel deploy."""
     ch = normalize_channel(channel)
     from app.config import get_settings
     from app.services.setup_wizard import update_env_keys
