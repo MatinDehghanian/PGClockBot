@@ -78,7 +78,7 @@ def register_connection_status_pages(app: FastAPI, *, render: Callable, require_
         })
 
     @app.post(STATUS_PATH + "/account")
-    async def connection_account(username: Annotated[str, Form(max_length=128)],
+    async def connection_account(username: Annotated[str, Form()],
                                  access: MonitorAccess = Depends(require_access), session: AsyncSession = Depends(get_db)) -> Response:
         return await _action_result(session, set_monitor_account(session, access, username=username.strip()))
 

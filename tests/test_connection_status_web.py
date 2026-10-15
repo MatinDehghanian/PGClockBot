@@ -255,6 +255,15 @@ class MonitorWebTests(MonitorDatabaseCase):
         self.assertIn("یک user جدا", response.text)
         self.assertNotIn(TOKEN, response.text)
 
+    async def test_pasting_a_long_subscription_link_never_echoes_it_in_validation_errors(self) -> None:
+        response = await self.client.post("/connection-status/account", data={
+            "username": f"https://panel.example/sub/{TOKEN}" + "x" * 128,
+        })
+        self.assertNotIn(TOKEN, response.text)
+        self.assertEqual(response.status_code, 303)
+        self.assertNotIn(TOKEN, response.headers["location"])
+        self.panel.get_user_by_username.assert_not_awaited()
+
     async def test_old_default_texts_are_readable_and_custom_settings_are_preserved(self) -> None:
         async with self.Session() as session:
             await set_settings_bulk(session, {**LEGACY_MONITOR_TEXTS, "menu_order": "shop,services", "connection_status_name_prompt": "نام دلخواه"})
