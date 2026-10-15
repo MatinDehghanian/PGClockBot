@@ -4,6 +4,8 @@
 tests/test_connection_monitor_catalog.py
 tests/test_connection_monitor_config.py
 tests/test_xray_probe.py
+tests/test_connection_probe.py
+tests/test_connection_status_policy.py
 tests/test_connection_status.py
 tests/test_connection_status_authz.py
 tests/test_connection_status_concurrency.py
