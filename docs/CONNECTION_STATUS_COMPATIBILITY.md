@@ -1,6 +1,7 @@
 # سازگاری نگاشت وضعیت اتصال
 
-مرحلهٔ ۱ روی Xray **26.3.27**، commit `d2758a0`، در macOS/arm64 اعتبارسنجی شد.
+قابلیت **Experimental** و پیش‌فرض خاموش است. syntax و startup کانفیگ مصنوعی با Xray
+**26.3.27**، commit `d2758a0`، روی macOS/arm64 و Linux/amd64 تأیید شده‌اند؛ live relay تأیید نشده است.
 منبع binary، [release رسمی v26.3.27](https://github.com/XTLS/Xray-core/releases/tag/v26.3.27)
 و فایل `Xray-macos-arm64-v8a.zip` است. SHA-256 آرشیو پیش از استخراج و اجرا با digest
 release تطبیق داده شد:
@@ -26,7 +27,7 @@ TLS/Reality از outbound معتبر خود پنل حفظ می‌شوند.
 پیش‌فرض نامعلوم، انتخاب چند پورت، wildcard، placeholder و چند SNI تأیید نشده‌اند.
 نبود این پیش‌نیازها نتیجهٔ `not_ready` است؛ ربات تنظیم هاست پنل را تغییر نمی‌دهد.
 
-| ترکیب | شواهد مرحلهٔ ۱ | محدودیت |
+| ترکیب | شواهد سازگاری | محدودیت |
 | --- | --- | --- |
 | VLESS + Reality + TCP خام | fixture، حفظ UUID/flow/key/SNI/short ID و `xray run -test` موفق | encryption=`none`؛ flow خالی یا Vision؛ بدون dialer/mux/fragment |
 | VLESS + TLS + WebSocket | fixture، حفظ SNI/Host/path/ALPN و `xray run -test` موفق | TLS verification روشن؛ flow خالی؛ تنظیم‌های پیشرفته خارج ماتریس |
@@ -44,17 +45,13 @@ TLS/Reality از outbound معتبر خود پنل حفظ می‌شوند.
 بیش از ۱۲ endpoint، تمام انتخاب آماده را با دلیل ظرفیت متوقف می‌کند؛ حذف بی‌صدای هدف نداریم.
 
 فایل `tests/fixtures/connection_monitor_catalog.json` کاملاً مصنوعی است؛ UUID آن حساب
-واقعی نیست. ۷۰ تست بدون شبکه و بدون credential واقعی اجرا شدند. کانفیگ حاصل شامل
+واقعی نیست. تست‌ها بدون شبکه و بدون credential واقعی اجرا می‌شوند. کانفیگ حاصل شامل
 دو endpoint Reality و یک endpoint WebSocket با `xray run -test -config …` بررسی شد.
 این اثبات syntax و پذیرش core است؛ اتصال واقعی، عبور CONNECT و دسترسی از
 سرور ربات در این تحویل skip شده‌اند. Xray هنگام validation دربارهٔ deprecation
 WebSocket پیام می‌دهد؛ پشتیبانی این ماتریس به نسخهٔ بررسی‌شده محدود است.
 
-نگاشت یک تابع خالص است. دریافت authenticated catalog، تأیید حساب اختصاصی و فعال بودن
-آن، authorization صریح Owner، نگهداری secret و TTL به use case و worker مراحل بعد تعلق
-دارند. هیچ job، دکمه یا پایش فعال در مرحلهٔ ۱ اضافه نشده است.
-
-## lifecycle مرحلهٔ ۳
+## Lifecycle و امنیت runner
 
 همان binary رسمی روی macOS/arm64 با سه مسیر مصنوعی اجرا شد؛ پیام شروع خود child
 دریافت، زنده بودن آن بررسی و سپس terminate و wait انجام شد. SHA-256 فایل اجرایی:
@@ -63,9 +60,10 @@ WebSocket پیام می‌دهد؛ پشتیبانی این ماتریس به ن�
 5d9dd24c0aba4b6cfcc6a33a5d67f854816ee17f392bf932ec8176da46f7e404
 ```
 
-runner مسیر مطلق بدون symlink، executable بودن، مجوز غیرقابل‌نوشتن برای group/other،
-checksum و نسخهٔ دقیق `26.3.27` را پیش از تست بررسی می‌کند. فایل JSON در دایرکتوری
-موقت `0700` و با مجوز `0600` ساخته می‌شود؛ I/O فایل به thread منتقل شده است.
+runner مسیر مطلق بدون symlink، executable بودن، نبود write برای group/other روی فایل
+و parent directory، checksum و نسخهٔ دقیق `26.3.27` را بررسی می‌کند. فایل JSON از
+لحظهٔ ایجاد با `os.open(..., 0o600)` در دایرکتوری موقت `0700` ساخته می‌شود؛ permission
+به chmod بعدی وابسته نیست. I/O و hashing داخل thread اجرا می‌شوند.
 environment هسته محدود، argv فاقد config خام و stdout/stderr بدون ذخیره یا log مصرف
 می‌شوند. هیچ generator یا کد شخص ثالث کپی نشده و dependency تازه‌ای اضافه نشده است.
 
@@ -82,7 +80,7 @@ startup/readiness پنج ثانیه و terminate دو ثانیه مهلت دار
 مجوز محدود آن حفظ می‌شود و اپراتور می‌تواند دایرکتوری‌های `pgclock-probe-*` متعلق به
 سرویس متوقف‌شده را حذف کند. این مورد تضمین پاک‌سازی پس از SIGKILL نیست.
 
-۱۲ تست آفلاین و پنج زیرتست، شروع ناموفق، readiness بدون marker، child مرده، retry
+تست‌های آفلاین، شروع ناموفق، readiness بدون marker، child مرده، retry
 محدود، خروجی حجیم، اختلاف نسخه/checksum، cancellation تکراری هنگام spawn و
 terminate/kill/wait را پوشش می‌دهند. startup روی Linux نیز در CI تأیید شد؛ اتصال واقعی
 با test user در سرور مقصد در این تحویل skip شده است.
@@ -104,15 +102,9 @@ workflow مستقل [Connection monitoring compatibility](../.github/workflows/c
 پیکربندی PostgreSQL سرویس CI از [الگوی رسمی GitHub](https://docs.github.com/en/actions/tutorials/use-containerized-services/create-postgresql-service-containers)
 پیروی می‌کند و حساب آن فقط متعلق به کانتینر موقت تست است.
 
-اجرای محلی همین CLI روی macOS/arm64: سه endpoint، startup برابر `0.0924s`، cleanup
-برابر `0.0025s` و بیشینهٔ RSS فرزندان `29664 KiB` ثبت شد. اعداد مربوط به startup مصنوعی
-در این محیط هستند؛ ظرفیت و اتصال production هنوز اندازه‌گیری نشده‌اند.
-
-[job تأیید Linux/amd64](https://github.com/Mrclocks/PGClockBot/actions/runs/38719627589/job/116370700334)
-با Python 3.12.15 نیز پاس شد: سه endpoint، startup برابر `0.049s`، cleanup برابر
-`0.0007s`، بیشینهٔ RSS فرزندان `35612 KiB` و child جمع‌شده ثبت شد. checksum آرشیو
-رسمی پیش از اجرا تأیید شد. این نتیجه فقط mapping، پذیرش کانفیگ، readiness و cleanup
-را پوشش می‌دهد؛ سنجش HTTPS زنده از حساب اختصاصی هنوز انجام نشده است.
+SHA مربوط به Actionهای همین workflow به commit رسمی pin شده است. شمار تست‌ها و نتیجهٔ
+CI مربوط به head بررسی‌شده در [PR #777](https://github.com/Mrclocks/PGClockBot/pull/777)
+ثبت می‌شود؛ startup مصنوعی، ظرفیت یا اتصال production را ثابت نمی‌کند.
 
 unit ساخته‌شده توسط نصب‌کنندهٔ پروژه `KillMode` را override نمی‌کند؛ طبق
 [مستند systemd](https://github.com/systemd/systemd/blob/main/man/systemd.kill.xml)

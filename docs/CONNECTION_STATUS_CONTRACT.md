@@ -1,7 +1,8 @@
 # قرارداد رفتار وضعیت اتصال PGClockBot
 
-این سند خروجی مرحلهٔ صفر [roadmap](CONNECTION_STATUS_ROADMAP.md) است. قرارداد محصول
-و معیار تست را مشخص می‌کند؛ به‌تنهایی پایش، مدل دیتابیس یا مجوز اجرایی ایجاد نمی‌کند.
+قابلیت **Experimental** است؛ پایش و انتشار به‌صورت پیش‌فرض خاموش‌اند و live test انجام
+نشده است. این سند رفتار محصول و معیار تست را مشخص می‌کند. task list و نتیجهٔ بررسی‌ها
+در [PR #777](https://github.com/Mrclocks/PGClockBot/pull/777) ثبت می‌شوند.
 
 ## دامنه و دسترسی
 
@@ -154,7 +155,9 @@ live test با test user در سرور مقصد در این تحویل skip شد
 
 خروجی عمومی فقط نام، وضعیت، زمان بررسی و نام نقطهٔ تست را نیاز دارد. آدرس، IP، tag،
 UUID، token، config، exception خام و delay شخصی مشتری در آن نیست. عبارت «بررسی از
-سرور ربات» همراه فهرست می‌آید. delay اندازه‌گیری‌شده در نسخهٔ اول فقط به ادمین نمایش داده می‌شود.
+سرور ربات» همراه فهرست می‌آید. توضیح ثابت صفحه، حتی با عنوان سفارشی، می‌گوید نتیجه
+فقط دسترسی از سرور ربات است و اتصال کاربر یا دسترسی از داخل ایران را تأیید نمی‌کند.
+دکمه و عنوان پیش‌فرض نیز «از دید سرور» هستند. delay فقط به ادمین نمایش داده می‌شود.
 
 خواندن عمومی فقط snapshot محلی است؛ صفر panel call، صفر core start و بدون تغییر
 state پایش. empty، unknown و error state متن امن دارند. خرابی پایش در سفارش، پرداخت،
@@ -162,6 +165,10 @@ state پایش. empty، unknown و error state متن امن دارند. خرا�
 
 ## موارد عمداً موکول‌شده
 
-اثبات mapping، ساخت DTO اجرایی، validation core، انتخاب نسخهٔ binary و تست‌های رفتار
-در مراحل بعد مطابق roadmap انجام می‌شوند. این قرارداد ادعای تست زنده یا پشتیبانی
-تأییدشدهٔ پروتکل‌ها نیست. نتیجهٔ مرحلهٔ صفر در [گزارش baseline](CONNECTION_STATUS_BASELINE.md) ثبت شده است.
+live test، production deployment، نقطهٔ تست داخل ایران، مدیریت نماینده، history،
+speed test، اعلان‌ها، Mini App و صفحهٔ وب جدید در این تحویل نیستند. نتیجهٔ تست‌های
+بدون شبکه و startup مصنوعی، عبور واقعی HTTPS از یک حساب را ثابت نمی‌کند.
+
+مراجع طراحی: [سنجش HTTP در v2rayN](https://github.com/2dust/v2rayN/blob/95f438abc93714150adf55acac7ceb03b3713032/v2rayN/ServiceLib/Services/SpeedtestService.cs)،
+[HTTP proxy در HTTPX](https://www.python-httpx.org/advanced/proxies/) و
+[ماتریس کانفیگ و core](CONNECTION_STATUS_COMPATIBILITY.md). کد شخص ثالث کپی نشده است.
