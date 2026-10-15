@@ -85,3 +85,25 @@ startup/readiness پنج ثانیه و terminate دو ثانیه مهلت دار
 ۱۲ تست آفلاین و پنج زیرتست، شروع ناموفق، readiness بدون marker، child مرده، retry
 محدود، خروجی حجیم، اختلاف نسخه/checksum، cancellation تکراری هنگام spawn و
 terminate/kill/wait را پوشش می‌دهند. پذیرش Linux و اتصال واقعی همچنان باز است.
+
+## بررسی تکرارپذیر CI
+
+workflow مستقل [Connection monitoring compatibility](../.github/workflows/connection-monitor.yml)
+تست‌های رفتاری را روی PostgreSQL 16 و startup را با core رسمی Linux/amd64 اجرا می‌کند.
+آرشیو Linux `Xray-linux-64.zip` با نسخهٔ ثابت `v26.3.27` و SHA-256 منتشرشده بررسی می‌شود:
+
+```text
+23cd9af937744d97776ee35ecad4972cf4b2109d1e0fe6be9930467608f7c8ae
+```
+
+پس از تأیید آرشیو، checksum فایل استخراج‌شده به runner داده می‌شود. CLI
+`python -m app.cli.connection_monitor --binary /absolute/path/xray --sha256 …`
+سه مسیر مصنوعی همین fixture را اجرا و readiness و reap شدن child را کنترل می‌کند؛
+درخواست relay یا حساب واقعی استفاده نمی‌شود. مسیر fixture مربوط به checkout توسعه است.
+پیکربندی PostgreSQL سرویس CI از [الگوی رسمی GitHub](https://docs.github.com/en/actions/tutorials/use-containerized-services/create-postgresql-service-containers)
+پیروی می‌کند و حساب آن فقط متعلق به کانتینر موقت تست است.
+
+اجرای محلی همین CLI روی macOS/arm64: سه endpoint، startup برابر `0.0924s`، cleanup
+برابر `0.0025s` و بیشینهٔ RSS فرزندان `29664 KiB` ثبت شد. اعداد مربوط به startup مصنوعی
+در این محیط هستند؛ ظرفیت و اتصال production هنوز اندازه‌گیری نشده‌اند. نتیجهٔ Linux
+فقط پس از قبولی job آن تأیید می‌شود؛ افزودن workflow به‌تنهایی قبولی این gate نیست.
