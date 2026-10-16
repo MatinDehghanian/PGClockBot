@@ -57,6 +57,8 @@ class RewardAndCampaignScopeTests(unittest.IsolatedAsyncioTestCase):
                             remark="order:2", shop_id=SHOP_ID, **_active_quota(self.now, days=20)),
                 LoyaltyReward(id=1, name="days", reward_type="time_days", reward_value=1, points_cost=1,
                               enabled=True, reseller_id=None),
+                LoyaltyReward(id=2, name="shop days", reward_type="time_days", reward_value=1, points_cost=1,
+                              enabled=True, reseller_id=SHOP_ID),
             ])
             await session.commit()
 
@@ -97,7 +99,9 @@ class RewardAndCampaignScopeTests(unittest.IsolatedAsyncioTestCase):
         try:
             async with self.Session() as session:
                 customer = await session.get(BotUser, CUSTOMER)
-                return await redeem_reward(session, customer, 1, service_id=service_id, idempotency_key="k")
+                return await redeem_reward(
+                    session, customer, 1 if bot_shop is None else 2, service_id=service_id, idempotency_key="k"
+                )
         finally:
             reset_shop_reseller_id(token)
 

@@ -1510,11 +1510,20 @@ class LuckyWheelSpin(Base):
 
 
 class LuckyWheelUserState(Base):
-    """Per-user wheel counters for cooldown / daily / free-spin UX."""
+    """Wheel counters (cooldown, daily limit, free spins) of one customer in one shop's wheel."""
 
     __tablename__ = "lucky_wheel_user_state"
     __table_args__ = (
-        UniqueConstraint("user_id", name="uq_lucky_wheel_user_state_user"),
+        Index(
+            "uq_lucky_wheel_state_shop", "user_id", "reseller_id", unique=True,
+            sqlite_where=text("reseller_id IS NOT NULL"),
+            postgresql_where=text("reseller_id IS NOT NULL"),
+        ),
+        Index(
+            "uq_lucky_wheel_state_platform", "user_id", unique=True,
+            sqlite_where=text("reseller_id IS NULL"),
+            postgresql_where=text("reseller_id IS NULL"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

@@ -362,7 +362,11 @@ def weighted_draw(
 async def _get_or_create_state(
     session: AsyncSession, user: BotUser, *, for_update: bool = False
 ) -> LuckyWheelUserState:
-    q = select(LuckyWheelUserState).where(LuckyWheelUserState.user_id == int(user.id))
+    scope = shop_prize_scope()
+    scope_clause = (
+        LuckyWheelUserState.reseller_id == scope if scope else LuckyWheelUserState.reseller_id.is_(None)
+    )
+    q = select(LuckyWheelUserState).where(LuckyWheelUserState.user_id == int(user.id), scope_clause)
     if for_update:
         try:
             q = q.with_for_update()
@@ -373,7 +377,7 @@ async def _get_or_create_state(
         return state
     state = LuckyWheelUserState(
         user_id=int(user.id),
-        reseller_id=shop_prize_scope(),
+        reseller_id=scope,
         free_spins_balance=0,
         spins_today=0,
         spins_day=_utc_day(),
@@ -386,7 +390,7 @@ async def _get_or_create_state(
         state = (
             await session.execute(
                 select(LuckyWheelUserState).where(
-                    LuckyWheelUserState.user_id == int(user.id)
+                    LuckyWheelUserState.user_id == int(user.id), scope_clause
                 )
             )
         ).scalar_one()
@@ -395,7 +399,7 @@ async def _get_or_create_state(
                 state = (
                     await session.execute(
                         select(LuckyWheelUserState)
-                        .where(LuckyWheelUserState.user_id == int(user.id))
+                        .where(LuckyWheelUserState.user_id == int(user.id), scope_clause)
                         .with_for_update()
                     )
                 ).scalar_one()

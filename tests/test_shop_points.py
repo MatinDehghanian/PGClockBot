@@ -150,14 +150,14 @@ class ShopPointsTests(unittest.IsolatedAsyncioTestCase):
         try:
             async with self.Session() as session:
                 customer = await session.get(BotUser, CUSTOMER)
-                return await redeem_reward(session, customer, 1, idempotency_key=f"r{bot_shop}")
+                return await redeem_reward(session, customer, 2, idempotency_key=f"r{bot_shop}")
         finally:
             reset_shop_reseller_id(token)
 
     async def test_redeeming_in_a_shop_bot_spends_that_shops_points_only(self):
         async with self.Session() as session:
-            session.add(LoyaltyReward(id=1, name="credit", reward_type="wallet_credit", reward_value=100,
-                                      points_cost=20, enabled=True, reseller_id=None))
+            session.add(LoyaltyReward(id=2, name="credit", reward_type="wallet_credit", reward_value=100,
+                                      points_cost=20, enabled=True, reseller_id=SHOP_ID))
             await session.commit()
             await self.credit(session, 500, None)
         with self.assertRaisesRegex(ValueError, "امتیاز کافی نیست"):

@@ -192,13 +192,17 @@ class DemoUserTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(funnel["pay_start"], 2)
 
     async def test_loyalty_credits_and_points_history_excludes_demo_customers(self) -> None:
-        self.session.add(LoyaltyReward(id=1, name="Wallet", reward_type="wallet_credit", reward_value=100, points_cost=10))
+        # Points and rewards belong to the shop of the customer's purchases: one reward per shop.
+        reward_of = {None: 1, 10: 2, 20: 3}
+        for reward_id, shop in ((1, None), (2, 10), (3, 20)):
+            self.session.add(LoyaltyReward(id=reward_id, name=f"Wallet {reward_id}", reward_type="wallet_credit",
+                                           reward_value=100, points_cost=10, reseller_id=shop))
         await self.session.flush()
-        for user_id in self.customers:
+        for user_id, shop_id in self.customers.items():
             self.session.add_all([
-                PointsTransaction(user_id=user_id, amount=100, balance_after=100, tx_type="earn", idempotency_key=f"earn{user_id}"),
-                PointsTransaction(user_id=user_id, amount=-10, balance_after=90, tx_type="redeem", idempotency_key=f"spend{user_id}"),
-                RewardRedemption(user_id=user_id, reward_id=1, reward_type="wallet_credit", reward_value=100, points_spent=10, status="completed", idempotency_key=f"reward{user_id}"),
+                PointsTransaction(user_id=user_id, amount=100, balance_after=100, tx_type="earn", idempotency_key=f"earn{user_id}", reseller_id=shop_id),
+                PointsTransaction(user_id=user_id, amount=-10, balance_after=90, tx_type="redeem", idempotency_key=f"spend{user_id}", reseller_id=shop_id),
+                RewardRedemption(user_id=user_id, reward_id=reward_of[shop_id], reward_type="wallet_credit", reward_value=100, points_spent=10, status="completed", idempotency_key=f"reward{user_id}"),
             ])
         for user_id in (11, 12):
             await self.session.execute(sa.update(BotUser).where(BotUser.id == user_id).values(referred_by_id=10))
@@ -209,7 +213,7 @@ class DemoUserTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(summary["points_redeemed"], 10)
         self.assertEqual(summary["wallet_credits_issued"], 100)
         self.assertEqual(summary["total_referrals"], 1)
-        for shop_id, amount in ((None, 300), (20, 100)):
+        for shop_id, amount in ((None, 100), (20, 100)):
             self.assertEqual((await overview_metrics(self.session, reseller_id=shop_id))["wallet_credits_issued"], amount)
         await set_demo_user(self.session, shop_staff(10), 11, is_demo=True)
         summary = await overview_metrics(self.session, reseller_id=10)

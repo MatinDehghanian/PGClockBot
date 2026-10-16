@@ -67,16 +67,27 @@ class BotLoyaltyMenuTests(unittest.TestCase):
         self.assertNotIn("🏅 سطوح", flat)
         self.assertIn("📐 قوانین امتیاز", flat)
 
-    def test_redeem_scope_guard_in_source(self):
-        from pathlib import Path
+    def test_redeem_scope_guard_refuses_a_reward_of_another_shop(self):
+        import asyncio
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock, MagicMock
 
-        src = Path("app/services/loyalty.py").read_text()
-        block = src.split("async def redeem_reward", 1)[1].split(
-            "async def _unique_discount_code", 1
-        )[0]
-        self.assertIn("user_rid", block)
-        self.assertIn("reward_rid", block)
-        self.assertIn("این جایزه فعال نیست", block)
+        from app.services.loyalty import redeem_reward
+        from app.services.users import reset_shop_reseller_id, set_shop_reseller_id
+
+        reward = SimpleNamespace(enabled=True, archived=False, reseller_id=9)
+        session = AsyncMock()
+        no_prior = MagicMock()
+        no_prior.scalar_one_or_none.return_value = None
+        found = MagicMock()
+        found.scalar_one_or_none.return_value = reward
+        session.execute = AsyncMock(side_effect=[no_prior, found])
+        token = set_shop_reseller_id(5)
+        try:
+            with self.assertRaisesRegex(ValueError, "این جایزه فعال نیست"):
+                asyncio.run(redeem_reward(session, SimpleNamespace(id=1), 1, idempotency_key="k"))
+        finally:
+            reset_shop_reseller_id(token)
 
     def test_inline_does_not_mirror_reply_main_subsets(self):
         """Reply KB owns club nav; inline only secondary actions."""

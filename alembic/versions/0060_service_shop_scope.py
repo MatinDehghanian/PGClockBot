@@ -60,9 +60,14 @@ def _in(connection: sa.Connection, sql: str, ids: Iterable[int], **params: objec
     return list(connection.execute(statement, {"ids": values, **params}))
 
 
-def _backfill_services(connection: sa.Connection) -> list[int]:
-    """Set shop_id / shop_needs_review in keyset batches; returns the ids left under review."""
+def _backfill_services(connection: sa.Connection) -> tuple[list[int], list[int]]:
+    """Set shop_id / shop_needs_review in keyset batches.
+
+    Returns the ids left under review and the ids of order-less services that were given
+    their customer's shop on the strength of the attribution alone (the owner can audit these).
+    """
     review_ids: list[int] = []
+    guessed_ids: list[int] = []
     last_id = 0
     while True:
         rows = connection.execute(
@@ -70,7 +75,7 @@ def _backfill_services(connection: sa.Connection) -> list[int]:
             {"last": last_id, "n": BATCH_SIZE},
         ).all()
         if not rows:
-            return review_ids
+            return review_ids, guessed_ids
         last_id = int(rows[-1].id)
         order_ids = {oid for oid in (_order_id(r.remark) for r in rows) if oid and oid > 0}
         orders = {
@@ -109,6 +114,8 @@ def _backfill_services(connection: sa.Connection) -> list[int]:
                 updates.append({"id": int(row.id), "shop": shop, "review": review})
             if review:
                 review_ids.append(int(row.id))
+            elif order_id is None and shop is not None:
+                guessed_ids.append(int(row.id))
         if updates:
             connection.execute(
                 sa.text("UPDATE user_services SET shop_id = :shop, shop_needs_review = :review WHERE id = :id"),
@@ -191,7 +198,13 @@ def upgrade() -> None:
         op.create_index(MEMBER_SHOP_USER, MEMBERS, ["shop_id", "bot_user_id"])
 
     if first_run and inspector.has_table("orders") and inspector.has_table("bot_users"):
-        review_ids = _backfill_services(connection)
+        review_ids, guessed_ids = _backfill_services(connection)
+        if guessed_ids:
+            logger.warning(
+                "%d service(s) without an order were assigned to their customer's shop from the "
+                "attribution alone; audit them if a customer was attributed after buying elsewhere: %s",
+                len(guessed_ids), guessed_ids[:REVIEW_LOG_LIMIT],
+            )
         if review_ids:
             logger.warning(
                 "%d service(s) have no derivable shop and are hidden until assigned: %s",

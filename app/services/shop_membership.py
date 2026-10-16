@@ -41,16 +41,21 @@ async def is_member(session: AsyncSession, bot_user_id: int, shop_id: int | None
     return found is not None
 
 
-async def ensure_member(session: AsyncSession, bot_user_id: int, shop_id: int | None) -> None:
-    """Record the membership once; a concurrent insert of the same pair is not an error."""
+async def ensure_member(session: AsyncSession, bot_user_id: int, shop_id: int | None) -> bool:
+    """Record the membership once and say whether this call added it.
+
+    A concurrent insert of the same pair is not an error.
+    """
     if await is_member(session, bot_user_id, shop_id):
-        return
+        return False
     try:
         async with session.begin_nested():
             session.add(BotUserShop(bot_user_id=int(bot_user_id), shop_id=int(shop_id) if shop_id else None))
             await session.flush()
     except IntegrityError:
         logger.debug("membership already recorded user=%s shop=%s", bot_user_id, shop_id)
+        return False
+    return True
 
 
 async def assert_customer_in_staff_scope(session: AsyncSession, staff: dict, user: BotUser) -> None:

@@ -14,8 +14,12 @@ from __future__ import annotations
 
 from typing import Sequence, Union
 
+import logging
+
 import sqlalchemy as sa
 from alembic import op
+
+logger = logging.getLogger("alembic.runtime.migration")
 
 revision: str = "0061_shop_points"
 down_revision: Union[str, None] = "0060_service_shop_scope"
@@ -34,6 +38,17 @@ def _ranges(connection: sa.Connection, table: str) -> list[tuple[int, int]]:
 
 
 def _move_points_to_shops(connection: sa.Connection) -> None:
+    moved = connection.execute(
+        sa.text(
+            "SELECT COUNT(*), COALESCE(SUM(points_balance), 0) FROM bot_users "
+            "WHERE reseller_id IS NOT NULL AND points_balance <> 0"
+        )
+    ).one()
+    if moved[0]:
+        logger.warning(
+            "%d customer(s) attributed to a shop had %d points moved from the platform balance to that shop",
+            moved[0], moved[1],
+        )
     for low, high in _ranges(connection, "bot_users"):
         window = {"low": low, "high": high}
         connection.execute(
