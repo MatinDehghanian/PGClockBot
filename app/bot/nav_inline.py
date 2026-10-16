@@ -581,6 +581,17 @@ def admin_groups_hub_keyboard(
         rows.append(shortcuts)
     for i in range(0, len(buttons), 2):
         rows.append(buttons[i : i + 2])
+    rows.append(
+        [
+            _ikb(
+                _t(ui, "btn_adm_edit_mode") or "✏️ حالت ویرایش منوها",
+                callback_data="ed:a:h",
+                ui=ui,
+                label_key="btn_adm_edit_mode",
+                style_id="adm_edit_mode",
+            )
+        ]
+    )
     rows.append(_hub_back_row(ui, callback_data="menu:home"))
     return InlineKeyboardMarkup(inline_keyboard=rows)
 

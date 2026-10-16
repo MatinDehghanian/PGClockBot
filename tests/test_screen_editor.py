@@ -321,18 +321,26 @@ class EditorFlowTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIsNone(ui_module.parse_request(data))
 
 
-class SettingsEntryTests(unittest.IsolatedAsyncioTestCase):
-    async def test_both_settings_menus_link_to_the_editor(self) -> None:
+class EntryPointTests(unittest.IsolatedAsyncioTestCase):
+    async def test_owner_opens_edit_mode_from_the_admin_home(self) -> None:
+        from app.bot.nav_inline import admin_groups_hub_keyboard
+
+        data = [b.callback_data for row in admin_groups_hub_keyboard(default_ui()).inline_keyboard for b in row]
+        self.assertIn("ed:a:h", data)
+        _text, markup = ui_module.switches_view(OWNER, feature_on=True, minutes_left=0)
+        self.assertEqual(markup.inline_keyboard[-1][0].callback_data, "nv:adm:home")
+
+    async def test_shop_owner_opens_edit_mode_from_shop_settings(self) -> None:
         from app.bot.handlers import admin_settings, reseller_settings
 
-        callback = _callback("adm:st:sec:menu")
-        await admin_settings._render_section(callback, MagicMock(), "menu")
-        owner_data = [b.callback_data for row in callback.message.edit_text.await_args.kwargs["reply_markup"].inline_keyboard for b in row]
         callback = _callback("res:st:sec:menu")
         await reseller_settings._render_section(callback, MagicMock(), "menu", SHOP_A)
-        shop_data = [b.callback_data for row in callback.message.edit_text.await_args.kwargs["reply_markup"].inline_keyboard for b in row]
-        self.assertIn("ed:a:h", owner_data)
-        self.assertIn("ed:r:h", shop_data)
+        markup = callback.message.edit_text.await_args.kwargs["reply_markup"]
+        self.assertIn("ed:r:h", [b.callback_data for row in markup.inline_keyboard for b in row])
+        callback = _callback("adm:st:sec:menu")
+        await admin_settings._render_section(callback, MagicMock(), "menu")
+        markup = callback.message.edit_text.await_args.kwargs["reply_markup"]
+        self.assertNotIn("ed:a:h", [b.callback_data for row in markup.inline_keyboard for b in row])
 
 
 if __name__ == "__main__":

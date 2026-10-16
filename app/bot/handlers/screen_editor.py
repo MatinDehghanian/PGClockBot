@@ -59,7 +59,8 @@ shop_router = Router(name="screen_editor_shop")
 
 _CODE_TO_COLOR = {"w": "", "p": "primary", "s": "success", "d": "danger"}
 _RESET_CODE = "x"
-_SETTINGS_BACK = {"a": "adm:st:sec:menu", "r": "res:st:sec:menu"}
+# Where «⬅️ بازگشت» leads from the switches: the owner opened them from the admin home.
+_SETTINGS_BACK = {"a": "nv:adm:home", "r": "res:st:sec:menu"}
 _CANCEL_WORDS = ["انصراف", "لغو", "cancel"]
 
 BTN_ENTRY = "✏️ حالت ویرایش منوها"
