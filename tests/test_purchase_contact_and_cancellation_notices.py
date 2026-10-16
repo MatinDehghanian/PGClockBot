@@ -66,7 +66,7 @@ class ContactAndNoticeTests(unittest.IsolatedAsyncioTestCase):
             Order(id=10, user_id=1, plan_id=1, amount=100, status="delivered"),
             Order(id=20, user_id=1, plan_id=1, amount=100, status="delivered", reseller_id=2),
             UserService(id=11, bot_user_id=1, pg_user_id=101, pg_username="<mine>", remark="order:10"),
-            UserService(id=12, bot_user_id=1, pg_user_id=102, pg_username="shop-mine", remark="order:20"),
+            UserService(id=12, bot_user_id=1, pg_user_id=102, pg_username="shop-mine", remark="order:20", shop_id=2),
         ])
         await self.session.commit()
         self.config = SimpleNamespace(web_secret="purchase-contact-test-secret", admin_ids=[9001], public_base_url="https://example.test")

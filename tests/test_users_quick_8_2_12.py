@@ -119,7 +119,7 @@ class SendStaffDmScopeTests(unittest.IsolatedAsyncioTestCase):
 
         user = SimpleNamespace(is_blocked=True, telegram_id=1, reseller_id=None)
         with self.assertRaises(ValueError):
-            await send_staff_dm(AsyncMock(), user, "hi")
+            await send_staff_dm(AsyncMock(), user, "hi", shop_id=None)
 
 
 if __name__ == "__main__":
