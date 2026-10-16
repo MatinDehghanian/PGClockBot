@@ -15,7 +15,10 @@ REPLY_KB = (ROOT / "app/bot/reply_keyboards.py").read_text(encoding="utf-8")
 class PlansDashboardRebuildTests(unittest.TestCase):
     def test_add_plan_on_reply_keyboard_not_kind_picker(self):
         self.assertIn("REPLY_ACTION_ADM_PLANS_ADD", REPLY_KB)
-        self.assertIn("➕ افزودن پلن", REPLY_KB)
+        from app.bot.keyboards import REPLY_ACTION_ADM_PLANS_ADD  # loads reply_keyboards in order
+        from app.bot.reply_keyboards import _admin_plans_list_entries
+
+        self.assertEqual(dict(_admin_plans_list_entries())[REPLY_ACTION_ADM_PLANS_ADD], "➕ افزودن پلن")
         list_block = REPLY_KB[
             REPLY_KB.find("def _admin_plans_list_entries")
             : REPLY_KB.find("def _admin_plans_add_type_entries")
