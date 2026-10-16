@@ -8,10 +8,11 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message
+from aiogram.types import InlineKeyboardMarkup, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.bot.connection_status_ui import admin_page_keyboard, admin_page_text, bot_monitor_access, target_keyboard, target_text
+from app.bot.connection_status_ui import MONITOR_HOME_CALLBACK, admin_page_keyboard, admin_page_text, bot_monitor_access, target_keyboard, target_text
+from app.bot.keyboards import back_button
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser
 from app.services.connection_monitor_access import MonitorAccess
@@ -80,13 +81,22 @@ async def reopen_monitor_home(message: Message, session: AsyncSession, db_user: 
                                **kwargs: object) -> None:
     access = await bot_monitor_access(session, db_user, is_reseller_bot=bool(kwargs.get("is_reseller_bot")))
     await state.set_state(None)
-    await show_monitor_home(message, session, access, edit=False)
+    # Cancel from the inline prompt edits that prompt back into the menu; a typed «انصراف» is the
+    # user's own message, which cannot be edited, so the menu is sent fresh.
+    from_bot = bool(message.from_user and message.from_user.is_bot)
+    await show_monitor_home(message, session, access, edit=from_bot)
 
 
-async def monitor_error(message: Message, session: AsyncSession, error: Exception) -> None:
+async def monitor_error(message: Message, session: AsyncSession, error: Exception, *, edit: bool = False) -> None:
+    """Show a safe reason. From an inline button the menu message itself becomes the error with
+    a back button; a typed reply has no bot message to edit, so the reason is sent as a message."""
     await rollback_quiet(session)
     # Domain messages are fixed Persian strings; never echo panel/DB/core errors.
     text = monitor_error_message(error)
     logger.warning("Monitoring admin action failed error_type=%s reason=%s", type(error).__name__,
                    getattr(error, "code", "action_failed"))
+    if edit:
+        markup = InlineKeyboardMarkup(inline_keyboard=[[back_button(None, MONITOR_HOME_CALLBACK)]])
+        await safe_edit_text(message, html.escape(text), reply_markup=markup)
+        return
     await message.answer(html.escape(text))
