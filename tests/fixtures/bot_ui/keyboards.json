@@ -97,7 +97,7 @@
         {
           "callback_data": "cma:home:0",
           "style": "primary",
-          "text": "📡 تست و وضعیت اتصال"
+          "text": "📡 وضعیت اتصال"
         }
       ],
       [
@@ -160,7 +160,7 @@
         {
           "callback_data": "cma:home:0",
           "style": "primary",
-          "text": "📡 تست و وضعیت اتصال"
+          "text": "📡 وضعیت اتصال"
         }
       ],
       [
@@ -3233,7 +3233,7 @@
         },
         {
           "style": "primary",
-          "text": "📡 تست و وضعیت اتصال"
+          "text": "📡 وضعیت اتصال"
         }
       ],
       [
