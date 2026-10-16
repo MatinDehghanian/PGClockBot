@@ -330,17 +330,49 @@ class EntryPointTests(unittest.IsolatedAsyncioTestCase):
         _text, markup = ui_module.switches_view(OWNER, feature_on=True, minutes_left=0)
         self.assertEqual(markup.inline_keyboard[-1][0].callback_data, "nv:adm:home")
 
-    async def test_shop_owner_opens_edit_mode_from_shop_settings(self) -> None:
-        from app.bot.handlers import admin_settings, reseller_settings
+    async def _shop_menu_section_data(self, *, feature_on: bool) -> list[str]:
+        from app.bot.handlers import reseller_settings
 
         callback = _callback("res:st:sec:menu")
-        await reseller_settings._render_section(callback, MagicMock(), "menu", SHOP_A)
+        with patch.object(reseller_settings, "is_editor_enabled", AsyncMock(return_value=feature_on)):
+            await reseller_settings._render_section(callback, MagicMock(), "menu", SHOP_A)
         markup = callback.message.edit_text.await_args.kwargs["reply_markup"]
-        self.assertIn("ed:r:h", [b.callback_data for row in markup.inline_keyboard for b in row])
+        return [b.callback_data for row in markup.inline_keyboard for b in row]
+
+    async def test_shop_owner_sees_the_entry_only_while_the_feature_is_on(self) -> None:
+        self.assertIn("ed:r:h", await self._shop_menu_section_data(feature_on=True))
+        self.assertNotIn("ed:r:h", await self._shop_menu_section_data(feature_on=False))
+
+    async def test_owner_settings_no_longer_carry_the_entry(self) -> None:
+        from app.bot.handlers import admin_settings
+
         callback = _callback("adm:st:sec:menu")
         await admin_settings._render_section(callback, MagicMock(), "menu")
         markup = callback.message.edit_text.await_args.kwargs["reply_markup"]
         self.assertNotIn("ed:a:h", [b.callback_data for row in markup.inline_keyboard for b in row])
+
+    async def test_admin_home_with_the_entry_is_shown_to_the_owner_only(self) -> None:
+        from app.bot.handlers import reply_nav
+
+        message = MagicMock()
+        message.answer = AsyncMock()
+        with (
+            patch("app.bot.auth.is_bot_owner_principal", AsyncMock(return_value=False)),
+            patch("app.bot.nav_inline.present_nav_panel", AsyncMock()) as present,
+        ):
+            await reply_nav.open_admin_home(message, MagicMock(), MagicMock(id=5))
+        present.assert_not_awaited()
+
+    async def test_settings_flow_shortcut_never_skips_the_owner_check_for_editors(self) -> None:
+        from app.bot.auth import bot_admin_settings_in_flow
+
+        state = FSMContext(storage=MemoryStorage(), key=StorageKey(bot_id=1, chat_id=1, user_id=1))
+        await state.update_data({nav.NAV_LEVEL: nav.NAV_ADMIN_SETTINGS})
+        await state.set_state(ui_module.EditorStates.owner_label)
+        for data in ("ed:a:h", "ed:a:f1", "bcl:a:g", "bcl:a:s:0:wallet_topup:d"):
+            with self.subTest(data=data):
+                self.assertFalse(await bot_admin_settings_in_flow(MagicMock(data=data), {"state": state}))
+        self.assertFalse(await bot_admin_settings_in_flow(MagicMock(spec=[]), {"state": state}))
 
 
 if __name__ == "__main__":
