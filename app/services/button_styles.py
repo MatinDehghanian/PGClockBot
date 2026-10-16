@@ -287,6 +287,13 @@ def setting_key(button_id: str) -> str:
     return f"btn_style_{resolve_style_id(button_id)}"
 
 
+def style_ids_sharing_setting(style_id: str) -> tuple[str, ...]:
+    """Every button id whose color is stored in the same setting as *style_id*."""
+    target = resolve_style_id(style_id)
+    sharing = {target} | {alias for alias, canonical in STYLE_ALIASES.items() if canonical == target}
+    return tuple(sorted(sharing))
+
+
 def normalize_style(raw: str | None) -> str:
     v = (raw or "").strip().lower()
     if v in {"primary", "success", "danger"}:

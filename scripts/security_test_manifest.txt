@@ -41,6 +41,8 @@ tests/test_update_migration_metadata.py
 # starting with # are comments; blank lines are ignored.
 # --- Tenant / shop isolation & IDOR ---
 
+# Bot settings button colors: owner/shop permissions and per-shop writes.
+tests/test_button_color_editor.py
 tests/test_update_owner_only.py
 tests/test_marketing_nav.py
 tests/test_gift_code_page.py

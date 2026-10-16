@@ -36,6 +36,8 @@ from app.services.settings_button_labels import (
     shop_button_subs,
 )
 from app.services import bot_feedback_texts as feedback
+from app.bot.handlers.button_colors import COLORS_SECTION
+from app.bot.handlers.button_colors import entry_button as colors_entry_button
 
 
 
@@ -504,6 +506,8 @@ async def _render_section(callback: CallbackQuery, session: AsyncSession, sec_id
                 for sub_id, label, _fields in sec.get("subs") or []
             ]
         )
+        if sec_id == COLORS_SECTION:
+            rows.append([colors_entry_button(for_reseller=True)])
         rows.append([kb.back_button(None, "res:st:hub")])
         if callback.message:
             await safe_edit_text(
