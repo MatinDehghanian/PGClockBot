@@ -10,6 +10,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot.auth import resolve_bot_owner_principal
+from app.bot.keyboards import back_button
 from app.db.models import BotUser
 from app.services.authz import authz_from_staff
 from app.services.connection_monitor_access import MONITOR_ACCESS_DENIED, MonitorAccess
@@ -22,6 +23,10 @@ from app.services.formatting import format_number
 from app.services.org_principals import attach_org_principal_fields
 from app.services.safe_format import safe_format
 from app.services.users import get_all_settings
+
+
+ADMIN_HOME_CALLBACK = "nv:adm:home"
+MONITOR_HOME_CALLBACK = "cma:home:0"
 
 
 class MonitorAdminLabel(BaseFilter):
@@ -75,13 +80,14 @@ def admin_page_text(page: MonitorAdminPage, ui: dict[str, str]) -> str:
     return "\n".join(lines)
 
 
-def admin_page_keyboard(page: MonitorAdminPage) -> InlineKeyboardMarkup:
+def admin_page_keyboard(page: MonitorAdminPage, ui: dict[str, str] | None = None) -> InlineKeyboardMarkup:
     rows = [[button("👤 تنظیم کاربر تست", "cma:account"), button("➕ انتخاب کانفیگ", "cma:hosts:0")],
             [button("⏹ توقف تست‌ها" if page.settings.enabled else "▶️ شروع تست‌ها", f"cma:run:{int(not page.settings.enabled)}")]]
     rows.extend([button(target.public_name or target.config_name or f"کانفیگ {format_number(target.id)}", f"cma:item:{target.id}")] for target in page.targets)
     if page.next_id is not None:
         rows.append([button("صفحهٔ بعد", f"cma:home:{page.next_id}")])
     rows.append([button("🔄 تازه‌سازی", "cma:home:0")])
+    rows.append([back_button(ui, ADMIN_HOME_CALLBACK)])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -99,7 +105,7 @@ def target_text(target: MonitorTargetView) -> str:
     ])
 
 
-def target_keyboard(target: MonitorTargetView) -> InlineKeyboardMarkup:
+def target_keyboard(target: MonitorTargetView, ui: dict[str, str] | None = None) -> InlineKeyboardMarkup:
     rows = []
     if target.test_enabled:
         rows = [[button("🔄 تست الان", f"cma:check:{target.id}"), button("⏸ توقف این کانفیگ", f"cma:pause:{target.id}")],
@@ -109,7 +115,7 @@ def target_keyboard(target: MonitorTargetView) -> InlineKeyboardMarkup:
         rows = [[button("▶️ فعال کردن تست کانفیگ", f"cma:pick:{target.config_key}")]]
     else:
         rows = [[button("انتخاب دوباره از اشتراک", "cma:hosts:0")]]
-    rows.append([button("بازگشت", "cma:home:0")])
+    rows.append([back_button(ui, MONITOR_HOME_CALLBACK)])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 

@@ -62,7 +62,7 @@ async def show_monitor_home(message: Message, session: AsyncSession, access: Mon
     page = await monitor_admin_page(session, access, now=datetime.now(timezone.utc), after_id=after_id)
     ui = await get_all_settings(session)
     await session.commit()
-    text, markup = admin_page_text(page, ui), admin_page_keyboard(page)
+    text, markup = admin_page_text(page, ui), admin_page_keyboard(page, ui)
     if edit:
         await safe_edit_text(message, text, reply_markup=markup)
     else:
@@ -71,7 +71,9 @@ async def show_monitor_home(message: Message, session: AsyncSession, access: Mon
 
 async def show_monitor_target(message: Message, session: AsyncSession, access: MonitorAccess, *, target_id: int) -> None:
     target = await monitor_target_view(session, access, target_id=target_id, now=datetime.now(timezone.utc))
-    await safe_edit_text(message, target_text(target), reply_markup=target_keyboard(target))
+    ui = await get_all_settings(session)
+    await session.commit()
+    await safe_edit_text(message, target_text(target), reply_markup=target_keyboard(target, ui))
 
 
 async def reopen_monitor_home(message: Message, session: AsyncSession, db_user: BotUser, state: FSMContext,
