@@ -85,7 +85,7 @@ def _item_keyboard(backup_id: str) -> InlineKeyboardMarkup:
     )
 
 
-def _hub_text(backups: list[dict], ui: dict[str, str] | None) -> str:
+def _hub_text(backups: list[dict], ui: dict[str, str] | None = None) -> str:
     lines = [
         screen_heading(ui, "a.backup"),
         f"نسخه: <code>{local_version()}</code>",
