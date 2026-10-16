@@ -67,8 +67,8 @@ async def assert_customer_in_staff_scope(session: AsyncSession, staff: dict, use
         raise
 
 
-async def is_shop_customer(session: AsyncSession, user: BotUser, shop_id: int) -> bool:
-    """True when the person is attributed to the shop or recorded as one of its customers."""
-    if user.reseller_id is not None and int(user.reseller_id) == int(shop_id):
+async def is_shop_customer(session: AsyncSession, user: BotUser, shop_id: int | None) -> bool:
+    """True when the person is attributed to the shop (None = platform) or recorded as one of its customers."""
+    if (user.reseller_id or None) == (shop_id or None):
         return True
     return await is_member(session, int(user.id), shop_id)

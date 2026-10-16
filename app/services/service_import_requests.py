@@ -42,6 +42,7 @@ from app.services.service_import_store import (
     as_utc,
 )
 from app.services.pg_user_scope import pg_user_owner_username
+from app.services.shop_membership import is_shop_customer
 from app.services.users import get_all_settings
 
 logger = logging.getLogger(__name__)
@@ -151,7 +152,7 @@ async def _settle(session: AsyncSession, request_id: int, status: str, reason: s
 
 async def _reverify(session: AsyncSession, request: ServiceImportRequest, user: BotUser) -> tuple[VerifiedService, Any]:
     shop_id = request.shop_id
-    if (user.reseller_id or None) != (shop_id or None):
+    if not await is_shop_customer(session, user, shop_id):
         raise ServiceImportError(GENERIC_REFUSAL, Reason.WRONG_SHOP)
     if user.is_blocked:
         raise ServiceImportError(GENERIC_REFUSAL, Reason.BLOCKED)
