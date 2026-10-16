@@ -412,12 +412,50 @@ class UserService(Base):
     renew_nudge_sent_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Shop that sold the service (NULL = platform), written when the service is created.
+    # A service whose shop could not be derived when this column was introduced keeps
+    # shop_needs_review and is hidden from every shop until the owner assigns it.
+    shop_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("bot_users.id"), nullable=True, index=True
+    )
+    shop_needs_review: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false"), index=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     owner: Mapped["BotUser"] = relationship(
         back_populates="services", foreign_keys=[bot_user_id]
     )
     plan: Mapped[Optional["Plan"]] = relationship()
+
+
+class BotUserShop(Base):
+    """A person is a customer of a shop (shop_id NULL = the platform).
+
+    One person can buy from several shops; BotUser.reseller_id only records the
+    shop that attributed them first. Rows are written idempotently on first contact
+    with a bot and whenever an order or a service is created.
+    """
+
+    __tablename__ = "bot_user_shops"
+    __table_args__ = (
+        Index(
+            "uq_bot_user_shops_shop", "bot_user_id", "shop_id", unique=True,
+            sqlite_where=text("shop_id IS NOT NULL"),
+            postgresql_where=text("shop_id IS NOT NULL"),
+        ),
+        Index(
+            "uq_bot_user_shops_platform", "bot_user_id", unique=True,
+            sqlite_where=text("shop_id IS NULL"),
+            postgresql_where=text("shop_id IS NULL"),
+        ),
+        Index("ix_bot_user_shops_shop_user", "shop_id", "bot_user_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    bot_user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id", ondelete="CASCADE"))
+    shop_id: Mapped[Optional[int]] = mapped_column(ForeignKey("bot_users.id", ondelete="CASCADE"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class ServiceImportAttempt(Base):
