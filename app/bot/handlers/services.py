@@ -24,6 +24,7 @@ from app.services.users import current_shop_reseller_id, get_all_settings
 from app.services.redact import user_safe_error
 from app.services.service_live_info import fetch_live_service_info
 from app.services import bot_feedback_texts as feedback
+from app.services.screen_titles import screen_heading
 
 router = Router(name="services")
 
@@ -319,7 +320,7 @@ async def svc_list(
         )
         await safe_edit_text(
             callback.message,
-            "📦 <b>سرویس‌های شما</b>" + kb.list_overflow_line(len(services)),
+            screen_heading(ui, "c.services") + kb.list_overflow_line(len(services)),
             reply_markup=markup,
         )
 

@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.button_color_editor import PLATFORM_SCOPE
 from app.services.rich_text import is_button_label_key
+from app.services.screen_titles import has_title, title_setting_key, validate_screen_title
 from app.services.settings_button_labels import all_btn_field_keys
 from app.services.users import DEFAULT_SETTINGS, get_all_settings, on, set_setting
 
@@ -140,3 +141,14 @@ async def save_button_label(
     if not can_edit_label(actor, label_key):
         raise ValueError("متن این دکمه قابل ویرایش نیست.")
     await set_setting(session, label_key, stored_value, reseller_id=actor.settings_scope)
+
+
+async def save_screen_title(
+    session: AsyncSession, actor: EditorActor, *, screen_id: str, audience: str, text: str
+) -> str:
+    """Validate and persist a menu title in the actor's own settings; return the stored title."""
+    if not has_title(screen_id) or audience not in actor.audiences:
+        raise ValueError("تیتر این منو قابل ویرایش نیست.")
+    title = validate_screen_title(text)
+    await set_setting(session, title_setting_key(screen_id), title, reseller_id=actor.settings_scope)
+    return title

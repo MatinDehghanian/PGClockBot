@@ -42,6 +42,7 @@ from app.services.settings_button_labels import (
     shop_button_subs,
 )
 from app.services import bot_feedback_texts as feedback
+from app.services.screen_titles import screen_heading
 from app.bot.handlers.button_colors import COLORS_SECTION
 from app.bot.handlers.button_colors import entry_button as colors_entry_button
 
@@ -62,7 +63,7 @@ async def _silent_settings_cancel(
     """Cancel typed settings input without a «لغو شد.» bubble (like Back)."""
     ui = await get_all_settings(session)
     await finish_text_step(
-        message, state, text=_SETTINGS_HUB_TEXT, inline=_hub_markup(ui)
+        message, state, text=_settings_hub_text(ui), inline=_hub_markup(ui)
     )
     await state.clear()
     await _keep_settings_nav(state)
@@ -408,11 +409,11 @@ def _kb(rows: list[list[InlineKeyboardButton]]) -> InlineKeyboardMarkup:
 # ----- render helpers -----
 
 
-_SETTINGS_HUB_TEXT = (
-    "⚙️ <b>تنظیمات سریع</b>\n"
-    "یک بخش را از دکمه‌های زیر انتخاب کنید.\n"
-    "ظاهر، رنگ، گزارش روزانه → وب‌پنل."
-)
+_SETTINGS_HUB_CAPTION = "یک بخش را از دکمه‌های زیر انتخاب کنید.\nظاهر، رنگ، گزارش روزانه → وب‌پنل."
+
+
+def _settings_hub_text(ui: dict[str, str] | None) -> str:
+    return f"{screen_heading(ui, 'a.settings')}\n{_SETTINGS_HUB_CAPTION}"
 
 
 async def _panel_settings_url(
@@ -472,7 +473,7 @@ async def _render_hub(
     ui = await get_all_settings(session) if session is not None else {}
     await safe_edit_text(
         callback.message,
-        _SETTINGS_HUB_TEXT,
+        _settings_hub_text(ui),
         reply_markup=admin_settings_hub_keyboard(ui),
     )
 
@@ -855,7 +856,8 @@ async def _finish_settings_text_edit(
     """Turn the input prompt into the subsection panel (same bubble) with a save note."""
     panel = await _settings_location_panel(session, loc)
     if panel is None:
-        panel = (_SETTINGS_HUB_TEXT, _hub_markup(await get_all_settings(session)))
+        hub_ui = await get_all_settings(session)
+        panel = (_settings_hub_text(hub_ui), _hub_markup(hub_ui))
     text, markup = panel
     await finish_text_step(message, state, text=f"{note}\n\n{text}", inline=markup)
     await state.clear()

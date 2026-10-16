@@ -47,9 +47,11 @@ from app.services.screen_editor import (
     edit_mode_store,
     is_editor_enabled,
     save_button_label,
+    save_screen_title,
     set_editor_enabled,
     validate_button_label,
 )
+from app.services.screen_titles import TITLE_MAX_LENGTH, has_title, screen_title
 from app.services.users import get_all_settings
 
 logger = logging.getLogger(__name__)
@@ -74,6 +76,7 @@ TEXT_FEATURE_OFF_FOR_SHOP = "✏️ <b>حالت ویرایش منوها</b>\n\n�
 TEXT_FEATURE_OFF = "قابلیت ویرایش منوها خاموش است."
 TEXT_SHOP_BOT_ONLY = "حالت ویرایش فروشگاه فقط داخل ربات فروشگاه کار می‌کند."
 TEXT_LABEL_SAVED = "✅ متن دکمه ذخیره شد."
+TEXT_TITLE_SAVED = "✅ تیتر منو ذخیره شد."
 TEXT_MENU_CHANGED = "این منو تغییر کرده؛ دوباره باز کنید."
 
 
@@ -103,7 +106,7 @@ def parse_request(data: str | None) -> EditRequest | None:
     try:
         if view in {"h", "f1", "f0", "m1", "m0"} and not rest:
             return EditRequest(audience, view)
-        if view == "o" and len(rest) == 1 and rest[0] in SCREENS:
+        if view in {"o", "n"} and len(rest) == 1 and rest[0] in SCREENS:
             return EditRequest(audience, view, screen_id=rest[0])
         if view in {"b", "t"} and len(rest) == 2 and rest[0] in SCREENS:
             return EditRequest(audience, view, screen_id=rest[0], index=int(rest[1]))
@@ -156,8 +159,10 @@ def panel_view(
         for index, button in enumerate(buttons)
         if _editable_parts(actor, button, ui) != (False, False)
     ]
+    if has_title(spec.id):
+        rows.insert(0, [_button(f"📝 تیتر: {screen_title(ui, spec.id)}", _cb(actor, "n", spec.id))])
     rows.append([_button(BTN_BACK_TO_MENU, spec.reopen_callback)])
-    text = f"✏️ <b>ویرایش: {html.escape(spec.title)}</b>\nروی دکمه‌ای بزنید تا متن یا رنگش را عوض کنید."
+    text = f"✏️ <b>ویرایش: {html.escape(spec.title)}</b>\nروی تیتر یا یک دکمه بزنید تا آن را عوض کنید."
     if len(rows) == 1:
         text = f"✏️ <b>ویرایش: {html.escape(spec.title)}</b>\nدر این منو چیزی برای ویرایش شما نیست."
     return text, InlineKeyboardMarkup(inline_keyboard=rows)
@@ -271,6 +276,9 @@ async def _screen_views(
         await callback.answer()
         await _show(callback, panel_view(actor, screen.spec, screen.buttons, screen.ui))
         return
+    if request.view == "n":
+        await _ask_title(callback, actor, screen, state)
+        return
     button = _button_at(screen, request.index)
     if request.view == "t":
         await _ask_label(callback, actor, screen, request.index, button, state)
@@ -306,7 +314,7 @@ async def _ask_label(
     if not can_edit_label(actor, button.label_key):
         raise ValueError("متن این دکمه قابل ویرایش نیست.")
     await state.set_state(EditorStates.shop_label if actor.for_reseller else EditorStates.owner_label)
-    await state.update_data(ed_screen=screen.spec.id, ed_index=index, ed_key=button.label_key)
+    await state.update_data(ed_screen=screen.spec.id, ed_title=False, ed_index=index, ed_key=button.label_key)
     await callback.answer()
     prompt = (
         f"✏️ متن جدید دکمهٔ «{html.escape(button.text)}» را بفرستید.\n"
@@ -314,6 +322,21 @@ async def _ask_label(
         "برای انصراف: انصراف"
     )
     rows = [[_button(BTN_BACK, _cb(actor, "b", screen.spec.id, index))]]
+    await _show(callback, (prompt, InlineKeyboardMarkup(inline_keyboard=rows)))
+
+
+async def _ask_title(callback: CallbackQuery, actor: EditorActor, screen: _Screen, state: FSMContext) -> None:
+    if not has_title(screen.spec.id):
+        raise ValueError("تیتر این منو قابل ویرایش نیست.")
+    await state.set_state(EditorStates.shop_label if actor.for_reseller else EditorStates.owner_label)
+    await state.update_data(ed_screen=screen.spec.id, ed_title=True, ed_index=None, ed_key=None)
+    await callback.answer()
+    prompt = (
+        f"📝 تیتر جدید منوی «{html.escape(screen_title(screen.ui, screen.spec.id))}» را بفرستید.\n"
+        f"یک خط، حداکثر {TITLE_MAX_LENGTH} کاراکتر، بدون &lt; و &gt; و &amp;.\n"
+        "برای انصراف: انصراف"
+    )
+    rows = [[_button(BTN_BACK, _cb(actor, "o", screen.spec.id))]]
     await _show(callback, (prompt, InlineKeyboardMarkup(inline_keyboard=rows)))
 
 
@@ -337,6 +360,9 @@ async def _save_label_message(message: Message, state: FSMContext, session: Asyn
         await state.set_state(None)
         await message.answer(feedback.CANCELLED, reply_markup=_after_label_markup(actor, screen_id))
         return
+    if data.get("ed_title"):
+        await _save_title_message(message, state, session, actor, screen_id, raw)
+        return
     try:
         screen = await _load_screen(session, actor, screen_id)
         button = _button_at(screen, int(index))
@@ -354,6 +380,21 @@ async def _save_label_message(message: Message, state: FSMContext, session: Asyn
         return
     await state.set_state(None)
     await message.answer(TEXT_LABEL_SAVED, reply_markup=_after_label_markup(actor, screen_id))
+
+
+async def _save_title_message(
+    message: Message, state: FSMContext, session: AsyncSession, actor: EditorActor, screen_id: str, raw: str
+) -> None:
+    spec = SCREENS.get(screen_id)
+    try:
+        if spec is None:
+            raise ValueError(TEXT_MENU_CHANGED)
+        await save_screen_title(session, actor, screen_id=screen_id, audience=spec.audience.value, text=raw)
+    except ValueError as exc:
+        await message.answer(str(exc))
+        return
+    await state.set_state(None)
+    await message.answer(TEXT_TITLE_SAVED, reply_markup=_after_label_markup(actor, screen_id))
 
 
 def _after_label_markup(actor: EditorActor, screen_id: str | None) -> InlineKeyboardMarkup | None:

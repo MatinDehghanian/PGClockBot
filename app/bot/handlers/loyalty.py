@@ -46,6 +46,8 @@ from app.services.service_scope import list_customer_services
 from app.services.users import current_shop_reseller_id, get_all_settings, get_setting, on, set_setting
 from app.services.redact import user_safe_error
 from app.services import bot_feedback_texts as feedback
+from app.services.button_color_editor import PLATFORM_SCOPE
+from app.services.screen_titles import screen_heading, screen_title
 
 router = Router(name="loyalty")
 
@@ -195,6 +197,7 @@ async def build_loyalty_text(session: AsyncSession, db_user: BotUser) -> str:
     tier = await get_tier_for_points(session, await _points(session, db_user))
     stats = await referral_stats(session, db_user.id)
     month = await month_earned_points(session, db_user.id, shop_id=current_shop_reseller_id())
+    ui = await get_all_settings(session)
     lines = [
         kv_line("⭐", "امتیاز شما", f"<b>{await _points(session, db_user)}</b>"),
         kv_line("🏅", "سطح", tier.name),
@@ -207,7 +210,7 @@ async def build_loyalty_text(session: AsyncSession, db_user: BotUser) -> str:
             kv_line("📅", "امتیاز این ماه", str(month)),
         ]
     )
-    return format_message("⭐ باشگاه مشتریان", "\n".join(lines))
+    return format_message(screen_title(ui, "c.loyalty"), "\n".join(lines))
 
 # ---------------------------------------------------------------------------
 # Staff ACL — fail closed; never use Owner PG from reseller path
@@ -274,7 +277,7 @@ async def open_loyalty_home_message(
 
     ui = await get_all_settings(session)
     if not await loyalty_enabled(session, reseller_id=current_shop_reseller_id()):
-        disabled = format_message("⭐ باشگاه مشتریان", "این بخش فعلاً غیرفعال است.")
+        disabled = format_message(screen_title(ui, "c.loyalty"), "این بخش فعلاً غیرفعال است.")
         if state is not None:
             await nav.set_nav_level(state, nav.NAV_LOYALTY, push=push)
         await present_inline_only(
@@ -322,7 +325,7 @@ async def open_loyalty_points_message(
     from app.bot.nav_inline import present_inline_only
 
     if not await loyalty_enabled(session, reseller_id=current_shop_reseller_id()):
-        disabled = format_message("⭐ باشگاه مشتریان", "این بخش فعلاً غیرفعال است.")
+        disabled = format_message(screen_title(ui, "c.loyalty"), "این بخش فعلاً غیرفعال است.")
         await present_inline_only(
             message,
             text=disabled,
@@ -451,7 +454,7 @@ async def open_loyalty_wheel_message(
     from app.bot.nav_inline import present_inline_only
 
     if not await loyalty_enabled(session, reseller_id=current_shop_reseller_id()):
-        disabled = format_message("⭐ باشگاه مشتریان", "این بخش فعلاً غیرفعال است.")
+        disabled = format_message(screen_title(ui, "c.loyalty"), "این بخش فعلاً غیرفعال است.")
         await present_inline_only(
             message,
             text=disabled,
@@ -611,7 +614,7 @@ async def open_admin_loyalty_hub(
 
     ui = await get_all_settings(session)
     body = (
-        f"⭐ <b>باشگاه مشتریان</b> ({who})\n"
+        f"{screen_heading(ui, 'a.loyalty')} ({who})\n"
         f"وضعیت: <b>{status}</b>\n"
         + feedback.PICK_SECTION_BELOW
         + f"{extra}"
@@ -1074,10 +1077,11 @@ async def loyalty_home(callback: CallbackQuery, session: AsyncSession, db_user: 
     """Legacy/deep-link entry — content + discounts extra only (nav = reply KB)."""
     await callback.answer()
     if not await loyalty_enabled(session, reseller_id=current_shop_reseller_id()):
+        ui = await get_all_settings(session)
         if callback.message:
             await safe_edit_text(
                 callback.message,
-                format_message("⭐ باشگاه مشتریان", "این بخش فعلاً غیرفعال است."),
+                format_message(screen_title(ui, "c.loyalty"), "این بخش فعلاً غیرفعال است."),
                 reply_markup=None,
             )
         return
@@ -1772,6 +1776,7 @@ async def staff_save_referral_text(
         await message.answer(feedback.NO_ACCESS_REPLY)
         return
     live_scope, can_tiers = scope_info
+    ui = await get_all_settings(session, reseller_id=live_scope or PLATFORM_SCOPE)
     if live_scope != scope:
         await state.clear()
         await message.answer("محدوده تنظیمات نامعتبر است.")
@@ -1807,7 +1812,7 @@ async def staff_save_referral_text(
             message,
             session,
             db_user,
-            format_message("⭐ باشگاه مشتریان", feedback.CANCELLED_BACK_TO_HUB),
+            format_message(screen_title(ui, "a.loyalty"), feedback.CANCELLED_BACK_TO_HUB),
             can_tiers=can_tiers,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
@@ -1826,7 +1831,7 @@ async def staff_save_referral_text(
         message,
         session,
         db_user,
-        format_message("⭐ باشگاه مشتریان", "متن دعوت ذخیره شد ✅"),
+        format_message(screen_title(ui, "a.loyalty"), "متن دعوت ذخیره شد ✅"),
         can_tiers=can_tiers,
         is_reseller_bot=is_reseller_bot,
         reseller_owner_id=reseller_owner_id,
