@@ -720,14 +720,12 @@
         },
         {
           "callback_data": "adm:st:sec:limits",
-          "style": "primary",
           "text": "محدودیت"
         }
       ],
       [
         {
           "callback_data": "adm:st:sec:guides",
-          "style": "primary",
           "text": "آموزش اتصال"
         },
         {
@@ -1094,14 +1092,12 @@
         },
         {
           "callback_data": "nv:res:ra:res_st_limits",
-          "style": "primary",
           "text": "محدودیت"
         }
       ],
       [
         {
           "callback_data": "nv:res:ra:res_st_guides",
-          "style": "primary",
           "text": "آموزش اتصال"
         },
         {
@@ -3236,6 +3232,7 @@
           "text": "🛠 سیستم"
         },
         {
+          "style": "primary",
           "text": "📡 تست و وضعیت اتصال"
         }
       ],

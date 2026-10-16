@@ -199,6 +199,7 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "adm_plans_aud_users", "label": "پلن‌های کاربران", "group": "منوی ادمین", "default": "primary"},
     {"id": "adm_plans_aud_resellers", "label": "پلن‌های نمایندگان", "group": "منوی ادمین", "default": "primary"},
     {"id": "adm_plans_add", "label": "افزودن پلن", "group": "منوی ادمین", "default": "primary"},
+    {"id": "adm_plans_view", "label": "مشاهده پلن‌ها", "group": "منوی ادمین", "default": "primary"},
     {"id": "adm_plans_categories", "label": "برچسب دسته (ادمین)", "group": "منوی ادمین", "default": ""},
     {"id": "adm_plans_addons", "label": "بسته حجم/زمان (ادمین)", "group": "منوی ادمین", "default": "primary"},
     # Admin loyalty sub
@@ -209,6 +210,7 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "adm_loy_settings", "label": "تنظیمات باشگاه", "group": "باشگاه ادمین", "default": ""},
     {"id": "adm_loy_ref_text", "label": "متن دعوت باشگاه", "group": "باشگاه ادمین", "default": ""},
     # PasarGuard sub
+    {"id": "connection_status_admin", "label": "تست و وضعیت اتصال", "group": "پاسارگارد", "default": "primary"},
     {"id": "pg_stats", "label": "نمای کلی پاسارگارد", "group": "پاسارگارد", "default": "success"},
     {"id": "pg_users", "label": "کاربران پاسارگارد", "group": "پاسارگارد", "default": ""},
     {"id": "pg_create", "label": "ساخت کاربر پاسارگارد", "group": "پاسارگارد", "default": "primary"},
@@ -222,6 +224,8 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "adm_st_pay", "label": "تنظیمات: پرداخت", "group": "تنظیمات ادمین", "default": ""},
     {"id": "adm_st_support", "label": "تنظیمات: پشتیبان‌ها", "group": "تنظیمات ادمین", "default": ""},
     {"id": "adm_st_access", "label": "تنظیمات: دسترسی", "group": "تنظیمات ادمین", "default": ""},
+    {"id": "adm_st_limits", "label": "تنظیمات: محدودیت", "group": "تنظیمات ادمین", "default": ""},
+    {"id": "adm_st_guides", "label": "تنظیمات: آموزش اتصال", "group": "تنظیمات ادمین", "default": ""},
     {"id": "adm_st_notify", "label": "تنظیمات: اعلان‌ها", "group": "تنظیمات ادمین", "default": ""},
     {"id": "adm_st_panel", "label": "تنظیمات: وب‌پنل", "group": "تنظیمات ادمین", "default": "primary"},
     # Backup sub
@@ -262,6 +266,8 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "res_st_pay", "label": "تنظیمات نماینده: پرداخت", "group": "تنظیمات نماینده", "default": ""},
     {"id": "res_st_support", "label": "تنظیمات نماینده: پشتیبان‌ها", "group": "تنظیمات نماینده", "default": ""},
     {"id": "res_st_access", "label": "تنظیمات نماینده: دسترسی", "group": "تنظیمات نماینده", "default": ""},
+    {"id": "res_st_limits", "label": "تنظیمات نماینده: محدودیت", "group": "تنظیمات نماینده", "default": ""},
+    {"id": "res_st_guides", "label": "تنظیمات نماینده: آموزش اتصال", "group": "تنظیمات نماینده", "default": ""},
     {"id": "res_st_notify", "label": "تنظیمات نماینده: اعلان‌ها", "group": "تنظیمات نماینده", "default": ""},
     {"id": "res_st_bot", "label": "تنظیمات نماینده: ربات", "group": "تنظیمات نماینده", "default": ""},
     {"id": "res_st_panel", "label": "تنظیمات نماینده: وب‌پنل", "group": "تنظیمات نماینده", "default": "primary"},
