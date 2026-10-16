@@ -137,7 +137,7 @@ class TicketNotifyAuthorityTests(unittest.TestCase):
         self.assertIn("reseller_id=0", chunk)
 
     def test_panel_admin_tg_filters_ticket_reseller(self):
-        from app.services.tickets import ticket_shop_clause
+        from app.services.ticket_scope import ticket_shop_clause
 
         self.assertIn("tickets.reseller_id IS NULL", str(ticket_shop_clause(None)))
         self.assertIn("tickets.reseller_id =", str(ticket_shop_clause(5)))

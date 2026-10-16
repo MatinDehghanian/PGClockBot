@@ -107,11 +107,8 @@ async def _owned_service_or_404(
 
 
 def _addons_allowed(user: BotUser, svc: UserService) -> bool:
-    return (
-        user.reseller_id is None
-        and bool(svc.pg_user_id)
-        and (svc.remark or "").strip() != "linked"
-    )
+    """Packs for a platform-sold, panel-linked service (shop-sold ones never reach this check)."""
+    return bool(svc.pg_user_id) and (svc.remark or "").strip() != "linked"
 
 
 async def _addon_service(

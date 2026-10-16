@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, Order, OrderStatus, Payment, PaymentStatus, Ticket
 from app.services.shop_scope import platform_may_review_payment
-from app.services.tickets import staff_ticket_in_scope
+from app.services.ticket_scope import staff_ticket_in_scope
 
 logger = logging.getLogger(__name__)
 

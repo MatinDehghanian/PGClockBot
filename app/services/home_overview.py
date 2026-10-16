@@ -23,6 +23,9 @@ from app.db.models import (
 )
 from app.services.demo_users import non_demo_customer
 from app.services.pasarguard import get_pg
+from app.services.service_scope import shop_services_clause
+from app.services.shop_membership import shop_member_clause
+from app.services.ticket_scope import ticket_shop_clause
 from app.services.setup_wizard import current_setup_values
 
 _TEHRAN = ZoneInfo("Asia/Tehran")
@@ -162,7 +165,7 @@ async def bot_panel_summary(session: AsyncSession) -> dict[str, Any]:
         select(func.count())
         .select_from(Ticket)
         .join(BotUser, BotUser.id == Ticket.user_id)
-        .where(Ticket.status == "open", BotUser.reseller_id.is_(None), BotUser.is_demo.is_(False))
+        .where(Ticket.status == "open", ticket_shop_clause(None), BotUser.is_demo.is_(False))
         .scalar_subquery()
     )
     resellers_expr = (
@@ -346,11 +349,11 @@ async def shop_period_stats(
 
     if reseller_id is None:
         scope_orders = Order.reseller_id.is_(None)
-        scope_users = BotUser.reseller_id.is_(None)
+        scope_users = shop_member_clause(None)
     else:
         rid = int(reseller_id)
         scope_orders = Order.reseller_id == rid
-        scope_users = BotUser.reseller_id == rid
+        scope_users = shop_member_clause(rid)
 
     def _sum_since(since, expr):
         return func.coalesce(
@@ -523,7 +526,7 @@ async def reseller_shop_summary(
 ) -> dict[str, int]:
     """Single round-trip aggregate counts for a reseller shop dashboard."""
     users_expr = (
-        select(func.count()).select_from(BotUser).where(BotUser.reseller_id == rid, BotUser.is_demo.is_(False)).scalar_subquery()
+        select(func.count()).select_from(BotUser).where(shop_member_clause(rid), BotUser.is_demo.is_(False)).scalar_subquery()
     )
     orders_expr = (
         select(func.count()).select_from(Order).where(Order.reseller_id == rid, non_demo_customer(Order.user_id)).scalar_subquery()
@@ -547,7 +550,7 @@ async def reseller_shop_summary(
         select(func.count())
         .select_from(UserService)
         .join(BotUser, BotUser.id == UserService.bot_user_id)
-        .where(BotUser.reseller_id == rid, BotUser.is_demo.is_(False))
+        .where(shop_services_clause(rid), BotUser.is_demo.is_(False))
         .scalar_subquery()
     )
     revenue_expr = (

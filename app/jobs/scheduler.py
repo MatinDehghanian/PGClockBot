@@ -120,9 +120,7 @@ async def check_expiring_services(bot: Bot) -> None:
             )
             if not platform_on and reseller_ids_with_alerts:
                 # Narrow to shops that actually have alerts on before PG fan-out
-                svc_q = svc_q.join(BotUser, BotUser.id == UserService.bot_user_id).where(
-                    BotUser.reseller_id.in_(reseller_ids_with_alerts)
-                )
+                svc_q = svc_q.where(UserService.shop_id.in_(reseller_ids_with_alerts))
             services = list((await session.execute(svc_q)).scalars().all())
             if not services:
                 break

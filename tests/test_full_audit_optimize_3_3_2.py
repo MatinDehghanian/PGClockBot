@@ -145,7 +145,7 @@ class BotPerfTests(unittest.TestCase):
     def test_scheduler_alert_discovery_is_lean(self):
         src = (ROOT / "app/jobs/scheduler.py").read_text(encoding="utf-8")
         self.assertIn('ResellerSetting.key == "user_alert_low_enabled"', src)
-        self.assertIn("BotUser.reseller_id.in_(reseller_ids_with_alerts)", src)
+        self.assertIn("UserService.shop_id.in_(reseller_ids_with_alerts)", src)
 
 
 class CssDeadCleanupTests(unittest.TestCase):

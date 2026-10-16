@@ -586,21 +586,38 @@ class LoyaltyStaticContractTests(unittest.TestCase):
         self.assertIn("0007_referral_loyalty", mig)
 
     def test_no_owner_pg_fallback_on_reseller_reward(self):
-        from pathlib import Path
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock, patch
 
-        src = Path("app/services/loyalty.py").read_text()
-        block = src.split("async def apply_service_reward", 1)[1].split(
-            "async def overview_metrics", 1
-        )[0]
-        self.assertIn("get_pg_for_reseller(session, int(user.reseller_id))", block)
-        self.assertIn("current_shop_reseller_id", block)
-        self.assertNotIn("except Exception:\n            pg = get_pg()", block)
-        self.assertNotIn("except Exception:\n        pg = get_pg()", block)
-        # Reseller path must not silently fall back to platform owner client
-        self.assertNotRegex(
-            block,
-            r"get_pg_for_reseller[\s\S]{0,120}except Exception:[\s\S]{0,80}get_pg\(\)",
-        )
+        from app.services.loyalty import apply_service_reward
+        from app.services.users import reset_shop_reseller_id, set_shop_reseller_id
+
+        service = SimpleNamespace(id=1, pg_user_id=9, bot_user_id=1)
+        user = SimpleNamespace(id=1)
+
+        async def apply(service_shop: int | None, bot_shop: int | None):
+            token = set_shop_reseller_id(bot_shop)
+            try:
+                with (
+                    patch("app.services.service_cancellations.lock_service_mutation", AsyncMock()),
+                    patch("app.services.loyalty.service_shop_id", AsyncMock(return_value=service_shop)),
+                    patch(
+                        "app.services.pasarguard.get_pg_for_reseller",
+                        AsyncMock(side_effect=ValueError("no panel login")),
+                    ),
+                    patch("app.services.pasarguard.get_pg", side_effect=AssertionError("owner client used")),
+                ):
+                    await apply_service_reward(AsyncMock(), user, service, "time_days", 1)
+            finally:
+                reset_shop_reseller_id(token)
+
+        # A shop service without a usable shop panel login never falls back to the Owner client.
+        with self.assertRaisesRegex(ValueError, "no panel login"):
+            asyncio.run(apply(5, 5))
+        # A reward cannot be applied across shops, in either direction.
+        for service_shop, bot_shop in ((None, 5), (5, None), (6, 5)):
+            with self.assertRaisesRegex(ValueError, "متعلق"):
+                asyncio.run(apply(service_shop, bot_shop))
 
     def test_panel_shop_scope_helpers(self):
         from app.api.loyalty_pages import _reward_in_scope, _rule_in_scope, _shop_scope

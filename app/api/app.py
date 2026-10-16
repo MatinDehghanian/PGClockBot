@@ -75,7 +75,8 @@ from app.services.security_policy import (
 from app.services.updates import local_version
 from app.services.message_variables import template_variable_specs
 from app.services.panel_assets import get_panel_asset_cache_key
-from app.services.shop_scope import is_platform_admin
+from app.services.shop_scope import is_platform_admin, payment_shop_id
+from app.services.ux20 import payment_shop_clause
 from app.services.settings_tab_groups import group_settings_tabs, tabs_with_message_variables
 from app.services.users import (
     SETTINGS_DOMAIN_REDIRECTS,
@@ -1435,6 +1436,8 @@ def create_api_app(lifespan=None) -> FastAPI:
     )
     from app.api.delivery_failure_pages import register_delivery_failure_pages
     register_delivery_failure_pages(app, require_orders=require_perm("orders"), get_db=get_db)
+    from app.api.service_shop_review_pages import register_service_shop_review_pages
+    register_service_shop_review_pages(app, render=render, require_admin=require_admin, get_db=get_db)
     from app.api.reseller_capacity_repair_pages import register_reseller_capacity_repair_pages
     register_reseller_capacity_repair_pages(app, require_staff=require_staff, get_db=get_db)
     register_shop_settings(
@@ -2528,8 +2531,8 @@ def create_api_app(lifespan=None) -> FastAPI:
                     (
                         await session.execute(
                             select(Payment)
-                            .join(BotUser, BotUser.id == Payment.user_id)
-                            .where(BotUser.reseller_id == rid)
+                            .outerjoin(Order, Order.id == Payment.order_id)
+                            .where(payment_shop_clause(int(rid)))
                             .order_by(Payment.id.desc())
                             .limit(6)
                         )
@@ -3525,6 +3528,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             order.user_id,
             title="❌ سفارش رد شد",
             body=f"سفارش #{order_id} رد شد. اگر اشتباهی رخ داده با پشتیبانی در تماس باشید.",
+            shop_id=order.reseller_id,
         )
         return _redirect_msg("/finance?tab=orders", ok="سفارش رد شد")
 
@@ -3558,6 +3562,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             order.user_id,
             title="⏹ سفارش لغو شد",
             body=f"سفارش #{order_id} لغو شد.",
+            shop_id=order.reseller_id,
         )
         return _redirect_msg("/finance?tab=orders", ok="سفارش لغو شد")
 
@@ -3616,8 +3621,6 @@ def create_api_app(lifespan=None) -> FastAPI:
                 from app.services.delivery import send_delivery_to_user
                 from app.services.notifications import notify_new_subscription, notify_wallet_topup_ok
                 from app.services.reseller_bots import open_notify_bot_for_user
-
-                from app.services.shop_scope import payment_shop_id
 
                 bot, should_close = await open_notify_bot_for_user(
                     session, user, shop_id=payment_shop_id(payment, order)
@@ -3710,6 +3713,9 @@ def create_api_app(lifespan=None) -> FastAPI:
             payment.user_id,
             title="❌ پرداخت رد شد",
             body=body,
+            shop_id=payment_shop_id(
+                payment, await session.get(Order, payment.order_id) if payment.order_id else None
+            ),
         )
         return _redirect_msg("/finance?tab=payments", ok="پرداخت رد شد")
 

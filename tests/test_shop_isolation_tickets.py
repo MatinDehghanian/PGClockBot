@@ -15,7 +15,8 @@ from app.db import Base
 from app.db.models import BotUser, Ticket, TicketStatus
 from app.services.admin_counters import count_open_tickets
 from app.services.table_bulk import bulk_close_bot_tickets
-from app.services.tickets import list_open_tickets, staff_ticket_in_scope
+from app.services.ticket_scope import staff_ticket_in_scope
+from app.services.tickets import list_open_tickets
 from tests.test_update_owner_only import OWNER_SESSION, SHOP_SESSION
 
 SHOP_ID = 5

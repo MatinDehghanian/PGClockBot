@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, Ticket
-from app.services.tickets import staff_ticket_in_scope, ticket_shop_clause
+from app.services.ticket_scope import staff_ticket_in_scope, ticket_shop_clause
 from app.services.panel_tickets import (
     PRIORITY_BADGE,
     PRIORITY_LABELS,

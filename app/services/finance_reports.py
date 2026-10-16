@@ -27,7 +27,9 @@ from app.services.demo_users import non_demo_customer
 from app.services.formatting import format_toman
 from app.services.home_overview import _period_since_utc, shop_period_stats
 from app.services.users_ops import DEFAULT_EXPIRE_DAYS
-from app.services.tickets import ticket_shop_clause
+from app.services.service_scope import shop_services_clause
+from app.services.shop_membership import shop_member_clause
+from app.services.ticket_scope import ticket_shop_clause
 
 ReportPeriod = Literal["day", "week", "month"]
 VALID_PERIODS: frozenset[str] = frozenset({"day", "week", "month"})
@@ -75,7 +77,7 @@ async def shop_ops_snapshot(
     out = empty_ops_snapshot()
 
     if reseller_id is None:
-        user_scope = BotUser.reseller_id.is_(None)
+        user_scope = shop_member_clause(None)
         fail_scope = DeliveryFailure.reseller_id.is_(None)
         pay_scope = or_(
             and_(Payment.is_wallet_topup.is_(True), Payment.wallet_shop_id.is_(None)),
@@ -83,7 +85,7 @@ async def shop_ops_snapshot(
         )
     else:
         rid = int(reseller_id)
-        user_scope = BotUser.reseller_id == rid
+        user_scope = shop_member_clause(rid)
         fail_scope = DeliveryFailure.reseller_id == rid
         pay_scope = or_(
             and_(Payment.is_wallet_topup.is_(True), Payment.wallet_shop_id == rid),
@@ -106,7 +108,7 @@ async def shop_ops_snapshot(
     # Users with zero UserService rows (shop customers only — same list rules)
     has_svc = (
         select(UserService.id)
-        .where(UserService.bot_user_id == BotUser.id)
+        .where(UserService.bot_user_id == BotUser.id, shop_services_clause(reseller_id))
         .correlate(BotUser)
         .exists()
     )
