@@ -1,6 +1,6 @@
 # Service and customer isolation between shops
 
-Status: design (phase 0). No behavior changes in this document's pull request.
+Status: design. This document changes no behavior. Pull request A (owner boundaries, tickets, payments, per-service checks, customer view) is implemented separately; section 7 lists what pull request B adds.
 
 ## 1. Problem
 
@@ -17,7 +17,7 @@ The features that already compare the service's shop with the current bot (renew
 ## 2. Invariants
 
 1. A service belongs to exactly one shop (or the platform), decided when it is created and never inferred from who the customer is today.
-2. A bot, panel session or Mini App for shop S may read or change a service only if the service's shop is S. The platform bot and the Owner web panel are the platform shop (`NULL`); the Owner reads shop data only through the web panel and only where this document allows it (section 6).
+2. A bot, panel session or Mini App for shop S may read or change a service only if the service's shop is S and it is not under review. The platform bot and the Owner web panel are the platform shop (`NULL`); the Owner reads shop data only through the web panel and only where this document allows it (section 6).
 3. A person can be a customer of several shops. Their services, tickets, orders, wallets and notifications stay in the shop that produced them.
 4. A user-level action (block, role, delete, wallet adjustment, direct message) is allowed only for the shop the user is attributed to; it never reaches the services of another shop.
 5. Every check happens where the mutation happens, on the loaded record, not only on the list that led to it.
@@ -40,14 +40,22 @@ Where the shop is known at creation (all three creation sites):
 | `bot_user_admin.py` manual provisioning | the shop of the acting scope (`shop_rid`) |
 | `service_import.py` import | the import `shop_id` |
 
-## 4. Backfill and its limit
+## 4. Backfill, review state and the report
 
-Migration `NNNN_service_shop_id` (idempotent, SQLite and PostgreSQL, keyset batches, `downgrade` drops the column and index):
+Migration `NNNN_service_shop_id` (idempotent, SQLite and PostgreSQL, keyset batches, `downgrade` drops what it added):
 
-1. `remark = 'order:N'` and the order belongs to the same user: `shop_id = order.reseller_id`.
-2. Everything else (`imported`, `linked`, `manual:*`, malformed remark): `shop_id = bot_users.reseller_id` of the owner. This is the only available signal.
+1. `remark = 'order:N'` and the order belongs to the same user: `shop_id = order.reseller_id`. This is the only place the remark text is parsed; from this release on `shop_id` is written when the service is created (delivery, manual provisioning, import) and nothing parses the remark again.
+2. Every other service (`imported`, `linked`, `manual:*`, malformed remark) has no order. Its shop can only be guessed from the customer's current `reseller_id`, which is wrong for a customer who was attributed to a shop after the service existed. These rows are **not** assigned silently:
+   - a customer whose attribution is consistent with the rest of their data (no order or service of another shop) gets `shop_id` from the attribution;
+   - a customer with evidence of two shops (a platform order or service next to a shop attribution, or the reverse) has such services marked `shop_needs_review = true` and `shop_id` left `NULL`.
 
-Known limit: for category 2 the result is wrong when the user was re-attributed after the service existed (a platform import that was later re-attributed). It cannot be detected from the data. The migration does not guess further; a read-only report lists users who have a service of category 2 and an order or service of another shop, so the owner can review them. No automatic reassignment.
+`NULL` stays "platform" for resolved rows; a row under review is excluded from every shop's view and from every staff action until the owner resolves it, so an unresolved service is never handed to the wrong shop. The migration writes the list of services under review to the migration log, and an owner-only page (or CLI command) lists them with the customer, the evidence and a one-click choice of shop. The report is produced by the same query that sets the flag, so it can never disagree with the backfill.
+
+## 4a. Shop membership
+
+The user list of a panel and the bot's customer queries cannot rely on `bot_users.reseller_id`, because one person can be a customer of several shops. Add a light table `bot_user_shops(bot_user_id, shop_id)` (`shop_id` `NULL` = platform; two partial unique indexes with `sqlite_where` and `postgresql_where` keep one row per pair) written idempotently on first contact with a bot, on order creation, on service creation and on import, and backfilled from `reseller_id`, orders and services. `reseller_id` stays for compatibility and for "which shop first attributed this person". User-level actions (block, role, delete, wallet adjustment, message) still belong only to the attributed shop; a delete is refused with a clear message while the person has services of another shop.
+
+Rejected: an `EXISTS` over orders and services as the membership rule. It cannot represent a customer who opened a bot but has not bought, and costs two index probes per row in every list.
 
 ## 5. One check, one helper
 
@@ -55,7 +63,7 @@ Known limit: for category 2 the result is wrong when the user was re-attributed 
 
 - `service_in_shop(service, shop_id) -> bool` and `assert_service_in_shop(service, shop_id)` (raises the domain `ValueError` with the existing Persian message).
 - `shop_services_clause(shop_id)` for queries (`UserService.shop_id IS NULL` or `== shop_id`).
-- `shop_member_clause(shop_id)`: a customer belongs to a shop if `BotUser.reseller_id == shop_id` or the customer has a service or an order of that shop. The platform clause is the mirror (unattributed, or has a platform service or order). This keeps a customer visible to the platform after attribution and visible to a shop that never attributed them.
+- `shop_member_clause(shop_id)`: a join on `bot_user_shops` (section 4a). A customer stays visible to the platform after attribution and is visible to a shop that never attributed them.
 - `current_shop_reseller_id()` stays the single source of "which bot is this".
 
 `service_shop_id` becomes a thin reader of the column. Call sites to convert, grouped by pull request in section 7.
@@ -73,25 +81,26 @@ Known limit: for category 2 the result is wrong when the user was re-attributed 
 
 ## 7. Pull requests
 
-Pull request A (no migration, no change to what a customer sees):
+Pull request A (no migration; implemented):
 
-- scope `POST /resellers/{id}/delete-user`; add `reseller_id IS NULL` to the broadcast audience; reject shop wallet top-up approval by the Owner (single and bulk);
-- ticket visibility by `Ticket.reseller_id`; close the fail-open in bulk ticket close;
+- scope `POST /resellers/{id}/delete-user`; add `reseller_id IS NULL` to the broadcast audience; Owner approval and rejection (single and bulk) only for platform payments, as the bot already does;
+- ticket visibility, counters and actions by `Ticket.reseller_id`; the fail-open in bulk ticket close;
 - `order.reseller_id == current shop` in the `pay:*` handlers;
-- stop first-touch re-attribution for a user who already has a service or order;
-- until the column exists, `assert_service_in_shop` is built on `service_shop_id` and applied to the panel and bot-admin service operations (`get_owned_service`, quick renew, extend, delete) and to the panel client choice, so a failed lookup is never treated as "already absent".
+- `get_owned_service` requires the acting shop and refuses a service whose fulfilling order belongs to another shop; the panel client is chosen from the service's shop;
+- customer lists, details, links and the Mini App show only services the bot in use sold (two queries per list through `services_in_shop`).
 
 Pull request B (migration and behavior change):
 
-- the column, backfill and report;
-- `service_scope.py` and its use in customer lists and details, link and QR, delete, Mini App, loyalty redemption and wheel;
+- `user_services.shop_id`, `shop_needs_review`, `bot_user_shops`, backfill and the review report; `service_shop_id` and `services_in_shop` read the column;
+- stop first-touch attribution for a customer who already has a service or an order (kept out of A because without membership a shop would stop seeing a customer who buys from it after buying elsewhere);
+- panel and bot user lists and the edit modal through the membership table and the service shop;
 - notification bot and panel client chosen from the service or order shop;
 - campaign audience and scheduler fallback through the helper;
-- point balances per shop are tracked as a follow-up, not part of B.
+- loyalty redemption and wheel by the shop of the bot in use; point balances per shop are a follow-up.
 
 ## 7a. Behavior change for customers
 
-A customer of two shops sees two separate lists. A service opened from the wrong bot says it is managed from its own shop's bot (the wording already used by renewals and cancellation). Support should be told before B ships.
+A customer of two shops sees two separate lists. A service opened from the wrong bot is reported as not found. Support should be told before pull request A ships.
 
 ## 8. Findings this design closes
 
