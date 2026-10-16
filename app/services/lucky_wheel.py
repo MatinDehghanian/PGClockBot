@@ -34,7 +34,9 @@ from app.services.loyalty import (
     debit_points,
     issue_discount_entitlement,
     loyalty_enabled,
+    points_balance,
 )
+from app.services.users import current_shop_reseller_id
 
 logger = logging.getLogger(__name__)
 
@@ -202,8 +204,10 @@ def prize_in_scope(prize: LuckyWheelPrize, scope: int | None) -> bool:
     return prize.reseller_id is not None and int(prize.reseller_id) == int(scope)
 
 
-def shop_prize_scope(user: BotUser) -> int | None:
-    return int(user.reseller_id) if user.reseller_id is not None else None
+def shop_prize_scope(_user: BotUser | None = None) -> int | None:
+    """Prizes, settings and spins belong to the shop of the bot in use, not the customer's attribution."""
+    rid = current_shop_reseller_id()
+    return int(rid) if rid else None
 
 
 async def list_prizes(
@@ -358,7 +362,11 @@ def weighted_draw(
 async def _get_or_create_state(
     session: AsyncSession, user: BotUser, *, for_update: bool = False
 ) -> LuckyWheelUserState:
-    q = select(LuckyWheelUserState).where(LuckyWheelUserState.user_id == int(user.id))
+    scope = shop_prize_scope()
+    scope_clause = (
+        LuckyWheelUserState.reseller_id == scope if scope else LuckyWheelUserState.reseller_id.is_(None)
+    )
+    q = select(LuckyWheelUserState).where(LuckyWheelUserState.user_id == int(user.id), scope_clause)
     if for_update:
         try:
             q = q.with_for_update()
@@ -369,7 +377,7 @@ async def _get_or_create_state(
         return state
     state = LuckyWheelUserState(
         user_id=int(user.id),
-        reseller_id=user.reseller_id,
+        reseller_id=scope,
         free_spins_balance=0,
         spins_today=0,
         spins_day=_utc_day(),
@@ -382,7 +390,7 @@ async def _get_or_create_state(
         state = (
             await session.execute(
                 select(LuckyWheelUserState).where(
-                    LuckyWheelUserState.user_id == int(user.id)
+                    LuckyWheelUserState.user_id == int(user.id), scope_clause
                 )
             )
         ).scalar_one()
@@ -391,7 +399,7 @@ async def _get_or_create_state(
                 state = (
                     await session.execute(
                         select(LuckyWheelUserState)
-                        .where(LuckyWheelUserState.user_id == int(user.id))
+                        .where(LuckyWheelUserState.user_id == int(user.id), scope_clause)
                         .with_for_update()
                     )
                 ).scalar_one()
@@ -464,7 +472,7 @@ async def get_user_wheel_status(session: AsyncSession, user: BotUser) -> WheelSt
             free_spins_left=0,
             spins_today=0,
             cooldown_remaining=0,
-            points_balance=int(user.points_balance or 0),
+            points_balance=await points_balance(session, user, scope),
             can_spin=False,
             block_reason="چرخ شانس غیرفعال است",
         )
@@ -485,7 +493,7 @@ async def get_user_wheel_status(session: AsyncSession, user: BotUser) -> WheelSt
     spins_today = int(state.spins_today or 0)
     daily_limit = int(cfg["daily_limit"])
     cost = int(cfg["spin_cost"])
-    pts = int(user.points_balance or 0)
+    pts = await points_balance(session, user, scope)
 
     reason: str | None = None
     can = True
@@ -604,6 +612,7 @@ async def spin(
                 idempotency_key=f"wheel_pts:{key}",
                 meta={"idempotency_key": key},
                 commit=False,
+                shop_id=scope,
             )
             pts_tx_id = pts_tx.id if pts_tx else None
 
@@ -655,6 +664,7 @@ async def spin(
                 idempotency_key=f"wheel_win_pts:{key}",
                 meta={"spin_id": spin_row.id},
                 commit=False,
+                shop_id=scope,
             )
         elif ptype == "wallet_credit" and pval > 0:
             from app.services.wallet import credit_wallet

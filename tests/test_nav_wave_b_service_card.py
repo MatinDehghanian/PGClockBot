@@ -57,6 +57,7 @@ class SvcViewInlineTests(unittest.IsolatedAsyncioTestCase):
         state.update_data = AsyncMock()
 
         with (
+            patch("app.bot.handlers.services.customer_may_use_service", AsyncMock(return_value=True)),
             patch(
                 "app.bot.handlers.services.get_all_settings",
                 AsyncMock(return_value={"nav_mode": "inline"}),
@@ -104,6 +105,7 @@ class SvcViewInlineTests(unittest.IsolatedAsyncioTestCase):
         db_user.id = 1
 
         with (
+            patch("app.bot.handlers.services.customer_may_use_service", AsyncMock(return_value=True)),
             patch(
                 "app.bot.handlers.services.get_all_settings",
                 AsyncMock(return_value={"nav_mode": "classic"}),
@@ -170,6 +172,7 @@ class OpenServicesSingleShortcutTests(unittest.IsolatedAsyncioTestCase):
         session.execute = AsyncMock(return_value=result)
 
         with (
+            patch("app.bot.handlers.reply_nav.list_customer_services", AsyncMock(return_value=[svc])),
             patch(
                 "app.bot.handlers.reply_nav.get_all_settings",
                 AsyncMock(return_value={"nav_mode": "inline"}),

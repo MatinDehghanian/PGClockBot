@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% from "macros.html" import page_title %}
+{% block title %}سرویس‌های در انتظار تعیین فروشگاه{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    {{ page_title('users', 'سرویس‌های در انتظار تعیین فروشگاه') }}
+  </div>
+</div>
+
+<div class="card">
+  <p class="muted">برای این سرویس‌ها نمی‌شد از روی سفارش، فروشگاه فروشنده را مطمئن تشخیص داد؛ مشتری‌شان به یک فروشگاه منتسب است ولی از جای دیگری هم خرید کرده است. تا فروشگاه تعیین نشود، سرویس برای هیچ فروشگاه و هیچ مشتری نمایش داده نمی‌شود و عملیات روی آن انجام نمی‌شود.</p>
+</div>
+
+<div class="card card-flush">
+  <div class="card-flush-head"><h2>در انتظار تصمیم</h2></div>
+  {% if rows %}
+  <div class="table-wrap">
+    <table class="table-compact">
+      <thead>
+        <tr><th class="col-id">سرویس</th><th class="col-user">مشتری</th><th class="col-user">منتسب به</th><th class="col-user">خرید از</th><th class="col-actions">فروشگاه این سرویس</th></tr>
+      </thead>
+      <tbody>
+      {% for row in rows %}
+        <tr>
+          <td dir="ltr">{{ row.pg_username }} <span class="muted">#{{ row.service_id }}</span></td>
+          <td>{{ row.customer_id }}</td>
+          <td>{{ 'پلتفرم' if row.attributed_shop is none else row.attributed_shop }}</td>
+          <td>{% for s in row.order_shops %}{{ 'پلتفرم' if s is none else s }}{% if not loop.last %}، {% endif %}{% else %}—{% endfor %}</td>
+          <td>
+            <form method="post" action="/service-shop-review/{{ row.service_id }}/assign" class="form-inline"
+                  data-confirm="این انتخاب قابل برگشت نیست. ادامه می‌دهید؟"
+                  data-confirm-title="تعیین فروشگاه سرویس"
+                  data-confirm-label="تعیین فروشگاه">
+              <select name="shop" aria-label="فروشگاه سرویس {{ row.pg_username }}" required>
+                <option value="platform">پلتفرم</option>
+                {% for shop_id, label in shops %}
+                <option value="{{ shop_id }}">{{ label }} (#{{ shop_id }})</option>
+                {% endfor %}
+              </select>
+              <button class="btn btn-sm" type="submit">تعیین</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="empty">سرویسی در انتظار تعیین فروشگاه نیست.</p>
+  {% endif %}
+</div>
+{% endblock %}

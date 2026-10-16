@@ -28,6 +28,7 @@ from app.services.catalog_pricing import annotate_prices, displayed_quote, quote
 from app.config import get_settings
 from app.db.models import BotUser, Plan, ResellerProfile, UserService
 from app.services.db_safe import rollback_quiet
+from app.services.service_scope import customer_may_use_service, list_customer_services
 from app.services.formatting import (
     expire_remaining_days,
     format_bytes_ratio,
@@ -96,25 +97,24 @@ async def _require_commerce_ready(session: AsyncSession, user: BotUser) -> str:
     return persona
 
 
-def _owned_service_or_404(svc: UserService | None, user: BotUser) -> UserService:
-    """Fail closed: service must belong to the authenticated Mini App user."""
-    if not svc or int(svc.bot_user_id) != int(user.id):
+async def _owned_service_or_404(
+    session: AsyncSession, svc: UserService | None, user: BotUser
+) -> UserService:
+    """Fail closed: the service must be the Mini App user's and platform-sold."""
+    if not await customer_may_use_service(session, svc, int(user.id), None):
         raise HTTPException(404)
     return svc
 
 
 def _addons_allowed(user: BotUser, svc: UserService) -> bool:
-    return (
-        user.reseller_id is None
-        and bool(svc.pg_user_id)
-        and (svc.remark or "").strip() != "linked"
-    )
+    """Packs for a platform-sold, panel-linked service (shop-sold ones never reach this check)."""
+    return bool(svc.pg_user_id) and (svc.remark or "").strip() != "linked"
 
 
 async def _addon_service(
     session: AsyncSession, user: BotUser, service_id: int
 ) -> UserService:
-    svc = _owned_service_or_404(await session.get(UserService, service_id), user)
+    svc = await _owned_service_or_404(session, await session.get(UserService, service_id), user)
     if not _addons_allowed(user, svc):
         raise HTTPException(400, "خرید بسته برای این سرویس در مینی‌اپ ممکن نیست")
     return svc
@@ -289,12 +289,7 @@ async def _user_shop_payload(session: AsyncSession, user: BotUser) -> dict:
     """
     from app.services.wallet import list_activity
 
-    svc_result = await session.execute(
-        select(UserService)
-        .where(UserService.bot_user_id == user.id)
-        .order_by(UserService.id.desc())
-    )
-    services = list(svc_result.scalars().all())
+    services = await list_customer_services(session, user.id, None)
     plans_q = (
         select(Plan)
         .where(
@@ -485,7 +480,7 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
         from app.services.service_cancellations import cancellation_status
         user = await load_mini_user(session, request)
         await _require_commerce_ready(session, user)
-        _owned_service_or_404(await session.get(UserService, service_id), user)
+        await _owned_service_or_404(session, await session.get(UserService, service_id), user)
         try:
             return _no_store({"request": await cancellation_status(session, user, service_id, shop_id=None)})
         except ValueError as exc:
@@ -496,7 +491,7 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
         from app.services.service_cancellations import request_cancellation
         user = await load_mini_user(session, request)
         await _require_commerce_ready(session, user)
-        _owned_service_or_404(await session.get(UserService, service_id), user)
+        await _owned_service_or_404(session, await session.get(UserService, service_id), user)
         try:
             data = await request.json()
             if not isinstance(data, dict) or not isinstance(data.get("reason"), str):
@@ -557,7 +552,7 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
     ):
         user = await load_mini_user(session, request)
         _require_commerce(user)
-        svc = _owned_service_or_404(await session.get(UserService, service_id), user)
+        svc = await _owned_service_or_404(session, await session.get(UserService, service_id), user)
         info = await _fetch_pg_info(_service_sub_token(svc), subscription_url=svc.subscription_url, service_id=svc.id, expected_pg_user_id=svc.pg_user_id)
         if info.get("status") and "expire" in info:
             from app.services.bot_user_admin import sync_service_quota_cache
@@ -575,7 +570,7 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
 
         user = await load_mini_user(session, request)
         _require_commerce(user)
-        svc = _owned_service_or_404(await session.get(UserService, service_id), user)
+        svc = await _owned_service_or_404(session, await session.get(UserService, service_id), user)
         url = absolutize_subscription_url(svc.subscription_url) or (
             (svc.subscription_url or "").strip()
         )
@@ -702,7 +697,7 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
             from app.services.notifications import notify_new_subscription
             from app.services.reseller_bots import open_notify_bot_for_user
 
-            bot, should_close = await open_notify_bot_for_user(session, user)
+            bot, should_close = await open_notify_bot_for_user(session, user, shop_id=None)
             try:
                 await notify_new_subscription(
                     bot, session, order=order, user_tg_id=user.telegram_id
@@ -768,7 +763,7 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
 
         user = await load_mini_user(session, request)
         await _require_commerce_ready(session, user)
-        _owned_service_or_404(await session.get(UserService, service_id), user)
+        await _owned_service_or_404(session, await session.get(UserService, service_id), user)
         try:
             return _no_store(await automation_settings(session, user, service_id))
         except ValueError as exc:
@@ -780,7 +775,7 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
 
         user = await load_mini_user(session, request)
         await _require_commerce_ready(session, user)
-        _owned_service_or_404(await session.get(UserService, service_id), user)
+        await _owned_service_or_404(session, await session.get(UserService, service_id), user)
         try:
             body = await request.json()
             if not isinstance(body, dict) or type(body.get("enabled")) is not bool:
@@ -800,7 +795,7 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
 
         user = await load_mini_user(session, request)
         await _require_commerce_ready(session, user)
-        svc = _owned_service_or_404(await session.get(UserService, service_id), user)
+        svc = await _owned_service_or_404(session, await session.get(UserService, service_id), user)
         plan = await get_catalog_plan(session, plan_id)
         try:
             return _no_store(await preview_renewal(session, user_id=user.id, service=svc, plan=plan))
@@ -830,7 +825,7 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
         ui = await get_all_settings(session)
         if not on(ui.get("pay_wallet_enabled")):
             raise HTTPException(403, "پرداخت با کیف پول غیرفعال است")
-        svc = _owned_service_or_404(await session.get(UserService, service_id), user)
+        svc = await _owned_service_or_404(session, await session.get(UserService, service_id), user)
         if (svc.remark or "").strip() == "linked":
             raise HTTPException(
                 400,

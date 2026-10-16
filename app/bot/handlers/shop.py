@@ -26,6 +26,7 @@ from app.services.formatting import (
     kv_line,
 )
 from app.services.orders import (
+    is_customer_order_in_current_shop,
     apply_discount_to_order,
     calc_custom_plan_price,
     calc_wholesale_price,
@@ -1605,7 +1606,7 @@ async def pay_back(
         await callback.answer("نامعتبر", show_alert=True)
         return
     order = await session.get(Order, order_id)
-    if not order or int(order.user_id) != int(db_user.id):
+    if not is_customer_order_in_current_shop(order, db_user.id):
         await callback.answer("سفارش نامعتبر", show_alert=True)
         return
     await callback.answer()
@@ -1686,7 +1687,7 @@ async def apply_loyalty_discount_btn(
 
     ent = await session.get(LoyaltyDiscountEntitlement, ent_id)
     order = await session.get(Order, order_id)
-    if not order or order.user_id != db_user.id:
+    if not is_customer_order_in_current_shop(order, db_user.id):
         await callback.answer("سفارش نامعتبر", show_alert=True)
         return
     if not ent or int(ent.user_id) != int(db_user.id):
@@ -1756,7 +1757,7 @@ async def apply_discount_msg(
     data = await state.get_data()
     order = await session.get(Order, data.get("order_id"))
     await state.clear()
-    if not order or order.user_id != db_user.id:
+    if not is_customer_order_in_current_shop(order, db_user.id):
         await restore_main_reply(
             message,
             session,
@@ -1820,7 +1821,7 @@ async def pay_wallet_cb(
         return
     order_id = int(callback.data.split(":")[-1])
     order = await session.get(Order, order_id)
-    if not order or order.user_id != db_user.id:
+    if not is_customer_order_in_current_shop(order, db_user.id):
         await callback.answer("سفارش نامعتبر", show_alert=True)
         return
     try:
@@ -2002,7 +2003,7 @@ async def pay_card_cb(
     order_id = int(parts[2])
     dest_id = parts[3] if len(parts) > 3 else None
     order = await session.get(Order, order_id)
-    if not order or order.user_id != db_user.id:
+    if not is_customer_order_in_current_shop(order, db_user.id):
         await callback.answer("سفارش نامعتبر", show_alert=True)
         return
     cards = enabled_cards(ui)
@@ -2102,7 +2103,7 @@ async def pay_gateway_cb(
     order_id = int(parts[2])
     dest_id = parts[3] if len(parts) > 3 else None
     order = await session.get(Order, order_id)
-    if not order or order.user_id != db_user.id:
+    if not is_customer_order_in_current_shop(order, db_user.id):
         await callback.answer("سفارش نامعتبر", show_alert=True)
         return
     gateways = enabled_gateways(ui)
@@ -2202,7 +2203,7 @@ async def pay_crypto_cb(
     order_id = int(parts[2])
     dest_id = parts[3] if len(parts) > 3 else None
     order = await session.get(Order, order_id)
-    if not order or order.user_id != db_user.id:
+    if not is_customer_order_in_current_shop(order, db_user.id):
         await callback.answer("سفارش نامعتبر", show_alert=True)
         return
     wallets = enabled_crypto_wallets(ui)
@@ -2282,7 +2283,7 @@ async def pay_stars_cb(
         return
     order_id = int(callback.data.split(":")[-1])
     order = await session.get(Order, order_id)
-    if not order or order.user_id != db_user.id:
+    if not is_customer_order_in_current_shop(order, db_user.id):
         await callback.answer("سفارش نامعتبر", show_alert=True)
         return
     try:
@@ -2352,7 +2353,7 @@ async def pay_psp_cb(
         return
     order_id = int((callback.data or "").split(":")[-1])
     order = await session.get(Order, order_id)
-    if not order or order.user_id != db_user.id:
+    if not is_customer_order_in_current_shop(order, db_user.id):
         await callback.answer("سفارش نامعتبر", show_alert=True)
         return
     try:
@@ -2544,7 +2545,7 @@ def _register_shop_cancel_codes() -> None:
             await message.answer("سفارش یافت نشد.")
             return
         order = await session.get(Order, int(oid))
-        if not order:
+        if not is_customer_order_in_current_shop(order, db_user.id):
             await message.answer("سفارش یافت نشد.")
             return
         summary = (

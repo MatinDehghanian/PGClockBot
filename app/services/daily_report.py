@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import BotUser, UserService
 from app.services.home_overview import bot_panel_summary, reseller_shop_summary
 from app.services.safe_format import safe_format
+from app.services.service_scope import shop_services_clause
 
 DOMAIN_DAILY_REPORT = "daily_report"
 
@@ -448,7 +449,7 @@ async def _today_activity(session: AsyncSession, *, reseller_id: int | None) -> 
             select(func.count())
             .select_from(UserService)
             .join(BotUser, BotUser.id == UserService.bot_user_id)
-            .where(UserService.created_at >= since, BotUser.reseller_id.is_(None), BotUser.is_demo.is_(False))
+            .where(UserService.created_at >= since, shop_services_clause(None), BotUser.is_demo.is_(False))
         )
     else:
         rid = int(reseller_id)
@@ -456,7 +457,7 @@ async def _today_activity(session: AsyncSession, *, reseller_id: int | None) -> 
             select(func.count())
             .select_from(UserService)
             .join(BotUser, BotUser.id == UserService.bot_user_id)
-            .where(UserService.created_at >= since, BotUser.reseller_id == rid, BotUser.is_demo.is_(False))
+            .where(UserService.created_at >= since, shop_services_clause(rid), BotUser.is_demo.is_(False))
         )
     services_new = int((await session.execute(svc_q)).scalar() or 0)
     return {

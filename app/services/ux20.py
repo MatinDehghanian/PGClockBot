@@ -31,6 +31,8 @@ from app.db.models import (
 from app.services.demo_users import non_demo_customer
 from app.services.pasarguard import is_pg_permission_denied
 from app.services.pg_read_resilience import PG_READ_UNAVAILABLE_MESSAGE, PgReadUnavailable
+from app.services.service_scope import shop_services_clause
+from app.services.ticket_scope import ticket_shop_clause
 
 logger = logging.getLogger(__name__)
 
@@ -144,6 +146,22 @@ async def check_pg_connection(*, reseller_user_id: int | None = None, session: A
         }
 
 
+def payment_shop_clause(shop_id: int | None):
+    """Payments of one shop (None = platform): a top-up's purse or the order's shop.
+
+    The query must outer-join ``Order`` on ``Order.id == Payment.order_id``.
+    """
+    if shop_id is None:
+        return or_(
+            and_(Payment.is_wallet_topup.is_(True), Payment.wallet_shop_id.is_(None)),
+            and_(Payment.is_wallet_topup.is_(False), Order.reseller_id.is_(None)),
+        )
+    return or_(
+        and_(Payment.is_wallet_topup.is_(True), Payment.wallet_shop_id == int(shop_id)),
+        and_(Payment.is_wallet_topup.is_(False), Order.reseller_id == int(shop_id)),
+    )
+
+
 async def build_action_center(
     session: AsyncSession,
     *,
@@ -160,9 +178,12 @@ async def build_action_center(
         .where(
             Payment.status == PaymentStatus.PENDING.value,
             Payment.receipt_file_id.is_not(None),
+            payment_shop_clause(reseller_id),
         )
     )
-    tickets_q = select(func.count()).select_from(Ticket).where(Ticket.status == "open")
+    tickets_q = select(func.count()).select_from(Ticket).where(
+        Ticket.status == "open", ticket_shop_clause(reseller_id)
+    )
     fail_q = (
         select(func.count())
         .select_from(DeliveryFailure)
@@ -170,22 +191,9 @@ async def build_action_center(
     )
 
     if reseller_id is None:
-        pending_q = pending_q.where(
-            or_(Payment.is_wallet_topup.is_(True), Order.reseller_id.is_(None))
-        )
-        tickets_q = tickets_q.join(BotUser, BotUser.id == Ticket.user_id).where(
-            BotUser.reseller_id.is_(None)
-        )
         fail_q = fail_q.where(DeliveryFailure.reseller_id.is_(None))
     else:
-        rid = int(reseller_id)
-        pending_q = pending_q.join(BotUser, BotUser.id == Payment.user_id).where(
-            BotUser.reseller_id == rid
-        )
-        tickets_q = tickets_q.join(BotUser, BotUser.id == Ticket.user_id).where(
-            BotUser.reseller_id == rid
-        )
-        fail_q = fail_q.where(DeliveryFailure.reseller_id == rid)
+        fail_q = fail_q.where(DeliveryFailure.reseller_id == int(reseller_id))
 
     pending = int((await session.execute(pending_q)).scalar() or 0)
     tickets = int((await session.execute(tickets_q)).scalar() or 0)
@@ -211,7 +219,6 @@ async def build_action_center(
                 select(UserService.created_at, Plan.duration_days)
                 .select_from(UserService)
                 .join(Plan, Plan.id == UserService.plan_id)
-                .join(BotUser, BotUser.id == UserService.bot_user_id)
                 .where(
                     UserService.plan_id.is_not(None),
                     Plan.duration_days.is_not(None),
@@ -219,9 +226,7 @@ async def build_action_center(
                     UserService.created_at >= scan_since,
                     UserService.quota_synced_at.is_(None),
                     UserService.is_cancelled.is_(False),
-                    BotUser.reseller_id.is_(None)
-                    if reseller_id is None
-                    else BotUser.reseller_id == int(reseller_id),
+                    shop_services_clause(reseller_id),
                 )
             )
         ).all()
@@ -241,19 +246,14 @@ async def build_action_center(
     synced_q = (
         select(func.count())
         .select_from(UserService)
-        .join(BotUser, BotUser.id == UserService.bot_user_id)
         .where(
             UserService.quota_synced_at.is_not(None),
             UserService.quota_expire_at.is_not(None),
             UserService.quota_expire_at >= now,
             UserService.quota_expire_at <= cutoff,
             UserService.is_cancelled.is_(False),
+            shop_services_clause(reseller_id),
         )
-    )
-    synced_q = synced_q.where(
-        BotUser.reseller_id.is_(None)
-        if reseller_id is None
-        else BotUser.reseller_id == int(reseller_id)
     )
     expiring += int((await session.execute(synced_q)).scalar() or 0)
 
@@ -301,20 +301,31 @@ async def build_action_center(
             }
         )
 
+    if reseller_id is None:
+        from app.services.service_shop_review import count_services_under_review
+
+        waiting = await count_services_under_review(session)
+        if waiting:
+            items.append(
+                {
+                    "key": "shop_review",
+                    "title": f"{waiting} سرویس در انتظار تعیین فروشگاه",
+                    "detail": "تا تعیین نشود برای هیچ فروشگاهی نمایش داده نمی‌شود",
+                    "href": "/service-shop-review",
+                    "tone": "warn",
+                }
+            )
+
     # Low volume: services still flagged by the alert scheduler (clears on renew).
     low_q = (
         select(func.count())
         .select_from(UserService)
-        .join(BotUser, BotUser.id == UserService.bot_user_id)
         .where(
             UserService.notified_traffic.is_(True),
             UserService.is_cancelled.is_(False),
+            shop_services_clause(reseller_id),
         )
     )
-    if reseller_id is None:
-        low_q = low_q.where(BotUser.reseller_id.is_(None))
-    else:
-        low_q = low_q.where(BotUser.reseller_id == int(reseller_id))
     low_volume = int((await session.execute(low_q)).scalar() or 0)
     if low_volume:
         from app.services.users_ops import users_list_href
@@ -530,7 +541,7 @@ async def retry_delivery(session: AsyncSession, order_id: int) -> Order:
                 .limit(1)
             )
         ).scalar_one_or_none()
-        bot, should_close = await open_notify_bot_for_user(session, user)
+        bot, should_close = await open_notify_bot_for_user(session, user, shop_id=order.reseller_id)
         try:
             await send_delivery_to_user(
                 bot, user.telegram_id, session, pay, order
@@ -815,17 +826,7 @@ async def suggest_receipt_matches(
         )
         .order_by(Payment.created_at.desc())
     )
-    if reseller_id is None:
-        # Platform scope: only payers with no shop membership at all.
-        q = q.where(BotUser.reseller_id.is_(None))
-    else:
-        rid = int(reseller_id)
-        q = q.join(Order, Order.id == Payment.order_id, isouter=True).where(
-            or_(
-                and_(Payment.is_wallet_topup.is_(True), BotUser.reseller_id == rid),
-                and_(Payment.is_wallet_topup.is_(False), Order.reseller_id == rid),
-            )
-        )
+    q = q.join(Order, Order.id == Payment.order_id, isouter=True).where(payment_shop_clause(reseller_id))
     rows = list((await session.execute(q.limit(5))).scalars().all())
     out = []
     for p in rows:

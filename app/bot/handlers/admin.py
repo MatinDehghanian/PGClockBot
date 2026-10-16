@@ -2273,7 +2273,7 @@ async def adm_users_list(callback: CallbackQuery, session: AsyncSession, db_user
         .limit(USERS_PAGE_SIZE)
     )
     users = list(result.scalars().all())
-    by_svc = await load_services_by_user_ids(session, [int(u.id) for u in users])
+    by_svc = await load_services_by_user_ids(session, [int(u.id) for u in users], shop_id=None)
     rows = []
     for u in users:
         ops = build_user_ops_row(u, by_svc.get(int(u.id), []))
@@ -2396,7 +2396,7 @@ async def _render_user_card(
         load_services_by_user_ids,
     )
 
-    by = await load_services_by_user_ids(session, [int(user.id)])
+    by = await load_services_by_user_ids(session, [int(user.id)], shop_id=None)
     ops = build_user_ops_row(user, by.get(int(user.id), []))
     flags = bot_user_alert_flags(ops)
     blocked = "بله 🚫" if user.is_blocked else "خیر"
@@ -2509,6 +2509,7 @@ async def adm_users_message_send(
             session,
             user,
             message.text or "",
+            shop_id=None,
             actor=str(db_user.telegram_id or db_user.id),
         )
         await session.commit()
@@ -2627,7 +2628,7 @@ async def adm_users_quick_renew(
     from app.services.users_quick import quick_renew_user
 
     try:
-        _svc, label = await quick_renew_user(session, user)
+        _svc, label = await quick_renew_user(session, user, shop_id=None)
         await session.commit()
         await callback.answer(f"تمدید شد: {label}"[:180], show_alert=True)
     except ValueError as e:
@@ -2785,7 +2786,7 @@ async def adm_users_services(
         return
     from app.services.bot_user_admin import list_service_snapshots, snapshot_telegram_lines
 
-    snaps = await list_service_snapshots(session, user_id)
+    snaps = await list_service_snapshots(session, user_id, shop_id=None)
     await callback.answer()
     if not snaps:
         if callback.message:
@@ -2833,7 +2834,7 @@ async def adm_users_service_one(
 
     try:
         svc = await get_owned_service(
-            session, bot_user_id=user_id, service_id=service_id
+            session, bot_user_id=user_id, service_id=service_id, shop_id=None
         )
         snap = await service_snapshot(session, svc)
         await session.commit()
@@ -2867,7 +2868,7 @@ async def adm_users_service_link(
 
     try:
         svc = await get_owned_service(
-            session, bot_user_id=user_id, service_id=service_id
+            session, bot_user_id=user_id, service_id=service_id, shop_id=None
         )
         snap = await service_snapshot(session, svc)
         await session.commit()
@@ -2908,7 +2909,7 @@ async def adm_users_service_renew(
 
     try:
         svc = await get_owned_service(
-            session, bot_user_id=user_id, service_id=service_id
+            session, bot_user_id=user_id, service_id=service_id, shop_id=None
         )
         plan = await session.get(Plan, int(svc.plan_id)) if svc.plan_id else None
         if plan is None:
@@ -2949,7 +2950,7 @@ async def adm_users_service_delete_ask(
 
     try:
         svc = await get_owned_service(
-            session, bot_user_id=user_id, service_id=service_id
+            session, bot_user_id=user_id, service_id=service_id, shop_id=None
         )
     except ValueError as e:
         await callback.answer(user_safe_error(e, limit=160), show_alert=True)
@@ -3003,7 +3004,7 @@ async def adm_users_service_delete(
     explicit_pg = len(parts) > 5 and parts[5] == "pg"
     try:
         svc = await get_owned_service(
-            session, bot_user_id=user_id, service_id=service_id
+            session, bot_user_id=user_id, service_id=service_id, shop_id=None
         )
         detach_only = is_external_service(svc) and not explicit_pg
         await admin_delete_service(
@@ -3131,7 +3132,7 @@ async def adm_users_service_adjust(
 
         try:
             svc = await get_owned_service(
-                session, bot_user_id=user_id, service_id=service_id
+                session, bot_user_id=user_id, service_id=service_id, shop_id=None
             )
             await admin_extend_service(
                 session, svc, extra_days=days, extra_gb=gb
@@ -4544,9 +4545,6 @@ async def _load_platform_ticket(
         return None, "یافت نشد"
     if ticket.reseller_id:
         return None, "این تیکت متعلق به فروشگاه نماینده است"
-    ticket_user = await session.get(BotUser, int(ticket.user_id))
-    if ticket_user and ticket_user.reseller_id:
-        return None, "این تیکت متعلق به فروشگاه نماینده است"
     return ticket, None
 
 
@@ -4676,17 +4674,6 @@ async def adm_ticket_reply(
         await state.clear()
         return
     if ticket.reseller_id:
-        await _answer_tickets_nav(
-            message,
-            session,
-            db_user,
-            "دسترسی به تیکت فروشگاه ندارید.",
-            state,
-            clear_state=True,
-        )
-        return
-    ticket_user = await session.get(BotUser, int(ticket.user_id))
-    if ticket_user and ticket_user.reseller_id:
         await _answer_tickets_nav(
             message,
             session,

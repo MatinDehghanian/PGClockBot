@@ -120,9 +120,7 @@ async def check_expiring_services(bot: Bot) -> None:
             )
             if not platform_on and reseller_ids_with_alerts:
                 # Narrow to shops that actually have alerts on before PG fan-out
-                svc_q = svc_q.join(BotUser, BotUser.id == UserService.bot_user_id).where(
-                    BotUser.reseller_id.in_(reseller_ids_with_alerts)
-                )
+                svc_q = svc_q.where(UserService.shop_id.in_(reseller_ids_with_alerts))
             services = list((await session.execute(svc_q)).scalars().all())
             if not services:
                 break
@@ -137,45 +135,15 @@ async def check_expiring_services(bot: Bot) -> None:
                 ).scalars().all()
                 users_by_id = {u.id: u for u in rows}
 
-            # Prefer shop of the fulfilling order (remark order:{id}) over sticky
-            # BotUser.reseller_id — first-touch attribution must not leak alerts.
-            order_ids: set[int] = set()
-            for svc in services:
-                remark = (getattr(svc, "remark", None) or "").strip()
-                if remark.startswith("order:"):
-                    try:
-                        order_ids.add(int(remark.split(":", 1)[1].split()[0]))
-                    except (TypeError, ValueError):
-                        pass
-            order_shop_by_id: dict[int, int | None] = {}
-            if order_ids:
-                from app.db.models import Order
-
-                for oid, orid in (
-                    await session.execute(
-                        select(Order.id, Order.reseller_id).where(Order.id.in_(order_ids))
-                    )
-                ).all():
-                    order_shop_by_id[int(oid)] = int(orid) if orid is not None else None
-
-            def _shop_rid_for(svc: UserService, user: BotUser) -> int | None:
-                remark = (getattr(svc, "remark", None) or "").strip()
-                if remark.startswith("order:"):
-                    try:
-                        oid = int(remark.split(":", 1)[1].split()[0])
-                    except (TypeError, ValueError):
-                        oid = 0
-                    if oid in order_shop_by_id:
-                        return order_shop_by_id[oid]
-                return int(user.reseller_id) if user.reseller_id else None
-
             eligible: list[tuple[UserService, BotUser, dict, int, int, int | None]] = []
             for svc in services:
                 user = users_by_id.get(svc.bot_user_id)
                 if not user or user.is_blocked:
                     continue
 
-                rid = _shop_rid_for(svc, user)
+                if svc.shop_needs_review:
+                    continue
+                rid = int(svc.shop_id) if svc.shop_id else None
                 if not platform_on:
                     if rid is None or rid not in reseller_ids_with_alerts:
                         continue

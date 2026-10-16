@@ -33,6 +33,7 @@ from app.db.models import (
     SettlementStatus,
 )
 from app.services.orders import approve_payment
+from app.services.shop_scope import payment_shop_id
 from app.services.payment_providers import get_psp_adapter
 from app.services.payment_providers.base import CheckoutRequest
 from app.services.payment_providers.card_auto import (
@@ -997,7 +998,9 @@ async def notify_after_settlement(
     user = await session.get(BotUser, payment.user_id)
     if not user:
         return
-    bot, should_close = await open_notify_bot_for_user(session, user)
+    bot, should_close = await open_notify_bot_for_user(
+        session, user, shop_id=payment_shop_id(payment, order)
+    )
     try:
         try:
             await send_delivery_to_user(bot, user.telegram_id, session, payment, order)

@@ -26,6 +26,7 @@ from app.db.models import (
     UserService,
 )
 from app.services.catalog_pricing import annotate_prices, displayed_quote, sale_price
+from app.services.service_scope import service_shop_id
 from app.services.formatting import format_toman, parse_expire
 from app.services.users import (
     current_shop_reseller_id,
@@ -47,24 +48,6 @@ CHOICE_FIELDS = {
     "duration": "duration_pack_id",
     "volume": "volume_pack_id",
 }
-
-
-async def service_shop_id(session: AsyncSession, service: UserService) -> int | None:
-    """Use the fulfilling order's shop before first-touch user attribution."""
-    remark = (service.remark or "").strip()
-    if remark.startswith("order:"):
-        try:
-            order_id = int(remark.split(":", 1)[1].split()[0])
-        except (ValueError, IndexError):
-            raise ValueError("مالکیت فروشگاه سرویس مشخص نیست")
-        order = await session.get(Order, order_id)
-        if not order or order.user_id != service.bot_user_id:
-            raise ValueError("مالکیت فروشگاه سرویس مشخص نیست")
-        return order.reseller_id
-    user = await session.get(BotUser, service.bot_user_id)
-    if not user:
-        raise ValueError("کاربر یافت نشد")
-    return user.reseller_id
 
 
 async def owned_automation_service(

@@ -60,7 +60,7 @@ class ShopPurchaseTests(unittest.IsolatedAsyncioTestCase):
         callback.answer = AsyncMock()
         callback.message = MagicMock()
         session = MagicMock()
-        order = SimpleNamespace(id=order_id, user_id=1, amount=50000)
+        order = SimpleNamespace(id=order_id, user_id=1, reseller_id=None, amount=50000)
         session.get = AsyncMock(return_value=order)
         shown: dict = {}
 

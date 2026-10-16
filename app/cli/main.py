@@ -69,6 +69,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Skip alembic upgrade on ETL target",
     )
 
+    rev = sub.add_parser("shop-review", help="List or assign services whose selling shop is unknown")
+    rev.add_argument("action", choices=("list", "assign"))
+    rev.add_argument("--service", type=int, default=0, help="Service id (assign)")
+    rev.add_argument("--shop", default="", help="Shop owner's user id, or 'platform' (assign)")
+
     doc = sub.add_parser("doctor", help="Run read-only diagnostics (OK/WARN/FAIL)")
     doc.add_argument(
         "--json",
@@ -153,6 +158,14 @@ def main(argv: list[str] | None = None) -> int:
                 yes=bool(args.yes),
                 skip_schema=bool(args.skip_schema),
             )
+        if cmd == "shop-review":
+            from app.cli.shop_review_cmds import cmd_shop_review_assign, cmd_shop_review_list
+
+            if args.action == "list":
+                return cmd_shop_review_list(ctx)
+            if not args.service or not args.shop:
+                raise CliError("assign needs --service and --shop")
+            return cmd_shop_review_assign(ctx, service_id=args.service, shop=args.shop)
         if cmd == "doctor":
             from app.cli.doctor_cmds import cmd_doctor
 

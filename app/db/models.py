@@ -412,12 +412,50 @@ class UserService(Base):
     renew_nudge_sent_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Shop that sold the service (NULL = platform), written when the service is created.
+    # A service whose shop could not be derived when this column was introduced keeps
+    # shop_needs_review and is hidden from every shop until the owner assigns it.
+    shop_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("bot_users.id"), nullable=True, index=True
+    )
+    shop_needs_review: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false"), index=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     owner: Mapped["BotUser"] = relationship(
         back_populates="services", foreign_keys=[bot_user_id]
     )
     plan: Mapped[Optional["Plan"]] = relationship()
+
+
+class BotUserShop(Base):
+    """A person is a customer of a shop (shop_id NULL = the platform).
+
+    One person can buy from several shops; BotUser.reseller_id only records the
+    shop that attributed them first. Rows are written idempotently on first contact
+    with a bot and whenever an order or a service is created.
+    """
+
+    __tablename__ = "bot_user_shops"
+    __table_args__ = (
+        Index(
+            "uq_bot_user_shops_shop", "bot_user_id", "shop_id", unique=True,
+            sqlite_where=text("shop_id IS NOT NULL"),
+            postgresql_where=text("shop_id IS NOT NULL"),
+        ),
+        Index(
+            "uq_bot_user_shops_platform", "bot_user_id", unique=True,
+            sqlite_where=text("shop_id IS NULL"),
+            postgresql_where=text("shop_id IS NULL"),
+        ),
+        Index("ix_bot_user_shops_shop_user", "shop_id", "bot_user_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    bot_user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id", ondelete="CASCADE"))
+    shop_id: Mapped[Optional[int]] = mapped_column(ForeignKey("bot_users.id", ondelete="CASCADE"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class ServiceImportAttempt(Base):
@@ -1125,7 +1163,25 @@ class PointsTransaction(Base):
         ForeignKey("points_transactions.id"), nullable=True
     )
     created_by: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    # Shop whose balance the entry moved (NULL = the platform's BotUser.points_balance).
+    reseller_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("bot_users.id"), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ShopPoints(Base):
+    """A customer's loyalty points in one shop; the platform's stay on ``BotUser.points_balance``."""
+
+    __tablename__ = "shop_points"
+    __table_args__ = (
+        UniqueConstraint("user_id", "reseller_id", name="uq_shop_points_user_reseller"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id", ondelete="CASCADE"), index=True)
+    reseller_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id", ondelete="CASCADE"), index=True)
+    balance: Mapped[int] = mapped_column(Integer, default=0)
 
 
 class PointsRule(Base):
@@ -1454,11 +1510,20 @@ class LuckyWheelSpin(Base):
 
 
 class LuckyWheelUserState(Base):
-    """Per-user wheel counters for cooldown / daily / free-spin UX."""
+    """Wheel counters (cooldown, daily limit, free spins) of one customer in one shop's wheel."""
 
     __tablename__ = "lucky_wheel_user_state"
     __table_args__ = (
-        UniqueConstraint("user_id", name="uq_lucky_wheel_user_state_user"),
+        Index(
+            "uq_lucky_wheel_state_shop", "user_id", "reseller_id", unique=True,
+            sqlite_where=text("reseller_id IS NOT NULL"),
+            postgresql_where=text("reseller_id IS NOT NULL"),
+        ),
+        Index(
+            "uq_lucky_wheel_state_platform", "user_id", unique=True,
+            sqlite_where=text("reseller_id IS NULL"),
+            postgresql_where=text("reseller_id IS NULL"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

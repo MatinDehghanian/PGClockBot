@@ -14,7 +14,7 @@ from app.bot import keyboards as kb
 from app.bot.auth import is_platform_admin
 from app.db.models import BotUser, Ticket, TicketStatus
 from app.services.reseller_access import load_reseller_actor
-from app.services.resellers import has_bot_perm, reseller_owns_user
+from app.services.resellers import has_bot_perm
 from app.services.tickets import close_ticket, get_ticket, reply_ticket
 
 router = Router(name="ticket_actions")
@@ -38,9 +38,6 @@ async def _actor_role(
         # Platform staff may only handle platform tickets — never shop tickets
         if shop_rid:
             return None
-        ticket_user = await session.get(BotUser, int(ticket.user_id))
-        if ticket_user and ticket_user.reseller_id:
-            return None
         return "staff"
     if ticket.user_id == db_user.id:
         return "owner"
@@ -52,12 +49,7 @@ async def _actor_role(
     )
     if not owner_id or not profile or not has_bot_perm(profile, "tickets"):
         return None
-    # Prefer Ticket.reseller_id; fall back to sticky ownership
-    if shop_rid is not None:
-        if int(shop_rid) == int(owner_id):
-            return "staff"
-        return None
-    if await reseller_owns_user(session, owner_id, ticket.user_id):
+    if shop_rid is not None and int(shop_rid) == int(owner_id):
         return "staff"
     return None
 

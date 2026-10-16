@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import BotUser, Order, Payment, PaymentStatus, Ticket, TicketStatus
 from app.services.demo_users import non_demo_customer
 from app.services.numbers import to_fa_digits
+from app.services.ticket_scope import ticket_shop_clause
 from app.services.service_cancellations import pending_cancellation_count
 
 
@@ -69,16 +70,7 @@ async def count_open_tickets(session: AsyncSession, *, shop_id: int | None) -> i
         .outerjoin(BotUser, BotUser.id == Ticket.user_id)
         .where(base, or_(BotUser.id.is_(None), BotUser.is_demo.is_(False)))
     )
-    if shop_id is None:
-        q = q.where(Ticket.reseller_id.is_(None), BotUser.reseller_id.is_(None))
-    else:
-        rid = int(shop_id)
-        q = q.where(
-            or_(
-                Ticket.reseller_id == rid,
-                and_(Ticket.reseller_id.is_(None), BotUser.reseller_id == rid),
-            )
-        )
+    q = q.where(ticket_shop_clause(shop_id))
     return int((await session.execute(q)).scalar() or 0)
 
 

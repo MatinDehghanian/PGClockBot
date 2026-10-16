@@ -36,6 +36,8 @@ from app.services.pasarguard import (
     user_subscription_url,
 )
 from app.services.wallet import credit_wallet, debit_wallet, list_transactions
+from app.services.service_scope import assert_service_in_shop, service_shop_id, shop_services_clause
+from app.services.shop_membership import ensure_member
 
 logger = logging.getLogger(__name__)
 
@@ -145,8 +147,7 @@ async def _pg_client_for_bot_service(
 
     Never fall through to the Owner env token for tenant services (isolation).
     """
-    bot_user = await session.get(BotUser, int(service.bot_user_id))
-    rid = int(bot_user.reseller_id) if bot_user and bot_user.reseller_id else None
+    rid = await service_shop_id(session, service)
     if rid:
         from app.services.pasarguard import get_pg_for_reseller
 
@@ -155,12 +156,12 @@ async def _pg_client_for_bot_service(
 
 
 async def load_user_services(
-    session: AsyncSession, bot_user_id: int
+    session: AsyncSession, bot_user_id: int, *, shop_id: int | None
 ) -> list[UserService]:
     rows = (
         await session.execute(
             select(UserService)
-            .where(UserService.bot_user_id == int(bot_user_id))
+            .where(UserService.bot_user_id == int(bot_user_id), shop_services_clause(shop_id))
             .options(selectinload(UserService.plan))
             .order_by(UserService.id.desc())
         )
@@ -263,22 +264,21 @@ async def service_snapshot(session: AsyncSession, service: UserService) -> Servi
 
 
 async def list_service_snapshots(
-    session: AsyncSession, bot_user_id: int
+    session: AsyncSession, bot_user_id: int, *, shop_id: int | None
 ) -> list[ServiceSnapshot]:
     out: list[ServiceSnapshot] = []
-    for svc in await load_user_services(session, bot_user_id):
+    for svc in await load_user_services(session, bot_user_id, shop_id=shop_id):
         out.append(await service_snapshot(session, svc))
     await session.commit()  # persist refreshed subscription urls
     return out
 
 
-def _plan_matches_user_shop(plan: Plan, user: BotUser) -> bool:
-    """Plan catalog tenant must match the bot user's shop ownership."""
-    user_rid = user.reseller_id
+def _plan_matches_shop(plan: Plan, shop_id: int | None) -> bool:
+    """Plan catalog tenant must match the shop that provisions the service."""
     plan_rid = plan.owner_reseller_id
-    if user_rid is None:
+    if shop_id is None:
         return plan_rid is None
-    return plan_rid is not None and int(plan_rid) == int(user_rid)
+    return plan_rid is not None and int(plan_rid) == int(shop_id)
 
 
 def _normalize_telegram_username(raw: str | None) -> str | None:
@@ -379,10 +379,15 @@ async def admin_provision_service(
     user: BotUser,
     plan: Plan,
     *,
+    shop_id: int | None,
     staff: dict | None = None,
     actor: str | None = None,
 ) -> UserService:
-    """Assign a new VPN service (PG user + UserService) without an order."""
+    """Assign a new VPN service (PG user + UserService) without an order.
+
+    ``shop_id`` is the acting shop (None = platform): the plan, the panel admin and the
+    stored service all belong to it, whatever shop the customer is attributed to.
+    """
     import time
 
     from app.services.orders import _reseller_pg_link, generate_pg_username
@@ -398,14 +403,14 @@ async def admin_provision_service(
         raise ValueError("پلن غیرفعال است")
     if plan.is_trial:
         raise ValueError("پلن تست برای اختصاص دستی مجاز نیست")
-    if not _plan_matches_user_shop(plan, user):
-        raise ValueError("این پلن متعلق به فروشگاه این کاربر نیست")
+    if not _plan_matches_shop(plan, shop_id):
+        raise ValueError("این پلن متعلق به فروشگاه شما نیست")
     if staff is not None and not plan_belongs_to_staff(plan, staff):
         raise ValueError("دسترسی به این پلن ندارید")
     # Shop isolation ∧ PasarGuard ACL (same axis as /pg/users create).
     assert_staff_pg_user_action(staff, "create")
 
-    shop_rid = int(user.reseller_id) if user.reseller_id else None
+    shop_rid = int(shop_id) if shop_id else None
     if shop_rid:
         from app.services.pasarguard import get_pg_for_reseller
 
@@ -502,6 +507,7 @@ async def admin_provision_service(
             subscription_url=sub_url,
             subscription_token=extract_sub_token(sub_url),
             remark=f"manual:{actor_label}",
+            shop_id=shop_rid,
         )
         plan_days = int(getattr(plan, "duration_days", 0) or 0) or None
         if isinstance(pg_user, dict):
@@ -516,6 +522,7 @@ async def admin_provision_service(
                 fallback_duration_days=plan_days,
             )
         session.add(service)
+        await ensure_member(session, int(user.id), shop_rid)
         await session.commit()
         await session.refresh(service)
         return service
@@ -629,9 +636,13 @@ async def list_wallet_txs(
 
 
 async def get_owned_service(
-    session: AsyncSession, *, bot_user_id: int, service_id: int
+    session: AsyncSession, *, bot_user_id: int, service_id: int, shop_id: int | None
 ) -> UserService:
-    """Load one owned shop service with plan eagerly (async-safe for Telegram cards)."""
+    """Load one service the acting shop sold, with plan eagerly (async-safe for Telegram cards).
+
+    ``shop_id`` is the acting scope (None = platform). A customer's service sold by
+    another shop is refused even when the customer is attributed to the acting shop.
+    """
     svc = (
         await session.execute(
             select(UserService)
@@ -641,6 +652,7 @@ async def get_owned_service(
     ).scalar_one_or_none()
     if svc is None or int(svc.bot_user_id) != int(bot_user_id):
         raise ValueError("سرویس یافت نشد")
+    await assert_service_in_shop(session, svc, shop_id)
     return svc
 
 

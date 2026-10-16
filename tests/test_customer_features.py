@@ -92,7 +92,7 @@ class CustomerFeaturesTests(unittest.IsolatedAsyncioTestCase):
         ])
         await self.session.flush()
         self.service = UserService(id=11, bot_user_id=1, pg_user_id=101, pg_username="mine", remark="order:10", subscription_url="https://vpn.example/sub/mine", quota_status="active", quota_synced_at=self.now, quota_expire_at=self.now + timedelta(days=2))
-        self.shop_service = UserService(id=12, bot_user_id=1, pg_user_id=102, pg_username="shop-mine", remark="order:20", subscription_url="https://vpn.example/sub/shop-mine", quota_status="active", quota_synced_at=self.now, quota_expire_at=self.now + timedelta(days=2))
+        self.shop_service = UserService(id=12, bot_user_id=1, pg_user_id=102, pg_username="shop-mine", remark="order:20", shop_id=2, subscription_url="https://vpn.example/sub/shop-mine", quota_status="active", quota_synced_at=self.now, quota_expire_at=self.now + timedelta(days=2))
         self.session.add_all([self.service, self.shop_service])
         await self.session.commit()
         self.panel = FakePanel()
@@ -239,6 +239,7 @@ class CustomerFeaturesTests(unittest.IsolatedAsyncioTestCase):
         await self.request()
         self.service.bot_user_id = 4
         self.service.remark = "order:30"
+        self.service.shop_id = 3
         await self.session.commit()
         self.assertIsNone(await cancellation_status(self.session, self.other, 11, shop_id=3))
         with self.assertRaises(ValueError):
@@ -491,7 +492,7 @@ class CustomerFeaturesTests(unittest.IsolatedAsyncioTestCase):
             async def load_customer(*args):
                 return await self.session.get(BotUser, 1)
             with patch("app.api.miniapp_pages.load_mini_user", AsyncMock(side_effect=load_customer)), patch("app.api.miniapp_pages.assert_mini_force_join", AsyncMock()):
-                self.assertEqual((await client.post("/api/mini/service/12/cancellation", json={"reason": "test"})).status_code, 400)
+                self.assertEqual((await client.post("/api/mini/service/12/cancellation", json={"reason": "test"})).status_code, 404)
                 self.assertEqual((await client.post("/api/mini/service/11/cancellation", json={"reason": "test"})).status_code, 200)
                 self.assertEqual((await client.post("/api/mini/service/11/cancellation", json=[])).status_code, 400)
 

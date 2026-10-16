@@ -51,9 +51,10 @@ async def send_staff_dm(
     user: BotUser,
     text: str,
     *,
+    shop_id: int | None,
     actor: str | None = None,
 ) -> None:
-    """Send a scoped staff DM via the correct shop/main bot."""
+    """Send a scoped staff DM through the acting shop's bot (None = platform bot)."""
     if user.is_blocked:
         raise ValueError("کاربر مسدود است — ابتدا مسدودی را بردارید")
     if not user.telegram_id:
@@ -63,7 +64,7 @@ async def send_staff_dm(
 
     from app.services.reseller_bots import open_notify_bot_for_user
 
-    bot, should_close = await open_notify_bot_for_user(session, user)
+    bot, should_close = await open_notify_bot_for_user(session, user, shop_id=shop_id)
     try:
         await bot.send_message(int(user.telegram_id), payload, parse_mode="HTML")
     finally:
@@ -90,6 +91,7 @@ async def quick_renew_user(
     *,
     service_id: int | None = None,
     staff: dict | None = None,
+    shop_id: int | None,
 ) -> tuple[UserService, str]:
     """Renew critical (or specified) service with its current plan. Returns (svc, label).
 
@@ -97,7 +99,7 @@ async def quick_renew_user(
     """
     from app.services.bot_user_admin import admin_renew_service, get_owned_service
 
-    by = await load_services_by_user_ids(session, [int(user.id)])
+    by = await load_services_by_user_ids(session, [int(user.id)], shop_id=shop_id)
     services = by.get(int(user.id), [])
     if not services:
         raise ValueError("سرویسی برای تمدید نیست")
@@ -114,7 +116,7 @@ async def quick_renew_user(
 
     # Re-load through ownership guard
     svc = await get_owned_service(
-        session, bot_user_id=int(user.id), service_id=int(target.id)
+        session, bot_user_id=int(user.id), service_id=int(target.id), shop_id=shop_id
     )
     plan = None
     if svc.plan_id:
@@ -134,6 +136,7 @@ async def bulk_staff_dm(
     users: Iterable[BotUser],
     text: str,
     *,
+    shop_id: int | None,
     actor: str | None = None,
 ) -> dict[str, int]:
     """Send the same staff DM to many users (hard-capped)."""
@@ -151,7 +154,7 @@ async def bulk_staff_dm(
         try:
             from app.services.reseller_bots import open_notify_bot_for_user
 
-            bot, should_close = await open_notify_bot_for_user(session, u)
+            bot, should_close = await open_notify_bot_for_user(session, u, shop_id=shop_id)
             try:
                 await bot.send_message(int(u.telegram_id), payload, parse_mode="HTML")
                 ok += 1

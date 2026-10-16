@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, OrgPrincipal, ResellerProfile, UserService
 from app.services.formatting import format_toman
+from app.services.service_scope import shop_services_clause
 from app.services.org_principals import (
     DEPTH_ONE,
     DEPTH_TWO,
@@ -127,7 +128,7 @@ async def collect_subordinate_stats(
                     select(func.count())
                     .select_from(UserService)
                     .join(BotUser, BotUser.id == UserService.bot_user_id)
-                    .where(BotUser.reseller_id == rid, BotUser.is_demo.is_(False))
+                    .where(shop_services_clause(rid), BotUser.is_demo.is_(False))
                 )
             ).scalar()
             or 0

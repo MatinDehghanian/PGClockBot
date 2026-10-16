@@ -174,3 +174,21 @@ tests/test_panel_alert_notifications.py
 tests/test_stuck_order_resolution.py
 
 tests/test_connection_status_web.py
+tests/test_shop_isolation_owner_routes.py
+tests/test_shop_isolation_tickets.py
+tests/test_shop_isolation_order_payment.py
+tests/test_shop_isolation_service_ops.py
+tests/test_shop_isolation_customer_services.py
+tests/test_service_shop_scope_migration.py
+tests/test_shop_attribution_keeps_platform_customers.py
+tests/test_shop_membership.py
+tests/test_service_shop_review.py
+tests/test_shop_isolation_rewards_campaigns.py
+tests/test_shop_isolation_notifications.py
+tests/test_shop_isolation_dashboards.py
+tests/test_service_shop_review_page.py
+tests/test_shop_points.py
+tests/test_shop_points_migration.py
+tests/test_shop_isolation_remaining.py
+tests/test_shop_isolation_review_fixes.py
+tests/test_wheel_state_per_shop.py

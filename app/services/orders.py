@@ -32,6 +32,7 @@ from app.db.models import (
 )
 from app.services.pasarguard import extract_sub_token, get_pg, user_subscription_url
 from app.services.purchase_contact import CONTACT_REQUIRED_MESSAGE, purchase_contact_needed, require_purchase_contact
+from app.services.shop_membership import ensure_member
 from app.services.provision_gate import (
     ProvisionError,
     assert_provision_create,
@@ -389,6 +390,19 @@ async def get_catalog_plan(session: AsyncSession, plan_id: int) -> Optional[Plan
     return plan
 
 
+def is_customer_order_in_current_shop(order: Order | None, user_id: int) -> bool:
+    """True when the order is this customer's and was placed in the bot being used.
+
+    A payment button can outlive the bot it was shown in; paying from another
+    shop's bot would send the money to that shop's card, gateway or review queue.
+    """
+    return (
+        order is not None
+        and int(order.user_id) == int(user_id)
+        and int(order.reseller_id or 0) == int(_shop_reseller_id() or 0)
+    )
+
+
 def _shop_reseller_id() -> int | None:
     """Always attribute orders to the current shop bot, never sticky user.reseller_id."""
     from app.services.users import current_shop_reseller_id
@@ -564,6 +578,7 @@ async def create_order(
     )
     session.add(order)
     await session.flush()
+    await ensure_member(session, user_id, shop_rid)
     try:
         discount, used_code = await _reserve_discount_code(session, discount_code, sale_price(plan), order=order)
     except ValueError:
@@ -711,6 +726,7 @@ async def create_custom_order(
     )
     session.add(order)
     await session.flush()
+    await ensure_member(session, user_id, shop_rid)
     try:
         discount, used_code = await _reserve_discount_code(session, discount_code, amount, order=order)
     except ValueError:
@@ -872,6 +888,7 @@ async def create_wholesale_order(
         note=f"wholesale:{qty}",
     )
     session.add(order)
+    await ensure_member(session, user_id, shop_rid)
     await session.commit()
     await session.refresh(order)
     return order
@@ -2122,6 +2139,7 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
                 subscription_url=sub_url,
                 subscription_token=extract_sub_token(sub_url),
                 remark=f"order:{order.id}",
+                shop_id=order.reseller_id,
             )
             from app.services.bot_user_admin import sync_service_quota_cache
 
@@ -2139,6 +2157,7 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
                 )
             session.add(service)
             await session.flush()
+            await ensure_member(session, order.user_id, order.reseller_id)
             return service
 
         try:
