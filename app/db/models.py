@@ -1163,7 +1163,25 @@ class PointsTransaction(Base):
         ForeignKey("points_transactions.id"), nullable=True
     )
     created_by: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    # Shop whose balance the entry moved (NULL = the platform's BotUser.points_balance).
+    reseller_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("bot_users.id"), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ShopPoints(Base):
+    """A customer's loyalty points in one shop; the platform's stay on ``BotUser.points_balance``."""
+
+    __tablename__ = "shop_points"
+    __table_args__ = (
+        UniqueConstraint("user_id", "reseller_id", name="uq_shop_points_user_reseller"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id", ondelete="CASCADE"), index=True)
+    reseller_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id", ondelete="CASCADE"), index=True)
+    balance: Mapped[int] = mapped_column(Integer, default=0)
 
 
 class PointsRule(Base):
