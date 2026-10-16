@@ -491,7 +491,7 @@ class CustomerFeaturesTests(unittest.IsolatedAsyncioTestCase):
             async def load_customer(*args):
                 return await self.session.get(BotUser, 1)
             with patch("app.api.miniapp_pages.load_mini_user", AsyncMock(side_effect=load_customer)), patch("app.api.miniapp_pages.assert_mini_force_join", AsyncMock()):
-                self.assertEqual((await client.post("/api/mini/service/12/cancellation", json={"reason": "test"})).status_code, 400)
+                self.assertEqual((await client.post("/api/mini/service/12/cancellation", json={"reason": "test"})).status_code, 404)
                 self.assertEqual((await client.post("/api/mini/service/11/cancellation", json={"reason": "test"})).status_code, 200)
                 self.assertEqual((await client.post("/api/mini/service/11/cancellation", json=[])).status_code, 400)
 

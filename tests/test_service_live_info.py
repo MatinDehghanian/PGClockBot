@@ -322,6 +322,7 @@ def test_bot_handlers_read_custom_link_and_display_result(svc, handler_name, fai
     session = AsyncMock()
     session.get.return_value = svc
     with (
+        patch.object(handlers, "customer_may_use_service", new=AsyncMock(return_value=True)),
         patch.object(handlers, "get_all_settings", new=AsyncMock(return_value={})),
         patch.object(handlers, "get_pg", return_value=pg),
         patch.object(handlers, "safe_edit_text", new=AsyncMock()) as edit,

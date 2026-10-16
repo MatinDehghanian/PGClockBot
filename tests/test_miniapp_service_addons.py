@@ -180,7 +180,8 @@ class MiniAppAddonTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await self.client.get("/api/mini/service/10/addons")).status_code, 400)
         self.svc.remark = None
         self.user.reseller_id = 2
-        self.assertEqual((await self.buy()).status_code, 400)
+        # A shop-sold service is not the Mini App's to show at all, so it is not found.
+        self.assertEqual((await self.buy()).status_code, 404)
         await self.assert_no_purchase()
 
     async def test_known_unlimited_quota_is_rejected_without_debit(self):

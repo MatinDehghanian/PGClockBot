@@ -79,9 +79,16 @@ class PlatformCannotTouchShopTests(unittest.TestCase):
         self.assertIn("order.reseller_id", src)
         self.assertIn("مربوط به نماینده است", src)
 
-    def test_ticket_actor_skips_shop_customers(self):
-        src = (ROOT / "app/bot/handlers/ticket_actions.py").read_text(encoding="utf-8")
-        self.assertIn("ticket_user.reseller_id", src)
+    def test_ticket_actor_skips_shop_tickets(self):
+        from types import SimpleNamespace
+
+        from app.services.tickets import staff_ticket_in_scope
+        from tests.test_update_owner_only import OWNER_SESSION
+
+        shop_ticket = SimpleNamespace(reseller_id=5)
+        platform_ticket = SimpleNamespace(reseller_id=None)
+        self.assertFalse(staff_ticket_in_scope(OWNER_SESSION, shop_ticket))
+        self.assertTrue(staff_ticket_in_scope(OWNER_SESSION, platform_ticket))
 
     def test_list_open_tickets_platform_only(self):
         src = (ROOT / "app/services/tickets.py").read_text(encoding="utf-8")

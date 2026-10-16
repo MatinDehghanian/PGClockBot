@@ -42,13 +42,13 @@ class BotUserAdminServiceTests(unittest.IsolatedAsyncioTestCase):
         result.scalar_one_or_none.return_value = None
         session.execute = AsyncMock(return_value=result)
         with self.assertRaises(ValueError):
-            await get_owned_service(session, bot_user_id=1, service_id=9)
+            await get_owned_service(session, bot_user_id=1, service_id=9, shop_id=None)
 
         svc = MagicMock(bot_user_id=2)
         result.scalar_one_or_none.return_value = svc
         session.execute = AsyncMock(return_value=result)
         with self.assertRaises(ValueError):
-            await get_owned_service(session, bot_user_id=1, service_id=9)
+            await get_owned_service(session, bot_user_id=1, service_id=9, shop_id=None)
 
     def test_get_owned_service_eager_loads_plan(self):
         """Regression: session.get without selectinload → MissingGreenlet on svc.plan

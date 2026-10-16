@@ -17,7 +17,7 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from app.db.models import BotUser, ResellerProfile, ServiceImportAttempt, UserService
+from app.db.models import BotUser, ResellerProfile, ServiceImportAttempt, UserService, Order, OrderStatus
 from app.services import service_import as si
 from app.services import service_import_config as si_config
 from app.services.pasarguard import PasarGuardError, subscription_path_from_url
@@ -104,6 +104,8 @@ class ImportCase(unittest.IsolatedAsyncioTestCase):
                 BotUser(id=7, telegram_id=107, referral_code="u7", role="user", reseller_id=5),
                 BotUser(id=8, telegram_id=108, referral_code="u8", role="user", is_blocked=True),
                 ResellerProfile(user_id=5, pg_admin_username=SHOP_ADMIN),
+                # The platform order behind the "order:1" services these tests create for user 1.
+                Order(id=1, user_id=1, reseller_id=None, amount=1000, status=OrderStatus.DELIVERED.value),
             ])
             await session.commit()
         self.platform_users = {
