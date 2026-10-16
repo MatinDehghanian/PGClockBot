@@ -131,3 +131,12 @@ class CustomerServiceScopeTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(caught.exception.status_code, 404, service_id)
             with self.assertRaises(HTTPException):
                 await _owned_service_or_404(session, None, customer)
+
+    async def test_a_customer_attributed_to_a_shop_can_still_buy_packs_for_a_platform_service(self):
+        from app.api.miniapp_pages import _addons_allowed
+
+        async with self.Session() as session:
+            customer = await session.get(BotUser, CUSTOMER_ID)
+            self.assertEqual(customer.reseller_id, SHOP_ID)
+            platform = await session.get(UserService, PLATFORM_SVC)
+            self.assertTrue(_addons_allowed(customer, platform))
