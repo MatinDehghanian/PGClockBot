@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, Order, ResellerProfile, UserService
@@ -76,3 +76,21 @@ async def assign_service_shop(session: AsyncSession, service_id: int, shop_id: i
     await session.commit()
     await session.refresh(service)
     return service
+
+
+async def count_services_under_review(session: AsyncSession) -> int:
+    return int(
+        await session.scalar(select(func.count()).select_from(UserService).where(UserService.shop_needs_review.is_(True)))
+        or 0
+    )
+
+
+async def list_assignable_shops(session: AsyncSession) -> list[tuple[int, str]]:
+    """(owner user id, label) of every active shop, for the owner's choice."""
+    rows = await session.execute(
+        select(BotUser.id, BotUser.full_name, BotUser.username)
+        .join(ResellerProfile, ResellerProfile.user_id == BotUser.id)
+        .where(ResellerProfile.is_active.is_(True))
+        .order_by(BotUser.id)
+    )
+    return [(int(uid), (name or username or f"#{uid}")) for uid, name, username in rows]

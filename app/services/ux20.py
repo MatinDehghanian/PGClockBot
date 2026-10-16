@@ -301,6 +301,21 @@ async def build_action_center(
             }
         )
 
+    if reseller_id is None:
+        from app.services.service_shop_review import count_services_under_review
+
+        waiting = await count_services_under_review(session)
+        if waiting:
+            items.append(
+                {
+                    "key": "shop_review",
+                    "title": f"{waiting} سرویس در انتظار تعیین فروشگاه",
+                    "detail": "تا تعیین نشود برای هیچ فروشگاهی نمایش داده نمی‌شود",
+                    "href": "/service-shop-review",
+                    "tone": "warn",
+                }
+            )
+
     # Low volume: services still flagged by the alert scheduler (clears on renew).
     low_q = (
         select(func.count())
