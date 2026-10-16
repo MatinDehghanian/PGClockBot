@@ -12,6 +12,7 @@ from app.bot import keyboards as kb
 from app.bot.nav_input import delete_user_message, finish_text_step
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser
+from app.services.connection_status_texts import CONNECTION_STATUS_MENU_KEY
 from app.services.resellers import get_reseller_profile, has_bot_perm
 from app.services.support_contacts import (
     delete_support_contact,
@@ -246,6 +247,7 @@ def _preview(value: str | None, *, limit: int = 120) -> str:
 MENU_ORDER_LABELS = {
     "shop": "خرید",
     "services": "سرویس‌ها",
+    CONNECTION_STATUS_MENU_KEY: "وضعیت اتصال",
     "wallet": "کیف پول",
     "support": "پشتیبانی",
     "loyalty": "باشگاه مشتریان",

@@ -53,7 +53,7 @@ async def monitor_input(message: Message, session: AsyncSession, db_user: BotUse
             page = await monitor_admin_page(session, access, now=datetime.now(timezone.utc))
             ui = await get_all_settings(session)
             await session.commit()
-            await finish_text_step(message, state, text=admin_page_text(page, ui), inline=admin_page_keyboard(page))
+            await finish_text_step(message, state, text=admin_page_text(page, ui), inline=admin_page_keyboard(page, ui))
             return
         data = await state.get_data()
         target_id = data.get("monitor_target_id")
@@ -62,6 +62,8 @@ async def monitor_input(message: Message, session: AsyncSession, db_user: BotUse
         await edit_monitor_target(session, access, target_id=target_id, field=field, value=value)
         await state.set_state(None)
         target = await monitor_target_view(session, access, target_id=target_id, now=datetime.now(timezone.utc))
-        await finish_text_step(message, state, text=target_text(target), inline=target_keyboard(target))
+        ui = await get_all_settings(session)
+        await session.commit()
+        await finish_text_step(message, state, text=target_text(target), inline=target_keyboard(target, ui))
     except Exception as exc:
         await monitor_error(message, session, exc)
