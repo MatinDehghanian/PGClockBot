@@ -33,6 +33,7 @@ from app.services.pasarguard import is_pg_permission_denied
 from app.services.pg_read_resilience import PG_READ_UNAVAILABLE_MESSAGE, PgReadUnavailable
 from app.services.service_scope import shop_services_clause
 from app.services.ticket_scope import ticket_shop_clause
+from app.services import bot_feedback_texts as feedback
 
 logger = logging.getLogger(__name__)
 
@@ -587,10 +588,10 @@ async def clone_plan(session: AsyncSession, plan_id: int, *, owner_reseller_id: 
         raise ValueError("پلن پیدا نشد")
     if owner_reseller_id is None:
         if src.owner_reseller_id is not None:
-            raise ValueError("دسترسی ندارید")
+            raise ValueError(feedback.NO_ACCESS)
     else:
         if int(src.owner_reseller_id or 0) != int(owner_reseller_id):
-            raise ValueError("دسترسی ندارید")
+            raise ValueError(feedback.NO_ACCESS)
     copy = Plan(
         name=f"{src.name} (کپی)",
         description=src.description,

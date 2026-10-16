@@ -11,6 +11,7 @@ from __future__ import annotations
 import re
 import unittest
 
+from app.services import bot_feedback_texts
 from app.services.message_variables import all_vars, preview_fill_map
 from app.services.rich_text import is_button_label_key
 from app.services.users import DEFAULT_SETTINGS
@@ -30,6 +31,14 @@ def _text_defaults() -> dict[str, str]:
         key: value
         for key, value in DEFAULT_SETTINGS.items()
         if not is_button_label_key(key) and key not in _DATA_VALUED_KEYS
+    }
+
+
+def _fixed_feedback_texts() -> dict[str, str]:
+    return {
+        name: value
+        for name, value in vars(bot_feedback_texts).items()
+        if name.isupper() and isinstance(value, str)
     }
 
 
@@ -75,9 +84,19 @@ class DefaultTextSafetyTests(unittest.TestCase):
                 self.assertNotIn("<", value)
 
 
+    def test_fixed_feedback_texts_are_valid_telegram_html(self) -> None:
+        for name, value in _fixed_feedback_texts().items():
+            with self.subTest(name=name):
+                self.assertTrue(value.strip())
+                self.assertEqual(telegram_html_errors(value), [])
+
+
 class DefaultTextSnapshotTests(unittest.TestCase):
     def test_default_texts_match_reviewed_snapshot(self) -> None:
         assert_matches_snapshot(self, "default_texts", dict(DEFAULT_SETTINGS))
+
+    def test_fixed_feedback_texts_match_reviewed_snapshot(self) -> None:
+        assert_matches_snapshot(self, "feedback_texts", _fixed_feedback_texts())
 
 
 if __name__ == "__main__":

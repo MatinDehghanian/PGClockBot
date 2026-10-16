@@ -19,6 +19,7 @@ from app.services.support_contacts import (
 )
 from app.services.tickets import create_ticket, get_ticket, list_user_tickets, reply_ticket
 from app.services.users import get_all_settings
+from app.services import bot_feedback_texts as feedback
 
 router = Router(name="support")
 
@@ -263,16 +264,16 @@ async def support_view(
     ticket_id = int(callback.data.split(":")[-1])
     ticket = await get_ticket(session, ticket_id)
     if not ticket or ticket.user_id != db_user.id:
-        await callback.answer("یافت نشد", show_alert=True)
+        await callback.answer(feedback.NOT_FOUND, show_alert=True)
         return
     # Shop isolation: only show tickets belonging to this bot's scope
     shop_rid = int(reseller_owner_id) if reseller_owner_id else None
     if shop_rid:
         if int(ticket.reseller_id or 0) != shop_rid:
-            await callback.answer("یافت نشد", show_alert=True)
+            await callback.answer(feedback.NOT_FOUND, show_alert=True)
             return
     elif ticket.reseller_id:
-        await callback.answer("یافت نشد", show_alert=True)
+        await callback.answer(feedback.NOT_FOUND, show_alert=True)
         return
     await callback.answer()
     lines = [

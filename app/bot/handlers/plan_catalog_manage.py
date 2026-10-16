@@ -21,6 +21,7 @@ from app.bot.tg_utils import parse_bot_float, parse_bot_int, safe_edit_text
 from app.db.models import BotUser
 from app.services.redact import user_safe_error
 from app.services.shop_scope import ShopScopeError, is_platform_admin as staff_is_platform_admin
+from app.services import bot_feedback_texts as feedback
 
 router = Router(name="plan_catalog_manage")
 
@@ -444,7 +445,7 @@ async def pcm_cat_list(
         reseller_owner_id=reseller_owner_id,
     )
     if not staff:
-        await callback.answer("دسترسی ندارید", show_alert=True)
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     await state.set_state(None)
     cats = await list_categories(session, staff, active_only=False)
@@ -475,7 +476,7 @@ async def pcm_cat_add(
         reseller_owner_id=reseller_owner_id,
     )
     if not staff:
-        await callback.answer("دسترسی ندارید", show_alert=True)
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     await callback.answer()
     from app.bot.nav_input import ask_text
@@ -524,7 +525,7 @@ async def pcm_cat_name_save(
             return
         await state.set_state(None)
         await message.answer(
-            "لغو شد.",
+            feedback.CANCELLED,
             reply_markup=await _lasting_reply_kb(
                 session, db_user, state,
                 is_reseller_bot=is_reseller_bot,
@@ -540,7 +541,7 @@ async def pcm_cat_name_save(
     )
     if not staff:
         await state.clear()
-        await message.answer("دسترسی ندارید.")
+        await message.answer(feedback.NO_ACCESS_REPLY)
         return
     name, icon_id = split_category_label_from_message(
         message.text, getattr(message, "entities", None)
@@ -634,7 +635,7 @@ async def pcm_cat_audience_save(
         reseller_owner_id=reseller_owner_id,
     )
     if not staff:
-        await callback.answer("دسترسی ندارید", show_alert=True)
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     parts = (callback.data or "").split(":")
     aud = parts[-1] if parts else "users"
@@ -692,21 +693,21 @@ async def pcm_cat_toggle(
         reseller_owner_id=reseller_owner_id,
     )
     if not staff:
-        await callback.answer("دسترسی ندارید", show_alert=True)
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     try:
         cid = int(callback.data.rsplit(":", 1)[-1])
     except ValueError:
-        await callback.answer("نامعتبر", show_alert=True)
+        await callback.answer(feedback.INVALID, show_alert=True)
         return
     cat = await get_owned_category(session, cid, staff)
     if not cat:
-        await callback.answer("یافت نشد", show_alert=True)
+        await callback.answer(feedback.NOT_FOUND, show_alert=True)
         return
     cat.is_active = not cat.is_active
     await session.commit()
     cats = await list_categories(session, staff, active_only=False)
-    await callback.answer("ذخیره شد")
+    await callback.answer(feedback.SAVED)
     if callback.message:
         await safe_edit_text(
             callback.message,
@@ -735,7 +736,7 @@ async def pcm_cat_delete(
         reseller_owner_id=reseller_owner_id,
     )
     if not staff:
-        await callback.answer("دسترسی ندارید", show_alert=True)
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     try:
         cid = int(callback.data.rsplit(":", 1)[-1])
@@ -747,7 +748,7 @@ async def pcm_cat_delete(
         await callback.answer(user_safe_error(e, limit=160), show_alert=True)
         return
     cats = await list_categories(session, staff, active_only=False)
-    await callback.answer("حذف شد")
+    await callback.answer(feedback.DELETED)
     if callback.message:
         await safe_edit_text(
             callback.message,
@@ -776,16 +777,16 @@ async def pcm_cat_edit_ask(
         reseller_owner_id=reseller_owner_id,
     )
     if not staff:
-        await callback.answer("دسترسی ندارید", show_alert=True)
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     try:
         cid = int(callback.data.rsplit(":", 1)[-1])
     except ValueError:
-        await callback.answer("نامعتبر", show_alert=True)
+        await callback.answer(feedback.INVALID, show_alert=True)
         return
     cat = await get_owned_category(session, cid, staff)
     if not cat:
-        await callback.answer("یافت نشد", show_alert=True)
+        await callback.answer(feedback.NOT_FOUND, show_alert=True)
         return
     await state.update_data(_pcm_edit_cat_id=cid)
     await callback.answer()
@@ -834,7 +835,7 @@ async def pcm_cat_edit_save(
             return
         await state.set_state(None)
         await message.answer(
-            "لغو شد.",
+            feedback.CANCELLED,
             reply_markup=await _lasting_reply_kb(
                 session, db_user, state,
                 is_reseller_bot=is_reseller_bot,
@@ -852,7 +853,7 @@ async def pcm_cat_edit_save(
     cid = int(data.get("_pcm_edit_cat_id") or 0)
     if not staff or not cid:
         await state.clear()
-        await message.answer("دسترسی ندارید.")
+        await message.answer(feedback.NO_ACCESS_REPLY)
         return
     name, icon_id = split_category_label_from_message(
         message.text, getattr(message, "entities", None)
@@ -915,7 +916,7 @@ async def pcm_addon_list(
         reseller_owner_id=reseller_owner_id,
     )
     if not staff:
-        await callback.answer("دسترسی ندارید", show_alert=True)
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     await state.set_state(None)
     packs = await list_packs(session, staff, active_only=False)
@@ -946,7 +947,7 @@ async def pcm_addon_add(
         reseller_owner_id=reseller_owner_id,
     )
     if not staff:
-        await callback.answer("دسترسی ندارید", show_alert=True)
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     await callback.answer()
     from app.bot.nav_input import ask_text
@@ -984,7 +985,7 @@ async def pcm_addon_name(
             return
         await state.set_state(None)
         await message.answer(
-            "لغو شد.",
+            feedback.CANCELLED,
             reply_markup=await _lasting_reply_kb(
                 session, db_user, state,
                 is_reseller_bot=is_reseller_bot,
@@ -1025,7 +1026,7 @@ async def pcm_addon_kind(
 ):
     kind = callback.data.rsplit(":", 1)[-1]
     if kind not in {"volume", "duration"}:
-        await callback.answer("نامعتبر", show_alert=True)
+        await callback.answer(feedback.INVALID, show_alert=True)
         return
     await state.update_data(_pcm_addon_kind=kind)
     await state.set_state(PlanCatalogStates.addon_amount)
@@ -1066,7 +1067,7 @@ async def pcm_addon_amount(
             return
         await state.set_state(None)
         await message.answer(
-            "لغو شد.",
+            feedback.CANCELLED,
             reply_markup=await _lasting_reply_kb(
                 session, db_user, state,
                 is_reseller_bot=is_reseller_bot,
@@ -1084,7 +1085,7 @@ async def pcm_addon_amount(
             if amount <= 0:
                 raise ValueError("amount")
     except ValueError:
-        await message.answer("عدد معتبر بفرستید.")
+        await message.answer(feedback.ENTER_VALID_NUMBER)
         return
     await state.update_data(_pcm_addon_amount=amount)
     from app.bot.nav_input import ask_text
@@ -1124,7 +1125,7 @@ async def pcm_addon_price_save(
             return
         await state.set_state(None)
         await message.answer(
-            "لغو شد.",
+            feedback.CANCELLED,
             reply_markup=await _lasting_reply_kb(
                 session, db_user, state,
                 is_reseller_bot=is_reseller_bot,
@@ -1135,7 +1136,7 @@ async def pcm_addon_price_save(
     try:
         price = max(0, parse_bot_int(message.text))
     except ValueError:
-        await message.answer("عدد معتبر بفرستید.")
+        await message.answer(feedback.ENTER_VALID_NUMBER)
         return
     staff = await resolve_catalog_staff(
         session,
@@ -1146,7 +1147,7 @@ async def pcm_addon_price_save(
     data = await state.get_data()
     if not staff:
         await state.clear()
-        await message.answer("دسترسی ندارید.")
+        await message.answer(feedback.NO_ACCESS_REPLY)
         return
     try:
         pack = await create_pack(
@@ -1196,21 +1197,21 @@ async def pcm_addon_toggle(
         reseller_owner_id=reseller_owner_id,
     )
     if not staff:
-        await callback.answer("دسترسی ندارید", show_alert=True)
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     try:
         pid = int(callback.data.rsplit(":", 1)[-1])
     except ValueError:
-        await callback.answer("نامعتبر", show_alert=True)
+        await callback.answer(feedback.INVALID, show_alert=True)
         return
     pack = await get_owned_pack(session, pid, staff)
     if not pack:
-        await callback.answer("یافت نشد", show_alert=True)
+        await callback.answer(feedback.NOT_FOUND, show_alert=True)
         return
     pack.is_active = not pack.is_active
     await session.commit()
     packs = await list_packs(session, staff, active_only=False)
-    await callback.answer("ذخیره شد")
+    await callback.answer(feedback.SAVED)
     if callback.message:
         await safe_edit_text(
             callback.message,
@@ -1239,7 +1240,7 @@ async def pcm_addon_delete(
         reseller_owner_id=reseller_owner_id,
     )
     if not staff:
-        await callback.answer("دسترسی ندارید", show_alert=True)
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     try:
         pid = int(callback.data.rsplit(":", 1)[-1])
@@ -1251,7 +1252,7 @@ async def pcm_addon_delete(
         await callback.answer(user_safe_error(e, limit=160), show_alert=True)
         return
     packs = await list_packs(session, staff, active_only=False)
-    await callback.answer("حذف شد")
+    await callback.answer(feedback.DELETED)
     if callback.message:
         await safe_edit_text(
             callback.message,
@@ -1280,16 +1281,16 @@ async def pcm_addon_edit_ask(
         reseller_owner_id=reseller_owner_id,
     )
     if not staff:
-        await callback.answer("دسترسی ندارید", show_alert=True)
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     try:
         pid = int(callback.data.rsplit(":", 1)[-1])
     except ValueError:
-        await callback.answer("نامعتبر", show_alert=True)
+        await callback.answer(feedback.INVALID, show_alert=True)
         return
     pack = await get_owned_pack(session, pid, staff)
     if not pack:
-        await callback.answer("یافت نشد", show_alert=True)
+        await callback.answer(feedback.NOT_FOUND, show_alert=True)
         return
     await state.set_state(PlanCatalogStates.addon_edit_field)
     await state.update_data(_pcm_edit_addon_id=pid, _pcm_edit_addon_field="name")
@@ -1338,7 +1339,7 @@ async def pcm_addon_edit_save(
             return
         await state.set_state(None)
         await message.answer(
-            "لغو شد.",
+            feedback.CANCELLED,
             reply_markup=await _lasting_reply_kb(
                 session, db_user, state,
                 is_reseller_bot=is_reseller_bot,
@@ -1357,7 +1358,7 @@ async def pcm_addon_edit_save(
     field = data.get("_pcm_edit_addon_field") or "name"
     if not staff or not pid:
         await state.clear()
-        await message.answer("دسترسی ندارید.")
+        await message.answer(feedback.NO_ACCESS_REPLY)
         return
     pack = await get_owned_pack(session, pid, staff)
     if not pack:

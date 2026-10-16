@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser
 from app.services.users import get_all_settings
+from app.services import bot_feedback_texts as feedback
 
 router = Router(name="nav_hubs")
 
@@ -299,7 +300,7 @@ async def nv_svc_guide(callback: CallbackQuery, session: AsyncSession, db_user: 
     try:
         svc_id = int(raw.rsplit(":", 1)[-1])
     except (TypeError, ValueError):
-        await callback.answer("نامعتبر", show_alert=True)
+        await callback.answer(feedback.INVALID, show_alert=True)
         return
     callback.data = f"guide:svc:{svc_id}"
     await svc_guide(callback, session, db_user)
@@ -844,7 +845,7 @@ async def nv_adm_plans_aud(
 
     aud = (callback.data or "").split(":")[-1]
     if aud not in {"users", "resellers"}:
-        await callback.answer("نامعتبر", show_alert=True)
+        await callback.answer(feedback.INVALID, show_alert=True)
         return
     await callback.answer()
     if not callback.message:
@@ -880,7 +881,7 @@ async def nv_adm_plans_list(
 
     aud = (callback.data or "").split(":")[-1]
     if aud not in {"users", "resellers"}:
-        await callback.answer("نامعتبر", show_alert=True)
+        await callback.answer(feedback.INVALID, show_alert=True)
         return
     await callback.answer()
     if not callback.message:

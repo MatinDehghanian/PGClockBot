@@ -36,6 +36,7 @@ from app.services.resellers import (
 from app.bot.tg_utils import safe_edit_text
 from app.services.users import get_all_settings
 from app.services.redact import user_safe_error
+from app.services import bot_feedback_texts as feedback
 
 _RESELLER_HOME_BACK = InlineKeyboardMarkup(
     inline_keyboard=[[kb.back_button(None, "nv:res:home")]]
@@ -228,7 +229,7 @@ async def res_creds(
                 )
             return
     if db_user.role != Role.RESELLER.value:
-        await callback.answer("فقط نمایندگان", show_alert=True)
+        await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
         return
     profile = await get_reseller_profile(session, db_user.id)
     if not profile or not profile.is_active:
@@ -300,10 +301,10 @@ async def res_dash(
         session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
     )
     if not owner_id or not profile:
-        await callback.answer("فقط نمایندگان", show_alert=True)
+        await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
         return
     if not has_bot_perm(profile, "dashboard"):
-        await callback.answer("دسترسی ندارید", show_alert=True)
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     await callback.answer()
     summary = await reseller_shop_summary(
@@ -337,10 +338,10 @@ async def res_users_list(
         session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
     )
     if not owner_id or not profile:
-        await callback.answer("فقط نمایندگان", show_alert=True)
+        await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
         return
     if not has_bot_perm(profile, "dashboard"):
-        await callback.answer("دسترسی ندارید", show_alert=True)
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     try:
         page = int((callback.data or "").rsplit(":", 1)[-1])
@@ -419,19 +420,19 @@ async def res_user_view(
         session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
     )
     if not owner_id or not profile:
-        await callback.answer("فقط نمایندگان", show_alert=True)
+        await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
         return
     if not has_bot_perm(profile, "dashboard"):
-        await callback.answer("دسترسی ندارید", show_alert=True)
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     try:
         uid = int((callback.data or "").rsplit(":", 1)[-1])
     except ValueError:
-        await callback.answer("نامعتبر", show_alert=True)
+        await callback.answer(feedback.INVALID, show_alert=True)
         return
     user = await session.get(BotUser, uid)
     if not user or not await is_shop_customer(session, user, int(owner_id)):
-        await callback.answer("دسترسی ندارید", show_alert=True)
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     await callback.answer()
     from app.services.formatting import copyable
@@ -499,19 +500,19 @@ async def res_user_message_start(
         session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
     )
     if not owner_id or not profile:
-        await callback.answer("فقط نمایندگان", show_alert=True)
+        await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
         return
     if not has_bot_perm(profile, "dashboard"):
-        await callback.answer("دسترسی ندارید", show_alert=True)
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     try:
         uid = int((callback.data or "").rsplit(":", 1)[-1])
     except ValueError:
-        await callback.answer("نامعتبر", show_alert=True)
+        await callback.answer(feedback.INVALID, show_alert=True)
         return
     user = await session.get(BotUser, uid)
     if not user or not await is_shop_customer(session, user, int(owner_id)):
-        await callback.answer("دسترسی ندارید", show_alert=True)
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     await callback.answer()
     await state.update_data(msg_user_id=int(user.id))
@@ -546,7 +547,7 @@ async def res_user_message_send(
         return
     if not has_bot_perm(profile, "dashboard"):
         await state.clear()
-        await message.answer("دسترسی ندارید.")
+        await message.answer(feedback.NO_ACCESS_REPLY)
         return
     if kb.is_cancel_text(message.text):
         from app.bot.nav_input import try_legacy_cancel
@@ -561,14 +562,14 @@ async def res_user_message_send(
         ):
             return
         await state.clear()
-        await message.answer("لغو شد.")
+        await message.answer(feedback.CANCELLED)
         return
     data = await state.get_data()
     uid = int(data.get("msg_user_id") or 0)
     user = await session.get(BotUser, uid) if uid else None
     await state.clear()
     if not user or not await is_shop_customer(session, user, int(owner_id)):
-        await message.answer("دسترسی ندارید.")
+        await message.answer(feedback.NO_ACCESS_REPLY)
         return
     from app.services.users_quick import send_staff_dm
 
@@ -600,19 +601,19 @@ async def res_user_quick_renew(
         session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
     )
     if not owner_id or not profile:
-        await callback.answer("فقط نمایندگان", show_alert=True)
+        await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
         return
     if not has_bot_perm(profile, "dashboard"):
-        await callback.answer("دسترسی ندارید", show_alert=True)
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     try:
         uid = int((callback.data or "").rsplit(":", 1)[-1])
     except ValueError:
-        await callback.answer("نامعتبر", show_alert=True)
+        await callback.answer(feedback.INVALID, show_alert=True)
         return
     user = await session.get(BotUser, uid)
     if not user or not await is_shop_customer(session, user, int(owner_id)):
-        await callback.answer("دسترسی ندارید", show_alert=True)
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     from app.services.users_quick import quick_renew_user
 
@@ -639,12 +640,12 @@ async def res_reports(
         session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
     )
     if not owner_id or not profile:
-        await callback.answer("فقط نمایندگان", show_alert=True)
+        await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
         return
     if not (
         has_bot_perm(profile, "orders") or has_bot_perm(profile, "payments")
     ):
-        await callback.answer("دسترسی ندارید", show_alert=True)
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     raw = (callback.data or "res:reports:week").split(":")
     period = raw[-1] if len(raw) >= 3 else "week"
@@ -695,10 +696,10 @@ async def res_stats(
         session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
     )
     if not owner_id or not profile:
-        await callback.answer("فقط نمایندگان", show_alert=True)
+        await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
         return
     if not has_bot_perm(profile, "stats"):
-        await callback.answer("دسترسی ندارید", show_alert=True)
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     await callback.answer()
     text = (
@@ -733,7 +734,7 @@ async def res_billing(
         session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
     )
     if not owner_id or not profile:
-        await callback.answer("فقط نمایندگان", show_alert=True)
+        await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
         return
     if not is_payg(profile):
         await callback.answer("این فروشگاه PAYG نیست", show_alert=True)
@@ -784,10 +785,10 @@ async def res_orders(
         session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
     )
     if not owner_id or not profile:
-        await callback.answer("فقط نمایندگان", show_alert=True)
+        await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
         return
     if not has_bot_perm(profile, "orders"):
-        await callback.answer("دسترسی ندارید", show_alert=True)
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     await callback.answer()
     result = await session.execute(
@@ -899,10 +900,10 @@ async def res_tickets(
         session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
     )
     if not owner_id or not profile:
-        await callback.answer("فقط نمایندگان", show_alert=True)
+        await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
         return
     if not has_bot_perm(profile, "tickets"):
-        await callback.answer("دسترسی ندارید", show_alert=True)
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     await callback.answer()
     if callback.message:
@@ -915,7 +916,7 @@ async def res_tickets(
             edit=True,
         )
         if not ok:
-            await callback.answer("دسترسی ندارید", show_alert=True)
+            await callback.answer(feedback.NO_ACCESS, show_alert=True)
 
 
 @router.callback_query(F.data == "res:cancellations")
@@ -930,7 +931,7 @@ async def res_cancellations(
         session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
     )
     if not owner_id or not profile:
-        await callback.answer("فقط نمایندگان", show_alert=True)
+        await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
         return
     await callback.answer()
     from app.bot.nav_inline import with_inline_back
@@ -984,12 +985,12 @@ async def res_cancellation_view(
         session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
     )
     if not owner_id or not profile:
-        await callback.answer("فقط نمایندگان", show_alert=True)
+        await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
         return
     try:
         rid = int((callback.data or "").rsplit(":", 1)[-1])
     except ValueError:
-        await callback.answer("نامعتبر", show_alert=True)
+        await callback.answer(feedback.INVALID, show_alert=True)
         return
     from app.bot.nav_inline import with_inline_back
     from app.db.models import ServiceCancellation
@@ -997,7 +998,7 @@ async def res_cancellation_view(
 
     row = await session.get(ServiceCancellation, rid)
     if not row or int(row.reseller_id or -1) != int(owner_id):
-        await callback.answer("یافت نشد", show_alert=True)
+        await callback.answer(feedback.NOT_FOUND, show_alert=True)
         return
     await callback.answer()
     ui = await get_all_settings(session)
@@ -1026,7 +1027,7 @@ async def res_payments(
         session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
     )
     if not owner_id or not profile:
-        await callback.answer("فقط نمایندگان", show_alert=True)
+        await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
         return
     if not has_bot_perm(profile, "payments"):
         await callback.answer("اجازه تأیید ندارید", show_alert=True)
@@ -1472,7 +1473,7 @@ async def res_renew(
         reseller_owner_id=reseller_owner_id,
     )
     if not owner_id or not profile or not plan or not owner:
-        await callback.answer("فقط نمایندگان", show_alert=True)
+        await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
         return
     uname = (profile.pg_admin_username or "").strip()
     sub = await get_subscription(session, uname) if uname else None
@@ -1527,7 +1528,7 @@ async def res_renew_go(
         reseller_owner_id=reseller_owner_id,
     )
     if not owner_id or not profile or not plan or not owner:
-        await callback.answer("فقط نمایندگان", show_alert=True)
+        await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
         return
     try:
         result = await renew_reseller_capacity(
@@ -1575,7 +1576,7 @@ async def res_buy_gb(
         reseller_owner_id=reseller_owner_id,
     )
     if not owner_id or not profile or not plan:
-        await callback.answer("فقط نمایندگان", show_alert=True)
+        await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
         return
     if not plan_allows_buy_extra(plan):
         await callback.answer("این پلن خرید حجم اضافه ندارد", show_alert=True)
@@ -1623,7 +1624,7 @@ async def res_buy_gb_go(
         reseller_owner_id=reseller_owner_id,
     )
     if not owner_id or not profile or not plan or not owner:
-        await callback.answer("فقط نمایندگان", show_alert=True)
+        await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
         return
     from app.services.reseller_capacity import ALLOWED_EXTRA_GB
 
@@ -1672,7 +1673,7 @@ async def res_buy_users(
         reseller_owner_id=reseller_owner_id,
     )
     if not owner_id or not profile or not plan:
-        await callback.answer("فقط نمایندگان", show_alert=True)
+        await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
         return
     if not plan_allows_buy_extra(plan):
         await callback.answer("این پلن خرید کاربر اضافه ندارد", show_alert=True)
@@ -1720,7 +1721,7 @@ async def res_buy_users_go(
         reseller_owner_id=reseller_owner_id,
     )
     if not owner_id or not profile or not plan or not owner:
-        await callback.answer("فقط نمایندگان", show_alert=True)
+        await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
         return
     from app.services.reseller_capacity import ALLOWED_EXTRA_USERS
 
@@ -1780,7 +1781,7 @@ async def res_addons(
         reseller_owner_id=reseller_owner_id,
     )
     if not owner_id or not profile or not owner:
-        await callback.answer("فقط نمایندگان", show_alert=True)
+        await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
         return
     if plan is None or not is_subscription_plan(plan):
         await callback.answer(
@@ -1901,7 +1902,7 @@ async def res_addon_buy(
         reseller_owner_id=reseller_owner_id,
     )
     if not owner_id or not profile or not owner:
-        await callback.answer("فقط نمایندگان", show_alert=True)
+        await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
         return
     if plan is None or not is_subscription_plan(plan):
         await callback.answer(

@@ -35,6 +35,7 @@ from app.services.settings_button_labels import (
     BTN_PAY_WALLET_DISCOUNT,
     shop_button_subs,
 )
+from app.services import bot_feedback_texts as feedback
 
 
 
@@ -340,7 +341,7 @@ async def _gate(
         reseller_owner_id=reseller_owner_id,
     )
     if not owner_id or not profile:
-        return None, "فقط نمایندگان"
+        return None, feedback.RESELLERS_ONLY
     if not has_bot_perm(profile, "shop_settings"):
         return None, "دسترسی تنظیمات فروشگاه ندارید"
     return profile, None
@@ -446,7 +447,7 @@ async def _render_hub(
 async def _render_section(callback: CallbackQuery, session: AsyncSession, sec_id: str, reseller_id: int):
     sec = SECTIONS.get(sec_id)
     if not sec:
-        await callback.answer("نامعتبر", show_alert=True)
+        await callback.answer(feedback.INVALID, show_alert=True)
         return
     with _Scoped(reseller_id):
         if sec.get("kind") == "supports":
@@ -581,7 +582,7 @@ async def _render_sub(
         await _render_menu_order(callback, session, reseller_id, back=f"res:st:sec:{sec_id}")
         return
     if not isinstance(fields, list):
-        await callback.answer("نامعتبر", show_alert=True)
+        await callback.answer(feedback.INVALID, show_alert=True)
         return
     with _Scoped(reseller_id):
         rows = []
@@ -684,13 +685,13 @@ async def settings_toggle(callback: CallbackQuery, session: AsyncSession, db_use
         return
     key = callback.data.split(":", 3)[-1]
     if key.startswith("notify_") or not _is_field_toggle_key(key):
-        await callback.answer("نامعتبر", show_alert=True)
+        await callback.answer(feedback.INVALID, show_alert=True)
         return
     with _Scoped(profile.user_id):
         cur = await get_setting(session, key, reseller_id=profile.user_id)
         new_val = "0" if on(cur) else "1"
         await set_setting(session, key, new_val, reseller_id=profile.user_id)
-    await callback.answer("ذخیره شد")
+    await callback.answer(feedback.SAVED)
     loc = _owner_screen_for_key(key)
     if loc:
         await _render_sub(callback, session, loc[0], loc[1], profile.user_id)
@@ -718,7 +719,7 @@ async def menu_layout_toggle(
             "compact" if cur == "classic" else "classic",
             reseller_id=profile.user_id,
         )
-    await callback.answer("ذخیره شد")
+    await callback.answer(feedback.SAVED)
     await _render_sub(callback, session, "menu", "layout", profile.user_id)
 
 
@@ -786,7 +787,7 @@ async def menu_order_edit(
     payload = {"menu_order": ",".join(order), **sync_show_flags_for_order(order)}
     payload["show_reseller_apply"] = "0"
     await set_settings_bulk(session, payload, reseller_id=profile.user_id)
-    await callback.answer("ذخیره شد")
+    await callback.answer(feedback.SAVED)
     await _render_menu_order(
         callback, session, profile.user_id, back="res:st:sec:menu"
     )
@@ -825,7 +826,7 @@ async def settings_notify_toggle(
     prefs = await get_shop_notify_prefs(session, profile.user_id)
     new_val = "0" if prefs.get(key) else "1"
     await set_setting(session, key, new_val, reseller_id=profile.user_id)
-    await callback.answer("ذخیره شد")
+    await callback.answer(feedback.SAVED)
     await _render_notify(callback, session, profile.user_id)
 
 
@@ -842,7 +843,7 @@ async def settings_edit_ask(
     key = callback.data.split(":", 3)[-1]
     meta = FIELDS.get(key)
     if not meta:
-        await callback.answer("نامعتبر", show_alert=True)
+        await callback.answer(feedback.INVALID, show_alert=True)
         return
     with _Scoped(profile.user_id):
         cur = await get_setting(session, key, reseller_id=profile.user_id)
@@ -1004,7 +1005,7 @@ async def support_del(callback: CallbackQuery, session: AsyncSession, db_user: B
         return
     cid = callback.data.split(":")[-1]
     await delete_support_contact(session, cid, reseller_id=profile.user_id)
-    await callback.answer("حذف شد")
+    await callback.answer(feedback.DELETED)
     await _render_section(callback, session, "support", profile.user_id)
 
 

@@ -48,6 +48,7 @@ from app.services.orders import (
 )
 from app.services.users import get_all_settings, on
 from app.services.message_variables import DOMAIN_PAYMENT, render_message_template
+from app.services import bot_feedback_texts as feedback
 
 router = Router(name="shop")
 logger = logging.getLogger(__name__)
@@ -609,7 +610,7 @@ async def custom_gb_entered(
             message,
             session,
             db_user,
-            text="لغو شد.",
+            text=feedback.CANCELLED,
             state=state,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
@@ -730,7 +731,7 @@ async def custom_days_entered(
             message,
             session,
             db_user,
-            text="لغو شد.",
+            text=feedback.CANCELLED,
             state=state,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
@@ -1065,7 +1066,7 @@ async def wholesale_qty_entered(
             message,
             session,
             db_user,
-            text="لغو شد.",
+            text=feedback.CANCELLED,
             state=state,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
@@ -1473,7 +1474,7 @@ async def shop_trial_contact_cancel(
             message,
             session,
             db_user,
-            text="لغو شد.",
+            text=feedback.CANCELLED,
             state=state,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
@@ -1603,7 +1604,7 @@ async def pay_back(
     try:
         order_id = int((callback.data or "").split(":")[-1])
     except (TypeError, ValueError):
-        await callback.answer("نامعتبر", show_alert=True)
+        await callback.answer(feedback.INVALID, show_alert=True)
         return
     order = await session.get(Order, order_id)
     if not is_customer_order_in_current_shop(order, db_user.id):
@@ -1680,7 +1681,7 @@ async def apply_loyalty_discount_btn(
         order_id = int(parts[2])
         ent_id = int(parts[3])
     except (IndexError, TypeError, ValueError):
-        await callback.answer("نامعتبر", show_alert=True)
+        await callback.answer(feedback.INVALID, show_alert=True)
         return
     from app.db.models import LoyaltyDiscountEntitlement
     from app.bot.menu_nav import present_order_pay
@@ -1744,7 +1745,7 @@ async def apply_discount_msg(
             message,
             session,
             db_user,
-            text="لغو شد.",
+            text=feedback.CANCELLED,
             state=state,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,

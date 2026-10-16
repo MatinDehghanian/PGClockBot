@@ -45,6 +45,7 @@ from app.services.message_variables import DOMAIN_REFERRAL
 from app.services.service_scope import list_customer_services
 from app.services.users import current_shop_reseller_id, get_all_settings, get_setting, on, set_setting
 from app.services.redact import user_safe_error
+from app.services import bot_feedback_texts as feedback
 
 router = Router(name="loyalty")
 
@@ -645,7 +646,7 @@ async def open_admin_loyalty_overview(
         reseller_owner_id=reseller_owner_id,
     )
     if scope_info is None:
-        await message.answer("دسترسی ندارید.")
+        await message.answer(feedback.NO_ACCESS_REPLY)
         return
     scope, can_tiers = scope_info
     await ensure_loyalty_defaults(session, reseller_id=scope)
@@ -752,7 +753,7 @@ async def open_admin_loyalty_rules(
         reseller_owner_id=reseller_owner_id,
     )
     if scope_info is None:
-        await message.answer("دسترسی ندارید.")
+        await message.answer(feedback.NO_ACCESS_REPLY)
         return
     scope, can_tiers = scope_info
     await ensure_loyalty_defaults(session, reseller_id=scope)
@@ -797,7 +798,7 @@ async def open_admin_loyalty_rewards(
         reseller_owner_id=reseller_owner_id,
     )
     if scope_info is None:
-        await message.answer("دسترسی ندارید.")
+        await message.answer(feedback.NO_ACCESS_REPLY)
         return
     scope, can_tiers = scope_info
     await ensure_loyalty_defaults(session, reseller_id=scope)
@@ -844,7 +845,7 @@ async def open_admin_loyalty_tiers(
         reseller_owner_id=reseller_owner_id,
     )
     if scope_info is None:
-        await message.answer("دسترسی ندارید.")
+        await message.answer(feedback.NO_ACCESS_REPLY)
         return
     scope, can_tiers = scope_info
     if not can_tiers:
@@ -926,7 +927,7 @@ async def open_admin_loyalty_settings(
         reseller_owner_id=reseller_owner_id,
     )
     if scope_info is None:
-        await message.answer("دسترسی ندارید.")
+        await message.answer(feedback.NO_ACCESS_REPLY)
         return
     scope, can_tiers = scope_info
     await ensure_loyalty_defaults(session, reseller_id=scope)
@@ -970,7 +971,7 @@ async def open_admin_loyalty_ref_text(
         reseller_owner_id=reseller_owner_id,
     )
     if scope_info is None:
-        await message.answer("دسترسی ندارید.")
+        await message.answer(feedback.NO_ACCESS_REPLY)
         return
     scope, can_tiers = scope_info
     # Reseller may edit referral text only with shop_settings (same as web panel)
@@ -1117,7 +1118,7 @@ async def loyalty_redeem(callback: CallbackQuery, session: AsyncSession, db_user
     try:
         reward_id = int(callback.data.split(":")[-1])
     except (TypeError, ValueError):
-        await callback.answer("نامعتبر", show_alert=True)
+        await callback.answer(feedback.INVALID, show_alert=True)
         return
 
     reward = await session.get(LoyaltyReward, reward_id)
@@ -1161,7 +1162,7 @@ async def loyalty_redeem_svc(callback: CallbackQuery, session: AsyncSession, db_
         reward_id = int(parts[2])
         service_id = int(parts[3])
     except (IndexError, TypeError, ValueError):
-        await callback.answer("نامعتبر", show_alert=True)
+        await callback.answer(feedback.INVALID, show_alert=True)
         return
     await _do_redeem(callback, session, db_user, reward_id, service_id)
 
@@ -1440,13 +1441,13 @@ async def staff_tog_enabled(
         reseller_owner_id=reseller_owner_id,
     )
     if scope_info is None:
-        await callback.answer("دسترسی ندارید", show_alert=True)
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     scope, _ = scope_info
     cur = await get_setting(session, SETTING_LOYALTY_ENABLED, "1", reseller_id=scope)
     new_val = "0" if on(cur) else "1"
     await set_setting(session, SETTING_LOYALTY_ENABLED, new_val, reseller_id=scope)
-    await callback.answer("ذخیره شد")
+    await callback.answer(feedback.SAVED)
     if callback.message:
         await safe_edit_text(
             callback.message,
@@ -1504,7 +1505,7 @@ async def staff_edit_rate_start(
         reseller_owner_id=reseller_owner_id,
     )
     if scope_info is None:
-        await callback.answer("دسترسی ندارید", show_alert=True)
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     scope, _ = scope_info
     cur = await get_setting(
@@ -1544,13 +1545,13 @@ async def staff_rule_toggle(
         reseller_owner_id=reseller_owner_id,
     )
     if scope_info is None:
-        await callback.answer("دسترسی ندارید", show_alert=True)
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     scope, _ = scope_info
     try:
         rid = int((callback.data or "").split(":")[-1])
     except ValueError:
-        await callback.answer("نامعتبر", show_alert=True)
+        await callback.answer(feedback.INVALID, show_alert=True)
         return
     rule = await session.get(PointsRule, rid)
     if not rule or not _rule_in_scope(rule, scope):
@@ -1558,7 +1559,7 @@ async def staff_rule_toggle(
         return
     rule.enabled = not bool(rule.enabled)
     await session.commit()
-    await callback.answer("ذخیره شد")
+    await callback.answer(feedback.SAVED)
     rules = await _scoped_rules(session, scope)
     if callback.message:
         await safe_edit_text(
@@ -1582,13 +1583,13 @@ async def staff_reward_toggle(
         reseller_owner_id=reseller_owner_id,
     )
     if scope_info is None:
-        await callback.answer("دسترسی ندارید", show_alert=True)
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     scope, _ = scope_info
     try:
         rid = int((callback.data or "").split(":")[-1])
     except ValueError:
-        await callback.answer("نامعتبر", show_alert=True)
+        await callback.answer(feedback.INVALID, show_alert=True)
         return
     reward = await session.get(LoyaltyReward, rid)
     if not reward or not _reward_in_scope(reward, scope):
@@ -1596,7 +1597,7 @@ async def staff_reward_toggle(
         return
     reward.enabled = not bool(reward.enabled)
     await session.commit()
-    await callback.answer("ذخیره شد")
+    await callback.answer(feedback.SAVED)
     rewards = await _scoped_rewards(session, scope)
     if callback.message:
         await safe_edit_text(
@@ -1677,7 +1678,7 @@ async def staff_save_wallet_rate(
     )
     if scope_info is None:
         await state.clear()
-        await message.answer("دسترسی ندارید.")
+        await message.answer(feedback.NO_ACCESS_REPLY)
         return
     live_scope, can_tiers = scope_info
     if live_scope != scope:
@@ -1725,7 +1726,7 @@ async def staff_save_wallet_rate(
         if rate < 0:
             raise ValueError("neg")
     except ValueError:
-        await message.answer("عدد معتبر بفرستید.")
+        await message.answer(feedback.ENTER_VALID_NUMBER)
         return
     await set_setting(
         session, SETTING_POINTS_TO_WALLET_RATE, str(rate), reseller_id=scope
@@ -1768,7 +1769,7 @@ async def staff_save_referral_text(
     )
     if scope_info is None:
         await state.clear()
-        await message.answer("دسترسی ندارید.")
+        await message.answer(feedback.NO_ACCESS_REPLY)
         return
     live_scope, can_tiers = scope_info
     if live_scope != scope:

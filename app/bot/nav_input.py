@@ -26,6 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot.nav_inline import NAV_PANEL_CHAT_KEY, NAV_PANEL_MSG_KEY, panel_is_still_live
 from app.db.models import BotUser
+from app.services import bot_feedback_texts as feedback
 
 logger = logging.getLogger(__name__)
 
@@ -273,7 +274,7 @@ async def nv_cancel_input(
     code = raw.split(":", 2)[-1] if raw.startswith("nv:cancel:") else ""
     entry = CANCEL_REGISTRY.get(code)
     if entry is None:
-        await callback.answer("نامعتبر", show_alert=True)
+        await callback.answer(feedback.INVALID, show_alert=True)
         return
     await callback.answer()
     # Clear typed-input FSM; preserve nav stack keys via clear of state only.

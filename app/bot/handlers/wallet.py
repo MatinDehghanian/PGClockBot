@@ -19,6 +19,7 @@ from app.services.receipts import submit_receipt
 from app.services.users import get_all_settings, on
 from app.services.wallet import list_activity
 from app.services.message_variables import DOMAIN_PAYMENT, render_message_template
+from app.services import bot_feedback_texts as feedback
 
 router = Router(name="wallet")
 
@@ -151,7 +152,7 @@ async def wallet_gift_code(
             message,
             session,
             db_user,
-            text="لغو شد.",
+            text=feedback.CANCELLED,
             state=state,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
@@ -314,7 +315,7 @@ async def wallet_topup_amount(message: Message, state: FSMContext, session: Asyn
             message,
             session,
             db_user,
-            text="لغو شد.",
+            text=feedback.CANCELLED,
             state=state,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
@@ -639,7 +640,7 @@ async def wallet_choose_method_cancel(
             message,
             session,
             db_user,
-            text="لغو شد.",
+            text=feedback.CANCELLED,
             state=state,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
@@ -724,7 +725,7 @@ async def wallet_receipt_cancel(
             message,
             session,
             db_user,
-            text="لغو شد.",
+            text=feedback.CANCELLED,
             state=state,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
