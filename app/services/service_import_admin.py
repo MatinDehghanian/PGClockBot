@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import BotUser, ServiceImportAttempt
 from app.services.authz import authz_from_staff, can_shop
 from app.services.pasarguard import PasarGuardError
+from app.services.shop_membership import shop_member_clause
 from app.services.service_import import (
     Reason,
     ServiceImportError,
@@ -126,7 +127,7 @@ async def recent_attempts(session: AsyncSession, scope: int | None, *, limit: in
         .order_by(ServiceImportAttempt.id.desc())
         .limit(max(1, int(limit)))
     )
-    query = query.where(BotUser.reseller_id.is_(None) if scope is None else BotUser.reseller_id == int(scope))
+    query = query.where(shop_member_clause(scope))
     rows = (await session.execute(query)).all()
     return [
         {

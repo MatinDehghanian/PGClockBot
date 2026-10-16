@@ -189,3 +189,4 @@ tests/test_shop_isolation_dashboards.py
 tests/test_service_shop_review_page.py
 tests/test_shop_points.py
 tests/test_shop_points_migration.py
+tests/test_shop_isolation_remaining.py

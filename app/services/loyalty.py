@@ -1598,64 +1598,41 @@ async def overview_metrics(
     )
     qualified = int((await session.execute(qual_q)).scalar_one() or 0)
 
-    pts_base = select(func.coalesce(func.sum(PointsTransaction.amount), 0)).where(
-        non_demo_customer(PointsTransaction.user_id),
+    # Points and redeemed credits belong to the shop whose purse or reward they are.
+    points_scope = (
+        PointsTransaction.reseller_id == int(reseller_id)
+        if reseller_id is not None
+        else PointsTransaction.reseller_id.is_(None)
     )
-    if reseller_id is not None:
-        pts_join = pts_base.select_from(PointsTransaction).join(
-            BotUser, BotUser.id == PointsTransaction.user_id
-        ).where(BotUser.reseller_id == int(reseller_id), PointsTransaction.amount > 0)
-        issued = int((await session.execute(pts_join)).scalar_one() or 0)
-        redeemed_q = (
-            select(func.coalesce(func.sum(PointsTransaction.amount), 0))
-            .select_from(PointsTransaction)
-            .join(BotUser, BotUser.id == PointsTransaction.user_id)
-            .where(
-                BotUser.reseller_id == int(reseller_id),
-                PointsTransaction.amount < 0,
-                PointsTransaction.tx_type == "redeem",
-                non_demo_customer(PointsTransaction.user_id),
+    points_sum = select(func.coalesce(func.sum(PointsTransaction.amount), 0)).where(
+        points_scope, non_demo_customer(PointsTransaction.user_id)
+    )
+    issued = int((await session.execute(points_sum.where(PointsTransaction.amount > 0))).scalar_one() or 0)
+    redeemed = int(
+        (
+            await session.execute(
+                points_sum.where(PointsTransaction.amount < 0, PointsTransaction.tx_type == "redeem")
             )
-        )
-        redeemed = int((await session.execute(redeemed_q)).scalar_one() or 0)
-    else:
-        issued = int(
-            (
-                await session.execute(
-                    pts_base.where(PointsTransaction.amount > 0)
-                )
-            ).scalar_one()
-            or 0
-        )
-        redeemed = int(
-            (
-                await session.execute(
-                    select(func.coalesce(func.sum(PointsTransaction.amount), 0)).where(
-                        PointsTransaction.amount < 0,
-                        PointsTransaction.tx_type == "redeem",
-                        non_demo_customer(PointsTransaction.user_id),
-                    )
-                )
-            ).scalar_one()
-            or 0
-        )
+        ).scalar_one()
+        or 0
+    )
 
-    red_q = select(func.coalesce(func.sum(RewardRedemption.reward_value), 0)).where(
-        RewardRedemption.reward_type == "wallet_credit",
-        RewardRedemption.status == "completed",
+    reward_scope = (
+        LoyaltyReward.reseller_id == int(reseller_id)
+        if reseller_id is not None
+        else LoyaltyReward.reseller_id.is_(None)
     )
-    if reseller_id is not None:
-        red_q = (
-            select(func.coalesce(func.sum(RewardRedemption.reward_value), 0))
-            .select_from(RewardRedemption)
-            .join(BotUser, BotUser.id == RewardRedemption.user_id)
-            .where(
-                RewardRedemption.reward_type == "wallet_credit",
-                RewardRedemption.status == "completed",
-                BotUser.reseller_id == int(reseller_id),
-            )
+    red_q = (
+        select(func.coalesce(func.sum(RewardRedemption.reward_value), 0))
+        .select_from(RewardRedemption)
+        .join(LoyaltyReward, LoyaltyReward.id == RewardRedemption.reward_id)
+        .where(
+            RewardRedemption.reward_type == "wallet_credit",
+            RewardRedemption.status == "completed",
+            reward_scope,
+            non_demo_customer(RewardRedemption.user_id),
         )
-    red_q = red_q.where(non_demo_customer(RewardRedemption.user_id))
+    )
     wallet_credits = int((await session.execute(red_q)).scalar_one() or 0)
 
     rw_q = select(func.count()).select_from(LoyaltyReward).where(
