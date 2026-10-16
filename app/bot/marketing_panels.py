@@ -23,8 +23,6 @@ CAMPAIGN_PANEL_CALLBACK = "nv:adm:cmp"
 GIFT_SET_PATTERN = re.compile(r"^adm:gc:set:(\d{1,9}):([01])\Z")
 CAMPAIGN_ACTION_PATTERN = re.compile(r"^adm:cmp:(start|pause):(\d{1,9})\Z")
 
-GIFT_BUTTON_LABEL = "🎁 کدهای هدیه"
-CAMPAIGN_BUTTON_LABEL = "📣 کمپین‌ها"
 WEB_BUTTON_LABEL = "🌐 مدیریت کامل در وب‌پنل"
 
 CAMPAIGN_STATUS_LABELS = {

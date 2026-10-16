@@ -106,6 +106,8 @@ BTN_ADMIN_SYS: list[Field] = [
     ("btn_adm_settings", "تنظیمات", "text"),
     ("btn_adm_broadcast", "پیام گروهی", "text"),
     ("btn_adm_preview", "پیش‌نمایش کاربر", "text"),
+    ("btn_adm_st_panel", "تنظیمات: وب‌پنل", "text"),
+    ("btn_adm_st_find", "تنظیمات: جستجو", "text"),
 ]
 
 BTN_STORE_EXTRA: list[Field] = [
@@ -130,6 +132,150 @@ BTN_ADMIN_HUB_ITEMS: list[Field] = [
     ("btn_adm_backup", "بکاپ / ریستور", "text"),
     ("btn_adm_exit_preview", "خروج از پیش‌نمایش", "text"),
 ]
+
+
+# Submenu labels that used to be fixed in code (≤8 fields per Telegram screen).
+BTN_ADMIN_PG: list[Field] = [
+    ("btn_pg_stats", "نمای کلی پاسارگارد", "text"),
+    ("btn_pg_users", "کاربران پاسارگارد", "text"),
+    ("btn_pg_create", "ساخت کاربر", "text"),
+    ("btn_pg_search", "جستجوی یوزر", "text"),
+    ("btn_pg_nodes", "نودها", "text"),
+    ("btn_pg_group", "ساخت گروه", "text"),
+    ("btn_pg_template", "ساخت تمپلیت", "text"),
+]
+
+BTN_ADMIN_PEOPLE_SUB: list[Field] = [
+    ("btn_adm_users_list", "لیست کاربران", "text"),
+    ("btn_adm_users_search", "جستجو با آیدی تلگرام", "text"),
+    ("btn_adm_users_web", "مدیریت کاربران در وب‌پنل", "text"),
+    ("btn_adm_res_list", "لیست نمایندگان", "text"),
+    ("btn_adm_res_apps", "درخواست‌های نمایندگی", "text"),
+    ("btn_adm_res_add", "افزودن نماینده", "text"),
+]
+
+BTN_ADMIN_SETTINGS_SUB: list[Field] = [
+    ("btn_adm_st_shop", "تنظیمات: فروشگاه", "text"),
+    ("btn_adm_st_menu", "تنظیمات: ظاهر و دکمه‌ها", "text"),
+    ("btn_adm_st_pay", "تنظیمات: پرداخت", "text"),
+    ("btn_adm_st_support", "تنظیمات: پشتیبان‌ها", "text"),
+    ("btn_adm_st_access", "تنظیمات: دسترسی", "text"),
+    ("btn_adm_st_limits", "تنظیمات: محدودیت", "text"),
+    ("btn_adm_st_guides", "تنظیمات: آموزش اتصال", "text"),
+    ("btn_adm_st_notify", "تنظیمات: اعلان‌ها", "text"),
+]
+
+BTN_ADMIN_BACKUP_BROADCAST: list[Field] = [
+    ("btn_backup_create", "ساخت بکاپ", "text"),
+    ("btn_backup_create_env", "بکاپ همراه .env", "text"),
+    ("btn_backup_upload", "آپلود فایل بکاپ", "text"),
+    ("btn_backup_refresh", "تازه‌سازی لیست بکاپ", "text"),
+    ("btn_bc_aud_all", "پیام همگانی: همه", "text"),
+    ("btn_bc_aud_users", "پیام همگانی: کاربران", "text"),
+    ("btn_bc_aud_resellers", "پیام همگانی: نمایندگان", "text"),
+    ("btn_bc_aud_admins", "پیام همگانی: ادمین‌ها", "text"),
+]
+
+BTN_ADMIN_PLANS_SUB: list[Field] = [
+    ("btn_adm_plans_aud_users", "پلن‌های کاربران", "text"),
+    ("btn_adm_plans_aud_resellers", "پلن‌های نمایندگان", "text"),
+    ("btn_adm_plans_add", "افزودن پلن", "text"),
+    ("btn_adm_plans_categories", "برچسب دسته", "text"),
+    ("btn_adm_plans_addons", "بسته حجم/زمان", "text"),
+    ("btn_adm_plans_view", "مشاهده پلن‌ها", "text"),
+]
+
+BTN_ADMIN_MARKETING_SUB: list[Field] = [
+    ("btn_adm_gift_codes", "کدهای هدیه", "text"),
+    ("btn_adm_campaigns", "کمپین‌ها", "text"),
+]
+
+BTN_SERVICE_MORE: list[Field] = [
+    ("btn_svc_refresh", "رفرش وضعیت", "text"),
+    ("btn_svc_auto", "تنظیمات خودکار", "text"),
+    ("btn_svc_cancel", "درخواست لغو سرویس", "text"),
+    ("btn_svc_delete", "حذف سرویس", "text"),
+    ("btn_svc_add_existing", "اتصال اشتراک قبلی", "text"),
+]
+
+BTN_ADMIN_PLAN_KINDS: list[Field] = [
+    ("btn_adm_plans_kind_res_fixed", "اشتراک ثابت", "text"),
+    ("btn_adm_plans_kind_res_payg", "اشتراک PAYG", "text"),
+    ("btn_adm_plans_kind_res_addon_vol", "بسته حجم", "text"),
+    ("btn_adm_plans_kind_res_addon_users", "بسته کاربر", "text"),
+]
+
+BTN_ADMIN_LOYALTY_SUB: list[Field] = [
+    ("btn_adm_loy_overview", "نمای کلی", "text"),
+    ("btn_adm_loy_rules", "قوانین امتیاز", "text"),
+    ("btn_adm_loy_rewards", "جوایز", "text"),
+    ("btn_adm_loy_tiers", "سطوح", "text"),
+    ("btn_adm_loy_settings", "تنظیمات باشگاه", "text"),
+    ("btn_adm_loy_ref_text", "متن دعوت", "text"),
+]
+
+BTN_RESELLER_HUB: list[Field] = [
+    ("btn_res_dash", "خانه نماینده", "text"),
+    ("btn_res_users", "مشتریان من", "text"),
+    ("btn_res_add_rep", "افزودن نماینده", "text"),
+    ("btn_res_reports", "گزارشات", "text"),
+    ("btn_res_stats", "آمار", "text"),
+    ("btn_res_plans", "پلن‌های فروش", "text"),
+    ("btn_res_orders", "سفارش‌های مشتریان", "text"),
+    ("btn_res_payments", "رسیدهای در انتظار", "text"),
+]
+
+BTN_RESELLER_HUB_MORE: list[Field] = [
+    ("btn_res_tickets", "تیکت‌های مشتریان", "text"),
+    ("btn_res_loyalty", "باشگاه مشتریان", "text"),
+    ("btn_res_settings", "تنظیمات فروشگاه", "text"),
+    ("btn_res_billing", "کیف پول PAYG", "text"),
+    ("btn_res_addon_packs", "بسته‌های حجم/کاربر", "text"),
+    ("btn_res_renew", "تمدید سرویس", "text"),
+]
+
+BTN_RESELLER_PLANS_SUB: list[Field] = [
+    ("btn_res_plan_add", "پلن جدید", "text"),
+    ("btn_res_plan_categories", "برچسب دسته", "text"),
+    ("btn_res_plan_addons", "بسته حجم/زمان", "text"),
+]
+
+BTN_RESELLER_SETTINGS_SUB: list[Field] = [
+    ("btn_res_st_shop", "فروشگاه", "text"),
+    ("btn_res_st_menu", "منو", "text"),
+    ("btn_res_st_pay", "پرداخت", "text"),
+    ("btn_res_st_support", "پشتیبان‌ها", "text"),
+    ("btn_res_st_access", "دسترسی", "text"),
+]
+
+BTN_CONNECTION_STATUS: list[Field] = [
+    ("btn_connection_status", "وضعیت سرورها (منوی کاربر)", "text"),
+    ("btn_connection_status_admin", "وضعیت اتصال (پنل ادمین)", "text"),
+]
+
+BTN_RESELLER_SETTINGS_MORE: list[Field] = [
+    ("btn_res_st_limits", "محدودیت", "text"),
+    ("btn_res_st_guides", "آموزش اتصال", "text"),
+    ("btn_res_st_notify", "اعلان‌ها", "text"),
+    ("btn_res_st_bot", "ربات", "text"),
+    ("btn_res_st_panel", "وب‌پنل", "text"),
+]
+
+# Admin submenu labels: platform-only like the admin hub labels above.
+PLATFORM_ONLY_BTN_KEYS = PLATFORM_ONLY_BTN_KEYS | frozenset(
+    key
+    for group in (
+        BTN_ADMIN_PG,
+        BTN_ADMIN_PEOPLE_SUB,
+        BTN_ADMIN_SETTINGS_SUB,
+        BTN_ADMIN_BACKUP_BROADCAST,
+        BTN_ADMIN_PLANS_SUB,
+        BTN_ADMIN_PLAN_KINDS,
+        BTN_ADMIN_LOYALTY_SUB,
+        BTN_ADMIN_MARKETING_SUB,
+    )
+    for key, _label, _kind in group
+) | frozenset({"btn_adm_st_panel", "btn_adm_st_find", "btn_connection_status_admin"})
 
 
 def appearance_button_subs() -> list[tuple]:
@@ -174,6 +320,21 @@ def shop_button_subs(*, include_platform: bool) -> list[tuple]:
         ("btn_roles", "دکمه‌های نقش‌ها", BTN_ROLES),
         ("btn_adm_ops", "دکمه‌های ادمین — عملیات", BTN_ADMIN_OPS),
         ("btn_adm_sys", "دکمه‌های ادمین — سیستم", BTN_ADMIN_SYS),
+        ("btn_adm_pg_sub", "دکمه‌های ادمین — پاسارگارد", BTN_ADMIN_PG),
+        ("btn_adm_people_sub", "دکمه‌های ادمین — کاربران و نمایندگان", BTN_ADMIN_PEOPLE_SUB),
+        ("btn_adm_settings_sub", "دکمه‌های ادمین — بخش‌های تنظیمات", BTN_ADMIN_SETTINGS_SUB),
+        ("btn_adm_backup_sub", "دکمه‌های ادمین — بکاپ و پیام همگانی", BTN_ADMIN_BACKUP_BROADCAST),
+        ("btn_adm_plans_sub", "دکمه‌های ادمین — پلن‌ها", BTN_ADMIN_PLANS_SUB),
+        ("btn_adm_plan_kinds", "دکمه‌های ادمین — نوع پلن نمایندگی", BTN_ADMIN_PLAN_KINDS),
+        ("btn_adm_loy_sub", "دکمه‌های ادمین — باشگاه", BTN_ADMIN_LOYALTY_SUB),
+        ("btn_adm_mkt_sub", "دکمه‌های ادمین — کدهای هدیه و کمپین", BTN_ADMIN_MARKETING_SUB),
+        ("btn_service_more", "دکمه‌های سرویس (ادامه)", BTN_SERVICE_MORE),
+        ("btn_res_hub", "دکمه‌های پنل نماینده", BTN_RESELLER_HUB),
+        ("btn_res_hub_more", "دکمه‌های پنل نماینده (ادامه)", BTN_RESELLER_HUB_MORE),
+        ("btn_res_plans_sub", "دکمه‌های پلن‌های فروش", BTN_RESELLER_PLANS_SUB),
+        ("btn_res_st_sub", "دکمه‌های تنظیمات فروشگاه", BTN_RESELLER_SETTINGS_SUB),
+        ("btn_res_st_more", "دکمه‌های تنظیمات فروشگاه (ادامه)", BTN_RESELLER_SETTINGS_MORE),
+        ("btn_status", "دکمه‌های وضعیت اتصال", BTN_CONNECTION_STATUS),
     ]
     out: list[tuple] = []
     for sub_id, title, fields in pairs:

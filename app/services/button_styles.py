@@ -88,6 +88,8 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "svc_link", "label": "لینک و QR", "group": "زیرمنوها", "default": ""},
     {"id": "svc_addon", "label": "حجم / زمان سرویس", "group": "زیرمنوها", "default": "primary"},
     {"id": "svc_refresh", "label": "رفرش وضعیت سرویس", "group": "زیرمنوها", "default": ""},
+    {"id": "svc_auto", "label": "تنظیمات خودکار سرویس", "group": "زیرمنوها", "default": ""},
+    {"id": "svc_cancel", "label": "درخواست لغو سرویس", "group": "زیرمنوها", "default": ""},
     {"id": "svc_delete", "label": "حذف سرویس", "group": "زیرمنوها", "default": "danger"},
     {"id": "svc_add_existing", "label": "افزودن سرویس قبلی", "group": "زیرمنوها", "default": ""},
     {"id": "wallet_tx", "label": "تراکنش‌های کیف پول", "group": "زیرمنوها", "default": ""},
@@ -228,6 +230,7 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "adm_st_limits", "label": "تنظیمات: محدودیت", "group": "تنظیمات ادمین", "default": ""},
     {"id": "adm_st_guides", "label": "تنظیمات: آموزش اتصال", "group": "تنظیمات ادمین", "default": ""},
     {"id": "adm_st_notify", "label": "تنظیمات: اعلان‌ها", "group": "تنظیمات ادمین", "default": ""},
+    {"id": "adm_st_find", "label": "تنظیمات: جستجو", "group": "تنظیمات ادمین", "default": ""},
     {"id": "adm_st_panel", "label": "تنظیمات: وب‌پنل", "group": "تنظیمات ادمین", "default": "primary"},
     # Backup sub
     {"id": "backup_create", "label": "ساخت بکاپ (بدون .env)", "group": "بکاپ", "default": "primary"},

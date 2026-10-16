@@ -702,12 +702,7 @@ def admin_product_hub_keyboard(
 @editable_screen("a.marketing")
 def admin_marketing_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
     """Club and broadcast leaves reuse ``nv:adm:*``; gift codes and campaigns are inline-only."""
-    from app.bot.marketing_panels import (
-        CAMPAIGN_BUTTON_LABEL,
-        CAMPAIGN_PANEL_CALLBACK,
-        GIFT_BUTTON_LABEL,
-        GIFT_PANEL_CALLBACK,
-    )
+    from app.bot.marketing_panels import CAMPAIGN_PANEL_CALLBACK, GIFT_PANEL_CALLBACK
 
     from app.bot.reply_keyboards import (
         REPLY_ACTION_ADMIN_BROADCAST,
@@ -733,15 +728,17 @@ def admin_marketing_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup
     buttons.extend(
         [
             _ikb(
-                GIFT_BUTTON_LABEL,
+                _t(ui, "btn_adm_gift_codes"),
                 callback_data=GIFT_PANEL_CALLBACK,
                 ui=ui,
+                label_key="btn_adm_gift_codes",
                 style_id="adm_gift_codes",
             ),
             _ikb(
-                CAMPAIGN_BUTTON_LABEL,
+                _t(ui, "btn_adm_campaigns"),
                 callback_data=CAMPAIGN_PANEL_CALLBACK,
                 ui=ui,
+                label_key="btn_adm_campaigns",
                 style_id="adm_campaigns",
             ),
         ]
@@ -878,7 +875,7 @@ def reseller_manage_hub_keyboard(
     from app.services.admin_counters import with_badge
 
     entries = _reseller_submenu_entries(
-        profile, can_add_representative=can_add_representative
+        profile, can_add_representative=can_add_representative, ui=ui
     )
     badge_for = {
         "res_payments": pending_payments,
@@ -974,7 +971,7 @@ def reseller_main_bot_hub_keyboard(
             action=key,
             style_id=key, style_fallback="primary",
         )
-        for key, text in _reseller_capacity_entries(profile)
+        for key, text in _reseller_capacity_entries(profile, ui)
     )
     rows = [buttons[i : i + 2] for i in range(0, len(buttons), 2)]
     rows.append(_hub_back_row(ui, callback_data="menu:home"))
@@ -1072,7 +1069,15 @@ def admin_settings_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
             )
         )
     markup = _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:system")
-    search_row = [_ikb("🔍 جستجو در تنظیمات", callback_data="adm:st:find", ui=ui)]
+    search_row = [
+        _ikb(
+            _t(ui, "btn_adm_st_find"),
+            callback_data="adm:st:find",
+            ui=ui,
+            label_key="btn_adm_st_find",
+            style_id="adm_st_find",
+        )
+    ]
     markup.inline_keyboard.insert(0, search_row)
     return markup
 
@@ -1149,9 +1154,6 @@ def admin_plans_audience_hub_keyboard(ui: dict | None = None) -> InlineKeyboardM
     return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:product")
 
 
-PLANS_VIEW_LABEL = "📋 مشاهده پلن‌ها"
-
-
 
 def _plans_kind_screen_id(audience: str, *_args: object, **_kwargs: object) -> str:
     return f"a.plans.{audience}"
@@ -1176,9 +1178,10 @@ def admin_plans_kind_hub_keyboard(
     }
     buttons = [
         _ikb(
-            PLANS_VIEW_LABEL,
+            _t(ui, "btn_adm_plans_view"),
             callback_data=f"nv:adm:plans:list:{audience}",
             ui=ui,
+            label_key="btn_adm_plans_view",
             style_id="adm_plans_view", style_fallback="primary",
         ),
         *(
@@ -1267,7 +1270,17 @@ def service_card_keyboard(
     cancel_rows = (
         []
         if external
-        else [[_ikb("📝 درخواست لغو سرویس", callback_data=f"svc:cancel:{sid}", ui=ui)]]
+        else [
+            [
+                _ikb(
+                    _t(ui, "btn_svc_cancel"),
+                    callback_data=f"svc:cancel:{sid}",
+                    ui=ui,
+                    label_key="btn_svc_cancel",
+                    style_id="svc_cancel",
+                )
+            ]
+        ]
     )
     rows: list[list[InlineKeyboardButton]] = [
         [
@@ -1304,23 +1317,27 @@ def service_card_keyboard(
         ],
         [
             _ikb(
-                "♻️ رفرش وضعیت",
+                _t(ui, "btn_svc_refresh"),
                 callback_data=f"svc:view:{sid}",
                 ui=ui,
+                label_key="btn_svc_refresh",
                 style_id="svc_refresh",
             ),
             _ikb(
-                "⚙️ تنظیمات خودکار",
+                _t(ui, "btn_svc_auto"),
                 callback_data=f"svc:auto:{sid}",
                 ui=ui,
+                label_key="btn_svc_auto",
+                style_id="svc_auto",
             ),
         ],
         *cancel_rows,
         [
             _ikb(
-                "🗑 حذف سرویس",
+                _t(ui, "btn_svc_delete"),
                 callback_data=f"svc:delask:{sid}",
                 ui=ui,
+                label_key="btn_svc_delete",
                 style_id="svc_delete", style_fallback="danger",
             ),
         ],
