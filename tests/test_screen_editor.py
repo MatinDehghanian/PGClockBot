@@ -115,16 +115,32 @@ class EditRowTests(unittest.TestCase):
         self.assertNotIn(EDIT_ROW_TEXT, texts)
 
 
+def _bot_routers() -> list:
+    """Every Router defined in the bot packages, read without attaching them to a dispatcher."""
+    import importlib
+    import pkgutil
+
+    from aiogram import Router
+
+    import app.bot
+    import app.bot.handlers
+
+    routers: list[Router] = []
+    for package in (app.bot, app.bot.handlers):
+        for info in pkgutil.iter_modules(package.__path__):
+            module = importlib.import_module(f"{package.__name__}.{info.name}")
+            routers.extend(v for v in vars(module).values() if isinstance(v, Router) and v not in routers)
+    return routers
+
+
 class ReopenCallbackTests(unittest.IsolatedAsyncioTestCase):
     async def test_every_screen_returns_through_a_registered_handler(self) -> None:
-        from app.bot import create_dispatcher
-
-        dispatcher = create_dispatcher()
+        routers = _bot_routers()
         user = User(id=1, is_bot=False, first_name="t")
         for screen_id, spec in SCREENS.items():
             event = CallbackQuery(id="1", from_user=user, chat_instance="1", data=spec.reopen_callback)
             matched = False
-            for router in dispatcher.chain_tail:
+            for router in routers:
                 for handler in router.callback_query.handlers:
                     try:
                         ok, _ = await handler.check(event)
