@@ -27,6 +27,7 @@ from app.services.loyalty import (
     list_available_discounts,
     list_points_history,
     loyalty_enabled,
+    points_balance,
     month_earned_points,
     overview_metrics,
     redeem_reward,
@@ -46,6 +47,11 @@ from app.services.users import current_shop_reseller_id, get_all_settings, get_s
 from app.services.redact import user_safe_error
 
 router = Router(name="loyalty")
+
+
+async def _points(session: AsyncSession, user: BotUser) -> int:
+    """The customer's points in the shop of the bot in use."""
+    return await points_balance(session, user, current_shop_reseller_id())
 
 class LoyaltyManageStates(StatesGroup):
     edit_wallet_rate = State()
@@ -185,11 +191,11 @@ async def build_loyalty_text(session: AsyncSession, db_user: BotUser) -> str:
         await ensure_loyalty_defaults(session, reseller_id=db_user.reseller_id)
     except Exception:
         pass
-    tier = await get_tier_for_points(session, int(db_user.points_balance or 0))
+    tier = await get_tier_for_points(session, await _points(session, db_user))
     stats = await referral_stats(session, db_user.id)
     month = await month_earned_points(session, db_user.id)
     lines = [
-        kv_line("⭐", "امتیاز شما", f"<b>{int(db_user.points_balance or 0)}</b>"),
+        kv_line("⭐", "امتیاز شما", f"<b>{await _points(session, db_user)}</b>"),
         kv_line("🏅", "سطح", tier.name),
     ]
     if tier.points_to_next is not None:
@@ -350,7 +356,7 @@ async def open_loyalty_rewards_message(
 
     await session.refresh(db_user)
     rewards = await list_active_rewards(session, reseller_id=db_user.reseller_id)
-    lines = [kv_line("⭐", "امتیاز فعلی", f"<b>{int(db_user.points_balance or 0)}</b>"), ""]
+    lines = [kv_line("⭐", "امتیاز فعلی", f"<b>{await _points(session, db_user)}</b>"), ""]
     if not rewards:
         lines.append("هنوز جایزه‌ای تعریف نشده است.")
     else:
@@ -477,7 +483,7 @@ async def open_loyalty_history_message(
     ui = await get_all_settings(session)
     from app.bot.nav_inline import present_inline_only
 
-    rows = await list_points_history(session, db_user.id, limit=8, offset=0)
+    rows = await list_points_history(session, db_user.id, shop_id=current_shop_reseller_id(), limit=8, offset=0)
     await session.refresh(db_user)
     if not rows:
         body = "تاریخچه‌ای نیست."
@@ -487,7 +493,7 @@ async def open_loyalty_history_message(
             sign = "+" if t.amount >= 0 else ""
             lines.append(f"{sign}{t.amount} — {t.description or t.tx_type}")
         body = "\n".join(lines)
-    body += f"\n\nموجودی فعلی: <b>{int(db_user.points_balance or 0)}</b>"
+    body += f"\n\nموجودی فعلی: <b>{await _points(session, db_user)}</b>"
     title_body = format_message("📜 تاریخچه امتیاز", body)
     page_kb = _hist_page_keyboard(
         page=0, has_more=len(rows) >= 8, include_back=False
@@ -1087,7 +1093,7 @@ async def loyalty_rewards(callback: CallbackQuery, session: AsyncSession, db_use
     await callback.answer()
     await session.refresh(db_user)
     rewards = await list_active_rewards(session, reseller_id=db_user.reseller_id)
-    lines = [kv_line("⭐", "امتیاز فعلی", f"<b>{int(db_user.points_balance or 0)}</b>"), ""]
+    lines = [kv_line("⭐", "امتیاز فعلی", f"<b>{await _points(session, db_user)}</b>"), ""]
     if not rewards:
         lines.append("هنوز جایزه‌ای تعریف نشده است.")
     else:
@@ -1207,7 +1213,7 @@ async def _do_redeem(
         "جایزه اعمال شد.",
         kv_line("🎁", "نوع", type_label),
         kv_line("📦", "مقدار", str(red.reward_value)),
-        kv_line("⭐", "امتیاز باقی‌مانده", str(int(db_user.points_balance or 0))),
+        kv_line("⭐", "امتیاز باقی‌مانده", str(await _points(session, db_user))),
     ]
     if red.reward_type == "discount_percent" and red.discount_code:
         lines.extend(
@@ -1308,7 +1314,7 @@ async def loyalty_wheel_spin(callback: CallbackQuery, session: AsyncSession, db_
         lines.append(kv_line("🎟", "هزینه", f"{result.cost_points} امتیاز"))
     else:
         lines.append(kv_line("🎟", "هزینه", "رایگان"))
-    lines.append(kv_line("⭐", "امتیاز باقی‌مانده", str(int(db_user.points_balance or 0))))
+    lines.append(kv_line("⭐", "امتیاز باقی‌مانده", str(await _points(session, db_user))))
     if result.discount_code:
         lines.extend(
             [
@@ -1378,7 +1384,9 @@ async def loyalty_history(callback: CallbackQuery, session: AsyncSession, db_use
         page = 0
     page = max(0, page)
     limit = 8
-    rows = await list_points_history(session, db_user.id, limit=limit, offset=page * limit)
+    rows = await list_points_history(
+        session, db_user.id, shop_id=current_shop_reseller_id(), limit=limit, offset=page * limit
+    )
     await session.refresh(db_user)
     if not rows:
         body = "تاریخچه‌ای نیست."
@@ -1388,7 +1396,7 @@ async def loyalty_history(callback: CallbackQuery, session: AsyncSession, db_use
             sign = "+" if t.amount >= 0 else ""
             lines.append(f"{sign}{t.amount} — {t.description or t.tx_type}")
         body = "\n".join(lines)
-    body += f"\n\nموجودی فعلی: <b>{int(db_user.points_balance or 0)}</b>"
+    body += f"\n\nموجودی فعلی: <b>{await _points(session, db_user)}</b>"
     page_kb = _hist_page_keyboard(
         page=page, has_more=len(rows) >= limit, include_back=True
     )

@@ -34,6 +34,7 @@ from app.services.loyalty import (
     debit_points,
     issue_discount_entitlement,
     loyalty_enabled,
+    points_balance,
 )
 from app.services.users import current_shop_reseller_id
 
@@ -467,7 +468,7 @@ async def get_user_wheel_status(session: AsyncSession, user: BotUser) -> WheelSt
             free_spins_left=0,
             spins_today=0,
             cooldown_remaining=0,
-            points_balance=int(user.points_balance or 0),
+            points_balance=await points_balance(session, user, scope),
             can_spin=False,
             block_reason="چرخ شانس غیرفعال است",
         )
@@ -488,7 +489,7 @@ async def get_user_wheel_status(session: AsyncSession, user: BotUser) -> WheelSt
     spins_today = int(state.spins_today or 0)
     daily_limit = int(cfg["daily_limit"])
     cost = int(cfg["spin_cost"])
-    pts = int(user.points_balance or 0)
+    pts = await points_balance(session, user, scope)
 
     reason: str | None = None
     can = True
@@ -607,6 +608,7 @@ async def spin(
                 idempotency_key=f"wheel_pts:{key}",
                 meta={"idempotency_key": key},
                 commit=False,
+                shop_id=scope,
             )
             pts_tx_id = pts_tx.id if pts_tx else None
 
@@ -658,6 +660,7 @@ async def spin(
                 idempotency_key=f"wheel_win_pts:{key}",
                 meta={"spin_id": spin_row.id},
                 commit=False,
+                shop_id=scope,
             )
         elif ptype == "wallet_credit" and pval > 0:
             from app.services.wallet import credit_wallet
