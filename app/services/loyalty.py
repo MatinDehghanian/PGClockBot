@@ -332,7 +332,7 @@ async def _ensure_shop_points_row(session: AsyncSession, user_id: int, shop_id: 
             session.add(ShopPoints(user_id=user_id, reseller_id=shop_id, balance=0))
             await session.flush()
     except IntegrityError:
-        pass  # a concurrent writer created the row first
+        logger.debug("shop points row already created user=%s shop=%s", user_id, shop_id)
 
 
 async def _apply_points_delta(
@@ -1065,19 +1065,7 @@ async def list_active_rewards(
         q = q.where(LoyaltyReward.reseller_id.is_(None))
     else:
         q = q.where(LoyaltyReward.reseller_id == int(reseller_id))
-    rows = list((await session.execute(q)).scalars().all())
-    if not rows and reseller_id is not None:
-        q2 = (
-            select(LoyaltyReward)
-            .where(
-                LoyaltyReward.enabled.is_(True),
-                LoyaltyReward.archived.is_(False),
-                LoyaltyReward.reseller_id.is_(None),
-            )
-            .order_by(LoyaltyReward.sort_order.asc(), LoyaltyReward.id.asc())
-        )
-        rows = list((await session.execute(q2)).scalars().all())
-    return rows
+    return list((await session.execute(q)).scalars().all())
 
 
 async def _user_redemption_count(session: AsyncSession, user_id: int, reward_id: int) -> int:
@@ -1128,15 +1116,11 @@ async def redeem_reward(
         reward = await session.get(LoyaltyReward, int(reward_id))
     if not reward or not reward.enabled or reward.archived:
         raise ValueError("این جایزه فعال نیست")
-    # Scope isolation: shop users cannot redeem another shop's rewards.
-    # Platform users may only redeem platform (reseller_id IS NULL) rewards.
-    # Shop users may redeem own-shop rewards or platform catalog (same as list_active_rewards).
+    # Scope isolation: a reward is redeemable only in the bot of the shop that owns it.
     user_rid = current_shop_reseller_id()
-    reward_rid = reward.reseller_id
-    if user_rid is None:
-        if reward_rid is not None:
-            raise ValueError("این جایزه فعال نیست")
-    elif reward_rid is not None and int(reward_rid) != int(user_rid):
+    # Points, reward and benefit all belong to one shop: a platform reward is not redeemable in
+    # a shop bot (its credit would come from the platform's wallet while the points are the shop's).
+    if (reward.reseller_id or None) != (user_rid or None):
         raise ValueError("این جایزه فعال نیست")
     if reward.max_redemptions_global is not None and int(reward.redemption_count) >= int(
         reward.max_redemptions_global
@@ -1203,7 +1187,7 @@ async def redeem_reward(
                 user,
                 rval,
                 wallet_reason,
-                shop_id=int(reward_rid) if reward_rid is not None else None,
+                shop_id=int(reward.reseller_id) if reward.reseller_id is not None else None,
                 commit=False,
             )
         reward.redemption_count = int(reward.redemption_count or 0) + 1
