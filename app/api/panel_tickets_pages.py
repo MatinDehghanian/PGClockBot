@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, Ticket
+from app.services.tickets import staff_ticket_in_scope, ticket_shop_clause
 from app.services.panel_tickets import (
     PRIORITY_BADGE,
     PRIORITY_LABELS,
@@ -46,15 +47,7 @@ def _staff_can_manage_bot_tickets(staff: dict) -> bool:
 
 async def _bot_ticket_in_scope(session: AsyncSession, staff: dict, ticket: Ticket) -> bool:
     """Tenant isolation for Telegram Ticket rows."""
-    user = await session.get(BotUser, int(ticket.user_id))
-    if is_platform_admin(staff):
-        return ticket.reseller_id is None and (user is None or user.reseller_id is None)
-    rid = shop_owner_id(staff)
-    if not rid:
-        return False
-    if ticket.reseller_id is not None:
-        return int(ticket.reseller_id) == int(rid)
-    return bool(user and user.reseller_id is not None and int(user.reseller_id) == int(rid))
+    return staff_ticket_in_scope(staff, ticket)
 
 
 def _bot_user_label(user: BotUser | None, user_id: int) -> str:
@@ -132,11 +125,7 @@ def register_panel_tickets_pages(app: FastAPI, *, render, require_staff, get_db)
                     (
                         await session.execute(
                             select(Ticket)
-                            .join(BotUser, BotUser.id == Ticket.user_id)
-                            .where(
-                                Ticket.reseller_id.is_(None),
-                                BotUser.reseller_id.is_(None),
-                            )
+                            .where(ticket_shop_clause(None))
                             .order_by(Ticket.id.desc())
                             .limit(100)
                         )
@@ -147,20 +136,11 @@ def register_panel_tickets_pages(app: FastAPI, *, render, require_staff, get_db)
             else:
                 rid = shop_owner_id(staff)
                 if rid:
-                    from sqlalchemy import or_
-
                     tg_tickets = list(
                         (
                             await session.execute(
                                 select(Ticket)
-                                .outerjoin(BotUser, BotUser.id == Ticket.user_id)
-                                .where(
-                                    or_(
-                                        Ticket.reseller_id == rid,
-                                        (Ticket.reseller_id.is_(None))
-                                        & (BotUser.reseller_id == rid),
-                                    )
-                                )
+                                .where(ticket_shop_clause(rid))
                                 .order_by(Ticket.id.desc())
                                 .limit(100)
                             )

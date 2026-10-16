@@ -567,7 +567,7 @@ async def reseller_shop_summary(
         .join(BotUser, BotUser.id == Ticket.user_id)
         .where(
             Ticket.status.in_(ticket_statuses), BotUser.is_demo.is_(False),
-            or_(Ticket.reseller_id == rid, and_(Ticket.reseller_id.is_(None), BotUser.reseller_id == rid)),
+            Ticket.reseller_id == rid,
         )
         .scalar_subquery()
     )

@@ -1,11 +1,27 @@
 from __future__ import annotations
 
-from sqlalchemy import or_, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.db.models import BotUser, Ticket, TicketMessage, TicketStatus
+from app.db.models import Ticket, TicketMessage, TicketStatus
+from app.services.shop_scope import is_platform_admin, shop_owner_id
 from app.services.users import current_shop_reseller_id
+
+
+def ticket_shop_clause(shop_id: int | None):
+    """SQL scope of a ticket list: the shop stamped on the ticket, NULL meaning the platform."""
+    if shop_id:
+        return Ticket.reseller_id == int(shop_id)
+    return Ticket.reseller_id.is_(None)
+
+
+def staff_ticket_in_scope(staff: dict, ticket: Ticket) -> bool:
+    """Staff may handle a customer ticket only of their own shop (platform Owner: platform tickets)."""
+    if is_platform_admin(staff):
+        return ticket.reseller_id is None
+    rid = shop_owner_id(staff)
+    return bool(rid) and ticket.reseller_id is not None and int(ticket.reseller_id) == int(rid)
 
 
 async def create_ticket(
@@ -106,31 +122,12 @@ async def list_open_tickets(
     platform_only: bool = False,
     reseller_id: int | None = None,
 ) -> list[Ticket]:
-    """List open tickets scoped by Ticket.reseller_id (with legacy sticky fallback)."""
+    """List open tickets scoped by the shop stamped on each ticket."""
     base = Ticket.status != TicketStatus.CLOSED.value
     if platform_only:
-        q = (
-            select(Ticket)
-            .outerjoin(BotUser, BotUser.id == Ticket.user_id)
-            .where(
-                base,
-                Ticket.reseller_id.is_(None),
-                BotUser.reseller_id.is_(None),
-            )
-        )
+        q = select(Ticket).where(base, ticket_shop_clause(None))
     elif reseller_id is not None:
-        rid = int(reseller_id)
-        q = (
-            select(Ticket)
-            .outerjoin(BotUser, BotUser.id == Ticket.user_id)
-            .where(
-                base,
-                or_(
-                    Ticket.reseller_id == rid,
-                    (Ticket.reseller_id.is_(None)) & (BotUser.reseller_id == rid),
-                ),
-            )
-        )
+        q = select(Ticket).where(base, ticket_shop_clause(reseller_id))
     else:
         q = select(Ticket).where(base)
     result = await session.execute(q.order_by(Ticket.id.desc()).limit(limit))

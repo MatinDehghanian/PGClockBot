@@ -6,7 +6,7 @@ from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
@@ -843,10 +843,7 @@ async def present_reseller_tickets_list(
         .join(BotUser, BotUser.id == Ticket.user_id)
         .where(
             Ticket.status.in_([TicketStatus.OPEN.value, TicketStatus.ANSWERED.value]),
-            or_(
-                Ticket.reseller_id == owner_id,
-                (Ticket.reseller_id.is_(None)) & (BotUser.reseller_id == owner_id),
-            ),
+            Ticket.reseller_id == owner_id,
         )
         .order_by(Ticket.id.desc())
         .limit(15)

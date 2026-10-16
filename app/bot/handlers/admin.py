@@ -4544,9 +4544,6 @@ async def _load_platform_ticket(
         return None, "یافت نشد"
     if ticket.reseller_id:
         return None, "این تیکت متعلق به فروشگاه نماینده است"
-    ticket_user = await session.get(BotUser, int(ticket.user_id))
-    if ticket_user and ticket_user.reseller_id:
-        return None, "این تیکت متعلق به فروشگاه نماینده است"
     return ticket, None
 
 
@@ -4676,17 +4673,6 @@ async def adm_ticket_reply(
         await state.clear()
         return
     if ticket.reseller_id:
-        await _answer_tickets_nav(
-            message,
-            session,
-            db_user,
-            "دسترسی به تیکت فروشگاه ندارید.",
-            state,
-            clear_state=True,
-        )
-        return
-    ticket_user = await session.get(BotUser, int(ticket.user_id))
-    if ticket_user and ticket_user.reseller_id:
         await _answer_tickets_nav(
             message,
             session,

@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, Order, OrderStatus, Payment, PaymentStatus, Ticket
 from app.services.shop_scope import platform_may_review_payment
+from app.services.tickets import staff_ticket_in_scope
 
 logger = logging.getLogger(__name__)
 
@@ -254,8 +255,6 @@ async def bulk_close_bot_tickets(
     staff: dict,
     ticket_ids: list[int],
 ) -> tuple[int, int]:
-    from app.services.shop_scope import ShopScopeError, assert_bot_user_in_scope
-
     ids = parse_bulk_ids(ticket_ids)
     ok = fail = 0
     for tid in ids:
@@ -263,13 +262,9 @@ async def bulk_close_bot_tickets(
         if not ticket or ticket.status == "closed":
             fail += 1
             continue
-        user = await session.get(BotUser, ticket.user_id) if ticket.user_id else None
-        if user:
-            try:
-                assert_bot_user_in_scope(staff, user)
-            except ShopScopeError:
-                fail += 1
-                continue
+        if not staff_ticket_in_scope(staff, ticket):
+            fail += 1
+            continue
         ticket.status = "closed"
         ok += 1
     if ok:
