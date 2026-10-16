@@ -272,7 +272,8 @@ class SettingsEntryTests(unittest.IsolatedAsyncioTestCase):
         from app.bot.handlers import reseller_settings
 
         callback = _callback("res:st:sec:menu")
-        await reseller_settings._render_section(callback, MagicMock(), "menu", SHOP_A)
+        with patch.object(reseller_settings, "is_editor_enabled", AsyncMock(return_value=False)):
+            await reseller_settings._render_section(callback, MagicMock(), "menu", SHOP_A)
         markup = callback.message.edit_text.await_args.kwargs["reply_markup"]
         self.assertIn("bcl:r:g", [b.callback_data for row in markup.inline_keyboard for b in row])
 
