@@ -69,17 +69,19 @@ class PublicStatusBotTests(MonitorDatabaseCase):
                 self.assertEqual(text, DEFAULT_SETTINGS["connection_status_error"])
                 self.assertNotIn("sensitive", text)
 
-    async def test_status_is_discoverable_on_reply_and_inline_customer_menus(self) -> None:
-        ui = dict(DEFAULT_SETTINGS)
+    async def test_status_is_discoverable_on_reply_and_inline_customer_menus_once_the_admin_adds_it(self) -> None:
+        ui = {**DEFAULT_SETTINGS, "menu_order": "shop,services,connection_status,wallet"}
         reply = keyboards.main_reply_keyboard("user", has_services=False, ui=ui)
         self.assertIn(ui["btn_connection_status"], [button.text for row in reply.keyboard for button in row])
         inline = keyboards.main_menu("user", has_services=False, ui=ui)
         self.assertIn("csp:refresh", [button.callback_data for row in inline.inline_keyboard for button in row])
 
-    async def test_default_customer_entry_and_title_identify_the_server_vantage(self) -> None:
-        menu = keyboards.main_menu("user", has_services=False, ui=dict(DEFAULT_SETTINGS))
+    async def test_status_button_is_off_by_default_and_the_page_title_identifies_the_server_vantage(self) -> None:
+        default_menu = keyboards.main_menu("user", has_services=False, ui=dict(DEFAULT_SETTINGS))
+        self.assertNotIn("csp:refresh", [button.callback_data for row in default_menu.inline_keyboard for button in row])
+        menu = keyboards.main_menu("user", has_services=False, ui={**DEFAULT_SETTINGS, "menu_order": "shop,connection_status"})
         entry = next(button for row in menu.inline_keyboard for button in row if button.callback_data == "csp:refresh")
-        self.assertIn("از دید سرور", entry.text)
+        self.assertEqual(entry.text, "📡 وضعیت سرورها")
         text = public_status_text(PublicConnectionPage(()), dict(DEFAULT_SETTINGS), now=self.now)
         self.assertIn("از دید سرور ربات", text)
 
