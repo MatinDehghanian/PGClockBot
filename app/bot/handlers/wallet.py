@@ -247,7 +247,7 @@ async def wallet_topup(callback: CallbackQuery, state: FSMContext, session: Asyn
         callback.message,
         text=format_message(
             "➕ شارژ کیف پول",
-            "مبلغ را انتخاب کنید یا «مبلغ دیگر» را بزنید:",
+            feedback.PICK_AMOUNT,
         ),
         inline=wallet_topup_presets_keyboard(ui),
     )
@@ -530,7 +530,7 @@ async def wtop_choose_method(
             if callback.message and markup:
                 await safe_edit_text(
                     callback.message,
-                    format_message("💳 کارت", "یکی از کارت‌ها را انتخاب کنید:"),
+                    format_message("💳 کارت", feedback.PICK_CARD),
                     reply_markup=markup,
                 )
             return
@@ -552,7 +552,7 @@ async def wtop_choose_method(
             if callback.message and markup:
                 await safe_edit_text(
                     callback.message,
-                    format_message("🌐 درگاه", "یکی از درگاه‌ها را انتخاب کنید:"),
+                    format_message("🌐 درگاه", feedback.PICK_GATEWAY),
                     reply_markup=markup,
                 )
             return

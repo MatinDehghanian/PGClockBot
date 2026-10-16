@@ -100,7 +100,7 @@ async def tkt_reply_start(
         await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     if ticket.status == TicketStatus.CLOSED.value:
-        await callback.answer("تیکت بسته است", show_alert=True)
+        await callback.answer(feedback.TICKET_CLOSED, show_alert=True)
         return
     await callback.answer()
     as_staff = role == "staff"
@@ -249,7 +249,7 @@ async def tkt_reply_body(
             message,
             session,
             db_user,
-            text="تیکت قبلاً بسته شده است.",
+            text=feedback.TICKET_ALREADY_CLOSED,
             state=state,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
@@ -310,7 +310,7 @@ async def tkt_reply_body(
             session,
             db_user,
             state,
-            text="ارسال شد ✅",
+            text=feedback.SENT,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
         )
@@ -318,7 +318,7 @@ async def tkt_reply_body(
     await finish_text_step(
         message,
         state,
-        text="ارسال شد ✅",
+        text=feedback.SENT,
         inline=None,
     )
 
@@ -351,7 +351,7 @@ async def tkt_close(
         await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     if ticket.status == TicketStatus.CLOSED.value:
-        await callback.answer("قبلاً بسته شده", show_alert=True)
+        await callback.answer(feedback.ALREADY_CLOSED, show_alert=True)
         if callback.message:
             try:
                 await callback.message.edit_reply_markup(reply_markup=None)
@@ -359,7 +359,7 @@ async def tkt_close(
                 pass
         return
     await close_ticket(session, ticket)
-    await callback.answer("تیکت بسته شد ✅", show_alert=True)
+    await callback.answer(feedback.TICKET_CLOSED_DONE, show_alert=True)
     if callback.message:
         try:
             await callback.message.edit_reply_markup(reply_markup=None)

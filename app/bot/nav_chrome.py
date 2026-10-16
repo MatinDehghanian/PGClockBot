@@ -140,7 +140,7 @@ async def answer_staff_nav(
     body = (text or "").strip()
     silent_cancel = reopen_panel is not None and (
         not body
-        or body in {feedback.CANCELLED, "لغو شد"}
+        or body in {feedback.CANCELLED, feedback.CANCELLED_SHORT}
         or is_bot_panel_message(message)
     )
     if not silent_cancel:

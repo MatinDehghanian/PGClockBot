@@ -260,7 +260,7 @@ def _shop_picker_copy(*, use_categories: bool) -> tuple[str, str]:
     """(body_html, inline_caption) for the shop kind/category step."""
     if use_categories:
         return (
-            "ابتدا <b>دسته</b> را از دکمه‌های زیر پیام انتخاب کنید.",
+            feedback.PICK_CATEGORY_BELOW,
             "دسته:",
         )
     return (
@@ -331,7 +331,7 @@ async def shop_list(callback: CallbackQuery, session: AsyncSession, db_user: Bot
 
         text, send_kw = outbound_setting_text(
             ui.get("shop_empty_text")
-            or "در حال حاضر پلنی برای فروش فعال نیست.",
+            or feedback.NO_PLANS_FOR_SALE,
             title="🛒 فروشگاه",
         )
         if callback.message:
@@ -439,16 +439,16 @@ async def shop_category_pick(
         try:
             cat_id = int(raw)
         except ValueError:
-            await callback.answer("دسته نامعتبر است.", show_alert=True)
+            await callback.answer(feedback.CATEGORY_INVALID, show_alert=True)
             return
         cat = cat_map.get(cat_id)
         if not cat or not category_matches_shop(cat, current_shop_reseller_id()):
-            await callback.answer("دسته یافت نشد.", show_alert=True)
+            await callback.answer(feedback.CATEGORY_NOT_FOUND, show_alert=True)
             return
         title = kb._category_button_label(cat)
         plans = plans_in_category(fixed_plans, cat_id)
     if not plans:
-        await callback.answer("پلنی در این دسته نیست.", show_alert=True)
+        await callback.answer(feedback.NO_PLANS_IN_CATEGORY, show_alert=True)
         return
     await callback.answer()
     if callback.message:
@@ -620,7 +620,7 @@ async def custom_gb_entered(
     try:
         gb = int(float((message.text or "").replace(",", "").replace("٬", "").strip()))
     except (ValueError, OverflowError):
-        await message.answer("عدد معتبر بفرستید")
+        await message.answer(feedback.ENTER_VALID_NUMBER_SHORT)
         return
     if gb < min_gb or gb > max_gb:
         await message.answer(f"حجم باید بین {min_gb} تا {max_gb} باشد")
@@ -741,7 +741,7 @@ async def custom_days_entered(
     try:
         days = int((message.text or "").replace(",", "").replace("٬", "").strip())
     except ValueError:
-        await message.answer("عدد معتبر بفرستید")
+        await message.answer(feedback.ENTER_VALID_NUMBER_SHORT)
         return
     if days < min_days or days > max_days:
         await message.answer(f"مدت باید بین {min_days} تا {max_days} باشد")
@@ -839,7 +839,7 @@ async def custom_buy(callback: CallbackQuery, session: AsyncSession, db_user: Bo
     )
     expected = quote_price(PriceTarget(expected, kind="custom"), await active_discounts(session, shop_id=current_shop_reseller_id())).price
     if expected > 0 and not kb.any_checkout_method_enabled(ui):
-        await callback.answer("هیچ روش پرداختی فعال نیست", show_alert=True)
+        await callback.answer(feedback.NO_PAYMENT_METHOD, show_alert=True)
         return
     try:
         order = await create_custom_order(
@@ -1193,7 +1193,7 @@ async def wholesale_buy(
         await callback.answer("پلن انتخاب نشده", show_alert=True)
         return
     if not kb.any_checkout_method_enabled(ui):
-        await callback.answer("هیچ روش پرداختی فعال نیست", show_alert=True)
+        await callback.answer(feedback.NO_PAYMENT_METHOD, show_alert=True)
         return
     try:
         order = await create_wholesale_order(
@@ -1355,7 +1355,7 @@ async def shop_buy(callback: CallbackQuery, session: AsyncSession, db_user: BotU
     if not plan.is_trial and await prompt_purchase_contact_if_needed(callback, session, db_user, state, ui):
         return
     if sale_price(plan) > 0 and not kb.any_checkout_method_enabled(ui):
-        await callback.answer("هیچ روش پرداختی فعال نیست", show_alert=True)
+        await callback.answer(feedback.NO_PAYMENT_METHOD, show_alert=True)
         return
 
     if plan.is_trial and on(ui.get("trial_require_contact")):
@@ -2017,7 +2017,7 @@ async def pay_card_cb(
         if callback.message and markup:
             await safe_edit_text(
                 callback.message,
-                format_message("💳 کارت به کارت", "یکی از کارت‌ها را انتخاب کنید:"),
+                format_message("💳 کارت به کارت", feedback.PICK_CARD),
                 reply_markup=markup,
             )
         return
@@ -2117,7 +2117,7 @@ async def pay_gateway_cb(
         if callback.message and markup:
             await safe_edit_text(
                 callback.message,
-                format_message("🌐 درگاه پرداخت", "یکی از درگاه‌ها را انتخاب کنید:"),
+                format_message("🌐 درگاه پرداخت", feedback.PICK_GATEWAY),
                 reply_markup=markup,
             )
         return

@@ -225,7 +225,7 @@ async def support_list(callback: CallbackQuery, session: AsyncSession, db_user: 
     tickets = await list_user_tickets(session, db_user.id)
     ui = await get_all_settings(session)
     if not tickets:
-        text = "تیکتی ندارید."
+        text = feedback.NO_TICKETS
         if callback.message:
             await safe_edit_text(
                 callback.message,
@@ -347,7 +347,7 @@ async def support_reply(
             message,
             session,
             db_user,
-            text="تیکت قبلاً بسته شده است.",
+            text=feedback.TICKET_ALREADY_CLOSED,
             state=state,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,

@@ -109,7 +109,7 @@ async def sync_plans_reply_keyboard(
     aud = str((await state.get_data()).get("_adm_plans_aud") or "users")
     if level == nav.NAV_ADMIN_PLANS_ADD_TYPE:
         inline = admin_plans_add_type_hub_keyboard(aud, ui)
-        body = "➕ <b>افزودن پلن</b>\nنوع پلن را انتخاب کنید:"
+        body = feedback.PICK_PLAN_TYPE
     elif level == nav.NAV_ADMIN_PLANS_KIND:
         inline = admin_plans_kind_hub_keyboard(aud, ui)
         body = (
@@ -150,7 +150,7 @@ async def _answer_plans_cancel(
             message,
             session,
             db_user,
-            text="کیبورد اصلی بازیابی شد.",
+            text=feedback.MAIN_KEYBOARD_RESTORED,
             is_reseller_bot=False,
             reseller_owner_id=None,
         )
@@ -423,7 +423,7 @@ async def _build_trial_screen(session: AsyncSession) -> tuple[str, InlineKeyboar
             f"اتصال: {link}"
         )
     else:
-        body = "هنوز ساخته نشده."
+        body = feedback.NOT_CREATED_YET
     st = _kind_btn_style(ui, "trial")
     rows = [
         [
@@ -895,7 +895,7 @@ async def plans_edit_save(
     await state.set_state(None)
     aud = data.get("_adm_plans_aud") or "users"
     kind = data.get("_adm_plans_kind") or "custom"
-    await _answer_plans_saved(message, state, session, "ذخیره شد ✅")
+    await _answer_plans_saved(message, state, session, feedback.SAVED_CHECK)
     bubble = await message.answer("⏳")
     await open_kind_screen(bubble, session, aud, kind)
 
@@ -1043,7 +1043,7 @@ async def trial_save_name(message: Message, state: FSMContext, session: AsyncSes
     trial.name = (message.text or "").strip()[:128]
     await _persist(session)
     await state.set_state(None)
-    await _answer_plans_saved(message, state, session, "ذخیره شد ✅")
+    await _answer_plans_saved(message, state, session, feedback.SAVED_CHECK)
     bubble = await message.answer("⏳")
     await send_users_trial(bubble, session)
 
@@ -1090,7 +1090,7 @@ async def trial_save_days(message: Message, state: FSMContext, session: AsyncSes
     trial.duration_days = days
     await _persist(session)
     await state.set_state(None)
-    await _answer_plans_saved(message, state, session, "ذخیره شد ✅")
+    await _answer_plans_saved(message, state, session, feedback.SAVED_CHECK)
     bubble = await message.answer("⏳")
     await send_users_trial(bubble, session)
 
@@ -1137,7 +1137,7 @@ async def trial_save_gb(message: Message, state: FSMContext, session: AsyncSessi
     trial.data_limit_gb = None if gb <= 0 else gb
     await _persist(session)
     await state.set_state(None)
-    await _answer_plans_saved(message, state, session, "ذخیره شد ✅")
+    await _answer_plans_saved(message, state, session, feedback.SAVED_CHECK)
     bubble = await message.answer("⏳")
     await send_users_trial(bubble, session)
 
@@ -1166,12 +1166,12 @@ async def trial_pick_tpl(callback: CallbackQuery, db_user: BotUser):
         )
     if not rows:
         rows.append(
-            [InlineKeyboardButton(text="تمپلیتی نیست", callback_data=BACK_USERS_KIND)]
+            [InlineKeyboardButton(text=feedback.NO_TEMPLATES, callback_data=BACK_USERS_KIND)]
         )
     rows.append(_back_row(BACK_USERS_KIND))
     await callback.answer()
     if callback.message:
-        await callback.message.edit_text("تمپلیت را انتخاب کنید:", reply_markup=_kb(rows))
+        await callback.message.edit_text(feedback.PICK_TEMPLATE, reply_markup=_kb(rows))
 
 @router.callback_query(F.data.startswith("adm:plans:trial:settpl:"))
 @require_bot_owner_handler
@@ -1239,10 +1239,10 @@ async def _show_trial_groups_plans(callback: CallbackQuery, state: FSMContext) -
             ]
         )
     else:
-        rows.append([InlineKeyboardButton(text="گروهی نیست", callback_data=BACK_USERS_KIND)])
+        rows.append([InlineKeyboardButton(text=feedback.NO_GROUPS, callback_data=BACK_USERS_KIND)])
     rows.append(_back_row(BACK_USERS_KIND))
     if callback.message:
-        await callback.message.edit_text("گروه(ها) را انتخاب کنید:", reply_markup=_kb(rows))
+        await callback.message.edit_text(feedback.PICK_GROUPS, reply_markup=_kb(rows))
 
 @router.callback_query(F.data.startswith("adm:plans:trial:toggrp:"))
 @require_bot_owner_handler
@@ -1336,7 +1336,7 @@ async def custom_pg_toggle(callback: CallbackQuery, session: AsyncSession, db_us
         return
     cur = await get_setting(session, "custom_plan_enabled")
     await set_setting(session, "custom_plan_enabled", "0" if on(cur) else "1")
-    await callback.answer("بروز شد")
+    await callback.answer(feedback.UPDATED)
     text, markup = await _custom_pg_summary(session)
     if callback.message:
         await callback.message.edit_text(text, reply_markup=markup)
@@ -1378,7 +1378,7 @@ async def custom_pick_tpl(callback: CallbackQuery, db_user: BotUser):
             ]
         )
     if not rows:
-        rows.append([InlineKeyboardButton(text="تمپلیتی نیست", callback_data="adm:plans:custom:pg")])
+        rows.append([InlineKeyboardButton(text=feedback.NO_TEMPLATES, callback_data="adm:plans:custom:pg")])
     rows.append(_back_row("adm:plans:custom:pg"))
     await callback.answer()
     if callback.message:
@@ -1441,7 +1441,7 @@ async def _show_custom_groups_plans(callback: CallbackQuery, state: FSMContext) 
             ]
         )
     else:
-        rows.append([InlineKeyboardButton(text="گروهی نیست", callback_data="adm:plans:custom:pg")])
+        rows.append([InlineKeyboardButton(text=feedback.NO_GROUPS, callback_data="adm:plans:custom:pg")])
     rows.append(_back_row("adm:plans:custom:pg"))
     if callback.message:
         await callback.message.edit_text(
@@ -1662,7 +1662,7 @@ async def resplan_toggle(callback: CallbackQuery, session: AsyncSession, db_user
         return
     plan.is_active = not plan.is_active
     await _persist(session)
-    await callback.answer("بروز شد")
+    await callback.answer(feedback.UPDATED)
     if callback.message:
         await callback.message.edit_text(
             _resplan_detail_text(plan),
@@ -1706,7 +1706,7 @@ async def resplan_flag_toggle(callback: CallbackQuery, session: AsyncSession, db
             return
         plan.share_pg_panel_url = not bool(plan.share_pg_panel_url)
     await _persist(session)
-    await callback.answer("بروز شد")
+    await callback.answer(feedback.UPDATED)
     if callback.message:
         await safe_edit_text(
             callback.message,
@@ -2034,7 +2034,7 @@ async def resplan_tog_perm(callback: CallbackQuery, session: AsyncSession, db_us
     plan.bot_permissions = csv
     plan.can_approve_receipts = "payments" in perms
     await _persist(session)
-    await callback.answer("بروز شد")
+    await callback.answer(feedback.UPDATED)
     rows = _perm_rows(plan_id, perms)
     if callback.message:
         await callback.message.edit_text(
@@ -2069,7 +2069,7 @@ async def resplan_edit_save(
     try:
         if field == "name":
             if not text:
-                await message.answer("نام خالی نیست.")
+                await message.answer(feedback.NAME_REQUIRED)
                 return
             plan.name = text[:128]
         elif field == "price":
@@ -2113,7 +2113,7 @@ async def resplan_edit_save(
     await sync_plan_billing_rate(session, plan)
     await _persist(session)
     await state.set_state(None)
-    await _answer_plans_saved(message, state, session, "ذخیره شد ✅")
+    await _answer_plans_saved(message, state, session, feedback.SAVED_CHECK)
     bubble = await message.answer(
         _resplan_detail_text(plan),
         reply_markup=_resplan_detail_keyboard(plan),
@@ -2450,7 +2450,7 @@ async def resplan_add_tog_grp(callback: CallbackQuery, state: FSMContext, db_use
         await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
     if await state.get_state() != AdminPlansStates.res_plan_link.state:
-        await callback.answer("ابتدا ساخت پلن را شروع کنید", show_alert=True)
+        await callback.answer(feedback.START_PLAN_CREATION_FIRST, show_alert=True)
         return
     try:
         gid = int(callback.data.rsplit(":", 1)[-1])
@@ -2474,7 +2474,7 @@ async def resplan_add_grp_done(callback: CallbackQuery, state: FSMContext, db_us
         await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
     if await state.get_state() != AdminPlansStates.res_plan_link.state:
-        await callback.answer("ابتدا ساخت پلن را شروع کنید", show_alert=True)
+        await callback.answer(feedback.START_PLAN_CREATION_FIRST, show_alert=True)
         return
     selected = [int(x) for x in ((await state.get_data()).get("res_plan_groups") or [])]
     if not selected:
@@ -2636,7 +2636,7 @@ async def resplan_set_color(callback: CallbackQuery, session: AsyncSession, db_u
         return
     plan.button_style = parse_plan_button_style_callback(parts[4])
     await _persist(session)
-    await callback.answer("رنگ ذخیره شد")
+    await callback.answer(feedback.COLOR_SAVED)
     if callback.message:
         await safe_edit_text(
             callback.message,

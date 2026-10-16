@@ -15,6 +15,7 @@ from app.services.formatting import service_card
 from app.services.service_scope import customer_may_use_service, list_customer_services
 from app.services.users import current_shop_reseller_id, get_all_settings, on
 from app.services.message_variables import DOMAIN_USER
+from app.services import bot_feedback_texts as feedback
 
 router = Router(name="start")
 
@@ -590,7 +591,7 @@ async def cb_force_join_check(
             raw_fj, ui=ui, channels=channels
         )
         alert = (
-            "عضویت تأیید نشد — ربات باید ادمین کانال باشد"
+            feedback.JOIN_NOT_CONFIRMED
             if unverified and not missing
             else "هنوز عضو کانال‌ها نشده‌اید — چند ثانیه بعد دوباره بزنید"
         )
@@ -722,8 +723,7 @@ async def cmd_help(
     raw = ui.get("guide_text")
     if not rich_plain_text(raw).strip():
         raw = (
-            "متنی برای راهنما تنظیم نشده. از وب‌پنل → تنظیمات ربات → متن‌ها، "
-            "فیلد «متن راهنما» را پر کنید."
+            feedback.GUIDE_TEXT_NOT_SET
         )
     text, send_kw = outbound_setting_text(raw, title="📘 راهنما")
     main_kb, _, _ = await build_main_reply_keyboard(
@@ -770,8 +770,7 @@ async def help_guide(callback: CallbackQuery, session: AsyncSession):
     raw = ui.get("guide_text")
     if not rich_plain_text(raw).strip():
         raw = (
-            "متنی برای راهنما تنظیم نشده. از وب‌پنل → تنظیمات ربات → متن‌ها، "
-            "فیلد «متن راهنما» را پر کنید."
+            feedback.GUIDE_TEXT_NOT_SET
         )
     text, send_kw = outbound_setting_text(raw, title="📘 راهنما")
     if callback.message:

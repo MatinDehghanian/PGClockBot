@@ -27,6 +27,7 @@ from app.services.home_overview import admin_customer_counts
 from app.services.service_scope import list_customer_services
 from app.services.users import current_shop_reseller_id, get_all_settings
 from app.services.redact import user_safe_error
+from app.services import bot_feedback_texts as feedback
 
 logger = logging.getLogger(__name__)
 router = Router(name="reply_nav")
@@ -330,7 +331,7 @@ async def open_shop_list(
         from app.services.rich_text import outbound_setting_text
 
         text, send_kw = outbound_setting_text(
-            ui.get("shop_empty_text") or "در حال حاضر پلنی برای فروش فعال نیست.",
+            ui.get("shop_empty_text") or feedback.NO_PLANS_FOR_SALE,
             title="🛒 فروشگاه",
         )
         main_kb, _, _ = await build_main_reply_keyboard(
@@ -401,7 +402,7 @@ async def open_services_list(
 
         text, send_kw = outbound_setting_text(
             ui.get("empty_services_text")
-            or "هنوز سرویسی ندارید.\nاز بخش «خرید سرویس» شروع کنید."
+            or feedback.NO_SERVICES_YET
         )
         if allow_import:
             await present_inline_only(
@@ -495,7 +496,7 @@ async def open_wallet_home(
 
     ui = await get_all_settings(session)
     bal = await wallet_balance_for_context(session, db_user)
-    hint = "یک گزینه را از دکمه‌های زیر انتخاب کنید."
+    hint = feedback.PICK_OPTION_BELOW
     text = format_message(
         "👛 کیف پول",
         "\n".join(
@@ -551,7 +552,7 @@ async def open_wallet_topup(
         message,
         text=format_message(
             "➕ شارژ کیف پول",
-            "مبلغ را انتخاب کنید یا «مبلغ دیگر» را بزنید:",
+            feedback.PICK_AMOUNT,
         ),
         inline=wallet_topup_presets_keyboard(ui),
     )
@@ -652,7 +653,7 @@ async def open_support_list(
     if not tickets:
         await present_inline_only(
             message,
-            text="تیکتی ندارید.",
+            text=feedback.NO_TICKETS,
             inline=InlineKeyboardMarkup(
                 inline_keyboard=[
                     [
@@ -767,7 +768,7 @@ async def open_reseller_apply(
         await message.answer(
             format_message(
                 "نمایندگی",
-                "در حال حاضر پلن نمایندگی فعالی تعریف نشده است.\nبعداً دوباره بررسی کنید.",
+                feedback.NO_RESELLER_PLANS,
             ),
             reply_markup=main_kb,
         )
@@ -813,7 +814,7 @@ async def _open_main_bot_reseller_hub(
     await present_nav_panel(
         message,
         text=format_message(
-            "🤝 پنل نماینده", "یک بخش را از دکمه‌های زیر انتخاب کنید."
+            "🤝 پنل نماینده", feedback.PICK_SECTION_BELOW
         ),
         inline=reseller_main_bot_hub_keyboard(profile, ui, show_pg=show_pg),
         state=state,
@@ -845,7 +846,7 @@ async def open_reseller_home(
         reseller_owner_id=reseller_owner_id,
     )
     if not owner_id or not profile:
-        await message.answer("دسترسی نماینده یافت نشد.")
+        await message.answer(feedback.RESELLER_ACCESS_NOT_FOUND)
         return
     ui = await get_all_settings(session)
     can_add = False
@@ -881,7 +882,7 @@ async def open_reseller_home(
         queue = PendingCounts()
     body = format_message(
         "🤝 پنل نماینده",
-        "یک بخش را از دکمه‌های زیر انتخاب کنید.",
+        feedback.PICK_SECTION_BELOW,
     )
     queue_line = format_queue_summary(queue)
     if queue_line:
@@ -991,7 +992,7 @@ async def open_pg_home(
         can_create = False
     body = (
         "🖥 <b>عملیات پاسارگارد</b>\n"
-        + "یک بخش را از دکمه‌های زیر انتخاب کنید."
+        + feedback.PICK_SECTION_BELOW
     )
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_ADMIN_PG, push=push)
@@ -1073,7 +1074,7 @@ async def dispatch_admin_inline_reply_action(
         await nav.set_nav_level(state, nav.NAV_ADMIN_PLANS_ADD_TYPE, push=True)
         await present_nav_panel(
             message,
-            text="➕ <b>افزودن پلن</b>\nنوع پلن را انتخاب کنید:",
+            text=feedback.PICK_PLAN_TYPE,
             inline=admin_plans_add_type_hub_keyboard(str(aud), ui),
             state=state,
         )
@@ -1200,7 +1201,7 @@ async def open_admin_users_hub(
     ui = await get_all_settings(session)
     counts = await admin_customer_counts(session)
     total, blocked, orders = counts["users"], counts["blocked"], counts["orders"]
-    hint = "یک گزینه را از دکمه‌های زیر انتخاب کنید."
+    hint = feedback.PICK_OPTION_BELOW
     body = (
         "👥 <b>کاربران بات</b>\n\n"
         f"کل: {total}\n"
@@ -1232,12 +1233,12 @@ async def open_admin_resellers_hub(
     ):
         return
     if not await platform_can_manage_representatives():
-        await message.answer("قابلیت ساخت نماینده برای این حساب فعال نیست")
+        await message.answer(feedback.REPRESENTATIVES_DISABLED)
         return
     ui = await get_all_settings(session)
     body = (
         "🤝 <b>نمایندگان</b>\n"
-        + "یک بخش را از دکمه‌های زیر انتخاب کنید."
+        + feedback.PICK_SECTION_BELOW
     )
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_ADMIN_RESELLERS, push=push)
@@ -1413,12 +1414,12 @@ async def open_reseller_settings_hub(
         reseller_owner_id=reseller_owner_id,
     )
     if not owner_id or not profile:
-        await message.answer("دسترسی نماینده یافت نشد.")
+        await message.answer(feedback.RESELLER_ACCESS_NOT_FOUND)
         return
     if not has_bot_perm(profile, "shop_settings"):
-        await message.answer("دسترسی تنظیمات فروشگاه ندارید.")
+        await message.answer(feedback.NO_SHOP_SETTINGS_ACCESS)
         return
-    bot_line = f"@{profile.bot_username}" if profile.bot_username else "توکن ثبت نشده"
+    bot_line = f"@{profile.bot_username}" if profile.bot_username else feedback.BOT_TOKEN_NOT_SET
     from app.bot.nav_inline import present_nav_panel, reseller_settings_hub_keyboard
 
     ui = await get_all_settings(session)
@@ -1468,7 +1469,7 @@ async def open_reseller_plans_hub(
         reseller_owner_id=reseller_owner_id,
     )
     if not owner_id or not profile:
-        await message.answer("دسترسی نماینده یافت نشد.")
+        await message.answer(feedback.RESELLER_ACCESS_NOT_FOUND)
         return
     if not has_bot_perm(profile, "plans"):
         await message.answer("دسترسی پلن ندارید.")
@@ -1805,7 +1806,7 @@ async def _soft_admin(
             from app.bot.auth import platform_can_manage_representatives
 
             if not await platform_can_manage_representatives():
-                await message.answer("قابلیت ساخت نماینده برای این حساب فعال نیست")
+                await message.answer(feedback.REPRESENTATIVES_DISABLED)
                 return
     bubble = await message.answer("⏳")
     cb = _SoftCallback(bubble, data)
@@ -2384,7 +2385,7 @@ async def _soft_reseller(
             reseller_owner_id=None,
         )
         if not owner_id or not profile:
-            await message.answer("دسترسی نماینده یافت نشد.")
+            await message.answer(feedback.RESELLER_ACCESS_NOT_FOUND)
             return
         # Fall through to capacity mapping below (no shop-panel gates).
     else:
@@ -2395,7 +2396,7 @@ async def _soft_reseller(
             reseller_owner_id=reseller_owner_id,
         )
         if not owner_id or not profile:
-            await message.answer("دسترسی نماینده یافت نشد.")
+            await message.answer(feedback.RESELLER_ACCESS_NOT_FOUND)
             return
 
     if action == kb.REPLY_ACTION_RES_ADD_REP:
@@ -2491,7 +2492,7 @@ async def _soft_reseller(
             from app.services.resellers import get_reseller_panel_base_url, has_bot_perm
 
             if not has_bot_perm(profile, "shop_settings"):
-                await message.answer("دسترسی تنظیمات فروشگاه ندارید.")
+                await message.answer(feedback.NO_SHOP_SETTINGS_ACCESS)
                 return
             base = (await get_reseller_panel_base_url(session) or "").rstrip("/")
             url = f"{base}/shop-settings" if base else "/shop-settings"
@@ -2994,7 +2995,7 @@ async def reply_main_nav(
         )
     elif action == kb.REPLY_ACTION_RES_PREVIEW:
         if not is_reseller_bot:
-            await message.answer("پیش‌نمایش فقط روی ربات فروشگاه شما فعال است.")
+            await message.answer(feedback.PREVIEW_ONLY_ON_SHOP_BOT)
             return
         await open_user_preview(
             message,
@@ -3066,7 +3067,7 @@ async def reply_main_nav(
             )
         await present_inline_only(
             message,
-            text="➕ <b>افزودن پلن</b>\nنوع پلن را انتخاب کنید:",
+            text=feedback.PICK_PLAN_TYPE,
             inline=admin_plans_add_type_hub_keyboard(str(aud), ui),
         )
         return
@@ -3377,7 +3378,7 @@ async def reply_main_nav(
             reseller_owner_id=reseller_owner_id,
         )
         if not owner_id or not profile or not has_bot_perm(profile, "shop_settings"):
-            await message.answer("دسترسی تنظیمات فروشگاه ندارید.")
+            await message.answer(feedback.NO_SHOP_SETTINGS_ACCESS)
             return
         try:
             base = (await get_reseller_panel_base_url(session) or "").rstrip("/")

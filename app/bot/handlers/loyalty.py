@@ -564,7 +564,7 @@ async def _staff_loyalty_answer(
             message,
             session,
             db_user,
-            text="کیبورد اصلی بازیابی شد.",
+            text=feedback.MAIN_KEYBOARD_RESTORED,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
             ui=ui,
@@ -613,7 +613,7 @@ async def open_admin_loyalty_hub(
     body = (
         f"⭐ <b>باشگاه مشتریان</b> ({who})\n"
         f"وضعیت: <b>{status}</b>\n"
-        + "یک بخش را از دکمه‌های زیر انتخاب کنید."
+        + feedback.PICK_SECTION_BELOW
         + f"{extra}"
     )
     if state is not None:
@@ -1788,7 +1788,7 @@ async def staff_save_referral_text(
         )
         if not profile or not has_bot_perm(profile, "shop_settings"):
             await state.clear()
-            await message.answer("دسترسی تنظیمات فروشگاه ندارید.")
+            await message.answer(feedback.NO_SHOP_SETTINGS_ACCESS)
             return
     if kb.is_cancel_text(text):
         from app.bot.nav_input import try_legacy_cancel
@@ -1807,7 +1807,7 @@ async def staff_save_referral_text(
             message,
             session,
             db_user,
-            format_message("⭐ باشگاه مشتریان", "لغو شد — به هاب مدیریت برگشتید."),
+            format_message("⭐ باشگاه مشتریان", feedback.CANCELLED_BACK_TO_HUB),
             can_tiers=can_tiers,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,

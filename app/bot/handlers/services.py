@@ -302,7 +302,7 @@ async def svc_list(
 
             text, send_kw = outbound_setting_text(
                 ui.get("empty_services_text")
-                or "هنوز سرویسی ندارید.\nاز بخش «خرید سرویس» شروع کنید."
+                or feedback.NO_SERVICES_YET
             )
             await safe_edit_text(
                 callback.message,
@@ -429,8 +429,7 @@ async def svc_guide(callback: CallbackQuery, session: AsyncSession, db_user: Bot
     raw = ui.get("guide_text")
     if not rich_plain_text(raw).strip():
         raw = (
-            "متنی برای راهنما تنظیم نشده. از وب‌پنل → تنظیمات ربات → متن‌ها، "
-            "فیلد «متن راهنما» را پر کنید."
+            feedback.GUIDE_TEXT_NOT_SET
         )
     text, send_kw = outbound_setting_text(raw, title="📘 آموزش اتصال")
     back = InlineKeyboardMarkup(
@@ -506,7 +505,7 @@ async def svc_renew(callback: CallbackQuery, session: AsyncSession, db_user: Bot
         return
     plans = await list_active_plans(session, include_trial=False)
     if not plans:
-        await callback.answer("پلنی نیست", show_alert=True)
+        await callback.answer(feedback.NO_PLANS, show_alert=True)
         return
     await callback.answer()
     from app.services.plan_categories import shop_category_map
@@ -590,7 +589,7 @@ async def svc_renew_pay(
         )
         return
     if sale_price(plan) > 0 and not kb.any_checkout_method_enabled(ui):
-        await callback.answer("هیچ روش پرداختی فعال نیست", show_alert=True)
+        await callback.answer(feedback.NO_PAYMENT_METHOD, show_alert=True)
         return
 
     from app.services.orders import renew_service_with_plan
@@ -792,7 +791,7 @@ async def svc_addon_pay(
         return
     await quote_product(session, pack, shop_id=current_shop_reseller_id())
     if sale_price(pack) > 0 and not kb.any_checkout_method_enabled(ui):
-        await callback.answer("هیچ روش پرداختی فعال نیست", show_alert=True)
+        await callback.answer(feedback.NO_PAYMENT_METHOD, show_alert=True)
         return
     try:
         order = await create_addon_order(
@@ -926,7 +925,7 @@ async def svc_delete(
         await callback.answer(user_safe_error(e, limit=160), show_alert=True)
         return
     await callback.answer(
-        "اتصال حذف شد" if not delete_pg else "سرویس حذف شد",
+        feedback.CONNECTION_DELETED if not delete_pg else "سرویس حذف شد",
         show_alert=True,
     )
     if state is not None:

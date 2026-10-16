@@ -55,7 +55,7 @@ async def _require_users(db_user: BotUser, callback=None, message=None, *, actio
         if callback is not None:
             await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         elif message is not None:
-            await message.answer("ادمین نیستید.")
+            await message.answer(feedback.NOT_ADMIN_REPLY)
         return False
     if not await can_platform_pg_page(db_user, "pg_users"):
         if callback is not None:
@@ -67,7 +67,7 @@ async def _require_users(db_user: BotUser, callback=None, message=None, *, actio
         if callback is not None:
             await callback.answer(feedback.ACTION_NOT_ALLOWED, show_alert=True)
         elif message is not None:
-            await message.answer("اجازه این عمل را ندارید.")
+            await message.answer(feedback.ACTION_NOT_ALLOWED_REPLY)
         return False
     return True
 
@@ -1027,7 +1027,7 @@ async def pg_create_tpl_pick(
         )
     if not rows:
         rows.append(
-            [InlineKeyboardButton(text="تمپلیتی نیست", callback_data="adm:pg:create")]
+            [InlineKeyboardButton(text=feedback.NO_TEMPLATES, callback_data="adm:pg:create")]
         )
     rows.append([kb.back_button(None, "adm:pg:create")])
     if callback.message:
@@ -1153,7 +1153,7 @@ async def _show_create_group_picker(
             ]
         )
     else:
-        rows.append([InlineKeyboardButton(text="گروهی نیست", callback_data=back_cb)])
+        rows.append([InlineKeyboardButton(text=feedback.NO_GROUPS, callback_data=back_cb)])
     rows.append([kb.back_button(None, back_cb)])
     text = (
         "📁 گروه‌ها را انتخاب کنید (چندتایی):\n"
@@ -1231,7 +1231,7 @@ async def pg_create_grpdone(
     data = await state.get_data()
     selected = [int(x) for x in (data.get("pg_selected_groups") or [])]
     if not selected:
-        await callback.answer("حداقل یک گروه انتخاب کنید", show_alert=True)
+        await callback.answer(feedback.PICK_AT_LEAST_ONE_GROUP, show_alert=True)
         return
     from app.services.bot_pg_catalog_authz import catalog_groups_allowed
 
@@ -2010,7 +2010,7 @@ async def pg_edit_grpdone(
         await callback.answer("کاربر نامعتبر", show_alert=True)
         return
     if not selected:
-        await callback.answer("حداقل یک گروه انتخاب کنید", show_alert=True)
+        await callback.answer(feedback.PICK_AT_LEAST_ONE_GROUP, show_alert=True)
         return
     from app.services.bot_pg_catalog_authz import catalog_groups_allowed
 

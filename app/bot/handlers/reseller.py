@@ -582,7 +582,7 @@ async def res_user_message_send(
             actor=str(db_user.telegram_id or owner_id),
         )
         await session.commit()
-        await message.answer("پیام ارسال شد ✅")
+        await message.answer(feedback.MESSAGE_SENT)
     except ValueError as e:
         await message.answer(user_safe_error(e))
     except Exception as e:
@@ -948,7 +948,7 @@ async def res_cancellations(
         markup = with_inline_back(None, ui, "nv:res:home")
         if callback.message:
             await safe_edit_text(
-                callback.message, "درخواست لغو معلقی نیست.", reply_markup=markup
+                callback.message, feedback.NO_PENDING_CANCELLATION, reply_markup=markup
             )
         return
     lines = ["📝 <b>درخواست‌های لغو</b>\n"]
@@ -1052,7 +1052,7 @@ async def res_payments(
     rows = result.all()
     if not rows:
         if callback.message:
-            await safe_edit_text(callback.message, "رسید معلقی نیست.", reply_markup=None)
+            await safe_edit_text(callback.message, feedback.NO_PENDING_RECEIPT, reply_markup=None)
         return
     for payment, user in rows:
         caption = (
@@ -1097,7 +1097,7 @@ async def _resapply_picker_copy(session: AsyncSession) -> tuple[str, str, bool]:
     if cats:
         return (
             "درخواست نمایندگی",
-            "ابتدا <b>دسته</b> را از دکمه‌های زیر پیام انتخاب کنید.",
+            feedback.PICK_CATEGORY_BELOW,
             True,
         )
     return (
@@ -1137,7 +1137,7 @@ async def resapply_home(
                 callback.message,
                 format_message(
                     "نمایندگی",
-                    "در حال حاضر پلن نمایندگی فعالی تعریف نشده است.\nبعداً دوباره بررسی کنید.",
+                    feedback.NO_RESELLER_PLANS,
                 ),
                 reply_markup=kb.back_home(ui),
             )
@@ -1183,19 +1183,19 @@ async def resapply_category(
         try:
             cat_id = int(raw)
         except ValueError:
-            await callback.answer("دسته نامعتبر است.", show_alert=True)
+            await callback.answer(feedback.CATEGORY_INVALID, show_alert=True)
             return
         cats = await list_shop_categories(
             session, reseller_id=None, active_only=True, audience=AUDIENCE_RESELLERS
         )
         cat = next((c for c in cats if int(c.id) == cat_id), None)
         if not cat:
-            await callback.answer("دسته یافت نشد.", show_alert=True)
+            await callback.answer(feedback.CATEGORY_NOT_FOUND, show_alert=True)
             return
         title = kb._category_button_label(cat)
         plans = reseller_plans_in_category(all_plans, cat_id)
     if not plans:
-        await callback.answer("پلنی در این دسته نیست.", show_alert=True)
+        await callback.answer(feedback.NO_PLANS_IN_CATEGORY, show_alert=True)
         return
     cats_all = await list_shop_categories(
         session, reseller_id=None, active_only=True, audience=AUDIENCE_RESELLERS
@@ -1537,7 +1537,7 @@ async def res_renew_go(
     except ValueError as e:
         await callback.answer(user_safe_error(e, limit=180), show_alert=True)
         return
-    await callback.answer("تمدید شد")
+    await callback.answer(feedback.RENEWED)
     if callback.message:
         exp = result.get("expires_at")
         exp_line = ""
@@ -1791,7 +1791,7 @@ async def res_addons(
         return
     uname = (profile.pg_admin_username or "").strip()
     if not uname:
-        await callback.answer("ادمین پاسارگارد تنظیم نشده", show_alert=True)
+        await callback.answer(feedback.PG_ADMIN_NOT_SET, show_alert=True)
         return
     try:
         sub = await get_or_create_subscription(session, uname)
@@ -1921,7 +1921,7 @@ async def res_addon_buy(
         return
     uname = (profile.pg_admin_username or "").strip()
     if not uname:
-        await callback.answer("ادمین پاسارگارد تنظیم نشده", show_alert=True)
+        await callback.answer(feedback.PG_ADMIN_NOT_SET, show_alert=True)
         return
     try:
         sub = await get_or_create_subscription(session, uname)

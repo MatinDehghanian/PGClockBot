@@ -360,7 +360,7 @@ async def pay_reject(callback: CallbackQuery, session: AsyncSession, db_user: Bo
 
         await callback.answer(user_safe_error(exc), show_alert=True)
         return
-    await callback.answer("رد شد")
+    await callback.answer(feedback.REJECTED)
     user = await session.get(BotUser, payment.user_id)
     ui = await get_all_settings(session)
     if user:

@@ -678,7 +678,7 @@ async def _render_trial(callback: CallbackQuery, session: AsyncSession) -> None:
             f"اتصال: {link}"
         )
     else:
-        body = "هنوز ساخته نشده."
+        body = feedback.NOT_CREATED_YET
     rows = [
         [
             InlineKeyboardButton(
@@ -846,7 +846,7 @@ async def _finish_settings_text_edit(
     db_user: BotUser,
     *,
     loc: tuple[str, str] | None,
-    note: str = "✅ ذخیره شد.",
+    note: str = feedback.SAVED_WITH_ICON,
 ) -> None:
     """Turn the input prompt into the subsection panel (same bubble) with a save note."""
     panel = await _settings_location_panel(session, loc)
@@ -1075,7 +1075,7 @@ async def settings_edit_ask(
     loc = _owner_screen_for_key(key)
     await callback.answer()
     await state.update_data(edit_key=key, edit_loc=loc)
-    hint = "عدد بفرستید." if kind == "number" else "متن جدید را بفرستید.\nبرای انصراف: انصراف"
+    hint = "عدد بفرستید." if kind == "number" else feedback.ENTER_NEW_TEXT
     if key == "force_join_channel":
         hint = "هر خط یک کانال (@channel یا آیدی).\nعضویت همه الزامی ذخیره می‌شود.\nبرای انصراف: انصراف"
     else:
@@ -1128,7 +1128,7 @@ async def settings_edit_save(
         try:
             float(raw)
         except ValueError:
-            await message.answer("عدد معتبر بفرستید")
+            await message.answer(feedback.ENTER_VALID_NUMBER_SHORT)
             return
         text = raw
         await set_setting(session, key, text)
@@ -1726,10 +1726,10 @@ async def trial_pick_tpl(
             ]
         )
     if not rows:
-        rows.append([InlineKeyboardButton(text="تمپلیتی نیست", callback_data="adm:st:sub:service:trial")])
+        rows.append([InlineKeyboardButton(text=feedback.NO_TEMPLATES, callback_data="adm:st:sub:service:trial")])
     rows.append(_back_row("adm:st:sub:service:trial"))
     if callback.message:
-        await callback.message.edit_text("تمپلیت را انتخاب کنید:", reply_markup=_kb(rows))
+        await callback.message.edit_text(feedback.PICK_TEMPLATE, reply_markup=_kb(rows))
 
 
 @settings_actor_required
@@ -1803,10 +1803,10 @@ async def _show_trial_groups(callback: CallbackQuery, state: FSMContext) -> None
             ]
         )
     else:
-        rows.append([InlineKeyboardButton(text="گروهی نیست", callback_data="adm:st:sub:service:trial")])
+        rows.append([InlineKeyboardButton(text=feedback.NO_GROUPS, callback_data="adm:st:sub:service:trial")])
     rows.append(_back_row("adm:st:sub:service:trial"))
     if callback.message:
-        await callback.message.edit_text("گروه(ها) را انتخاب کنید:", reply_markup=_kb(rows))
+        await callback.message.edit_text(feedback.PICK_GROUPS, reply_markup=_kb(rows))
 
 
 @settings_actor_required
