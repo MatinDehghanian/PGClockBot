@@ -79,10 +79,10 @@ async def assign_service_shop(session: AsyncSession, service_id: int, shop_id: i
 
 
 async def count_services_under_review(session: AsyncSession) -> int:
-    return int(
-        await session.scalar(select(func.count()).select_from(UserService).where(UserService.shop_needs_review.is_(True)))
-        or 0
+    result = await session.execute(
+        select(func.count()).select_from(UserService).where(UserService.shop_needs_review.is_(True))
     )
+    return int(result.scalar() or 0)
 
 
 async def list_assignable_shops(session: AsyncSession) -> list[tuple[int, str]]:
