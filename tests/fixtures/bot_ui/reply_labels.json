@@ -21,6 +21,7 @@
     "🏠 منوی اصلی": "home",
     "👤 افراد": "adm_hub_people",
     "📡 تست و وضعیت اتصال": "connection_status_admin",
+    "📡 وضعیت اتصال": "connection_status_admin",
     "📦 محصول و PG": "adm_hub_product",
     "🗓 عملیات روزانه": "adm_hub_ops",
     "🛠 سیستم": "adm_hub_system"
