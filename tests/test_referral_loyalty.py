@@ -65,6 +65,7 @@ class LoyaltyEngineTests(unittest.IsolatedAsyncioTestCase):
                 reference="1",
                 description="first",
                 idempotency_key="k1",
+                shop_id=None,
             )
             t2 = await credit_points(
                 session,
@@ -75,6 +76,7 @@ class LoyaltyEngineTests(unittest.IsolatedAsyncioTestCase):
                 reference="1",
                 description="first",
                 idempotency_key="k1",
+                shop_id=None,
             )
             self.assertEqual(t1.id, t2.id)
             await session.refresh(u)
@@ -89,6 +91,7 @@ class LoyaltyEngineTests(unittest.IsolatedAsyncioTestCase):
                 reference="2",
                 description="spend",
                 idempotency_key="k2",
+                shop_id=None,
             )
             await session.refresh(u)
             self.assertEqual(u.points_balance, 30)
@@ -103,6 +106,7 @@ class LoyaltyEngineTests(unittest.IsolatedAsyncioTestCase):
                     reference="3",
                     description="over",
                     idempotency_key="k3",
+                    shop_id=None,
                 )
 
     async def test_self_referral_blocked_on_event(self):
@@ -196,6 +200,7 @@ class LoyaltyEngineTests(unittest.IsolatedAsyncioTestCase):
                 reference=None,
                 description="seed",
                 idempotency_key="seed500",
+                shop_id=None,
             )
             reward = LoyaltyReward(
                 name="کیف",
@@ -239,6 +244,7 @@ class LoyaltyEngineTests(unittest.IsolatedAsyncioTestCase):
                 reference=None,
                 description="seed",
                 idempotency_key="seed200",
+                shop_id=None,
             )
             reward = LoyaltyReward(
                 name="off",
@@ -268,11 +274,13 @@ class LoyaltyEngineTests(unittest.IsolatedAsyncioTestCase):
                 reference=None,
                 description="seed",
                 idempotency_key="seed10",
+                shop_id=None,
             )
             with self.assertRaises(ValueError):
-                await admin_adjust_points(session, u, 5, reason="  ", admin_identity="admin")
+                await admin_adjust_points(session, u, 5, reason="  ", admin_identity="admin", shop_id=None)
             tx = await admin_adjust_points(
-                session, u, 5, reason="جبران دستی", admin_identity="admin"
+                session, u, 5, reason="جبران دستی", admin_identity="admin",
+                shop_id=None,
             )
             self.assertEqual(tx.tx_type, "adjust")
             await session.refresh(u)
@@ -300,6 +308,7 @@ class LoyaltyEngineTests(unittest.IsolatedAsyncioTestCase):
                 reference="ord1",
                 description="buy",
                 idempotency_key="earn100",
+                shop_id=None,
             )
             await debit_points(
                 session,
@@ -310,6 +319,7 @@ class LoyaltyEngineTests(unittest.IsolatedAsyncioTestCase):
                 reference="1",
                 description="spent",
                 idempotency_key="spent100",
+                shop_id=None,
             )
             await session.refresh(u)
             self.assertEqual(u.points_balance, 0)
@@ -335,6 +345,7 @@ class LoyaltyEngineTests(unittest.IsolatedAsyncioTestCase):
                 reference=None,
                 description="seed",
                 idempotency_key="seed300",
+                shop_id=None,
             )
             reward = LoyaltyReward(
                 name="۱۵٪",
@@ -424,6 +435,7 @@ class LoyaltyEngineTests(unittest.IsolatedAsyncioTestCase):
                 reference=None,
                 description="seed",
                 idempotency_key="seed300b",
+                shop_id=None,
             )
             reward = LoyaltyReward(
                 name="۱۰٪",
@@ -500,6 +512,7 @@ class LoyaltyEngineTests(unittest.IsolatedAsyncioTestCase):
                 reference=None,
                 description="seed",
                 idempotency_key="seed500b",
+                shop_id=None,
             )
             svc = UserService(
                 bot_user_id=u.id,
