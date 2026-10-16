@@ -14,7 +14,6 @@ from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import BaseFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
-from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,10 +21,11 @@ from app.bot import keyboards as kb
 from app.bot import menu_nav as nav
 from app.bot.menu_nav import restore_main_reply
 from app.bot.reply_keyboards import _reply_admin_marketing_entries
-from app.db.models import BotUser, Order, Role, UserService
+from app.db.models import BotUser, Order, Role
 from app.services.formatting import format_message
 from app.services.home_overview import admin_customer_counts
-from app.services.users import get_all_settings
+from app.services.service_scope import list_customer_services
+from app.services.users import current_shop_reseller_id, get_all_settings
 from app.services.redact import user_safe_error
 
 logger = logging.getLogger(__name__)
@@ -378,12 +378,7 @@ async def open_services_list(
     from app.bot.nav_chrome import heal_main_reply
     from app.bot.nav_inline import present_inline_only
     ui = await get_all_settings(session)
-    result = await session.execute(
-        select(UserService)
-        .where(UserService.bot_user_id == db_user.id)
-        .order_by(UserService.id.desc())
-    )
-    services = list(result.scalars().all())
+    services = await list_customer_services(session, db_user.id, current_shop_reseller_id())
     reseller_label = await _reseller_capacity_list_label(
         session,
         db_user,

@@ -8,7 +8,6 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.filters import Command
 from aiogram.types import Message
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.catalog_pricing import displayed_quote, price_html, quote_product, sale_price
@@ -20,7 +19,8 @@ from app.services.formatting import format_message, format_toman, service_card
 from app.services.orders import get_catalog_plan, list_active_plans
 from app.services.pasarguard import get_pg
 from app.services.service_import import is_external_service
-from app.services.users import get_all_settings
+from app.services.service_scope import customer_may_use_service, list_customer_services
+from app.services.users import current_shop_reseller_id, get_all_settings
 from app.services.redact import user_safe_error
 from app.services.service_live_info import fetch_live_service_info
 
@@ -285,12 +285,7 @@ async def svc_list(
 ):
     await callback.answer()
     ui = await get_all_settings(session)
-    result = await session.execute(
-        select(UserService)
-        .where(UserService.bot_user_id == db_user.id)
-        .order_by(UserService.id.desc())
-    )
-    services = list(result.scalars().all())
+    services = await list_customer_services(session, db_user.id, current_shop_reseller_id())
     reseller_label = await _reseller_capacity_list_label(
         session,
         db_user,
@@ -383,7 +378,7 @@ async def svc_view(
     ui = await get_all_settings(session)
     svc_id = int(callback.data.split(":")[-1])
     svc = await session.get(UserService, svc_id)
-    if not svc or svc.bot_user_id != db_user.id:
+    if not await customer_may_use_service(session, svc, db_user.id, current_shop_reseller_id()):
         await callback.answer("یافت نشد", show_alert=True)
         return
     await callback.answer()
@@ -421,7 +416,7 @@ async def svc_guide(callback: CallbackQuery, session: AsyncSession, db_user: Bot
         await callback.answer("نامعتبر", show_alert=True)
         return
     svc = await session.get(UserService, svc_id)
-    if not svc or svc.bot_user_id != db_user.id:
+    if not await customer_may_use_service(session, svc, db_user.id, current_shop_reseller_id()):
         await callback.answer("یافت نشد", show_alert=True)
         return
     aud = await _audience_for_user(session, db_user)
@@ -456,7 +451,7 @@ async def svc_link(callback: CallbackQuery, session: AsyncSession, db_user: BotU
     ui = await get_all_settings(session)
     svc_id = int(callback.data.split(":")[-1])
     svc = await session.get(UserService, svc_id)
-    if not svc or svc.bot_user_id != db_user.id:
+    if not await customer_may_use_service(session, svc, db_user.id, current_shop_reseller_id()):
         await callback.answer("یافت نشد", show_alert=True)
         return
     await callback.answer()
@@ -499,7 +494,7 @@ async def svc_renew(callback: CallbackQuery, session: AsyncSession, db_user: Bot
     ui = await get_all_settings(session)
     svc_id = int(callback.data.split(":")[-1])
     svc = await session.get(UserService, svc_id)
-    if not svc or svc.bot_user_id != db_user.id:
+    if not await customer_may_use_service(session, svc, db_user.id, current_shop_reseller_id()):
         await callback.answer("یافت نشد", show_alert=True)
         return
     if (svc.remark or "").strip() == "linked":
@@ -549,7 +544,7 @@ async def svc_renew_preview(
     _, _, svc_id, plan_id = callback.data.split(":")
     svc = await session.get(UserService, int(svc_id))
     plan = await get_catalog_plan(session, int(plan_id))
-    if not svc or not plan or svc.bot_user_id != db_user.id:
+    if not plan or not await customer_may_use_service(session, svc, db_user.id, current_shop_reseller_id()):
         await callback.answer("نامعتبر", show_alert=True)
         return
     try:
@@ -584,7 +579,7 @@ async def svc_renew_pay(
     _, _, svc_id, plan_id = callback.data.split(":")
     svc = await session.get(UserService, int(svc_id))
     plan = await get_catalog_plan(session, int(plan_id))
-    if not svc or not plan or svc.bot_user_id != db_user.id:
+    if not plan or not await customer_may_use_service(session, svc, db_user.id, current_shop_reseller_id()):
         await callback.answer("نامعتبر", show_alert=True)
         return
     if (svc.remark or "").strip() == "linked":
@@ -682,7 +677,7 @@ async def svc_addon(
     svc_id = int(parts[2])
     kind_filter = parts[3] if len(parts) > 3 else None
     svc = await session.get(UserService, svc_id)
-    if not svc or svc.bot_user_id != db_user.id:
+    if not await customer_may_use_service(session, svc, db_user.id, current_shop_reseller_id()):
         await callback.answer("یافت نشد", show_alert=True)
         return
     if (svc.remark or "").strip() == "linked":
@@ -788,7 +783,7 @@ async def svc_addon_pay(
     from app.services.users import current_shop_reseller_id
 
     pack = await session.get(ServiceAddonPack, pack_id)
-    if not svc or not pack or svc.bot_user_id != db_user.id:
+    if not pack or not await customer_may_use_service(session, svc, db_user.id, current_shop_reseller_id()):
         await callback.answer("نامعتبر", show_alert=True)
         return
     if not pack_matches_shop(pack, current_shop_reseller_id()):
@@ -863,7 +858,7 @@ async def svc_delete_ask(
 ):
     svc_id = int(callback.data.split(":")[-1])
     svc = await session.get(UserService, svc_id)
-    if not svc or svc.bot_user_id != db_user.id:
+    if not await customer_may_use_service(session, svc, db_user.id, current_shop_reseller_id()):
         await callback.answer("یافت نشد", show_alert=True)
         return
     await callback.answer()
@@ -916,7 +911,7 @@ async def svc_delete(
         return
     svc_id = int(parts[2])
     svc = await session.get(UserService, svc_id)
-    if not svc or svc.bot_user_id != db_user.id:
+    if not await customer_may_use_service(session, svc, db_user.id, current_shop_reseller_id()):
         await callback.answer("یافت نشد", show_alert=True)
         return
     from app.services.bot_user_admin import admin_delete_service

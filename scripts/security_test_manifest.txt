@@ -178,3 +178,4 @@ tests/test_shop_isolation_owner_routes.py
 tests/test_shop_isolation_tickets.py
 tests/test_shop_isolation_order_payment.py
 tests/test_shop_isolation_service_ops.py
+tests/test_shop_isolation_customer_services.py

@@ -36,8 +36,7 @@ from app.services.pasarguard import (
     user_subscription_url,
 )
 from app.services.wallet import credit_wallet, debit_wallet, list_transactions
-from app.services.service_automation import service_shop_id
-from app.services.service_scope import assert_service_in_shop
+from app.services.service_scope import assert_service_in_shop, service_shop_id
 
 logger = logging.getLogger(__name__)
 
