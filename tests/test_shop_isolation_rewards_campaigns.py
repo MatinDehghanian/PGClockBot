@@ -13,9 +13,9 @@ os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.db import Base
-from app.db.models import BotUser, BotUserShop, LoyaltyReward, ResellerProfile, UserService
+from app.db.models import BotUser, BotUserShop, LoyaltyReward, ResellerProfile, ShopPoints, UserService
 from app.services.campaigns import audience_query
-from app.services.loyalty import redeem_reward
+from app.services.loyalty import points_balance, redeem_reward
 from app.services.lucky_wheel import shop_prize_scope
 from app.services.users import reset_shop_reseller_id, set_shop_reseller_id
 
@@ -50,6 +50,7 @@ class RewardAndCampaignScopeTests(unittest.IsolatedAsyncioTestCase):
             session.add_all([
                 BotUserShop(bot_user_id=CUSTOMER, shop_id=None),
                 BotUserShop(bot_user_id=CUSTOMER, shop_id=SHOP_ID),
+                ShopPoints(user_id=CUSTOMER, reseller_id=SHOP_ID, balance=100),
                 UserService(id=PLATFORM_SVC, bot_user_id=CUSTOMER, pg_user_id=1, pg_username="plat",
                             remark="order:1", shop_id=None, **_active_quota(self.now)),
                 UserService(id=SHOP_SVC, bot_user_id=CUSTOMER, pg_user_id=2, pg_username="shop",
@@ -105,7 +106,9 @@ class RewardAndCampaignScopeTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaisesRegex(ValueError, "سرویس معتبر نیست"):
                 await self.redeem(bot_shop, service_id)
         async with self.Session() as session:
-            self.assertEqual((await session.get(BotUser, CUSTOMER)).points_balance, 100)
+            customer = await session.get(BotUser, CUSTOMER)
+            self.assertEqual(customer.points_balance, 100)
+            self.assertEqual(await points_balance(session, customer, SHOP_ID), 100)
 
     async def test_a_platform_bot_reward_cannot_target_a_shop_service(self):
         with self.assertRaises(ValueError):

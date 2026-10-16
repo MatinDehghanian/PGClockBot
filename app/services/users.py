@@ -1978,6 +1978,7 @@ async def delete_bot_user(
         PointsTransaction,
         ReferralEvent,
         RewardRedemption,
+        ShopPoints,
         ShopWallet,
         TermsAcceptance,
     )
@@ -2055,6 +2056,10 @@ async def delete_bot_user(
     )
     await session.execute(delete(ShopWallet).where(ShopWallet.user_id == user_id))
     await session.execute(delete(ShopWallet).where(ShopWallet.reseller_id == user_id))
+    # A deleted shop's points go with it; never re-label its entries as the platform's.
+    await session.execute(delete(ShopPoints).where(ShopPoints.user_id == user_id))
+    await session.execute(delete(ShopPoints).where(ShopPoints.reseller_id == user_id))
+    await session.execute(delete(PointsTransaction).where(PointsTransaction.reseller_id == user_id))
 
     await session.execute(
         delete(LoyaltyDiscountEntitlement).where(LoyaltyDiscountEntitlement.user_id == user_id)
