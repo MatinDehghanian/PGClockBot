@@ -2273,7 +2273,7 @@ async def adm_users_list(callback: CallbackQuery, session: AsyncSession, db_user
         .limit(USERS_PAGE_SIZE)
     )
     users = list(result.scalars().all())
-    by_svc = await load_services_by_user_ids(session, [int(u.id) for u in users])
+    by_svc = await load_services_by_user_ids(session, [int(u.id) for u in users], shop_id=None)
     rows = []
     for u in users:
         ops = build_user_ops_row(u, by_svc.get(int(u.id), []))
@@ -2396,7 +2396,7 @@ async def _render_user_card(
         load_services_by_user_ids,
     )
 
-    by = await load_services_by_user_ids(session, [int(user.id)])
+    by = await load_services_by_user_ids(session, [int(user.id)], shop_id=None)
     ops = build_user_ops_row(user, by.get(int(user.id), []))
     flags = bot_user_alert_flags(ops)
     blocked = "بله 🚫" if user.is_blocked else "خیر"
@@ -2509,6 +2509,7 @@ async def adm_users_message_send(
             session,
             user,
             message.text or "",
+            shop_id=None,
             actor=str(db_user.telegram_id or db_user.id),
         )
         await session.commit()
@@ -2785,7 +2786,7 @@ async def adm_users_services(
         return
     from app.services.bot_user_admin import list_service_snapshots, snapshot_telegram_lines
 
-    snaps = await list_service_snapshots(session, user_id)
+    snaps = await list_service_snapshots(session, user_id, shop_id=None)
     await callback.answer()
     if not snaps:
         if callback.message:

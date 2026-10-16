@@ -6,7 +6,7 @@ from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
@@ -23,6 +23,7 @@ from app.db.models import (
 from app.services.home_overview import reseller_shop_summary
 from app.services.formatting import format_message, format_toman, order_status_fa
 from app.services.reseller_access import load_reseller_actor
+from app.services.shop_membership import is_shop_customer
 from app.services.resellers import (
     create_application,
     format_reseller_plan_apply_detail,
@@ -370,7 +371,7 @@ async def res_users_list(
         .limit(RES_USERS_PAGE)
     )
     users = list(result.scalars().all())
-    by_svc = await load_services_by_user_ids(session, [int(u.id) for u in users])
+    by_svc = await load_services_by_user_ids(session, [int(u.id) for u in users], shop_id=int(owner_id))
     buttons: list[InlineKeyboardButton] = []
     for u in users:
         ops = build_user_ops_row(u, by_svc.get(int(u.id), []))
@@ -429,7 +430,7 @@ async def res_user_view(
         await callback.answer("نامعتبر", show_alert=True)
         return
     user = await session.get(BotUser, uid)
-    if not user or int(user.reseller_id or 0) != int(owner_id):
+    if not user or not await is_shop_customer(session, user, int(owner_id)):
         await callback.answer("دسترسی ندارید", show_alert=True)
         return
     await callback.answer()
@@ -442,7 +443,7 @@ async def res_user_view(
 
     from app.services.wallet import get_wallet_balance
 
-    by = await load_services_by_user_ids(session, [int(user.id)])
+    by = await load_services_by_user_ids(session, [int(user.id)], shop_id=int(owner_id))
     ops = build_user_ops_row(user, by.get(int(user.id), []))
     flags = bot_user_alert_flags(ops)
     blocked = "بله" if user.is_blocked else "خیر"
@@ -509,7 +510,7 @@ async def res_user_message_start(
         await callback.answer("نامعتبر", show_alert=True)
         return
     user = await session.get(BotUser, uid)
-    if not user or int(user.reseller_id or 0) != int(owner_id):
+    if not user or not await is_shop_customer(session, user, int(owner_id)):
         await callback.answer("دسترسی ندارید", show_alert=True)
         return
     await callback.answer()
@@ -566,7 +567,7 @@ async def res_user_message_send(
     uid = int(data.get("msg_user_id") or 0)
     user = await session.get(BotUser, uid) if uid else None
     await state.clear()
-    if not user or int(user.reseller_id or 0) != int(owner_id):
+    if not user or not await is_shop_customer(session, user, int(owner_id)):
         await message.answer("دسترسی ندارید.")
         return
     from app.services.users_quick import send_staff_dm
@@ -576,6 +577,7 @@ async def res_user_message_send(
             session,
             user,
             message.text or "",
+            shop_id=int(owner_id),
             actor=str(db_user.telegram_id or owner_id),
         )
         await session.commit()
@@ -609,7 +611,7 @@ async def res_user_quick_renew(
         await callback.answer("نامعتبر", show_alert=True)
         return
     user = await session.get(BotUser, uid)
-    if not user or int(user.reseller_id or 0) != int(owner_id):
+    if not user or not await is_shop_customer(session, user, int(owner_id)):
         await callback.answer("دسترسی ندارید", show_alert=True)
         return
     from app.services.users_quick import quick_renew_user
@@ -1033,8 +1035,13 @@ async def res_payments(
     result = await session.execute(
         select(Payment, BotUser)
         .join(BotUser, BotUser.id == Payment.user_id)
+        .outerjoin(Order, Order.id == Payment.order_id)
         .where(
-            BotUser.reseller_id == owner_id,
+            # The payment's own shop: a wallet top-up's purse or the order's shop, not the payer's attribution.
+            or_(
+                (Payment.is_wallet_topup.is_(True)) & (Payment.wallet_shop_id == owner_id),
+                (Payment.is_wallet_topup.is_(False)) & (Order.reseller_id == owner_id),
+            ),
             Payment.status == PaymentStatus.PENDING.value,
             Payment.receipt_file_id.is_not(None),
         )

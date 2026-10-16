@@ -31,13 +31,14 @@ class ServiceShopGuardTests(RoutesHarness):
                 Order(id=102, user_id=CUSTOMER_ID, reseller_id=SHOP_ID, amount=1, status=OrderStatus.DELIVERED.value),
             ])
             await session.flush()
-            for sid, remark in (
-                (PLATFORM_SVC, "order:101"), (SHOP_SVC, "order:102"),
-                (IMPORTED_SVC, "imported"), (BROKEN_SVC, "order:999"),
+            for sid, remark, shop, review in (
+                (PLATFORM_SVC, "order:101", None, False), (SHOP_SVC, "order:102", SHOP_ID, False),
+                (IMPORTED_SVC, "imported", SHOP_ID, False), (BROKEN_SVC, "imported", None, True),
             ):
                 session.add(UserService(
                     id=sid, bot_user_id=CUSTOMER_ID, pg_user_id=sid, pg_username=f"svc{sid}",
                     subscription_url=f"https://sub.example/{sid}", subscription_token=f"tok{sid}", remark=remark,
+                    shop_id=shop, shop_needs_review=review,
                 ))
             await session.commit()
 
@@ -64,7 +65,7 @@ class ServiceShopGuardTests(RoutesHarness):
         with self.assertRaises(ValueError):
             await self.load(IMPORTED_SVC, None)
 
-    async def test_a_service_whose_order_cannot_be_found_is_refused_everywhere(self):
+    async def test_a_service_under_review_is_refused_everywhere(self):
         for shop in (None, SHOP_ID):
             with self.assertRaises(ValueError):
                 await self.load(BROKEN_SVC, shop)
@@ -76,7 +77,8 @@ class ServiceShopGuardTests(RoutesHarness):
     async def test_quick_renew_refuses_a_platform_service_from_the_shop(self):
         async with AsyncSession(bind=self.engine) as session:
             customer = await session.get(BotUser, CUSTOMER_ID)
-            with self.assertRaisesRegex(ValueError, SERVICE_OUTSIDE_SHOP_MESSAGE):
+            # The shop's service list does not contain the platform service at all.
+            with self.assertRaises(ValueError):
                 await quick_renew_user(session, customer, service_id=PLATFORM_SVC, shop_id=SHOP_ID)
 
     async def get_as(self, session_payload: dict, path: str):

@@ -378,6 +378,25 @@ def _referral_code() -> str:
     return "".join(secrets.choice(alphabet) for _ in range(8))
 
 
+async def _record_cross_bot_membership(
+    session: AsyncSession, user: BotUser, bot_shop_id: int | None
+) -> None:
+    """Remember that the person now uses a bot other than the one that attributed them.
+
+    The attributing shop is recorded when the person is created, so only a visit to
+    another bot (a platform customer in a shop bot, or the reverse) needs a row; this
+    keeps the per-message path free of extra queries.
+    """
+    if user.role != Role.USER.value or int(user.id) == int(bot_shop_id or 0):
+        return
+    if (user.reseller_id or None) == (bot_shop_id or None):
+        return
+    from app.services.shop_membership import ensure_member
+
+    await ensure_member(session, int(user.id), bot_shop_id)
+    await session.commit()
+
+
 async def _has_commerce_history(session: AsyncSession, user_id: int) -> bool:
     """True when the user already owns a service or placed an order (any shop)."""
     has_service = await session.scalar(
@@ -456,6 +475,7 @@ async def get_or_create_user(
         if changed:
             await session.commit()
             await session.refresh(user)
+        await _record_cross_bot_membership(session, user, reseller_owner_id)
         return user
 
     from app.services.referral_registration import ReferralRequired, find_registration_referrer
@@ -506,6 +526,11 @@ async def get_or_create_user(
         user.reseller_id = None
         await session.commit()
         await session.refresh(user)
+    if user.role == Role.USER.value:
+        from app.services.shop_membership import ensure_member
+
+        await ensure_member(session, int(user.id), user.reseller_id)
+        await session.commit()
     if referred_by_id:
         try:
             from app.services.loyalty import on_user_referred

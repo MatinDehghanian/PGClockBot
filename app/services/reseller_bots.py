@@ -213,17 +213,24 @@ def get_reseller_bot_manager() -> ResellerBotManager | None:
     return _manager
 
 
-async def open_notify_bot_for_user(session, user) -> tuple[Bot, bool]:
+# Default for ``shop_id``: fall back to the shop the customer is attributed to.
+ATTRIBUTED_SHOP = object()
+
+
+async def open_notify_bot_for_user(session, user, *, shop_id=ATTRIBUTED_SHOP) -> tuple[Bot, bool]:
     """Return (bot, should_close) for notifying a customer.
 
-    Prefers the dedicated reseller shop bot when the user belongs to a shop;
-    otherwise creates a short-lived main-bot instance that the caller must close.
+    ``shop_id`` is the shop the message is about (an order's or the acting staff's shop;
+    None = platform). Without it the customer's attributed shop is used, which is wrong
+    for a person who buys from several shops, so callers that know the shop pass it.
+    Prefers that shop's dedicated bot; otherwise creates a short-lived main-bot instance
+    that the caller must close.
 
     Always returns a bot with HTML parse_mode so format_message / <b> tags render.
     """
     from app.bot import create_bot
 
-    reseller_id = getattr(user, "reseller_id", None)
+    reseller_id = getattr(user, "reseller_id", None) if shop_id is ATTRIBUTED_SHOP else shop_id
     if reseller_id:
         bot, should_close = await open_notify_bot_for_reseller(session, int(reseller_id))
         if bot is not None:

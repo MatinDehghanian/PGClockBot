@@ -700,7 +700,7 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
             from app.services.notifications import notify_new_subscription
             from app.services.reseller_bots import open_notify_bot_for_user
 
-            bot, should_close = await open_notify_bot_for_user(session, user)
+            bot, should_close = await open_notify_bot_for_user(session, user, shop_id=None)
             try:
                 await notify_new_subscription(
                     bot, session, order=order, user_tg_id=user.telegram_id

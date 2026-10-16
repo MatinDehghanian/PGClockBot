@@ -32,6 +32,7 @@ from app.db.models import (
 )
 from app.services.pasarguard import extract_sub_token, get_pg, user_subscription_url
 from app.services.purchase_contact import CONTACT_REQUIRED_MESSAGE, purchase_contact_needed, require_purchase_contact
+from app.services.shop_membership import ensure_member
 from app.services.provision_gate import (
     ProvisionError,
     assert_provision_create,
@@ -577,6 +578,7 @@ async def create_order(
     )
     session.add(order)
     await session.flush()
+    await ensure_member(session, user_id, shop_rid)
     try:
         discount, used_code = await _reserve_discount_code(session, discount_code, sale_price(plan), order=order)
     except ValueError:
@@ -724,6 +726,7 @@ async def create_custom_order(
     )
     session.add(order)
     await session.flush()
+    await ensure_member(session, user_id, shop_rid)
     try:
         discount, used_code = await _reserve_discount_code(session, discount_code, amount, order=order)
     except ValueError:
@@ -885,6 +888,7 @@ async def create_wholesale_order(
         note=f"wholesale:{qty}",
     )
     session.add(order)
+    await ensure_member(session, user_id, shop_rid)
     await session.commit()
     await session.refresh(order)
     return order
@@ -2135,6 +2139,7 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
                 subscription_url=sub_url,
                 subscription_token=extract_sub_token(sub_url),
                 remark=f"order:{order.id}",
+                shop_id=order.reseller_id,
             )
             from app.services.bot_user_admin import sync_service_quota_cache
 
@@ -2152,6 +2157,7 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
                 )
             session.add(service)
             await session.flush()
+            await ensure_member(session, order.user_id, order.reseller_id)
             return service
 
         try:

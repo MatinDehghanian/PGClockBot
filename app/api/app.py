@@ -3617,7 +3617,11 @@ def create_api_app(lifespan=None) -> FastAPI:
                 from app.services.notifications import notify_new_subscription, notify_wallet_topup_ok
                 from app.services.reseller_bots import open_notify_bot_for_user
 
-                bot, should_close = await open_notify_bot_for_user(session, user)
+                from app.services.shop_scope import payment_shop_id
+
+                bot, should_close = await open_notify_bot_for_user(
+                    session, user, shop_id=payment_shop_id(payment, order)
+                )
                 try:
                     try:
                         await send_delivery_to_user(

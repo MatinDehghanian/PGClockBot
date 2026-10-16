@@ -54,6 +54,7 @@ from app.services.service_import_config import (
     read_settings,
 )
 from app.services.service_import_store import TooManyRequests, open_request
+from app.services.shop_membership import ensure_member
 from app.services.users import get_all_settings
 
 logger = logging.getLogger(__name__)
@@ -457,9 +458,15 @@ async def attach_verified(
         subscription_url=sub_url,
         subscription_token=verified.token,
         remark=wanted,
+        shop_id=shop_id,
     )
     session.add(service)
-    return await _commit(session, service, verified.record, ImportOutcome.ADDED)
+    result = await _commit(session, service, verified.record, ImportOutcome.ADDED)
+    # After the commit: querying earlier would flush the row and turn the unique-link
+    # refusal handled by _commit into a raw database error.
+    await ensure_member(session, int(user.id), shop_id)
+    await session.commit()
+    return result
 
 
 async def _queue_request(
