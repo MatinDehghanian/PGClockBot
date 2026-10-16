@@ -108,6 +108,7 @@ class SvcGuideCatalogTests(unittest.IsolatedAsyncioTestCase):
         db_user.role = "user"
 
         with (
+            patch("app.bot.handlers.services.customer_may_use_service", new=AsyncMock(return_value=True)),
             patch(
                 "app.bot.handlers.guides._audience_for_user",
                 new=AsyncMock(return_value="user"),
@@ -147,6 +148,7 @@ class SvcGuideCatalogTests(unittest.IsolatedAsyncioTestCase):
         db_user.role = "user"
 
         with (
+            patch("app.bot.handlers.services.customer_may_use_service", new=AsyncMock(return_value=True)),
             patch(
                 "app.bot.handlers.guides._audience_for_user",
                 new=AsyncMock(return_value="user"),

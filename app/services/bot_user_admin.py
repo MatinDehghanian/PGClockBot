@@ -36,6 +36,7 @@ from app.services.pasarguard import (
     user_subscription_url,
 )
 from app.services.wallet import credit_wallet, debit_wallet, list_transactions
+from app.services.service_scope import assert_service_in_shop, service_shop_id
 
 logger = logging.getLogger(__name__)
 
@@ -145,8 +146,7 @@ async def _pg_client_for_bot_service(
 
     Never fall through to the Owner env token for tenant services (isolation).
     """
-    bot_user = await session.get(BotUser, int(service.bot_user_id))
-    rid = int(bot_user.reseller_id) if bot_user and bot_user.reseller_id else None
+    rid = await service_shop_id(session, service)
     if rid:
         from app.services.pasarguard import get_pg_for_reseller
 
@@ -629,9 +629,13 @@ async def list_wallet_txs(
 
 
 async def get_owned_service(
-    session: AsyncSession, *, bot_user_id: int, service_id: int
+    session: AsyncSession, *, bot_user_id: int, service_id: int, shop_id: int | None
 ) -> UserService:
-    """Load one owned shop service with plan eagerly (async-safe for Telegram cards)."""
+    """Load one service the acting shop sold, with plan eagerly (async-safe for Telegram cards).
+
+    ``shop_id`` is the acting scope (None = platform). A customer's service sold by
+    another shop is refused even when the customer is attributed to the acting shop.
+    """
     svc = (
         await session.execute(
             select(UserService)
@@ -641,6 +645,7 @@ async def get_owned_service(
     ).scalar_one_or_none()
     if svc is None or int(svc.bot_user_id) != int(bot_user_id):
         raise ValueError("سرویس یافت نشد")
+    await assert_service_in_shop(session, svc, shop_id)
     return svc
 
 

@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import BotUser, Plan
 from app.services.authz import authz_from_staff, can_shop
 from app.services.demo_users import DEMO_USERS_PERMISSION, set_demo_user
-from app.services.shop_scope import ShopScopeError, assert_bot_user_in_scope
+from app.services.shop_scope import ShopScopeError, assert_bot_user_in_scope, resolve_shop_scope_id
 
 
 def _q(msg: str) -> str:
@@ -370,7 +370,9 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
         sid_raw = str(form.get("service_id") or "").strip()
         service_id = int(sid_raw) if sid_raw.isdigit() else None
         try:
-            svc, label = await quick_renew_user(session, user, service_id=service_id, staff=staff)
+            svc, label = await quick_renew_user(
+                session, user, service_id=service_id, staff=staff, shop_id=resolve_shop_scope_id(staff)
+            )
             await session.commit()
         except ValueError as e:
             return _redirect_list_form(form, err=str(e), uid=user_id)
@@ -457,7 +459,8 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
         form = await request.form()
         try:
             svc = await get_owned_service(
-                session, bot_user_id=user_id, service_id=service_id
+                session, bot_user_id=user_id, service_id=service_id,
+                shop_id=resolve_shop_scope_id(staff),
             )
         except ValueError as e:
             return _redirect_user(user_id, err=str(e))
@@ -508,7 +511,8 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
         form = await request.form()
         try:
             svc = await get_owned_service(
-                session, bot_user_id=user_id, service_id=service_id
+                session, bot_user_id=user_id, service_id=service_id,
+                shop_id=resolve_shop_scope_id(staff),
             )
         except ValueError as e:
             return _redirect_user(user_id, err=str(e))
@@ -551,7 +555,8 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
 
         try:
             svc = await get_owned_service(
-                session, bot_user_id=user_id, service_id=service_id
+                session, bot_user_id=user_id, service_id=service_id,
+                shop_id=resolve_shop_scope_id(staff),
             )
         except ValueError as e:
             return _redirect_user(user_id, err=str(e))
@@ -597,7 +602,8 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
 
         try:
             svc = await get_owned_service(
-                session, bot_user_id=user_id, service_id=service_id
+                session, bot_user_id=user_id, service_id=service_id,
+                shop_id=resolve_shop_scope_id(staff),
             )
             snap = await service_snapshot(session, svc)
             await session.commit()

@@ -15,7 +15,8 @@ from app.services.connection_guides import (
     guides_for_audience,
 )
 from app.services.formatting import format_message
-from app.services.users import get_all_settings
+from app.services.service_scope import customer_may_use_service
+from app.services.users import current_shop_reseller_id, get_all_settings
 
 router = Router(name="guides")
 
@@ -167,7 +168,7 @@ async def guide_open_cb(
     sub_url = None
     if svc_id:
         svc = await session.get(UserService, svc_id)
-        if svc and svc.bot_user_id == db_user.id:
+        if await customer_may_use_service(session, svc, db_user.id, current_shop_reseller_id()):
             sub_url = svc.subscription_url
     body = (guide.get("body") or "").strip() or "—"
     title = str(guide.get("title") or "آموزش")

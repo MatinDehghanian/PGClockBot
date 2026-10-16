@@ -5,7 +5,7 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -69,7 +69,9 @@ class GetOwnedServiceEagerPlanTests(unittest.IsolatedAsyncioTestCase):
         session = AsyncMock()
         session.execute = AsyncMock(return_value=result)
 
-        out = await get_owned_service(session, bot_user_id=1, service_id=9)
+        # The shop guard has its own tests; this one pins the eager plan load.
+        with patch("app.services.bot_user_admin.assert_service_in_shop", new=AsyncMock()):
+            out = await get_owned_service(session, bot_user_id=1, service_id=9, shop_id=None)
         self.assertIs(out, svc)
         session.execute.assert_awaited_once()
         self.assertEqual(out.plan.name, "پلن")

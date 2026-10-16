@@ -12,7 +12,8 @@ from app.bot.nav_input import delete_user_message
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser, UserService
 from app.services.formatting import service_card
-from app.services.users import get_all_settings, on
+from app.services.service_scope import customer_may_use_service, list_customer_services
+from app.services.users import current_shop_reseller_id, get_all_settings, on
 from app.services.message_variables import DOMAIN_USER
 
 router = Router(name="start")
@@ -412,14 +413,8 @@ async def _deeplink_renew(
     )
     if svc_id is None:
         # Pick latest service when payload is bare "renew"
-        row = (
-            await session.execute(
-                select(UserService)
-                .where(UserService.bot_user_id == db_user.id)
-                .order_by(UserService.id.desc())
-                .limit(1)
-            )
-        ).scalar_one_or_none()
+        latest = await list_customer_services(session, db_user.id, current_shop_reseller_id(), limit=1)
+        row = latest[0] if latest else None
         if not row:
             await open_services_list(
                 message,
@@ -432,7 +427,7 @@ async def _deeplink_renew(
             return
         svc_id = int(row.id)
     svc = await session.get(UserService, int(svc_id))
-    if not svc or svc.bot_user_id != db_user.id:
+    if not await customer_may_use_service(session, svc, db_user.id, current_shop_reseller_id()):
         await open_services_list(
             message,
             session,
@@ -487,14 +482,8 @@ async def _deeplink_config(
         effective_role=effective_role,
     )
     if svc_id is None:
-        row = (
-            await session.execute(
-                select(UserService)
-                .where(UserService.bot_user_id == db_user.id)
-                .order_by(UserService.id.desc())
-                .limit(1)
-            )
-        ).scalar_one_or_none()
+        latest = await list_customer_services(session, db_user.id, current_shop_reseller_id(), limit=1)
+        row = latest[0] if latest else None
         if not row:
             await open_services_list(
                 message,
@@ -507,7 +496,7 @@ async def _deeplink_config(
             return
         svc_id = int(row.id)
     svc = await session.get(UserService, int(svc_id))
-    if not svc or svc.bot_user_id != db_user.id:
+    if not await customer_may_use_service(session, svc, db_user.id, current_shop_reseller_id()):
         await open_services_list(
             message,
             session,

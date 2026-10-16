@@ -27,6 +27,7 @@ from app.services.demo_users import non_demo_customer
 from app.services.formatting import format_toman
 from app.services.home_overview import _period_since_utc, shop_period_stats
 from app.services.users_ops import DEFAULT_EXPIRE_DAYS
+from app.services.tickets import ticket_shop_clause
 
 ReportPeriod = Literal["day", "week", "month"]
 VALID_PERIODS: frozenset[str] = frozenset({"day", "week", "month"})
@@ -141,19 +142,7 @@ async def shop_ops_snapshot(
         .join(BotUser, BotUser.id == Ticket.user_id)
         .where(Ticket.status == "open", BotUser.is_demo.is_(False))
     )
-    if reseller_id is None:
-        tickets_q = tickets_q.where(
-            Ticket.reseller_id.is_(None),
-            BotUser.reseller_id.is_(None),
-        )
-    else:
-        rid = int(reseller_id)
-        tickets_q = tickets_q.where(
-            or_(
-                Ticket.reseller_id == rid,
-                and_(Ticket.reseller_id.is_(None), BotUser.reseller_id == rid),
-            )
-        )
+    tickets_q = tickets_q.where(ticket_shop_clause(reseller_id))
     out["open_tickets"] = int((await session.execute(tickets_q)).scalar() or 0)
 
     fail_q = (

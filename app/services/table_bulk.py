@@ -11,6 +11,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, Order, OrderStatus, Payment, PaymentStatus, Ticket
+from app.services.shop_scope import platform_may_review_payment
+from app.services.tickets import staff_ticket_in_scope
 
 logger = logging.getLogger(__name__)
 
@@ -75,11 +77,7 @@ def _payment_in_scope(staff: dict, payment: Payment, order: Order | None) -> boo
     from app.services.shop_scope import ShopScopeError, require_shop_owner_id
 
     if staff.get("role") == "admin":
-        if payment.is_wallet_topup:
-            return True
-        if order and order.reseller_id is not None:
-            return False
-        return True
+        return platform_may_review_payment(payment, order)
     try:
         rid = require_shop_owner_id(staff)
     except ShopScopeError:
@@ -226,7 +224,7 @@ async def bulk_renew_users(
     staff: dict,
     user_ids: list[int],
 ) -> tuple[int, int]:
-    from app.services.shop_scope import ShopScopeError, assert_bot_user_in_scope
+    from app.services.shop_scope import ShopScopeError, assert_bot_user_in_scope, resolve_shop_scope_id
     from app.services.users_quick import quick_renew_user
 
     ids = parse_bulk_ids(user_ids)
@@ -242,7 +240,9 @@ async def bulk_renew_users(
             fail += 1
             continue
         try:
-            await quick_renew_user(session, user, service_id=None, staff=staff)
+            await quick_renew_user(
+                session, user, service_id=None, staff=staff, shop_id=resolve_shop_scope_id(staff)
+            )
             ok += 1
         except Exception:
             logger.debug("bulk renew failed uid=%s", uid, exc_info=True)
@@ -257,8 +257,6 @@ async def bulk_close_bot_tickets(
     staff: dict,
     ticket_ids: list[int],
 ) -> tuple[int, int]:
-    from app.services.shop_scope import ShopScopeError, assert_bot_user_in_scope
-
     ids = parse_bulk_ids(ticket_ids)
     ok = fail = 0
     for tid in ids:
@@ -266,13 +264,9 @@ async def bulk_close_bot_tickets(
         if not ticket or ticket.status == "closed":
             fail += 1
             continue
-        user = await session.get(BotUser, ticket.user_id) if ticket.user_id else None
-        if user:
-            try:
-                assert_bot_user_in_scope(staff, user)
-            except ShopScopeError:
-                fail += 1
-                continue
+        if not staff_ticket_in_scope(staff, ticket):
+            fail += 1
+            continue
         ticket.status = "closed"
         ok += 1
     if ok:

@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings, normalize_pg_base_url
 from app.db.models import BotUser, ResellerPlan, ResellerProfile, Role
+from app.services.shop_scope import ShopScopeError, assert_bot_user_in_scope
 from app.services.billing import require_positive_payg_rate
 from app.services.pasarguard import get_pg
 from app.services.pg_quota import limit_snapshot_cards, load_staff_limit_snapshot
@@ -1154,6 +1155,10 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         user = await session.get(BotUser, user_id)
         if not user:
             return RedirectResponse(f"/resellers?err={_q('کاربر یافت نشد')}", status_code=303)
+        try:
+            assert_bot_user_in_scope(staff, user)
+        except ShopScopeError as e:
+            return RedirectResponse(f"/resellers?err={_q(e.message)}", status_code=303)
         try:
             await notify_account_edit(
                 session,

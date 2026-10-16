@@ -204,19 +204,23 @@ class MiniAppSerializeLeakTests(unittest.TestCase):
         self.assertNotIn("🔴", _serialize_service(svc, {"status": "disabled"})["status_fa"])
 
 
-class MiniAppOwnedServiceUnitTests(unittest.TestCase):
-    def test_owned_service_rejects_foreign(self):
+class MiniAppOwnedServiceUnitTests(unittest.IsolatedAsyncioTestCase):
+    async def test_owned_service_rejects_foreign(self):
+        from unittest.mock import AsyncMock, patch
+
         from fastapi import HTTPException
 
         from app.api.miniapp_pages import _owned_service_or_404
 
         user = SimpleNamespace(id=1)
         foreign = SimpleNamespace(bot_user_id=2, id=9)
-        with self.assertRaises(HTTPException) as ctx:
-            _owned_service_or_404(foreign, user)
-        self.assertEqual(ctx.exception.status_code, 404)
-        own = SimpleNamespace(bot_user_id=1, id=3)
-        self.assertIs(_owned_service_or_404(own, user), own)
+        # The platform-shop rule has its own tests; here only the owner check matters.
+        with patch("app.services.service_scope.service_shop_id", new=AsyncMock(return_value=None)):
+            with self.assertRaises(HTTPException) as ctx:
+                await _owned_service_or_404(None, foreign, user)
+            self.assertEqual(ctx.exception.status_code, 404)
+            own = SimpleNamespace(bot_user_id=1, id=3)
+            self.assertIs(await _owned_service_or_404(None, own, user), own)
 
     def test_commerce_matrix(self):
         from app.api.miniapp_pages import _require_commerce, commerce_allowed

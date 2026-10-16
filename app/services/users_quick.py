@@ -90,6 +90,7 @@ async def quick_renew_user(
     *,
     service_id: int | None = None,
     staff: dict | None = None,
+    shop_id: int | None,
 ) -> tuple[UserService, str]:
     """Renew critical (or specified) service with its current plan. Returns (svc, label).
 
@@ -114,7 +115,7 @@ async def quick_renew_user(
 
     # Re-load through ownership guard
     svc = await get_owned_service(
-        session, bot_user_id=int(user.id), service_id=int(target.id)
+        session, bot_user_id=int(user.id), service_id=int(target.id), shop_id=shop_id
     )
     plan = None
     if svc.plan_id:

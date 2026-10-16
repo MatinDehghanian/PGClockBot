@@ -389,6 +389,19 @@ async def get_catalog_plan(session: AsyncSession, plan_id: int) -> Optional[Plan
     return plan
 
 
+def is_customer_order_in_current_shop(order: Order | None, user_id: int) -> bool:
+    """True when the order is this customer's and was placed in the bot being used.
+
+    A payment button can outlive the bot it was shown in; paying from another
+    shop's bot would send the money to that shop's card, gateway or review queue.
+    """
+    return (
+        order is not None
+        and int(order.user_id) == int(user_id)
+        and int(order.reseller_id or 0) == int(_shop_reseller_id() or 0)
+    )
+
+
 def _shop_reseller_id() -> int | None:
     """Always attribute orders to the current shop bot, never sticky user.reseller_id."""
     from app.services.users import current_shop_reseller_id

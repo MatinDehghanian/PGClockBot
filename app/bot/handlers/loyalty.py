@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot import keyboards as kb
 from app.bot.tg_utils import safe_edit_text
 from app.config import get_settings
-from app.db.models import BotUser, LoyaltyReward, LoyaltyTier, PointsRule, Role, UserService
+from app.db.models import BotUser, LoyaltyReward, LoyaltyTier, PointsRule, Role
 from app.services.formatting import format_message, format_toman, kv_line
 from app.services.loyalty import (
     EVENT_LABELS,
@@ -41,7 +41,8 @@ from app.services.lucky_wheel import (
     wheel_feature_enabled,
 )
 from app.services.message_variables import DOMAIN_REFERRAL
-from app.services.users import get_all_settings, get_setting, on, set_setting
+from app.services.service_scope import list_customer_services
+from app.services.users import current_shop_reseller_id, get_all_settings, get_setting, on, set_setting
 from app.services.redact import user_safe_error
 
 router = Router(name="loyalty")
@@ -1119,16 +1120,7 @@ async def loyalty_redeem(callback: CallbackQuery, session: AsyncSession, db_user
         return
 
     if reward.reward_type in ("traffic_gb", "time_days"):
-        services = list(
-            (
-                await session.execute(
-                    select(UserService)
-                    .where(UserService.bot_user_id == db_user.id)
-                    .order_by(UserService.id.desc())
-                    .limit(10)
-                )
-            ).scalars().all()
-        )
+        services = await list_customer_services(session, db_user.id, current_shop_reseller_id(), limit=10)
         if not services:
             await callback.answer("سرویس فعالی ندارید", show_alert=True)
             return
