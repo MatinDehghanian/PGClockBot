@@ -31,6 +31,7 @@ MAX_ALIASES_PER_ACTION = 12
 # wherever the button is still enabled. Append when changing a btn_* default.
 RETIRED_DEFAULT_LABELS: dict[str, tuple[str, ...]] = {
     "btn_connection_status": ("📡 وضعیت از دید سرور",),
+    "btn_connection_status_admin": ("📡 تست و وضعیت اتصال",),
 }
 
 # Reverse of special action→btn_* map (btn key may map to several actions).
