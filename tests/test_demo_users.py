@@ -70,7 +70,7 @@ class DemoUserTests(unittest.IsolatedAsyncioTestCase):
             self.session.add_all([
                 Order(id=user_id * 10, user_id=user_id, reseller_id=shop_id, plan_id=1, amount=900 if user_id in self.demo_ids else 100, status="delivered", payment_method="wallet", created_at=self.now),
                 Order(id=user_id * 10 + 1, user_id=user_id, reseller_id=shop_id, plan_id=1, amount=50, status="awaiting_approval", created_at=self.now),
-                UserService(id=user_id, bot_user_id=user_id, plan_id=1, pg_username=f"customer{user_id}", notified_traffic=True, created_at=self.now),
+                UserService(id=user_id, bot_user_id=user_id, plan_id=1, pg_username=f"customer{user_id}", notified_traffic=True, shop_id=shop_id, created_at=self.now),
                 Ticket(user_id=user_id, reseller_id=shop_id, subject="Support", status="open"),
                 FunnelEvent(user_id=user_id, reseller_id=shop_id, step="delivered", idempotency_key=f"demo{user_id}", created_at=self.now),
                 WalletTransaction(user_id=user_id, reseller_id=shop_id, amount=70, balance_after=50, reason="test"),
