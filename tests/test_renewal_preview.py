@@ -275,6 +275,7 @@ class RenewalDeliveryTests(RenewalFixture):
             await self.create()
         self.service.bot_user_id = 1
         self.user.reseller_id = 2
+        self.service.shop_id = 2
         await self.session.commit()
         with self.assertRaisesRegex(ValueError, "فروشگاه"):
             await self.create()

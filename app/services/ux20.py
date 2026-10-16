@@ -530,7 +530,7 @@ async def retry_delivery(session: AsyncSession, order_id: int) -> Order:
                 .limit(1)
             )
         ).scalar_one_or_none()
-        bot, should_close = await open_notify_bot_for_user(session, user)
+        bot, should_close = await open_notify_bot_for_user(session, user, shop_id=order.reseller_id)
         try:
             await send_delivery_to_user(
                 bot, user.telegram_id, session, pay, order

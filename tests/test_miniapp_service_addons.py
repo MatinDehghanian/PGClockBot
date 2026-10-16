@@ -180,6 +180,7 @@ class MiniAppAddonTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await self.client.get("/api/mini/service/10/addons")).status_code, 400)
         self.svc.remark = None
         self.user.reseller_id = 2
+        self.svc.shop_id = 2
         # A shop-sold service is not the Mini App's to show at all, so it is not found.
         self.assertEqual((await self.buy()).status_code, 404)
         await self.assert_no_purchase()

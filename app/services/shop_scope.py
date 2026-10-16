@@ -135,15 +135,20 @@ def assert_order_retry_in_scope(staff: dict, order: Any) -> None:
         raise ShopScopeError("دسترسی به این سفارش ندارید")
 
 
+def payment_shop_id(payment: Any, order: Any | None) -> int | None:
+    """The shop a payment belongs to: a top-up's purse, else its order's shop (None = platform)."""
+    if getattr(payment, "is_wallet_topup", False):
+        return getattr(payment, "wallet_shop_id", None)
+    return _reseller_id_of(order) if order is not None else None
+
+
 def platform_may_review_payment(payment: Any, order: Any | None) -> bool:
     """Owner reviews platform payments only; shop wallets and shop orders stay with that shop.
 
     Mirrors ``reseller_can_review_payment`` on the bot so the web panel cannot
     credit or reject another shop's money.
     """
-    if getattr(payment, "is_wallet_topup", False):
-        return getattr(payment, "wallet_shop_id", None) is None
-    return order is None or _reseller_id_of(order) is None
+    return payment_shop_id(payment, order) is None
 
 
 def assert_bot_user_in_scope(staff: dict, user: Any) -> None:

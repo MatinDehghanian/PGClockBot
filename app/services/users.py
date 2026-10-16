@@ -13,7 +13,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
-from app.db.models import BotUser, Role, Setting
+from app.db.models import BotUser, Order, Role, Setting, UserService
 from app.services.button_styles import default_settings as button_style_defaults
 from app.services.button_styles import setting_group_fields as button_style_setting_fields
 from app.services.connection_status_texts import MONITOR_TEXT_DEFAULTS, readable_monitor_texts
@@ -378,6 +378,36 @@ def _referral_code() -> str:
     return "".join(secrets.choice(alphabet) for _ in range(8))
 
 
+async def _record_cross_bot_membership(
+    session: AsyncSession, user: BotUser, bot_shop_id: int | None
+) -> None:
+    """Remember that the person now uses a bot other than the one that attributed them.
+
+    The attributing shop is recorded when the person is created, so only a visit to
+    another bot (a platform customer in a shop bot, or the reverse) needs a row; this
+    keeps the per-message path free of extra queries.
+    """
+    if user.role != Role.USER.value or int(user.id) == int(bot_shop_id or 0):
+        return
+    if (user.reseller_id or None) == (bot_shop_id or None):
+        return
+    from app.services.shop_membership import ensure_member
+
+    await ensure_member(session, int(user.id), bot_shop_id)
+    await session.commit()
+
+
+async def _has_commerce_history(session: AsyncSession, user_id: int) -> bool:
+    """True when the user already owns a service or placed an order (any shop)."""
+    has_service = await session.scalar(
+        select(UserService.id).where(UserService.bot_user_id == user_id).limit(1)
+    )
+    if has_service is not None:
+        return True
+    has_order = await session.scalar(select(Order.id).where(Order.user_id == user_id).limit(1))
+    return has_order is not None
+
+
 async def get_or_create_user(
     session: AsyncSession,
     telegram_id: int,
@@ -430,18 +460,22 @@ async def get_or_create_user(
             else:
                 user.role = Role.USER.value
             changed = True
-        # Sticky first-touch attribution for reseller shop bots
+        # Sticky first-touch attribution for reseller shop bots. A customer who
+        # already bought elsewhere keeps their services and stays out of the shop's
+        # user list: attribution would hand the platform's services to the shop.
         if (
             reseller_owner_id
             and user.reseller_id is None
             and user.id != reseller_owner_id
             and user.role == Role.USER.value
+            and not await _has_commerce_history(session, int(user.id))
         ):
             user.reseller_id = reseller_owner_id
             changed = True
         if changed:
             await session.commit()
             await session.refresh(user)
+        await _record_cross_bot_membership(session, user, reseller_owner_id)
         return user
 
     from app.services.referral_registration import ReferralRequired, find_registration_referrer
@@ -492,6 +526,11 @@ async def get_or_create_user(
         user.reseller_id = None
         await session.commit()
         await session.refresh(user)
+    if user.role == Role.USER.value:
+        from app.services.shop_membership import ensure_member
+
+        await ensure_member(session, int(user.id), user.reseller_id)
+        await session.commit()
     if referred_by_id:
         try:
             from app.services.loyalty import on_user_referred

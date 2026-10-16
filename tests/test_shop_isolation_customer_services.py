@@ -43,13 +43,14 @@ class CustomerServiceScopeTests(unittest.IsolatedAsyncioTestCase):
                 Order(id=102, user_id=CUSTOMER_ID, reseller_id=SHOP_ID, amount=1, status=OrderStatus.DELIVERED.value),
             ])
             await session.flush()
-            for sid, remark in (
-                (PLATFORM_SVC, "order:101"), (SHOP_SVC, "order:102"),
-                (IMPORTED_SVC, "imported"), (BROKEN_SVC, "order:999"),
+            for sid, remark, shop, review in (
+                (PLATFORM_SVC, "order:101", None, False), (SHOP_SVC, "order:102", SHOP_ID, False),
+                (IMPORTED_SVC, "imported", SHOP_ID, False), (BROKEN_SVC, "imported", None, True),
             ):
                 session.add(UserService(
                     id=sid, bot_user_id=CUSTOMER_ID, pg_user_id=sid, pg_username=f"svc{sid}",
                     subscription_url=f"https://sub.example/{sid}", subscription_token=f"tok{sid}", remark=remark,
+                    shop_id=shop, shop_needs_review=review,
                 ))
             await session.commit()
 

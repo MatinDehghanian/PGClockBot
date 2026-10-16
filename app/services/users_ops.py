@@ -18,6 +18,8 @@ from sqlalchemy.orm import selectinload
 
 from app.db.models import BotUser, Plan, Role, UserService
 from app.services.formatting import format_bytes
+from app.services.service_scope import shop_services_clause
+from app.services.shop_membership import shop_member_clause
 
 UserFilter = Literal[
     "all",
@@ -299,15 +301,16 @@ def build_user_ops_row(
 
 
 async def load_services_by_user_ids(
-    session: AsyncSession, user_ids: list[int]
+    session: AsyncSession, user_ids: list[int], *, shop_id: int | None
 ) -> dict[int, list[UserService]]:
+    """Services of the given customers that ``shop_id`` (None = platform) sold."""
     if not user_ids:
         return {}
     rows = list(
         (
             await session.execute(
                 select(UserService)
-                .where(UserService.bot_user_id.in_(user_ids))
+                .where(UserService.bot_user_id.in_(user_ids), shop_services_clause(shop_id))
                 .options(selectinload(UserService.plan))
                 .order_by(UserService.id.desc())
             )
@@ -330,11 +333,8 @@ def pure_reseller_clause():
 
 
 def scoped_users_where(scope_reseller_id: int | None):
-    """Platform shop → reseller_id IS NULL; tenant → matching reseller_id."""
-    base = not_(pure_reseller_clause())
-    if scope_reseller_id is None:
-        return and_(base, BotUser.reseller_id.is_(None))
-    return and_(base, BotUser.reseller_id == int(scope_reseller_id))
+    """Customers of the platform (None) or of one shop: attributed to it or a recorded member."""
+    return and_(not_(pure_reseller_clause()), shop_member_clause(scope_reseller_id))
 
 
 def filter_ops_rows(rows: list[UserOpsRow], filter_key: UserFilter) -> list[UserOpsRow]:
@@ -393,7 +393,7 @@ async def build_users_ops_page(
     fk = normalize_users_filter(str(filter_key))
     focus = parse_focus_uid(str(focus_uid) if focus_uid is not None else None)
     uids = [int(u.id) for u in users]
-    by_uid = await load_services_by_user_ids(session, uids)
+    by_uid = await load_services_by_user_ids(session, uids, shop_id=shop_id)
     if wallet_by_uid is None:
         wallet_by_uid = await wallet_balances_for_scope(
             session, uids, shop_id=shop_id
