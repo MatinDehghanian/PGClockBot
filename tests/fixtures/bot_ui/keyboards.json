@@ -1,4 +1,1400 @@
 {
+  "hub.admin.backup": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "adm:backup:create:noenv",
+          "style": "primary",
+          "text": "🆕 ساخت بکاپ"
+        },
+        {
+          "callback_data": "adm:backup:create:env",
+          "style": "danger",
+          "text": "🆕 بکاپ + .env"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:backup:upload",
+          "text": "📤 آپلود فایل بکاپ"
+        },
+        {
+          "callback_data": "nv:adm:backup",
+          "text": "🔄 تازه‌سازی لیست"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:adm:system",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "hub.admin.broadcast": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "adm:broadcast:aud:all",
+          "text": "📢 همه"
+        },
+        {
+          "callback_data": "adm:broadcast:aud:users",
+          "text": "👥 کاربران عادی"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:broadcast:aud:resellers",
+          "text": "🤝 فقط نمایندگان"
+        },
+        {
+          "callback_data": "adm:broadcast:aud:admins",
+          "text": "🛠 ادمین‌ها"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:adm:marketing",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "hub.admin.groups": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "nv:adm:ops",
+          "style": "success",
+          "text": "🗓 عملیات روزانه"
+        },
+        {
+          "callback_data": "nv:adm:people",
+          "style": "success",
+          "text": "👤 افراد"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:adm:product",
+          "style": "success",
+          "text": "📦 محصول و PG"
+        },
+        {
+          "callback_data": "nv:adm:marketing",
+          "style": "success",
+          "text": "🎯 بازاریابی"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:adm:system",
+          "text": "🛠 سیستم"
+        },
+        {
+          "callback_data": "cma:home:0",
+          "style": "primary",
+          "text": "📡 تست و وضعیت اتصال"
+        }
+      ],
+      [
+        {
+          "callback_data": "menu:home",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "hub.admin.groups_with_queues": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "adm:payments",
+          "style": "danger",
+          "text": "🧾 رسید (۳)"
+        },
+        {
+          "callback_data": "adm:tickets",
+          "style": "danger",
+          "text": "🎫 تیکت (۱)"
+        },
+        {
+          "callback_data": "adm:cancellations",
+          "style": "danger",
+          "text": "📝 لغو (۲)"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:adm:ops",
+          "style": "success",
+          "text": "🗓 عملیات روزانه"
+        },
+        {
+          "callback_data": "nv:adm:people",
+          "style": "success",
+          "text": "👤 افراد"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:adm:product",
+          "style": "success",
+          "text": "📦 محصول و PG"
+        },
+        {
+          "callback_data": "nv:adm:marketing",
+          "style": "success",
+          "text": "🎯 بازاریابی"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:adm:system",
+          "text": "🛠 سیستم"
+        },
+        {
+          "callback_data": "cma:home:0",
+          "style": "primary",
+          "text": "📡 تست و وضعیت اتصال"
+        }
+      ],
+      [
+        {
+          "callback_data": "menu:home",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "hub.admin.loyalty": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "nv:adm:loy:overview",
+          "style": "success",
+          "text": "📊 نمای کلی"
+        },
+        {
+          "callback_data": "nv:adm:loy:rules",
+          "text": "📐 قوانین امتیاز"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:adm:loy:rewards",
+          "text": "🎁 جوایز"
+        },
+        {
+          "callback_data": "nv:adm:loy:tiers",
+          "text": "🏅 سطوح"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:adm:loy:settings",
+          "text": "⚙️ تنظیمات باشگاه"
+        },
+        {
+          "callback_data": "nv:adm:loy:reftext",
+          "text": "📝 متن دعوت"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:adm:marketing",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "hub.admin.loyalty_without_tiers": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "nv:adm:loy:overview",
+          "style": "success",
+          "text": "📊 نمای کلی"
+        },
+        {
+          "callback_data": "nv:adm:loy:rules",
+          "text": "📐 قوانین امتیاز"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:adm:loy:rewards",
+          "text": "🎁 جوایز"
+        },
+        {
+          "callback_data": "nv:adm:loy:settings",
+          "text": "⚙️ تنظیمات باشگاه"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:adm:loy:reftext",
+          "text": "📝 متن دعوت"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:adm:marketing",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "hub.admin.marketing": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "nv:adm:loy",
+          "style": "success",
+          "text": "⭐ باشگاه مشتریان"
+        },
+        {
+          "callback_data": "nv:adm:broadcast",
+          "text": "📢 پیام گروهی"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:adm:gc",
+          "text": "🎁 کدهای هدیه"
+        },
+        {
+          "callback_data": "nv:adm:cmp",
+          "text": "📣 کمپین‌ها"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:adm:home",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "hub.admin.ops": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "adm:dash",
+          "style": "success",
+          "text": "📊 داشبورد"
+        },
+        {
+          "callback_data": "adm:reports:week",
+          "style": "success",
+          "text": "📈 گزارشات"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:orders",
+          "style": "success",
+          "text": "🛒 سفارش‌ها"
+        },
+        {
+          "callback_data": "adm:payments",
+          "style": "success",
+          "text": "🧾 رسیدها (۳)"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:tickets",
+          "style": "success",
+          "text": "🎫 تیکت‌ها (۱)"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:adm:home",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "hub.admin.people": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "nv:adm:users",
+          "style": "success",
+          "text": "👥 کاربران"
+        },
+        {
+          "callback_data": "nv:adm:resellers",
+          "style": "success",
+          "text": "🤝 نمایندگان"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:adm:home",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "hub.admin.people_without_representatives": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "nv:adm:users",
+          "style": "success",
+          "text": "👥 کاربران"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:adm:home",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "hub.admin.pg": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "adm:pg:stats",
+          "style": "success",
+          "text": "🏠 نمای کلی"
+        },
+        {
+          "callback_data": "adm:pg:users",
+          "text": "👥 کاربران"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:pg:create",
+          "style": "primary",
+          "text": "➕ ساخت کاربر"
+        },
+        {
+          "callback_data": "adm:pg:search",
+          "text": "🔎 جستجوی یوزر"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:pg:nodes",
+          "text": "🕸 نودها"
+        },
+        {
+          "callback_data": "adm:pg:group",
+          "style": "primary",
+          "text": "📁 ساخت گروه"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:pg:template",
+          "style": "primary",
+          "text": "📋 ساخت تمپلیت"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:adm:product",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "hub.admin.pg_read_only": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "adm:pg:stats",
+          "style": "success",
+          "text": "🏠 نمای کلی"
+        },
+        {
+          "callback_data": "adm:pg:users",
+          "text": "👥 کاربران"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:pg:search",
+          "text": "🔎 جستجوی یوزر"
+        },
+        {
+          "callback_data": "adm:pg:nodes",
+          "text": "🕸 نودها"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:pg:group",
+          "style": "primary",
+          "text": "📁 ساخت گروه"
+        },
+        {
+          "callback_data": "adm:pg:template",
+          "style": "primary",
+          "text": "📋 ساخت تمپلیت"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:adm:product",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "hub.admin.plans_add_resellers": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "nv:adm:ra:adm_plans_kind_res_fixed",
+          "style": "primary",
+          "text": "اشتراک ثابت"
+        },
+        {
+          "callback_data": "nv:adm:ra:adm_plans_kind_res_payg",
+          "style": "primary",
+          "text": "اشتراک PAYG"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:adm:ra:adm_plans_kind_res_addon_vol",
+          "style": "primary",
+          "text": "بسته حجم"
+        },
+        {
+          "callback_data": "nv:adm:ra:adm_plans_kind_res_addon_users",
+          "style": "primary",
+          "text": "بسته کاربر"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:adm:plans:aud:resellers",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "hub.admin.plans_add_users": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "nv:adm:ra:adm_plans_kind_users_fixed",
+          "style": "primary",
+          "text": "ثابت"
+        },
+        {
+          "callback_data": "nv:adm:ra:adm_plans_kind_users_custom",
+          "style": "primary",
+          "text": "دلخواه"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:adm:ra:adm_plans_kind_users_trial",
+          "style": "primary",
+          "text": "تست"
+        },
+        {
+          "callback_data": "nv:adm:ra:adm_plans_kind_users_wholesale",
+          "style": "primary",
+          "text": "📦 فروش عمده"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:adm:plans:aud:users",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "hub.admin.plans_audience": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "nv:adm:plans:aud:users",
+          "style": "primary",
+          "text": "📦 پلن‌های کاربران"
+        },
+        {
+          "callback_data": "nv:adm:plans:aud:resellers",
+          "style": "primary",
+          "text": "🤝 پلن‌های نمایندگان"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:adm:ra:adm_plans_categories",
+          "text": "🏷 برچسب دسته"
+        },
+        {
+          "callback_data": "nv:adm:ra:adm_plans_addons",
+          "style": "primary",
+          "text": "⏱ بسته حجم/زمان"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:adm:product",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "hub.admin.plans_kind_resellers": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "nv:adm:plans:list:resellers",
+          "style": "primary",
+          "text": "📋 مشاهده پلن‌ها"
+        },
+        {
+          "callback_data": "nv:adm:ra:adm_plans_add",
+          "style": "primary",
+          "text": "➕ افزودن پلن"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:adm:ra:adm_plans_categories",
+          "text": "🏷 برچسب دسته"
+        },
+        {
+          "callback_data": "nv:adm:ra:adm_plans_addons",
+          "style": "primary",
+          "text": "⏱ بسته حجم/زمان"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:adm:plans",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "hub.admin.plans_kind_users": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "nv:adm:plans:list:users",
+          "style": "primary",
+          "text": "📋 مشاهده پلن‌ها"
+        },
+        {
+          "callback_data": "nv:adm:ra:adm_plans_add",
+          "style": "primary",
+          "text": "➕ افزودن پلن"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:adm:ra:adm_plans_categories",
+          "text": "🏷 برچسب دسته"
+        },
+        {
+          "callback_data": "nv:adm:ra:adm_plans_addons",
+          "style": "primary",
+          "text": "⏱ بسته حجم/زمان"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:adm:plans",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "hub.admin.product": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "nv:adm:plans",
+          "style": "success",
+          "text": "📦 پلن‌ها"
+        },
+        {
+          "callback_data": "nv:adm:pg",
+          "style": "success",
+          "text": "🖥 پاسارگارد"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:adm:home",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "hub.admin.resellers": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "adm:resellers:list:0",
+          "text": "📋 لیست نمایندگان"
+        },
+        {
+          "callback_data": "adm:resapp:list",
+          "text": "📋 درخواست‌های منتظر"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:resellers:add",
+          "style": "primary",
+          "text": "➕ افزودن دستی"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:adm:people",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "hub.admin.settings": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "adm:st:find",
+          "text": "🔍 جستجو در تنظیمات"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:st:sec:shop",
+          "text": "فروشگاه"
+        },
+        {
+          "callback_data": "adm:st:sec:menu",
+          "text": "ظاهر و دکمه‌ها"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:st:sec:pay",
+          "text": "پرداخت"
+        },
+        {
+          "callback_data": "adm:st:sec:support",
+          "text": "پشتیبان‌ها"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:st:sec:access",
+          "text": "دسترسی"
+        },
+        {
+          "callback_data": "adm:st:sec:limits",
+          "style": "primary",
+          "text": "محدودیت"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:st:sec:guides",
+          "style": "primary",
+          "text": "آموزش اتصال"
+        },
+        {
+          "callback_data": "adm:st:sec:notify",
+          "text": "اعلان‌ها"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:adm:ra:adm_st_panel",
+          "style": "primary",
+          "text": "🌐 وب‌پنل"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:adm:system",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "hub.admin.system": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "nv:adm:settings",
+          "text": "⚙️ تنظیمات"
+        },
+        {
+          "callback_data": "nv:adm:backup",
+          "text": "💾 بکاپ / ریستور"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:adm:preview",
+          "text": "👁 پیش‌نمایش منوی کاربر"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:adm:home",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "hub.admin.users": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "adm:users:list:0",
+          "text": "📋 لیست کاربران"
+        },
+        {
+          "callback_data": "adm:users:search",
+          "text": "🔎 جستجو با آیدی تلگرام"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:users:webhint",
+          "text": "🌐 مدیریت کامل در وب‌پنل"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:adm:people",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "hub.loyalty": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "nv:loy:ref",
+          "style": "primary",
+          "text": "👥 دعوت دوستان"
+        },
+        {
+          "callback_data": "nv:loy:pts",
+          "text": "⭐ امتیاز من"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:loy:rew",
+          "text": "🎁 جوایز"
+        },
+        {
+          "callback_data": "nv:loy:hist",
+          "text": "📜 تاریخچه"
+        }
+      ],
+      [
+        {
+          "callback_data": "menu:home",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "hub.reseller.access_card": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "nv:res:home",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "hub.reseller.main_bot": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "nv:res:ra:reseller_creds",
+          "text": "🔐 اطلاعات ورود پنل و ربات"
+        },
+        {
+          "callback_data": "nv:adm:pg",
+          "style": "success",
+          "text": "🖥 پاسارگارد"
+        }
+      ],
+      [
+        {
+          "callback_data": "menu:home",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "hub.reseller.manage": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "res:payments",
+          "style": "danger",
+          "text": "🧾 رسید (۲)"
+        },
+        {
+          "callback_data": "res:tickets",
+          "style": "danger",
+          "text": "🎫 تیکت (۱)"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:res:ra:res_dash",
+          "style": "success",
+          "text": "🏠 خانه نماینده"
+        },
+        {
+          "callback_data": "nv:res:ra:res_users",
+          "style": "success",
+          "text": "👥 مشتریان من"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:res:ra:res_add_rep",
+          "style": "primary",
+          "text": "➕ افزودن نماینده"
+        },
+        {
+          "callback_data": "nv:res:ra:res_reports",
+          "style": "success",
+          "text": "📈 گزارشات"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:res:ra:res_stats",
+          "style": "success",
+          "text": "📊 آمار"
+        },
+        {
+          "callback_data": "nv:res:ra:res_plans",
+          "style": "primary",
+          "text": "💎 پلن‌های فروش"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:res:ra:res_orders",
+          "style": "success",
+          "text": "🛒 سفارش‌های مشتریان"
+        },
+        {
+          "callback_data": "nv:res:ra:res_payments",
+          "style": "success",
+          "text": "🧾 رسیدهای در انتظار (۲)"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:res:ra:res_tickets",
+          "style": "success",
+          "text": "🎫 تیکت‌های مشتریان (۱)"
+        },
+        {
+          "callback_data": "nv:res:ra:res_loyalty",
+          "style": "success",
+          "text": "⭐ باشگاه مشتریان"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:res:ra:res_settings",
+          "text": "⚙️ تنظیمات فروشگاه"
+        }
+      ],
+      [
+        {
+          "callback_data": "menu:home",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "hub.reseller.manage_payg": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "nv:res:ra:res_dash",
+          "style": "success",
+          "text": "🏠 خانه نماینده"
+        },
+        {
+          "callback_data": "nv:res:ra:res_users",
+          "style": "success",
+          "text": "👥 مشتریان من"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:res:ra:res_billing",
+          "style": "success",
+          "text": "💰 کیف پول PAYG"
+        },
+        {
+          "callback_data": "nv:res:ra:res_reports",
+          "style": "success",
+          "text": "📈 گزارشات"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:res:ra:res_stats",
+          "style": "success",
+          "text": "📊 آمار"
+        },
+        {
+          "callback_data": "nv:res:ra:res_plans",
+          "style": "primary",
+          "text": "💎 پلن‌های فروش"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:res:ra:res_orders",
+          "style": "success",
+          "text": "🛒 سفارش‌های مشتریان"
+        },
+        {
+          "callback_data": "nv:res:ra:res_payments",
+          "style": "success",
+          "text": "🧾 رسیدهای در انتظار"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:res:ra:res_tickets",
+          "style": "success",
+          "text": "🎫 تیکت‌های مشتریان"
+        },
+        {
+          "callback_data": "nv:res:ra:res_loyalty",
+          "style": "success",
+          "text": "⭐ باشگاه مشتریان"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:res:ra:res_settings",
+          "text": "⚙️ تنظیمات فروشگاه"
+        }
+      ],
+      [
+        {
+          "callback_data": "menu:home",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "hub.reseller.plans": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "nv:res:ra:res_plan_add",
+          "style": "primary",
+          "text": "➕ پلن جدید"
+        },
+        {
+          "callback_data": "nv:res:ra:res_plan_categories",
+          "text": "🏷 برچسب دسته"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:res:ra:res_plan_addons",
+          "style": "primary",
+          "text": "⏱ بسته حجم/زمان"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:res:home",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "hub.reseller.settings": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "nv:res:ra:res_st_shop",
+          "text": "فروشگاه"
+        },
+        {
+          "callback_data": "nv:res:ra:res_st_menu",
+          "text": "منو"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:res:ra:res_st_pay",
+          "text": "پرداخت"
+        },
+        {
+          "callback_data": "nv:res:ra:res_st_support",
+          "text": "پشتیبان‌ها"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:res:ra:res_st_access",
+          "text": "دسترسی"
+        },
+        {
+          "callback_data": "nv:res:ra:res_st_limits",
+          "style": "primary",
+          "text": "محدودیت"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:res:ra:res_st_guides",
+          "style": "primary",
+          "text": "آموزش اتصال"
+        },
+        {
+          "callback_data": "nv:res:ra:res_st_notify",
+          "text": "اعلان‌ها"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:res:ra:res_st_bot",
+          "text": "ربات"
+        },
+        {
+          "callback_data": "nv:res:ra:res_st_panel",
+          "style": "primary",
+          "text": "🌐 وب‌پنل"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:res:home",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "hub.service_card": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "svc:renew:7",
+          "style": "primary",
+          "text": "🔄 تمدید"
+        },
+        {
+          "callback_data": "svc:addon:7",
+          "style": "primary",
+          "text": "➕ حجم / زمان"
+        }
+      ],
+      [
+        {
+          "callback_data": "svc:link:7",
+          "text": "🔗 لینک و QR"
+        },
+        {
+          "callback_data": "guide:svc:7",
+          "style": "primary",
+          "text": "📘 آموزش اتصال"
+        }
+      ],
+      [
+        {
+          "callback_data": "svc:view:7",
+          "text": "♻️ رفرش وضعیت"
+        },
+        {
+          "callback_data": "svc:auto:7",
+          "text": "⚙️ تنظیمات خودکار"
+        }
+      ],
+      [
+        {
+          "callback_data": "svc:cancel:7",
+          "text": "📝 درخواست لغو سرویس"
+        }
+      ],
+      [
+        {
+          "callback_data": "svc:delask:7",
+          "style": "danger",
+          "text": "🗑 حذف سرویس"
+        }
+      ],
+      [
+        {
+          "callback_data": "svc:list",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "hub.service_card_external": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "svc:renew:7",
+          "style": "primary",
+          "text": "🔄 تمدید"
+        },
+        {
+          "callback_data": "svc:addon:7",
+          "style": "primary",
+          "text": "➕ حجم / زمان"
+        }
+      ],
+      [
+        {
+          "callback_data": "svc:link:7",
+          "text": "🔗 لینک و QR"
+        },
+        {
+          "callback_data": "guide:svc:7",
+          "style": "primary",
+          "text": "📘 آموزش اتصال"
+        }
+      ],
+      [
+        {
+          "callback_data": "svc:view:7",
+          "text": "♻️ رفرش وضعیت"
+        },
+        {
+          "callback_data": "svc:auto:7",
+          "text": "⚙️ تنظیمات خودکار"
+        }
+      ],
+      [
+        {
+          "callback_data": "svc:delask:7",
+          "style": "danger",
+          "text": "🗑 حذف سرویس"
+        }
+      ],
+      [
+        {
+          "callback_data": "svc:list",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "hub.services_list": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "svc:view:7",
+          "text": "🔹 user_7"
+        },
+        {
+          "callback_data": "svc:view:8",
+          "text": "🔹 user_8"
+        }
+      ],
+      [
+        {
+          "callback_data": "menu:home",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "hub.services_list_with_import": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "svc:reseller",
+          "text": "ظرفیت: ۳ از ۱۰"
+        }
+      ],
+      [
+        {
+          "callback_data": "svc:view:7",
+          "text": "🔹 user_7"
+        },
+        {
+          "callback_data": "svc:view:8",
+          "text": "🔹 user_8"
+        }
+      ],
+      [
+        {
+          "callback_data": "svc:add",
+          "text": "🔗 اتصال اشتراک قبلی"
+        }
+      ],
+      [
+        {
+          "callback_data": "menu:home",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "hub.support": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "nv:s:new",
+          "style": "primary",
+          "text": "🟣✉️ تیکت جدید"
+        },
+        {
+          "callback_data": "nv:s:list",
+          "text": "📋 تیکت‌های من"
+        }
+      ],
+      [
+        {
+          "callback_data": "menu:home",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "hub.topup_methods": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "wtop:card",
+          "style": "primary",
+          "text": "🔵💳 کارت به کارت"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:w:topup",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "hub.wallet": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "nv:w:topup",
+          "style": "primary",
+          "text": "🟢➕ شارژ کیف پول"
+        },
+        {
+          "callback_data": "nv:w:tx",
+          "text": "🟡📜 تراکنش‌ها"
+        }
+      ],
+      [
+        {
+          "callback_data": "menu:home",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "hub.wallet_topup_presets": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "nv:w:amt:50000",
+          "style": "primary",
+          "text": "‏50٬000 تومان"
+        },
+        {
+          "callback_data": "nv:w:amt:100000",
+          "style": "primary",
+          "text": "‏100٬000 تومان"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:w:amt:200000",
+          "style": "primary",
+          "text": "‏200٬000 تومان"
+        },
+        {
+          "callback_data": "nv:w:amt:500000",
+          "style": "primary",
+          "text": "‏500٬000 تومان"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:w:amt:custom",
+          "style": "primary",
+          "text": "✍ مبلغ دیگر"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:w:home",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
   "inline.admin.backup_files": {
     "inline_keyboard": [
       [
