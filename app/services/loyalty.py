@@ -31,6 +31,7 @@ from app.db.models import (
 )
 from app.services.demo_users import non_demo_customer
 from app.services.formatting import bot_user_panel_label
+from app.services.service_scope import customer_may_use_service, service_shop_id
 
 logger = logging.getLogger(__name__)
 
@@ -1058,6 +1059,8 @@ async def redeem_reward(
     idempotency_key: str | None = None,
 ) -> RewardRedemption:
     """Atomic redeem: lock reward + user, debit points, apply benefit, record redemption."""
+    from app.services.users import current_shop_reseller_id  # users imports loyalty lazily; avoid a cycle
+
     key = idempotency_key or f"redeem:{user.id}:{reward_id}:{int(datetime.now(timezone.utc).timestamp())}"
     existing = (
         await session.execute(
@@ -1081,7 +1084,7 @@ async def redeem_reward(
     # Scope isolation: shop users cannot redeem another shop's rewards.
     # Platform users may only redeem platform (reseller_id IS NULL) rewards.
     # Shop users may redeem own-shop rewards or platform catalog (same as list_active_rewards).
-    user_rid = user.reseller_id
+    user_rid = current_shop_reseller_id()
     reward_rid = reward.reseller_id
     if user_rid is None:
         if reward_rid is not None:
@@ -1112,7 +1115,7 @@ async def redeem_reward(
         if not service_id:
             raise ValueError("یک سرویس فعال انتخاب کنید")
         service = await session.get(UserService, int(service_id))
-        if not service or int(service.bot_user_id) != int(user.id):
+        if not await customer_may_use_service(session, service, int(user.id), user_rid):
             raise ValueError("سرویس معتبر نیست")
         if not service.pg_user_id:
             raise ValueError("سرویس به پنل متصل نیست")
@@ -1475,13 +1478,13 @@ async def apply_service_reward(
     from app.services.pasarguard import get_pg, get_pg_for_reseller
     from app.services.users import current_shop_reseller_id
 
-    if user.reseller_id:
+    service_shop = await service_shop_id(session, service)
+    if service_shop != (current_shop_reseller_id() or None):
+        raise ValueError("سرویس متعلق به این فروشگاه نیست")
+    if service_shop:
         # Shop path: never fall back to Owner/platform PG credentials
-        pg = await get_pg_for_reseller(session, int(user.reseller_id))
+        pg = await get_pg_for_reseller(session, int(service_shop))
     else:
-        # Fail closed on shop bots — Owner token must never serve shop traffic
-        if current_shop_reseller_id():
-            raise ValueError("کاربر فروشگاه بدون مالک معتبر است؛ اعمال جایزه ممکن نیست")
         pg = get_pg()
 
     info = await pg.get_user_by_id(int(service.pg_user_id))

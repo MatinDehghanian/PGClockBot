@@ -183,3 +183,4 @@ tests/test_service_shop_scope_migration.py
 tests/test_shop_attribution_keeps_platform_customers.py
 tests/test_shop_membership.py
 tests/test_service_shop_review.py
+tests/test_shop_isolation_rewards_campaigns.py

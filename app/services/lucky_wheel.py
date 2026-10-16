@@ -35,6 +35,7 @@ from app.services.loyalty import (
     issue_discount_entitlement,
     loyalty_enabled,
 )
+from app.services.users import current_shop_reseller_id
 
 logger = logging.getLogger(__name__)
 
@@ -202,8 +203,10 @@ def prize_in_scope(prize: LuckyWheelPrize, scope: int | None) -> bool:
     return prize.reseller_id is not None and int(prize.reseller_id) == int(scope)
 
 
-def shop_prize_scope(user: BotUser) -> int | None:
-    return int(user.reseller_id) if user.reseller_id is not None else None
+def shop_prize_scope(_user: BotUser | None = None) -> int | None:
+    """Prizes, settings and spins belong to the shop of the bot in use, not the customer's attribution."""
+    rid = current_shop_reseller_id()
+    return int(rid) if rid else None
 
 
 async def list_prizes(
@@ -369,7 +372,7 @@ async def _get_or_create_state(
         return state
     state = LuckyWheelUserState(
         user_id=int(user.id),
-        reseller_id=user.reseller_id,
+        reseller_id=shop_prize_scope(),
         free_spins_balance=0,
         spins_today=0,
         spins_day=_utc_day(),

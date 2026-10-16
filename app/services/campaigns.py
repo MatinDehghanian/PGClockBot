@@ -7,14 +7,22 @@ from datetime import datetime, timedelta, timezone
 
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError, TelegramRetryAfter
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-from sqlalchemy import String, and_, cast, exists, func, or_, select, update
+from sqlalchemy import and_, exists, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 
 from app.db.models import BotUser, CampaignRecipient, MarketingPreference, Order, Plan, TargetedCampaign, UserService
+from app.services.service_scope import shop_services_clause
+from app.services.shop_membership import shop_member_clause
 
 AUDIENCES = {"trial": "کاربران تست بدون خرید", "expiring": "سرویس‌های نزدیک انقضا", "inactive": "مشتریان بدون خرید در بازهٔ انتخابی"}
 RECIPIENT_LIMIT = 5000
 CAMPAIGN_LIST_LIMIT = 5
+
+
+def _member_clause(shop_id):
+    """Customers of the shop: attributed, recorded as members, or with an order there."""
+    placed = exists(select(Order.id).where(Order.user_id == BotUser.id, Order.reseller_id == shop_id))
+    return or_(shop_member_clause(shop_id), placed)
 
 
 def audience_query(*, shop_id, audience, days, now=None):
@@ -23,7 +31,7 @@ def audience_query(*, shop_id, audience, days, now=None):
     now = now or datetime.now(timezone.utc)
     shop_order = and_(Order.user_id == BotUser.id, Order.reseller_id == shop_id)
     bought = exists(select(Order.id).where(shop_order, Order.status == "delivered", Order.amount > 0))
-    member = or_(BotUser.reseller_id == shop_id, exists(select(Order.id).where(shop_order)))
+    member = _member_clause(shop_id)
     opted_out = exists(select(MarketingPreference.user_id).where(
         MarketingPreference.user_id == BotUser.id, MarketingPreference.shop_key == (shop_id or 0), MarketingPreference.enabled.is_(False)))
     query = select(BotUser.id).where(member, BotUser.is_blocked.is_(False), BotUser.role.in_(["user", "reseller"]), ~opted_out)
@@ -35,12 +43,8 @@ def audience_query(*, shop_id, audience, days, now=None):
         query = query.where(BotUser.created_at <= cutoff, ~exists(select(Order.id).where(
             shop_order, Order.status == "delivered", Order.created_at > cutoff)))
     else:
-        origin = exists(select(Order.id).where(
-            Order.user_id == UserService.bot_user_id, Order.reseller_id == shop_id,
-            UserService.remark == ("order:" + cast(Order.id, String))))
-        legacy = and_(or_(UserService.remark.is_(None), ~UserService.remark.like("order:%")), BotUser.reseller_id == shop_id)
         query = query.where(exists(select(UserService.id).where(
-            UserService.bot_user_id == BotUser.id, or_(origin, legacy),
+            UserService.bot_user_id == BotUser.id, shop_services_clause(shop_id),
             UserService.is_cancelled.is_(False), UserService.cancellation_pending.is_(False),
             UserService.quota_status == "active",
             UserService.quota_synced_at >= now - timedelta(days=1),
@@ -171,9 +175,7 @@ async def process_campaign(session, campaign_id, bot, *, batch_size=20, delay=0.
                 await session.commit()
                 continue
             # Recheck current membership; snapshot ids are never trusted as a tenant boundary.
-            member = await session.scalar(select(BotUser.id).where(
-                BotUser.id == user.id, or_(BotUser.reseller_id == shop_id, exists(select(Order.id).where(
-                    Order.user_id == BotUser.id, Order.reseller_id == shop_id)))))
+            member = await session.scalar(select(BotUser.id).where(BotUser.id == user.id, _member_clause(shop_id)))
             if member is None:
                 recipient.status = "skipped"
                 await session.commit()
