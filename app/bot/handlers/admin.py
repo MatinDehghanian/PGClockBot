@@ -2627,7 +2627,7 @@ async def adm_users_quick_renew(
     from app.services.users_quick import quick_renew_user
 
     try:
-        _svc, label = await quick_renew_user(session, user)
+        _svc, label = await quick_renew_user(session, user, shop_id=None)
         await session.commit()
         await callback.answer(f"تمدید شد: {label}"[:180], show_alert=True)
     except ValueError as e:
@@ -2833,7 +2833,7 @@ async def adm_users_service_one(
 
     try:
         svc = await get_owned_service(
-            session, bot_user_id=user_id, service_id=service_id
+            session, bot_user_id=user_id, service_id=service_id, shop_id=None
         )
         snap = await service_snapshot(session, svc)
         await session.commit()
@@ -2867,7 +2867,7 @@ async def adm_users_service_link(
 
     try:
         svc = await get_owned_service(
-            session, bot_user_id=user_id, service_id=service_id
+            session, bot_user_id=user_id, service_id=service_id, shop_id=None
         )
         snap = await service_snapshot(session, svc)
         await session.commit()
@@ -2908,7 +2908,7 @@ async def adm_users_service_renew(
 
     try:
         svc = await get_owned_service(
-            session, bot_user_id=user_id, service_id=service_id
+            session, bot_user_id=user_id, service_id=service_id, shop_id=None
         )
         plan = await session.get(Plan, int(svc.plan_id)) if svc.plan_id else None
         if plan is None:
@@ -2949,7 +2949,7 @@ async def adm_users_service_delete_ask(
 
     try:
         svc = await get_owned_service(
-            session, bot_user_id=user_id, service_id=service_id
+            session, bot_user_id=user_id, service_id=service_id, shop_id=None
         )
     except ValueError as e:
         await callback.answer(user_safe_error(e, limit=160), show_alert=True)
@@ -3003,7 +3003,7 @@ async def adm_users_service_delete(
     explicit_pg = len(parts) > 5 and parts[5] == "pg"
     try:
         svc = await get_owned_service(
-            session, bot_user_id=user_id, service_id=service_id
+            session, bot_user_id=user_id, service_id=service_id, shop_id=None
         )
         detach_only = is_external_service(svc) and not explicit_pg
         await admin_delete_service(
@@ -3131,7 +3131,7 @@ async def adm_users_service_adjust(
 
         try:
             svc = await get_owned_service(
-                session, bot_user_id=user_id, service_id=service_id
+                session, bot_user_id=user_id, service_id=service_id, shop_id=None
             )
             await admin_extend_service(
                 session, svc, extra_days=days, extra_gb=gb

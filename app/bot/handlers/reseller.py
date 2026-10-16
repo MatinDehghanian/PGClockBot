@@ -615,7 +615,7 @@ async def res_user_quick_renew(
     from app.services.users_quick import quick_renew_user
 
     try:
-        _svc, label = await quick_renew_user(session, user)
+        _svc, label = await quick_renew_user(session, user, shop_id=int(owner_id))
         await session.commit()
         await callback.answer(f"تمدید شد: {label}"[:180], show_alert=True)
     except ValueError as e:

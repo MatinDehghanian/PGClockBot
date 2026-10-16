@@ -224,7 +224,7 @@ async def bulk_renew_users(
     staff: dict,
     user_ids: list[int],
 ) -> tuple[int, int]:
-    from app.services.shop_scope import ShopScopeError, assert_bot_user_in_scope
+    from app.services.shop_scope import ShopScopeError, assert_bot_user_in_scope, resolve_shop_scope_id
     from app.services.users_quick import quick_renew_user
 
     ids = parse_bulk_ids(user_ids)
@@ -240,7 +240,9 @@ async def bulk_renew_users(
             fail += 1
             continue
         try:
-            await quick_renew_user(session, user, service_id=None, staff=staff)
+            await quick_renew_user(
+                session, user, service_id=None, staff=staff, shop_id=resolve_shop_scope_id(staff)
+            )
             ok += 1
         except Exception:
             logger.debug("bulk renew failed uid=%s", uid, exc_info=True)
