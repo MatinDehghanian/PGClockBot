@@ -82,7 +82,7 @@ class PlatformCannotTouchShopTests(unittest.TestCase):
     def test_ticket_actor_skips_shop_tickets(self):
         from types import SimpleNamespace
 
-        from app.services.tickets import staff_ticket_in_scope
+        from app.services.ticket_scope import staff_ticket_in_scope
         from tests.test_update_owner_only import OWNER_SESSION
 
         shop_ticket = SimpleNamespace(reseller_id=5)

@@ -76,6 +76,7 @@ from app.services.updates import local_version
 from app.services.message_variables import template_variable_specs
 from app.services.panel_assets import get_panel_asset_cache_key
 from app.services.shop_scope import is_platform_admin, payment_shop_id
+from app.services.ux20 import payment_shop_clause
 from app.services.settings_tab_groups import group_settings_tabs, tabs_with_message_variables
 from app.services.users import (
     SETTINGS_DOMAIN_REDIRECTS,
@@ -2528,8 +2529,8 @@ def create_api_app(lifespan=None) -> FastAPI:
                     (
                         await session.execute(
                             select(Payment)
-                            .join(BotUser, BotUser.id == Payment.user_id)
-                            .where(BotUser.reseller_id == rid)
+                            .outerjoin(Order, Order.id == Payment.order_id)
+                            .where(payment_shop_clause(int(rid)))
                             .order_by(Payment.id.desc())
                             .limit(6)
                         )

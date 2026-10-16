@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import BotUser, Order, Payment, PaymentStatus, Ticket, TicketStatus
 from app.services.demo_users import non_demo_customer
 from app.services.numbers import to_fa_digits
-from app.services.tickets import ticket_shop_clause
+from app.services.ticket_scope import ticket_shop_clause
 from app.services.service_cancellations import pending_cancellation_count
 
 

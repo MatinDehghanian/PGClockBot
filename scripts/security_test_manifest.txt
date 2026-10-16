@@ -185,3 +185,4 @@ tests/test_shop_membership.py
 tests/test_service_shop_review.py
 tests/test_shop_isolation_rewards_campaigns.py
 tests/test_shop_isolation_notifications.py
+tests/test_shop_isolation_dashboards.py

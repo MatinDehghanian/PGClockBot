@@ -436,7 +436,7 @@ def register_finance_pages(app, *, render, require_staff, get_db):
                 scope = or_(
                     and_(
                         Payment.is_wallet_topup.is_(True),
-                        BotUser.reseller_id.is_(None),
+                        Payment.wallet_shop_id.is_(None),
                     ),
                     and_(
                         Payment.is_wallet_topup.is_(False),
