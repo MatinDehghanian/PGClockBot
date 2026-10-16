@@ -339,6 +339,7 @@
   "reply_btn_label_aliases": "{}",
   "reseller_panel_base_url": "",
   "reseller_pg_panel_base_url": "",
+  "screen_editor_enabled": "0",
   "service_import_admins": "",
   "service_import_enabled": "0",
   "service_import_max_per_user": "5",

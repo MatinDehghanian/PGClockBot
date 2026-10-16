@@ -183,9 +183,10 @@ class _Actor:
     shop_id: int | None
 
 
-async def _shop_actor(
+async def shop_settings_shop_id(
     session: AsyncSession, db_user: BotUser, *, is_reseller_bot: bool, reseller_owner_id: int | None
-) -> _Actor | None:
+) -> int | None:
+    """The shop whose settings this person may change (shop_settings permission), else None."""
     from app.services.reseller_access import load_reseller_actor
 
     owner_id, profile = await load_reseller_actor(
@@ -193,7 +194,16 @@ async def _shop_actor(
     )
     if not owner_id or not profile or not has_bot_perm(profile, "shop_settings"):
         return None
-    return _Actor(for_reseller=True, shop_id=int(profile.user_id))
+    return int(profile.user_id)
+
+
+async def _shop_actor(
+    session: AsyncSession, db_user: BotUser, *, is_reseller_bot: bool, reseller_owner_id: int | None
+) -> _Actor | None:
+    shop_id = await shop_settings_shop_id(
+        session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
+    )
+    return _Actor(for_reseller=True, shop_id=shop_id) if shop_id else None
 
 
 async def _handle(callback: CallbackQuery, session: AsyncSession, actor: _Actor, request: ColorRequest) -> None:
