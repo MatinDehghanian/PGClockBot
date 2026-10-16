@@ -368,7 +368,8 @@ def _after_label_markup(actor: EditorActor, screen_id: str | None) -> InlineKeyb
 # ── Routers ──────────────────────────────────────────────────────────────────
 
 
-@owner_router.callback_query(F.data.startswith(f"{EDIT_CALLBACK_ROOT}:a:"))
+# Literal prefixes (EDIT_CALLBACK_ROOT) keep the handlers visible to the callback contract check.
+@owner_router.callback_query(F.data.startswith("ed:a:"))
 async def owner_editor(callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext) -> None:
     # The owner-principal middleware on this router already admitted the actor.
     request = parse_request(callback.data)
@@ -394,7 +395,7 @@ async def _shop_actor(
     return EditorActor(user_id=int(db_user.id), shop_id=shop_id) if shop_id else None
 
 
-@shop_router.callback_query(F.data.startswith(f"{EDIT_CALLBACK_ROOT}:r:"))
+@shop_router.callback_query(F.data.startswith("ed:r:"))
 async def shop_editor(
     callback: CallbackQuery,
     session: AsyncSession,
