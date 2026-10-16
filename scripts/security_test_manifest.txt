@@ -176,3 +176,4 @@ tests/test_stuck_order_resolution.py
 tests/test_connection_status_web.py
 tests/test_shop_isolation_owner_routes.py
 tests/test_shop_isolation_tickets.py
+tests/test_shop_isolation_order_payment.py
