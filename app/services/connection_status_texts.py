@@ -12,7 +12,7 @@ from app.services.daily_report import format_jalali_parts
 CONNECTION_STATUS_MENU_KEY = "connection_status"
 
 MONITOR_TEXT_DEFAULTS = {
-    "btn_connection_status": "📡 وضعیت از دید سرور",
+    "btn_connection_status": "📡 وضعیت سرورها",
     "connection_status_title": "وضعیت هاست‌ها از دید سرور ربات",
     "connection_status_empty": "هنوز هاستی برای نمایش به کاربران انتخاب نشده است.",
     "connection_status_error": "دریافت وضعیت اکنون ممکن نیست؛ کمی بعد دوباره تلاش کنید.",
@@ -48,6 +48,7 @@ REASON_LABELS = {
 
 
 LEGACY_MONITOR_TEXTS = {
+    "btn_connection_status": "📡 وضعیت از دید سرور",
     "connection_status_empty": "هنوز موردی برای نمایش عمومی منتشر نشده است.",
     "btn_connection_status_admin": "📡 مدیریت وضعیت اتصال",
     "connection_status_admin_title": "📡 وضعیت اتصال هاست‌ها",

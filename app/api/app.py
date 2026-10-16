@@ -4290,9 +4290,9 @@ def create_api_app(lifespan=None) -> FastAPI:
         return RedirectResponse("/tickets?supports=1&saved=1", status_code=303)
 
     def _menu_tab_context(values: dict) -> dict:
-        from app.bot.keyboards import DEFAULT_MENU_ORDER
+        from app.bot.keyboards import DEFAULT_ACTIVE_MENU_ORDER, DEFAULT_MENU_ORDER
 
-        order_raw = values.get("menu_order") or ",".join(DEFAULT_MENU_ORDER)
+        order_raw = values.get("menu_order") or ",".join(DEFAULT_ACTIVE_MENU_ORDER)
         order = [p.strip() for p in order_raw.split(",") if p.strip()]
         order = [k for k in order if k in DEFAULT_MENU_ORDER]
         if "shop" not in order:

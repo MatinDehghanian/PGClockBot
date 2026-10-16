@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from aiogram.fsm.context import FSMContext
@@ -17,7 +18,8 @@ from app.bot.nav_inline import admin_groups_hub_keyboard
 from app.bot.connection_status_admin_ui import parse_monitor_callback
 from app.bot.connection_status_admin_ui import monitor_error
 from app.services.connection_monitor_accounts import ACCOUNT_MESSAGES, MonitorAccountError
-from app.bot.connection_status_ui import MonitorAdminLabel, config_picker_text
+from app.bot.connection_status_admin_ui import show_monitor_home
+from app.bot.connection_status_ui import MonitorAdminLabel, admin_page_keyboard, config_picker_text, target_keyboard
 from app.services.connection_status_texts import LEGACY_MONITOR_TEXTS, MONITOR_TEXT_DEFAULTS
 from app.bot.handlers import connection_status_admin as admin
 from app.bot.handlers import connection_status_admin_input as forms
@@ -25,6 +27,7 @@ from app.bot.nav_input import CANCEL_CODE_KEY
 from app.db.models import BotUser, ConnectionMonitorTarget
 from app.services.connection_monitor_admin import MonitorConfigPage
 from app.services.connection_monitor_subscription import subscription_entries
+from app.services.connection_monitor_views import monitor_admin_page
 from app.services.users import DEFAULT_SETTINGS
 
 
@@ -92,6 +95,30 @@ class MonitorAdminBotTests(MonitorDatabaseCase):
             async with self.Session() as session:
                 await monitor_error(self.message, session, MonitorAccountError("inactive"))
         self.assertEqual(answer.call_args.args[0], ACCOUNT_MESSAGES["inactive"])
+
+    async def test_monitor_home_ends_with_a_back_button_to_the_admin_panel(self) -> None:
+        with patch.object(Message, "answer", new_callable=AsyncMock) as answer:
+            async with self.Session() as session:
+                await show_monitor_home(self.message, session, self.access, edit=False)
+        last_row = answer.call_args.kwargs["reply_markup"].inline_keyboard[-1]
+        self.assertEqual([button.callback_data for button in last_row], ["nv:adm:home"])
+        self.assertEqual(last_row[0].text, "⬅️ بازگشت")
+
+    async def test_back_button_follows_the_admin_configured_label_and_every_callback_stays_bounded(self) -> None:
+        async with self.Session() as session:
+            overview = await monitor_admin_page(session, self.access, now=datetime.now(timezone.utc))
+        markup = admin_page_keyboard(overview, {**DEFAULT_SETTINGS, "btn_back": "برگشت به پنل"})
+        self.assertEqual(markup.inline_keyboard[-1][0].text, "برگشت به پنل")
+        self.assertTrue(all(len(button.callback_data.encode()) <= 64 for row in markup.inline_keyboard for button in row))
+
+    async def test_config_screens_go_back_to_the_monitor_home(self) -> None:
+        stub = SimpleNamespace(id=1, test_enabled=False, config_key=None, is_public=False, public_name="", config_name="")
+        self.assertEqual(target_keyboard(stub).inline_keyboard[-1][0].callback_data, "cma:home:0")
+        with patch.object(admin, "monitor_config_choices", AsyncMock(return_value=MonitorConfigPage((), None))), \
+             patch.object(admin, "safe_edit_text", new_callable=AsyncMock) as render:
+            async with self.Session() as session:
+                await admin._config_picker(self.message, session, self.access, after_id=0)
+        self.assertEqual(render.call_args.kwargs["reply_markup"].inline_keyboard[-1][0].callback_data, "cma:home:0")
 
     async def asyncSetUp(self) -> None:
         await super().asyncSetUp()

@@ -13,7 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot.connection_status_admin_ui import (
     MonitorCommand, monitor_error, parse_monitor_callback, show_monitor_home, show_monitor_target,
 )
-from app.bot.connection_status_ui import MonitorAdminLabel, bot_monitor_access, button, config_picker_text, monitor_text
+from app.bot.connection_status_ui import MONITOR_HOME_CALLBACK, MonitorAdminLabel, bot_monitor_access, button, config_picker_text, monitor_text
+from app.bot.keyboards import back_button
 from app.bot.handlers.connection_status_admin_input import CANCEL_CODE, MonitorInput
 from app.bot.nav_input import ask_text
 from app.bot.tg_utils import safe_edit_text
@@ -64,7 +65,9 @@ async def _config_picker(message: Message, session: AsyncSession, access: Monito
     rows = [[button(("⚪ " if choice.issue else "") + choice.name, f"cma:pick:{choice.config_key}")] for choice in page.choices]
     if page.next_offset is not None:
         rows.append([button("صفحهٔ بعد", f"cma:hosts:{page.next_offset}")])
-    rows.append([button("بازگشت", "cma:home:0")])
+    ui = await get_all_settings(session)
+    await session.commit()
+    rows.append([back_button(ui, MONITOR_HOME_CALLBACK)])
     await safe_edit_text(message, config_picker_text(page), reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
 
 
