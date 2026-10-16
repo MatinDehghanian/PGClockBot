@@ -37,7 +37,6 @@
   },
   "admin.main": {
     "⭐ باشگاه مشتریان": "adm_loyalty",
-    "📡 وضعیت از دید سرور": "connection_status",
     "🔄 شروع مجدد": "home",
     "🔵📦 سرویس‌های من": "services",
     "🛠 پنل ادمین": "admin",
@@ -117,7 +116,6 @@
   },
   "admin.preview": {
     "⭐ باشگاه مشتریان": "adm_loyalty",
-    "📡 وضعیت از دید سرور": "connection_status",
     "🔵📦 سرویس‌های من": "services",
     "🛠 بازگشت به پنل ادمین": "admin",
     "🟡👛 کیف پول": "wallet",
@@ -178,7 +176,6 @@
   },
   "reseller.main": {
     "⭐ باشگاه مشتریان": "res_loyalty",
-    "📡 وضعیت از دید سرور": "connection_status",
     "🔄 شروع مجدد": "home",
     "🔵📦 سرویس‌های من": "services",
     "🟡👛 کیف پول": "wallet",
@@ -209,7 +206,6 @@
   },
   "shop_owner.main_bot": {
     "⭐ باشگاه مشتریان": "loyalty",
-    "📡 وضعیت از دید سرور": "connection_status",
     "🔄 شروع مجدد": "home",
     "🔵📦 سرویس‌های من": "services",
     "🟡👛 کیف پول": "wallet",
@@ -228,7 +224,6 @@
   },
   "user.main": {
     "⭐ باشگاه مشتریان": "loyalty",
-    "📡 وضعیت از دید سرور": "connection_status",
     "🔄 شروع مجدد": "home",
     "🔵📦 سرویس‌های من": "services",
     "🟡👛 کیف پول": "wallet",
@@ -238,8 +233,18 @@
   },
   "user.main_new": {
     "⭐ باشگاه مشتریان": "loyalty",
-    "📡 وضعیت از دید سرور": "connection_status",
     "🔄 شروع مجدد": "home",
+    "🟡👛 کیف پول": "wallet",
+    "🟢🛒 خرید سرویس": "shop",
+    "🟣🎧 پشتیبانی": "support",
+    "🤝 درخواست نمایندگی": "reseller_apply"
+  },
+  "user.main_with_status": {
+    "⭐ باشگاه مشتریان": "loyalty",
+    "📡 وضعیت از دید سرور": "connection_status",
+    "📡 وضعیت سرورها": "connection_status",
+    "🔄 شروع مجدد": "home",
+    "🔵📦 سرویس‌های من": "services",
     "🟡👛 کیف پول": "wallet",
     "🟢🛒 خرید سرویس": "shop",
     "🟣🎧 پشتیبانی": "support",

@@ -32,10 +32,18 @@ from tests.bot_ui_snapshots import (
 Markup = InlineKeyboardMarkup | ReplyKeyboardMarkup
 _ALL_SHOP_PERMS = ",".join(key for key, _label in FEATURE_PERMS)
 _LONG_LIST_SIZE = 60
+STATUS_MENU_ORDER = "shop,services,connection_status,wallet,support,loyalty,reseller_apply"
 
 
 def default_ui() -> dict[str, str]:
     return dict(DEFAULT_SETTINGS)
+
+
+def status_enabled_ui() -> dict[str, str]:
+    """Defaults plus the connection status button, which installs may still have on."""
+    ui = default_ui()
+    ui["menu_order"] = STATUS_MENU_ORDER
+    return ui
 
 
 def sample_plan(plan_id: int = 3, **overrides: object) -> Plan:
@@ -69,8 +77,12 @@ def sample_service(service_id: int) -> SimpleNamespace:
 
 def _reply_scenarios(ui: dict[str, str]) -> dict[str, Callable[[], Markup]]:
     profile = sample_reseller_profile()
+    status_ui = status_enabled_ui()
     return {
         "reply.main.user_new": lambda: rk.main_reply_keyboard("user", ui=ui),
+        "reply.main.user_with_status": lambda: rk.main_reply_keyboard(
+            "user", has_services=True, ui=status_ui
+        ),
         "reply.main.user_with_services": lambda: rk.main_reply_keyboard(
             "user", has_services=True, ui=ui
         ),

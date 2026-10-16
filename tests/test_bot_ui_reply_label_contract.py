@@ -37,6 +37,7 @@ from tests.test_bot_ui_keyboard_snapshots import (
     all_scenarios,
     default_ui,
     sample_reseller_profile,
+    status_enabled_ui,
 )
 
 CONTRACT_NAME = "reply_labels"
@@ -54,11 +55,19 @@ class NavScenario:
     is_reseller_bot: bool = False
     show_reseller_creds: bool = False
     state_data: dict[str, str] = field(default_factory=dict)
+    status_button_on: bool = False
 
 
 SCENARIOS: tuple[NavScenario, ...] = (
     NavScenario("user.main", "user", nav.NAV_MAIN, ("reply.main.user_with_services",)),
     NavScenario("user.main_new", "user", nav.NAV_MAIN, ("reply.main.user_new",)),
+    NavScenario(
+        "user.main_with_status",
+        "user",
+        nav.NAV_MAIN,
+        ("reply.main.user_with_status",),
+        status_button_on=True,
+    ),
     NavScenario("user.shop", "user", nav.NAV_SHOP, ("reply.shop",)),
     NavScenario("user.wallet", "user", nav.NAV_WALLET, ("reply.wallet",)),
     NavScenario("user.support", "user", nav.NAV_SUPPORT, ("reply.support",)),
@@ -162,7 +171,7 @@ SCENARIOS: tuple[NavScenario, ...] = (
 
 async def _press(scenario: NavScenario, text: str) -> str | None:
     """Run the production reply filter for *text* and return the resolved action."""
-    ui = default_ui()
+    ui = status_enabled_ui() if scenario.status_button_on else default_ui()
     profile = sample_reseller_profile()
     state = FSMContext(
         storage=MemoryStorage(), key=StorageKey(bot_id=1, chat_id=1, user_id=1)

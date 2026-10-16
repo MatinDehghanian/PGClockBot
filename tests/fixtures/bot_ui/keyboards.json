@@ -840,26 +840,20 @@
       ],
       [
         {
-          "callback_data": "csp:refresh",
-          "text": "📡 وضعیت از دید سرور"
-        },
-        {
           "callback_data": "wallet:home",
           "style": "primary",
           "text": "🟡👛 کیف پول"
-        }
-      ],
-      [
+        },
         {
           "callback_data": "support:home",
           "text": "🟣🎧 پشتیبانی"
-        },
-        {
-          "callback_data": "loy:home",
-          "text": "⭐ باشگاه مشتریان"
         }
       ],
       [
+        {
+          "callback_data": "loy:home",
+          "text": "⭐ باشگاه مشتریان"
+        },
         {
           "callback_data": "resapply:home",
           "text": "🤝 درخواست نمایندگی"
@@ -2568,24 +2562,19 @@
       ],
       [
         {
-          "text": "📡 وضعیت از دید سرور"
-        },
-        {
           "style": "primary",
           "text": "🟡👛 کیف پول"
-        }
-      ],
-      [
+        },
         {
           "style": "primary",
           "text": "🟣🎧 پشتیبانی"
-        },
-        {
-          "style": "success",
-          "text": "⭐ باشگاه مشتریان"
         }
       ],
       [
+        {
+          "style": "success",
+          "text": "⭐ باشگاه مشتریان"
+        },
         {
           "text": "🛠 پنل ادمین"
         }
@@ -2616,27 +2605,24 @@
       ],
       [
         {
-          "text": "📡 وضعیت از دید سرور"
-        },
-        {
           "style": "primary",
           "text": "🟡👛 کیف پول"
-        }
-      ],
-      [
+        },
         {
           "style": "primary",
           "text": "🟣🎧 پشتیبانی"
-        },
-        {
-          "style": "success",
-          "text": "⭐ باشگاه مشتریان"
         }
       ],
       [
         {
-          "text": "🤝 درخواست نمایندگی"
+          "style": "success",
+          "text": "⭐ باشگاه مشتریان"
         },
+        {
+          "text": "🤝 درخواست نمایندگی"
+        }
+      ],
+      [
         {
           "text": "🛠 بازگشت به پنل ادمین"
         }
@@ -2662,24 +2648,19 @@
       ],
       [
         {
-          "text": "📡 وضعیت از دید سرور"
-        },
-        {
           "style": "primary",
           "text": "🟡👛 کیف پول"
-        }
-      ],
-      [
+        },
         {
           "style": "primary",
           "text": "🟣🎧 پشتیبانی"
-        },
-        {
-          "style": "success",
-          "text": "⭐ باشگاه مشتریان"
         }
       ],
       [
+        {
+          "style": "success",
+          "text": "⭐ باشگاه مشتریان"
+        },
         {
           "text": "🤝 پنل نماینده"
         }
@@ -2710,27 +2691,24 @@
       ],
       [
         {
-          "text": "📡 وضعیت از دید سرور"
-        },
-        {
           "style": "primary",
           "text": "🟡👛 کیف پول"
-        }
-      ],
-      [
+        },
         {
           "style": "primary",
           "text": "🟣🎧 پشتیبانی"
-        },
-        {
-          "style": "success",
-          "text": "⭐ باشگاه مشتریان"
         }
       ],
       [
         {
-          "text": "🤝 درخواست نمایندگی"
+          "style": "success",
+          "text": "⭐ باشگاه مشتریان"
         },
+        {
+          "text": "🤝 درخواست نمایندگی"
+        }
+      ],
+      [
         {
           "text": "🤝 پنل نماینده"
         }
@@ -2755,24 +2733,21 @@
           "text": "🟢🛒 خرید سرویس"
         },
         {
-          "text": "📡 وضعیت از دید سرور"
+          "style": "primary",
+          "text": "🟡👛 کیف پول"
         }
       ],
       [
-        {
-          "style": "primary",
-          "text": "🟡👛 کیف پول"
-        },
         {
           "style": "primary",
           "text": "🟣🎧 پشتیبانی"
-        }
-      ],
-      [
+        },
         {
           "style": "success",
           "text": "⭐ باشگاه مشتریان"
-        },
+        }
+      ],
+      [
         {
           "text": "🤝 درخواست نمایندگی"
         }
@@ -2803,7 +2778,50 @@
       ],
       [
         {
-          "text": "📡 وضعیت از دید سرور"
+          "style": "primary",
+          "text": "🟡👛 کیف پول"
+        },
+        {
+          "style": "primary",
+          "text": "🟣🎧 پشتیبانی"
+        }
+      ],
+      [
+        {
+          "style": "success",
+          "text": "⭐ باشگاه مشتریان"
+        },
+        {
+          "text": "🤝 درخواست نمایندگی"
+        }
+      ],
+      [
+        {
+          "text": "🔄 شروع مجدد"
+        }
+      ]
+    ],
+    "kind": "reply",
+    "one_time_keyboard": false,
+    "resize_keyboard": true
+  },
+  "reply.main.user_with_status": {
+    "input_field_placeholder": "از منوی پایین انتخاب کنید…",
+    "is_persistent": false,
+    "keyboard": [
+      [
+        {
+          "style": "primary",
+          "text": "🟢🛒 خرید سرویس"
+        },
+        {
+          "style": "primary",
+          "text": "🔵📦 سرویس‌های من"
+        }
+      ],
+      [
+        {
+          "text": "📡 وضعیت سرورها"
         },
         {
           "style": "primary",
