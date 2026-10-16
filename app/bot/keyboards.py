@@ -30,8 +30,9 @@ DEFAULT_MENU_ORDER = [
     "loyalty",
     "reseller_apply",
 ]
-# Alias kept for callers that distinguish catalog vs active (same set today).
-DEFAULT_ACTIVE_MENU_ORDER = list(DEFAULT_MENU_ORDER)
+# Items active on a fresh install. The connection status button stays in the catalog (the web menu
+# editor offers it from «مخزن») but is off until an admin adds it.
+DEFAULT_ACTIVE_MENU_ORDER = [key for key in DEFAULT_MENU_ORDER if key != CONNECTION_STATUS_MENU_KEY]
 
 # Legacy keys stripped from saved menu_order so old installs drop them from the keyboard.
 # miniapp: MenuButton «Open» only — never ReplyKeyboard / menu DnD / welcome inline.

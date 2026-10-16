@@ -151,8 +151,9 @@ def _restart_footer(ui: dict | None) -> list[tuple[str, str, str]]:
     return [(REPLY_ACTION_HOME, label, "btn_restart")] if label else []
 
 
-def _connection_status_entries(key: str, ui: dict | None) -> list[tuple[str, str]]:
-    if key != CONNECTION_STATUS_MENU_KEY:
+def _connection_status_entries(key: str, ui: dict | None, role: str) -> list[tuple[str, str]]:
+    # Admins reach the same data from «تست و وضعیت اتصال»; the customer view stays in user preview.
+    if key != CONNECTION_STATUS_MENU_KEY or role == Role.ADMIN.value:
         return []
     return [(CONNECTION_STATUS_MENU_KEY, _t(ui, "btn_connection_status"))]
 
@@ -174,7 +175,7 @@ def _reply_user_entries(
     """
     entries: list[tuple[str, str]] = []
     for key in _menu_order(ui):
-        entries.extend(_connection_status_entries(key, ui))
+        entries.extend(_connection_status_entries(key, ui, role))
         if key == "shop":
             entries.append((REPLY_ACTION_SHOP, _t(ui, "btn_shop")))
         elif key == "services" and has_services:

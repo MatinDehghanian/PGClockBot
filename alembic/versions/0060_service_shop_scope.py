@@ -1,7 +1,7 @@
 """Store the selling shop on each service and add the shop membership table.
 
 Revision ID: 0060_service_shop_scope
-Revises: 0058_monitor_subscription_configs
+Revises: 0059_status_menu_default_off
 
 Backfill (first run only, bounded keyset batches, SQLite and PostgreSQL):
 
@@ -24,7 +24,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "0060_service_shop_scope"
-down_revision: Union[str, None] = "0058_monitor_subscription_configs"
+down_revision: Union[str, None] = "0059_status_menu_default_off"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

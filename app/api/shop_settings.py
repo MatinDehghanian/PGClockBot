@@ -51,9 +51,9 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         return RedirectResponse(url, status_code=303)
 
     def _menu_tab_context(values: dict) -> dict:
-        from app.bot.keyboards import DEFAULT_MENU_ORDER
+        from app.bot.keyboards import DEFAULT_ACTIVE_MENU_ORDER, DEFAULT_MENU_ORDER
 
-        order_raw = values.get("menu_order") or ",".join(DEFAULT_MENU_ORDER)
+        order_raw = values.get("menu_order") or ",".join(DEFAULT_ACTIVE_MENU_ORDER)
         order = [p.strip() for p in order_raw.split(",") if p.strip()]
         if "referral" in order and "loyalty" not in order:
             order = ["loyalty" if k == "referral" else k for k in order]

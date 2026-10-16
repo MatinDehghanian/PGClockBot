@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot.connection_status_ui import STATUS_LABELS, button, checked_time, monitor_text
 from app.services.connection_status import PROBE_LABEL, PublicConnectionPage
 from app.services.connection_status_policy import is_fresh
+from app.services.connection_status_texts import LEGACY_MONITOR_TEXTS, MONITOR_TEXT_DEFAULTS
 from app.services.users import get_all_settings
 
 
@@ -23,7 +24,11 @@ class MonitorPublicLabel(BaseFilter):
         if not message.text:
             return False
         ui = await get_all_settings(session)
-        return message.text.strip() == ui["btn_connection_status"].strip()
+        label = ui["btn_connection_status"].strip()
+        accepted = {label}
+        if label == MONITOR_TEXT_DEFAULTS["btn_connection_status"]:
+            accepted.add(LEGACY_MONITOR_TEXTS["btn_connection_status"])
+        return message.text.strip() in accepted
 
 
 def public_status_text(page: PublicConnectionPage, ui: dict[str, str], *, now: datetime) -> str:

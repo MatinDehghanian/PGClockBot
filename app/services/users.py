@@ -16,7 +16,7 @@ from app.config import get_settings
 from app.db.models import BotUser, Order, Role, Setting, UserService
 from app.services.button_styles import default_settings as button_style_defaults
 from app.services.button_styles import setting_group_fields as button_style_setting_fields
-from app.services.connection_status_texts import CONNECTION_STATUS_MENU_KEY, MONITOR_TEXT_DEFAULTS, readable_monitor_texts
+from app.services.connection_status_texts import MONITOR_TEXT_DEFAULTS, readable_monitor_texts
 from app.services.user_purge import purge_user_references
 
 logger = logging.getLogger("pgclock.users")
@@ -909,7 +909,7 @@ DEFAULT_SETTINGS = {
     "menu_layout": "compact",
     "nav_mode": "inline",
     "wallet_topup_presets": "50000,100000,200000,500000",
-    "menu_order": f"shop,services,{CONNECTION_STATUS_MENU_KEY},wallet,support,loyalty,reseller_apply",
+    "menu_order": "shop,services,wallet,support,loyalty,reseller_apply",
     "pg_username_prefix": "clk",
     "pg_username_suffix": "",
     "pg_username_pattern": "{prefix}_{random}{suffix}",
