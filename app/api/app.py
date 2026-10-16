@@ -3598,7 +3598,11 @@ def create_api_app(lifespan=None) -> FastAPI:
             if not platform_may_review_payment(payment, order_row):
                 return _redirect_msg(
                     "/finance?tab=payments",
-                    err="پرداخت‌ها و شارژهای فروشگاه فقط توسط نماینده همان فروشگاه تأیید می‌شود",
+                    err=(
+                        "شارژ کیف پول فروشگاه فقط توسط نماینده همان فروشگاه تأیید می‌شود"
+                        if payment.is_wallet_topup
+                        else "پرداخت‌های فروشگاه فقط توسط نماینده همان فروشگاه تأیید می‌شود"
+                    ),
                 )
         if payment.status != PaymentStatus.PENDING.value:
             return _redirect_msg("/finance?tab=payments", err="این پرداخت قابل تأیید نیست")
@@ -3677,7 +3681,11 @@ def create_api_app(lifespan=None) -> FastAPI:
             if not platform_may_review_payment(payment, order_row):
                 return _redirect_msg(
                     "/finance?tab=payments",
-                    err="پرداخت‌ها و شارژهای فروشگاه فقط توسط نماینده همان فروشگاه رد می‌شود",
+                    err=(
+                        "شارژ کیف پول فروشگاه فقط توسط نماینده همان فروشگاه رد می‌شود"
+                        if payment.is_wallet_topup
+                        else "پرداخت‌های فروشگاه فقط توسط نماینده همان فروشگاه رد می‌شود"
+                    ),
                 )
         try:
             await reject_payment(session, payment, reviewer_tg=0, note="web reject")
