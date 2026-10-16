@@ -141,7 +141,7 @@ async def _resapply_home_keyboard(session: AsyncSession, ui: dict) -> InlineKeyb
                 callback_data="menu:home",
                 ui=ui,
                 label_key="btn_back",
-                style=kb._style(ui, "back"),
+                style_id="back",
             )
         ]
     )
@@ -193,7 +193,7 @@ async def _resapply_plan_list_keyboard(
                 callback_data=back_callback,
                 ui=ui,
                 label_key="btn_back",
-                style=kb._style(ui, "back"),
+                style_id="back",
             )
         ]
     )
@@ -1312,7 +1312,7 @@ async def resapply_plan(
                 callback_data=back_cb,
                 ui=ui,
                 label_key="btn_back",
-                style=kb._style(ui, "back"),
+                style_id="back",
             )
         ],
     ]

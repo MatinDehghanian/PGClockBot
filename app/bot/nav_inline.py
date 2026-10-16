@@ -15,7 +15,7 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 
-from app.bot.keyboards import _ikb, _style, _t
+from app.bot.keyboards import _ikb, _t
 
 logger = logging.getLogger(__name__)
 
@@ -263,7 +263,7 @@ def wallet_topup_presets_keyboard(ui: dict | None = None) -> InlineKeyboardMarku
             format_toman(n),
             callback_data=f"nv:w:amt:{n}",
             ui=ui,
-            style=_style(ui, "wallet_topup", fallback="primary"),
+            style_id="wallet_topup", style_fallback="primary",
         )
         for n in presets[:8]
     ]
@@ -276,7 +276,7 @@ def wallet_topup_presets_keyboard(ui: dict | None = None) -> InlineKeyboardMarku
                 "✍ مبلغ دیگر",
                 callback_data="nv:w:amt:custom",
                 ui=ui,
-                style=_style(ui, "wallet_topup", fallback="primary"),
+                style_id="wallet_topup", style_fallback="primary",
             )
         ]
     )
@@ -287,7 +287,7 @@ def wallet_topup_presets_keyboard(ui: dict | None = None) -> InlineKeyboardMarku
                 callback_data="nv:w:home",
                 ui=ui,
                 label_key="btn_back",
-                style=_style(ui, "back"),
+                style_id="back",
             )
         ]
     )
@@ -320,7 +320,7 @@ def topup_methods_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
                     callback_data=cb,
                     ui=ui,
                     label_key=label_key,
-                    style=_style(ui, style_key, fallback="primary"),
+                    style_id=style_key, style_fallback="primary",
                 )
             ]
         )
@@ -331,7 +331,7 @@ def topup_methods_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
                 callback_data="nv:w:topup",
                 ui=ui,
                 label_key="btn_back",
-                style=_style(ui, "back"),
+                style_id="back",
             )
         ]
     )
@@ -346,14 +346,14 @@ def wallet_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
                 callback_data="nv:w:topup",
                 ui=ui,
                 label_key="btn_wallet_topup",
-                style=_style(ui, "wallet_topup", fallback="primary"),
+                style_id="wallet_topup", style_fallback="primary",
             ),
             _ikb(
                 _t(ui, "btn_wallet_tx") or "📜 تراکنش‌ها",
                 callback_data="nv:w:tx",
                 ui=ui,
                 label_key="btn_wallet_tx",
-                style=_style(ui, "wallet_tx"),
+                style_id="wallet_tx",
             ),
         ],
         [
@@ -362,7 +362,7 @@ def wallet_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
                 callback_data="menu:home",
                 ui=ui,
                 label_key="btn_back",
-                style=_style(ui, "back"),
+                style_id="back",
             )
         ],
     ]
@@ -381,14 +381,14 @@ def support_hub_keyboard(
                 callback_data="nv:s:new",
                 ui=ui,
                 label_key="btn_support_new",
-                style=_style(ui, "support_new", fallback="primary"),
+                style_id="support_new", style_fallback="primary",
             ),
             _ikb(
                 _t(ui, "btn_support_list") or "📋 تیکت‌های من",
                 callback_data="nv:s:list",
                 ui=ui,
                 label_key="btn_support_list",
-                style=_style(ui, "support_list"),
+                style_id="support_list",
             ),
         ]
     ]
@@ -401,7 +401,7 @@ def support_hub_keyboard(
                 callback_data="menu:home",
                 ui=ui,
                 label_key="btn_back",
-                style=_style(ui, "back"),
+                style_id="back",
             )
         ]
     )
@@ -440,7 +440,7 @@ def loyalty_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
             callback_data=cb_map[key],
             ui=ui,
             action=key,
-            style=_style(ui, style_map[key], fallback="primary"),
+            style_id=style_map[key], style_fallback="primary",
         )
         for key, text in entries
         if key in cb_map
@@ -455,7 +455,7 @@ def loyalty_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
                 callback_data="menu:home",
                 ui=ui,
                 label_key="btn_back",
-                style=_style(ui, "back"),
+                style_id="back",
             )
         ]
     )
@@ -471,7 +471,7 @@ def _hub_back_row(
             callback_data=callback_data,
             ui=ui,
             label_key="btn_back",
-            style=_style(ui, "back"),
+            style_id="back",
         )
     ]
 
@@ -509,7 +509,7 @@ def queue_shortcut_row(
                 with_badge("🧾 رسید", payments),
                 callback_data=payments_cb,
                 ui=ui,
-                style=_style(ui, "reject", fallback="danger"),
+                style_id="reject", style_fallback="danger",
             )
         )
     if int(tickets or 0) > 0:
@@ -518,7 +518,7 @@ def queue_shortcut_row(
                 with_badge("🎫 تیکت", tickets),
                 callback_data=tickets_cb,
                 ui=ui,
-                style=_style(ui, "reject", fallback="danger"),
+                style_id="reject", style_fallback="danger",
             )
         )
     if int(cancellations or 0) > 0:
@@ -527,7 +527,7 @@ def queue_shortcut_row(
                 with_badge("📝 لغو", cancellations),
                 callback_data=cancellations_cb,
                 ui=ui,
-                style=_style(ui, "reject", fallback="danger"),
+                style_id="reject", style_fallback="danger",
             )
         )
     return row
@@ -560,7 +560,7 @@ def admin_groups_hub_keyboard(
             callback_data=cb_map[key],
             ui=ui,
             action=key,
-            style=_style(ui, key, fallback="primary"),
+            style_id=key, style_fallback="primary",
         )
         for key, text in _reply_admin_hub_entries(ui)
         if key in cb_map
@@ -614,7 +614,7 @@ def admin_ops_hub_keyboard(
             callback_data=cb_map[key],
             ui=ui,
             action=key,
-            style=_style(ui, key, fallback="primary"),
+            style_id=key, style_fallback="primary",
         )
         for key, text in _reply_admin_ops_entries(ui)
         if key in cb_map
@@ -641,7 +641,7 @@ def admin_people_hub_keyboard(
             callback_data=cb_map[key],
             ui=ui,
             action=key,
-            style=_style(ui, key, fallback="primary"),
+            style_id=key, style_fallback="primary",
         )
         for key, text in _reply_admin_people_entries(
             ui, can_manage_representatives=can_manage_representatives
@@ -672,7 +672,7 @@ def admin_product_hub_keyboard(
             callback_data=cb_map[key],
             ui=ui,
             action=key,
-            style=_style(ui, key, fallback="primary"),
+            style_id=key, style_fallback="primary",
         )
         for key, text in _reply_admin_product_entries(ui, pg_features=pg_features)
         if key in cb_map
@@ -705,7 +705,7 @@ def admin_marketing_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup
             callback_data=cb_map[key],
             ui=ui,
             action=key,
-            style=_style(ui, key, fallback="primary"),
+            style_id=key, style_fallback="primary",
         )
         for key, text in _reply_admin_marketing_entries(ui)
         if key in cb_map
@@ -716,13 +716,13 @@ def admin_marketing_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup
                 GIFT_BUTTON_LABEL,
                 callback_data=GIFT_PANEL_CALLBACK,
                 ui=ui,
-                style=_style(ui, "adm_gift_codes"),
+                style_id="adm_gift_codes",
             ),
             _ikb(
                 CAMPAIGN_BUTTON_LABEL,
                 callback_data=CAMPAIGN_PANEL_CALLBACK,
                 ui=ui,
-                style=_style(ui, "adm_campaigns"),
+                style_id="adm_campaigns",
             ),
         ]
     )
@@ -748,7 +748,7 @@ def admin_system_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
             callback_data=cb_map[key],
             ui=ui,
             action=key,
-            style=_style(ui, key, fallback="primary"),
+            style_id=key, style_fallback="primary",
         )
         for key, text in _reply_admin_system_entries(ui)
         if key in cb_map
@@ -790,7 +790,7 @@ def pg_hub_keyboard(
             callback_data=cb_map[key],
             ui=ui,
             action=key,
-            style=_style(ui, key, fallback="primary"),
+            style_id=key, style_fallback="primary",
         )
         for key, text in _pg_submenu_entries(
             ui, features=features, can_create_user=can_create_user
@@ -830,7 +830,7 @@ def admin_loyalty_manage_hub_keyboard(
             callback_data=cb_map[key],
             ui=ui,
             action=key,
-            style=_style(ui, key, fallback="primary"),
+            style_id=key, style_fallback="primary",
         )
         for key, text in _admin_loyalty_submenu_entries(
             ui, include_tiers=include_tiers
@@ -866,7 +866,7 @@ def reseller_manage_hub_keyboard(
             callback_data=f"nv:res:ra:{key}",
             ui=ui,
             action=key,
-            style=_style(ui, key, fallback="primary"),
+            style_id=key, style_fallback="primary",
         )
         for key, text in entries
     ]
@@ -929,7 +929,7 @@ def reseller_main_bot_hub_keyboard(
             callback_data=f"nv:res:ra:{REPLY_ACTION_CREDS}",
             ui=ui,
             action=REPLY_ACTION_CREDS,
-            style=_style(ui, REPLY_ACTION_CREDS, fallback="primary"),
+            style_id=REPLY_ACTION_CREDS, style_fallback="primary",
         )
     ]
     if show_pg:
@@ -939,7 +939,7 @@ def reseller_main_bot_hub_keyboard(
                 callback_data="nv:adm:pg",
                 ui=ui,
                 action=REPLY_ACTION_ADMIN_PG,
-                style=_style(ui, REPLY_ACTION_ADMIN_PG, fallback="primary"),
+                style_id=REPLY_ACTION_ADMIN_PG, style_fallback="primary",
             )
         )
     buttons.extend(
@@ -948,7 +948,7 @@ def reseller_main_bot_hub_keyboard(
             callback_data=f"nv:res:ra:{key}",
             ui=ui,
             action=key,
-            style=_style(ui, key, fallback="primary"),
+            style_id=key, style_fallback="primary",
         )
         for key, text in _reseller_capacity_entries(profile)
     )
@@ -979,7 +979,7 @@ def admin_users_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
             callback_data=cb_map[key],
             ui=ui,
             action=key,
-            style=_style(ui, key, fallback="primary"),
+            style_id=key, style_fallback="primary",
         )
         for key, text in _admin_users_submenu_entries(ui)
         if key in cb_map
@@ -1006,7 +1006,7 @@ def admin_resellers_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup
             callback_data=cb_map[key],
             ui=ui,
             action=key,
-            style=_style(ui, key, fallback="primary"),
+            style_id=key, style_fallback="primary",
         )
         for key, text in _admin_resellers_submenu_entries(ui)
         if key in cb_map
@@ -1041,7 +1041,7 @@ def admin_settings_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
                 callback_data=cb,
                 ui=ui,
                 action=key,
-                style=_style(ui, key, fallback="primary"),
+                style_id=key, style_fallback="primary",
             )
         )
     markup = _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:system")
@@ -1065,7 +1065,7 @@ def admin_backup_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
             callback_data=cb_map[key],
             ui=ui,
             action=key,
-            style=_style(ui, key, fallback="primary"),
+            style_id=key, style_fallback="primary",
         )
         for key, text in _admin_backup_submenu_entries(ui)
         if key in cb_map
@@ -1082,7 +1082,7 @@ def admin_broadcast_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup
             callback_data=f"adm:broadcast:aud:{key.replace('bc_aud_', '', 1)}",
             ui=ui,
             action=key,
-            style=_style(ui, key, fallback="primary"),
+            style_id=key, style_fallback="primary",
         )
         for key, text in _admin_broadcast_submenu_entries(ui)
         if key.startswith("bc_aud_")
@@ -1111,7 +1111,7 @@ def admin_plans_audience_hub_keyboard(ui: dict | None = None) -> InlineKeyboardM
             callback_data=cb_map[key],
             ui=ui,
             action=key,
-            style=_style(ui, key, fallback="primary"),
+            style_id=key, style_fallback="primary",
         )
         for key, text in _admin_plans_audience_entries(ui)
         if key in cb_map
@@ -1143,7 +1143,7 @@ def admin_plans_kind_hub_keyboard(
             PLANS_VIEW_LABEL,
             callback_data=f"nv:adm:plans:list:{audience}",
             ui=ui,
-            style=_style(ui, "adm_plans_view", fallback="primary"),
+            style_id="adm_plans_view", style_fallback="primary",
         ),
         *(
             _ikb(
@@ -1151,7 +1151,7 @@ def admin_plans_kind_hub_keyboard(
                 callback_data=cb_map[key],
                 ui=ui,
                 action=key,
-                style=_style(ui, key, fallback="primary"),
+                style_id=key, style_fallback="primary",
             )
             for key, text in _admin_plans_list_entries(ui)
             if key in cb_map
@@ -1171,7 +1171,7 @@ def admin_plans_add_type_hub_keyboard(
             callback_data=f"nv:adm:ra:{key}",
             ui=ui,
             action=key,
-            style=_style(ui, key, fallback="primary"),
+            style_id=key, style_fallback="primary",
         )
         for key, text in _admin_plans_add_type_entries(audience, ui)
     ]
@@ -1192,7 +1192,7 @@ def reseller_settings_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMark
             callback_data=f"nv:res:ra:{key}",
             ui=ui,
             action=key,
-            style=_style(ui, key, fallback="primary"),
+            style_id=key, style_fallback="primary",
         )
         for key, text in _reseller_settings_submenu_entries(ui)
     ]
@@ -1208,7 +1208,7 @@ def reseller_plans_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
             callback_data=f"nv:res:ra:{key}",
             ui=ui,
             action=key,
-            style=_style(ui, key, fallback="primary"),
+            style_id=key, style_fallback="primary",
         )
         for key, text in _reseller_plans_submenu_entries(ui)
     ]
@@ -1237,14 +1237,14 @@ def service_card_keyboard(
                 callback_data=f"svc:renew:{sid}",
                 ui=ui,
                 label_key="btn_renew",
-                style=_style(ui, "svc_renew", fallback="primary"),
+                style_id="svc_renew", style_fallback="primary",
             ),
             _ikb(
                 _t(ui, "btn_svc_addon") or "➕ حجم / زمان",
                 callback_data=f"svc:addon:{sid}",
                 ui=ui,
                 label_key="btn_svc_addon",
-                style=_style(ui, "svc_addon", fallback="primary"),
+                style_id="svc_addon", style_fallback="primary",
             ),
         ],
         [
@@ -1253,14 +1253,14 @@ def service_card_keyboard(
                 callback_data=f"svc:link:{sid}",
                 ui=ui,
                 label_key="btn_sub_link",
-                style=_style(ui, "svc_link"),
+                style_id="svc_link",
             ),
             _ikb(
                 _t(ui, "btn_guides") or _t(ui, "btn_guide") or "📘 آموزش اتصال",
                 callback_data=f"guide:svc:{sid}",
                 ui=ui,
                 label_key="btn_guides",
-                style=_style(ui, "guides", fallback="primary"),
+                style_id="guides", style_fallback="primary",
             ),
         ],
         [
@@ -1268,7 +1268,7 @@ def service_card_keyboard(
                 "♻️ رفرش وضعیت",
                 callback_data=f"svc:view:{sid}",
                 ui=ui,
-                style=_style(ui, "svc_refresh"),
+                style_id="svc_refresh",
             ),
             _ikb(
                 "⚙️ تنظیمات خودکار",
@@ -1282,7 +1282,7 @@ def service_card_keyboard(
                 "🗑 حذف سرویس",
                 callback_data=f"svc:delask:{sid}",
                 ui=ui,
-                style=_style(ui, "svc_delete", fallback="danger"),
+                style_id="svc_delete", style_fallback="danger",
             ),
         ],
         [
@@ -1291,7 +1291,7 @@ def service_card_keyboard(
                 callback_data="svc:list",
                 ui=ui,
                 label_key="btn_back",
-                style=_style(ui, "back"),
+                style_id="back",
             )
         ],
     ]
@@ -1322,7 +1322,7 @@ def services_list_keyboard(
                 callback_data="menu:home",
                 ui=ui,
                 label_key="btn_back",
-                style=_style(ui, "back"),
+                style_id="back",
             )
         ]
     )

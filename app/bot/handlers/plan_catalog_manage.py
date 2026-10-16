@@ -209,7 +209,7 @@ def _cat_list_markup(
                 callback_data=back_callback,
                 ui=ui,
                 label_key="btn_back",
-                style=kb._style(ui, "back"),
+                style_id="back",
             )
         ]
     )
@@ -257,7 +257,7 @@ def _addon_list_markup(
                 callback_data=back_callback,
                 ui=ui,
                 label_key="btn_back",
-                style=kb._style(ui, "back"),
+                style_id="back",
             )
         ]
     )
