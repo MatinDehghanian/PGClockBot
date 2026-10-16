@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, Order, OrderStatus, Payment, PaymentStatus, Ticket
+from app.services.shop_scope import platform_may_review_payment
 
 logger = logging.getLogger(__name__)
 
@@ -75,11 +76,7 @@ def _payment_in_scope(staff: dict, payment: Payment, order: Order | None) -> boo
     from app.services.shop_scope import ShopScopeError, require_shop_owner_id
 
     if staff.get("role") == "admin":
-        if payment.is_wallet_topup:
-            return True
-        if order and order.reseller_id is not None:
-            return False
-        return True
+        return platform_may_review_payment(payment, order)
     try:
         rid = require_shop_owner_id(staff)
     except ShopScopeError:

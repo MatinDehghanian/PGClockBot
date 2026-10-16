@@ -32,7 +32,7 @@ async def list_broadcast_targets(
     Dual-role shop owners (role=reseller) still receive «کاربران عادی» messages
     because they use the bot as customers too. Admins are excluded from ``users``.
     """
-    q = select(BotUser).where(BotUser.is_blocked.is_(False))
+    q = select(BotUser).where(BotUser.is_blocked.is_(False), BotUser.reseller_id.is_(None))
     if audience == "users":
         q = q.where(BotUser.role.in_([Role.USER.value, Role.RESELLER.value]))
     elif audience == "resellers":
@@ -92,8 +92,11 @@ async def send_broadcast(
     total = 0
     last_id = 0
     while True:
+        # The platform bot token only reaches platform customers; shop customers
+        # belong to their shop's bot.
         q = select(BotUser).where(
             BotUser.is_blocked.is_(False),
+            BotUser.reseller_id.is_(None),
             BotUser.id > last_id,
         )
         if audience == "users":

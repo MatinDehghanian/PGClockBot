@@ -3590,13 +3590,15 @@ def create_api_app(lifespan=None) -> FastAPI:
             order_row = await session.get(Order, payment.order_id)
             if not order_row or order_row.reseller_id != rid:
                 return _redirect_msg("/finance?tab=payments", err="دسترسی به این پرداخت ندارید")
-        elif payment.order_id and not payment.is_wallet_topup:
-            # Platform admin must not approve shop-tenant payments (match bot isolation)
-            order_row = await session.get(Order, payment.order_id)
-            if order_row and order_row.reseller_id is not None:
+        else:
+            # Platform admin must not approve shop-tenant payments or shop wallet top-ups.
+            from app.services.shop_scope import platform_may_review_payment
+
+            order_row = await session.get(Order, payment.order_id) if payment.order_id else None
+            if not platform_may_review_payment(payment, order_row):
                 return _redirect_msg(
-                "/finance?tab=payments",
-                    err="پرداخت‌های فروشگاه فقط توسط نماینده همان فروشگاه تأیید می‌شود",
+                    "/finance?tab=payments",
+                    err="پرداخت‌ها و شارژهای فروشگاه فقط توسط نماینده همان فروشگاه تأیید می‌شود",
                 )
         if payment.status != PaymentStatus.PENDING.value:
             return _redirect_msg("/finance?tab=payments", err="این پرداخت قابل تأیید نیست")
@@ -3668,12 +3670,14 @@ def create_api_app(lifespan=None) -> FastAPI:
             order_row = await session.get(Order, payment.order_id)
             if not order_row or order_row.reseller_id != rid:
                 return _redirect_msg("/finance?tab=payments", err="دسترسی به این پرداخت ندارید")
-        elif payment.order_id and not payment.is_wallet_topup:
-            order_row = await session.get(Order, payment.order_id)
-            if order_row and order_row.reseller_id is not None:
+        else:
+            from app.services.shop_scope import platform_may_review_payment
+
+            order_row = await session.get(Order, payment.order_id) if payment.order_id else None
+            if not platform_may_review_payment(payment, order_row):
                 return _redirect_msg(
-                "/finance?tab=payments",
-                    err="پرداخت‌های فروشگاه فقط توسط نماینده همان فروشگاه رد می‌شود",
+                    "/finance?tab=payments",
+                    err="پرداخت‌ها و شارژهای فروشگاه فقط توسط نماینده همان فروشگاه رد می‌شود",
                 )
         try:
             await reject_payment(session, payment, reviewer_tg=0, note="web reject")
