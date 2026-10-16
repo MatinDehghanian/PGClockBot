@@ -13,7 +13,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
-from app.db.models import BotUser, Role, Setting
+from app.db.models import BotUser, Order, Role, Setting, UserService
 from app.services.button_styles import default_settings as button_style_defaults
 from app.services.button_styles import setting_group_fields as button_style_setting_fields
 from app.services.connection_status_texts import CONNECTION_STATUS_MENU_KEY, MONITOR_TEXT_DEFAULTS, readable_monitor_texts
@@ -378,6 +378,17 @@ def _referral_code() -> str:
     return "".join(secrets.choice(alphabet) for _ in range(8))
 
 
+async def _has_commerce_history(session: AsyncSession, user_id: int) -> bool:
+    """True when the user already owns a service or placed an order (any shop)."""
+    has_service = await session.scalar(
+        select(UserService.id).where(UserService.bot_user_id == user_id).limit(1)
+    )
+    if has_service is not None:
+        return True
+    has_order = await session.scalar(select(Order.id).where(Order.user_id == user_id).limit(1))
+    return has_order is not None
+
+
 async def get_or_create_user(
     session: AsyncSession,
     telegram_id: int,
@@ -430,12 +441,15 @@ async def get_or_create_user(
             else:
                 user.role = Role.USER.value
             changed = True
-        # Sticky first-touch attribution for reseller shop bots
+        # Sticky first-touch attribution for reseller shop bots. A customer who
+        # already bought elsewhere keeps their services and stays out of the shop's
+        # user list: attribution would hand the platform's services to the shop.
         if (
             reseller_owner_id
             and user.reseller_id is None
             and user.id != reseller_owner_id
             and user.role == Role.USER.value
+            and not await _has_commerce_history(session, int(user.id))
         ):
             user.reseller_id = reseller_owner_id
             changed = True
