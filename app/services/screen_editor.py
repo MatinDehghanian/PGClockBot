@@ -13,13 +13,26 @@ from __future__ import annotations
 
 import math
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass
 
+from aiogram.types import MessageEntity
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.button_color_editor import PLATFORM_SCOPE
-from app.services.rich_text import is_button_label_key
-from app.services.screen_titles import has_title, title_setting_key, validate_screen_title
+from app.services.rich_text import is_button_label_key, pack_rich_text
+from app.services.screen_titles import (
+    CAPTION_HIDDEN,
+    CAPTION_SETTING_OVERRIDES,
+    can_hide_caption,
+    caption_setting_key,
+    has_caption,
+    has_title,
+    stored_text,
+    title_setting_key,
+    validate_screen_caption,
+    validate_screen_title,
+)
 from app.services.settings_button_labels import all_btn_field_keys
 from app.services.users import DEFAULT_SETTINGS, get_all_settings, on, set_setting
 
@@ -153,12 +166,67 @@ async def save_button_label(
     await set_setting(session, label_key, stored_value, reseller_id=actor.settings_scope)
 
 
+_TEXT_PARTS = ("title", "caption")
+_UNSAFE_IN_HTML_SETTING = frozenset("<>&")
+
+
+def _screen_text_key(actor: EditorActor, *, screen_id: str, audience: str, part: str) -> str:
+    """The setting behind a menu's title or caption, after checking the actor may edit it."""
+    allowed = has_title(screen_id) if part == "title" else has_caption(screen_id)
+    if part not in _TEXT_PARTS or not allowed or audience not in actor.audiences:
+        raise ValueError("تیتر این منو قابل ویرایش نیست." if part == "title" else "توضیح این منو قابل ویرایش نیست.")
+    return title_setting_key(screen_id) if part == "title" else caption_setting_key(screen_id)
+
+
 async def save_screen_title(
-    session: AsyncSession, actor: EditorActor, *, screen_id: str, audience: str, text: str
+    session: AsyncSession,
+    actor: EditorActor,
+    *,
+    screen_id: str,
+    audience: str,
+    text: str,
+    entities: Sequence[MessageEntity] | None = None,
 ) -> str:
-    """Validate and persist a menu title in the actor's own settings; return the stored title."""
-    if not has_title(screen_id) or audience not in actor.audiences:
-        raise ValueError("تیتر این منو قابل ویرایش نیست.")
+    """Validate and persist a menu title (premium emoji kept) in the actor's own settings."""
+    key = _screen_text_key(actor, screen_id=screen_id, audience=audience, part="title")
     title = validate_screen_title(text)
-    await set_setting(session, title_setting_key(screen_id), title, reseller_id=actor.settings_scope)
+    await set_setting(session, key, stored_text(title, text, entities), reseller_id=actor.settings_scope)
     return title
+
+
+async def save_screen_caption(
+    session: AsyncSession,
+    actor: EditorActor,
+    *,
+    screen_id: str,
+    audience: str,
+    text: str,
+    entities: Sequence[MessageEntity] | None = None,
+) -> str:
+    """Validate and persist the caption under a menu's title in the actor's own settings."""
+    key = _screen_text_key(actor, screen_id=screen_id, audience=audience, part="caption")
+    caption = validate_screen_caption(text)
+    if screen_id in CAPTION_SETTING_OVERRIDES:
+        # This setting is also sent as an HTML card when it has no premium emoji.
+        if _UNSAFE_IN_HTML_SETTING & set(caption):
+            raise ValueError("این توضیح نمی‌تواند < یا > یا & داشته باشد.")
+        stored = pack_rich_text(text, entities) if entities else caption
+    else:
+        stored = stored_text(caption, text, entities)
+    await set_setting(session, key, stored, reseller_id=actor.settings_scope)
+    return caption
+
+
+async def hide_screen_caption(session: AsyncSession, actor: EditorActor, *, screen_id: str, audience: str) -> None:
+    key = _screen_text_key(actor, screen_id=screen_id, audience=audience, part="caption")
+    if not can_hide_caption(screen_id):
+        raise ValueError("توضیح این منو را نمی‌شود پنهان کرد.")
+    await set_setting(session, key, CAPTION_HIDDEN, reseller_id=actor.settings_scope)
+
+
+async def reset_screen_text(
+    session: AsyncSession, actor: EditorActor, *, screen_id: str, audience: str, part: str
+) -> None:
+    """Put a menu's title or caption back to the text the bot ships with."""
+    key = _screen_text_key(actor, screen_id=screen_id, audience=audience, part=part)
+    await set_setting(session, key, DEFAULT_SETTINGS.get(key, ""), reseller_id=actor.settings_scope)

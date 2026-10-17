@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.db.models import BotUser, Order, Role, Setting, UserService
 from app.services.button_styles import default_settings as button_style_defaults
-from app.services.screen_titles import title_setting_defaults
+from app.services.screen_titles import screen_text_defaults
 from app.services.button_styles import setting_group_fields as button_style_setting_fields
 from app.services.connection_status_texts import MONITOR_TEXT_DEFAULTS, readable_monitor_texts
 from app.services.user_purge import purge_user_references
@@ -1098,7 +1098,7 @@ DEFAULT_SETTINGS = {
     "service_import_admins": "",
 }
 DEFAULT_SETTINGS.update(button_style_defaults())
-DEFAULT_SETTINGS.update(title_setting_defaults())
+DEFAULT_SETTINGS.update(screen_text_defaults())
 DEFAULT_SETTINGS.update(MONITOR_TEXT_DEFAULTS)
 
 # field kinds: text | textarea | toggle | select | number | image

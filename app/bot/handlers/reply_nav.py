@@ -28,7 +28,13 @@ from app.services.service_scope import list_customer_services
 from app.services.users import current_shop_reseller_id, get_all_settings
 from app.services.redact import user_safe_error
 from app.services import bot_feedback_texts as feedback
-from app.services.screen_titles import screen_heading, screen_title
+from app.services.screen_titles import (
+    screen_caption,
+    screen_heading,
+    screen_title_html,
+    screen_title_raw,
+    with_caption,
+)
 
 logger = logging.getLogger(__name__)
 router = Router(name="reply_nav")
@@ -458,7 +464,7 @@ async def open_services_list(
                 ui=ui,
             )
         return
-    body = f"{screen_heading(ui, 'c.services')}\nیکی را انتخاب کنید:" + kb.list_overflow_line(
+    body = with_caption(screen_heading(ui, "c.services"), screen_caption(ui, "c.services")) + kb.list_overflow_line(
         len(services)
     )
     from app.bot.nav_inline import services_list_keyboard
@@ -497,9 +503,8 @@ async def open_wallet_home(
 
     ui = await get_all_settings(session)
     bal = await wallet_balance_for_context(session, db_user)
-    hint = feedback.PICK_OPTION_BELOW
     text = format_message(
-        screen_title(ui, "c.wallet"),
+        screen_title_html(ui, "c.wallet"),
         "\n".join(
             [
                 kv_line(
@@ -508,7 +513,7 @@ async def open_wallet_home(
                     f"<b>{format_toman(bal, get_settings().currency)}</b>",
                 ),
                 "",
-                hint,
+                screen_caption(ui, "c.wallet"),
             ]
         ),
     )
@@ -608,7 +613,7 @@ async def open_support_home(
     default_support = "تیکت جدید بسازید یا تیکت‌های قبلی را ببینید."
     text, send_kw = outbound_setting_text(
         ui.get("support_text") or default_support,
-        title=screen_title(ui, "c.support"),
+        title_raw=screen_title_raw(ui, "c.support"),
     )
     contact_rows: list[list[InlineKeyboardButton]] = []
     for c in contacts:
@@ -815,7 +820,7 @@ async def _open_main_bot_reseller_hub(
     await present_nav_panel(
         message,
         text=format_message(
-            screen_title(ui, "r.home"), feedback.PICK_SECTION_BELOW
+            screen_title_html(ui, "r.home"), screen_caption(ui, "r.home")
         ),
         inline=reseller_main_bot_hub_keyboard(profile, ui, show_pg=show_pg),
         state=state,
@@ -881,10 +886,7 @@ async def open_reseller_home(
             exc_info=True,
         )
         queue = PendingCounts()
-    body = format_message(
-        screen_title(ui, "r.home"),
-        feedback.PICK_SECTION_BELOW,
-    )
+    body = format_message(screen_title_html(ui, "r.home"), screen_caption(ui, "r.home"))
     queue_line = format_queue_summary(queue)
     if queue_line:
         body = f"{body}\n\n{queue_line}"
@@ -992,8 +994,7 @@ async def open_pg_home(
         feats = frozenset()
         can_create = False
     body = (
-        f"{screen_heading(ui, 'a.pg')}\n"
-        + feedback.PICK_SECTION_BELOW
+        with_caption(screen_heading(ui, "a.pg"), screen_caption(ui, "a.pg"))
     )
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_ADMIN_PG, push=push)
@@ -1170,11 +1171,8 @@ async def present_admin_plans_audience(
     ui = await get_all_settings(session)
     if state is not None:
         await state.update_data(_adm_plans_aud=audience, _adm_plans_kind=None)
-    title = screen_heading(ui, "a.plans.users" if audience == "users" else "a.plans.resellers")
-    body = (
-        f"{title}\n"
-        + "فهرست پلن‌ها را با «مشاهده پلن‌ها» ببینید؛ افزودن/کاتالوگ از دکمه‌های زیر."
-    )
+    screen_id = "a.plans.users" if audience == "users" else "a.plans.resellers"
+    body = with_caption(screen_heading(ui, screen_id), screen_caption(ui, screen_id))
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_ADMIN_PLANS_KIND, push=True)
     await present_nav_panel(
@@ -1202,14 +1200,13 @@ async def open_admin_users_hub(
     ui = await get_all_settings(session)
     counts = await admin_customer_counts(session)
     total, blocked, orders = counts["users"], counts["blocked"], counts["orders"]
-    hint = feedback.PICK_OPTION_BELOW
     body = (
         f"{screen_heading(ui, 'a.users')}\n\n"
         f"کل: {total}\n"
         f"مسدود: {blocked}\n"
         f"سفارش‌ها: {orders}\n\n"
-        f"{hint}"
-    )
+        f"{screen_caption(ui, 'a.users')}"
+    ).rstrip()
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_ADMIN_USERS, push=push)
     await present_nav_panel(
@@ -1238,8 +1235,7 @@ async def open_admin_resellers_hub(
         return
     ui = await get_all_settings(session)
     body = (
-        f"{screen_heading(ui, 'a.resellers')}\n"
-        + feedback.PICK_SECTION_BELOW
+        with_caption(screen_heading(ui, "a.resellers"), screen_caption(ui, "a.resellers"))
     )
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_ADMIN_RESELLERS, push=push)
@@ -1268,8 +1264,7 @@ async def open_admin_settings_hub(
         return
     ui = await get_all_settings(session)
     body = (
-        f"{screen_heading(ui, 'a.settings')}\n"
-        + "یک بخش را از دکمه‌های زیر انتخاب کنید.\nظاهر، رنگ، گزارش روزانه → وب‌پنل."
+        with_caption(screen_heading(ui, "a.settings"), screen_caption(ui, "a.settings"))
     )
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_ADMIN_SETTINGS, push=push)
@@ -1341,8 +1336,7 @@ async def open_admin_broadcast_hub(
         return
     ui = await get_all_settings(session)
     body = (
-        f"{screen_heading(ui, 'a.broadcast')}\n"
-        + "مخاطب را از دکمه‌های زیر انتخاب کنید:"
+        with_caption(screen_heading(ui, "a.broadcast"), screen_caption(ui, "a.broadcast"))
     )
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_ADMIN_BROADCAST, push=push)
@@ -1373,8 +1367,7 @@ async def open_admin_plans_hub(
     await state.set_state(None)
     await state.update_data(_adm_plans_aud=None, _adm_plans_kind=None)
     body = (
-        f"{screen_heading(ui, 'a.plans')} (مثل وب‌پنل /plans)\n"
-        + "مخاطب یا ابزار کاتالوگ را از دکمه‌های زیر انتخاب کنید."
+        with_caption(screen_heading(ui, "a.plans"), screen_caption(ui, "a.plans"))
     )
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_ADMIN_PLANS_AUDIENCE, push=push)
@@ -1421,14 +1414,8 @@ async def open_reseller_settings_hub(
     from app.bot.nav_inline import present_nav_panel, reseller_settings_hub_keyboard
 
     ui = await get_all_settings(session)
-    body = (
-        f"{screen_heading(ui, 'r.settings')}\n"
-        f"ربات: <code>{bot_line}</code>\n"
-        + (
-            "بخش‌ها از دکمه‌های زیر — فقط محدودهٔ همین فروشگاه.\n"
-            "ظاهر، رنگ، گزارش روزانه → وب‌پنل."
-            "ظاهر، رنگ، گزارش روزانه → وب‌پنل."
-        )
+    body = with_caption(
+        screen_heading(ui, "r.settings"), f"ربات: <code>{bot_line}</code>", screen_caption(ui, "r.settings")
     )
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_RESELLER_SETTINGS, push=push)
@@ -1483,13 +1470,7 @@ async def open_reseller_plans_hub(
     ui = await get_all_settings(session, reseller_id=owner_id)
     plans = await _list_plans(session, owner_id)
     list_body = "هنوز پلنی نساخته‌اید." if not plans else f"تعداد: {len(plans)}"
-    hub_text = (
-        f"{screen_heading(ui, 'r.plans')}\n"
-        + (
-            "ساخت و کاتالوگ از دکمه‌های زیر."
-            "برچسب دسته و بسته حجم/زمان از کیبورد — مثل وب‌پنل."
-        )
-    )
+    hub_text = with_caption(screen_heading(ui, "r.plans"), screen_caption(ui, "r.plans"))
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_RESELLER_PLANS, push=push)
     hub = reseller_plans_hub_keyboard(ui)
@@ -1534,10 +1515,7 @@ async def open_admin_home(
         queue = await pending_counts(session, shop_id=None)
     except Exception:
         logger.warning("admin home pending_counts failed", exc_info=True)
-    body = (
-        f"{screen_heading(ui, 'a.home')}\n<code>v{local_version}</code>\n\n"
-        "یک گروه را از دکمه‌های زیر انتخاب کنید."
-    )
+    body = with_caption(f"{screen_heading(ui, 'a.home')}\n<code>v{local_version}</code>\n", screen_caption(ui, "a.home"))
     queue_line = format_queue_summary(queue)
     if queue_line:
         body = f"{body}\n\n{queue_line}"
@@ -1582,7 +1560,7 @@ async def open_admin_ops_hub(
     except Exception:
         logger.warning("admin ops pending_counts failed", exc_info=True)
         queue = PendingCounts()
-    body = f"{screen_heading(ui, 'a.ops')}\nداشبورد، سفارش‌ها، رسیدها و تیکت‌ها."
+    body = with_caption(screen_heading(ui, "a.ops"), screen_caption(ui, "a.ops"))
     queue_line = format_queue_summary(queue)
     if queue_line:
         # Cancel count is summary-only (no bot cancel inbox yet).
@@ -1620,7 +1598,7 @@ async def open_admin_people_hub(
     _, can_reps = await nav._platform_admin_menu_flags(
         session, db_user, is_reseller_bot=is_reseller_bot
     )
-    body = f"{screen_heading(ui, 'a.people')}\nکاربران و نمایندگان."
+    body = with_caption(screen_heading(ui, "a.people"), screen_caption(ui, "a.people"))
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_ADMIN_PEOPLE, push=push)
     await present_nav_panel(
@@ -1652,7 +1630,7 @@ async def open_admin_product_hub(
     pg_feats, _ = await nav._platform_admin_menu_flags(
         session, db_user, is_reseller_bot=is_reseller_bot
     )
-    body = f"{screen_heading(ui, 'a.product')}\nپلن‌ها و عملیات پاسارگارد."
+    body = with_caption(screen_heading(ui, "a.product"), screen_caption(ui, "a.product"))
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_ADMIN_PRODUCT, push=push)
     await present_nav_panel(
@@ -1679,7 +1657,7 @@ async def open_admin_system_hub(
     ):
         return
     ui = await get_all_settings(session)
-    body = f"{screen_heading(ui, 'a.system')}\nتنظیمات، بکاپ و پیش‌نمایش."
+    body = with_caption(screen_heading(ui, "a.system"), screen_caption(ui, "a.system"))
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_ADMIN_SYSTEM, push=push)
     await present_nav_panel(

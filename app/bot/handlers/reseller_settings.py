@@ -37,7 +37,7 @@ from app.services.settings_button_labels import (
     shop_button_subs,
 )
 from app.services import bot_feedback_texts as feedback
-from app.services.screen_titles import screen_heading
+from app.services.screen_titles import screen_caption, screen_heading, with_caption
 from app.bot.handlers.button_colors import COLORS_SECTION
 from app.bot.handlers.button_colors import entry_button as colors_entry_button
 from app.bot.handlers.screen_editor import entry_button as editor_entry_button
@@ -375,12 +375,8 @@ HubPanel = tuple[str, InlineKeyboardMarkup | None]
 async def _hub_panel(session: AsyncSession, profile) -> HubPanel:
     ui = await get_all_settings(session, reseller_id=profile.user_id)
     bot_line = f"@{profile.bot_username}" if profile.bot_username else feedback.BOT_TOKEN_NOT_SET
-    text = (
-        f"{screen_heading(ui, 'r.settings')}\n\n"
-        f"ربات: <code>{bot_line}</code>\n"
-        "بخش را از دکمه‌های پنل اینلاین انتخاب کنید.\n"
-        "فقط محدودهٔ همین فروشگاه — بدون تنظیمات پلتفرم.\n"
-        "ظاهر، رنگ، گزارش روزانه → وب‌پنل."
+    text = with_caption(
+        screen_heading(ui, "r.settings"), f"ربات: <code>{bot_line}</code>", screen_caption(ui, "r.settings")
     )
     rows: list[list[InlineKeyboardButton]] = []
     from app.services.resellers import get_reseller_panel_base_url

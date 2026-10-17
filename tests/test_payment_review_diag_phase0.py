@@ -287,7 +287,11 @@ class PayrevHandlerWiringTests(unittest.TestCase):
         self.assertIn("تشخیص", tpl)
 
     def test_backup_env_clarity_bot_and_web(self):
-        bot = Path("app/bot/handlers/admin_backup.py").read_text(encoding="utf-8")
+        from app.bot.handlers.admin_backup import _hub_text
+        from app.services.users import DEFAULT_SETTINGS
+
+        backups = [{"id": "b1", "size_human": "1 MB", "app_version": "1", "include_env": True}]
+        bot = _hub_text(backups, dict(DEFAULT_SETTINGS))
         web = Path("app/web/templates/_settings_backup.html").read_text(encoding="utf-8")
         self.assertIn("شامل .env", bot)
         self.assertIn("بدون .env", bot)

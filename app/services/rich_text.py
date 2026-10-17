@@ -10,6 +10,7 @@ Button labels (``btn_*``) pack custom-emoji entities so keyboards can set Bot AP
 
 from __future__ import annotations
 
+import html
 import json
 import logging
 import re
@@ -204,6 +205,34 @@ def first_custom_emoji_id(entities: Sequence[MessageEntity] | None) -> str | Non
         if _entity_type_str(e) == "custom_emoji" and e.custom_emoji_id:
             return str(e.custom_emoji_id)
     return None
+
+
+def custom_emoji_html(
+    text: str, entities: Sequence[MessageEntity] | None, *, start: int = 0, end: int | None = None
+) -> str:
+    """HTML for ``text`` between UTF-16 offsets ``start`` and ``end``: escaped, premium emoji as ``<tg-emoji>``.
+
+    Only custom emoji are kept; other entities (bold, links, …) become plain text.
+    """
+    body = text or ""
+    total = utf16_len(body)
+    end = total if end is None else max(start, min(end, total))
+    spans = sorted(
+        (int(e.offset), int(e.offset) + int(e.length), str(e.custom_emoji_id))
+        for e in entities or []
+        if _entity_type_str(e) == "custom_emoji" and e.custom_emoji_id and int(e.length) > 0
+    )
+    parts: list[str] = []
+    cursor = start
+    for span_start, span_end, emoji_id in spans:
+        if span_start < cursor or span_end > end:
+            continue
+        parts.append(html.escape(_utf16_slice(body, cursor, span_start), quote=False))
+        glyph = html.escape(_utf16_slice(body, span_start, span_end), quote=False)
+        parts.append(f'<tg-emoji emoji-id="{html.escape(emoji_id)}">{glyph}</tg-emoji>')
+        cursor = span_end
+    parts.append(html.escape(_utf16_slice(body, cursor, end), quote=False))
+    return "".join(parts)
 
 
 def strip_custom_emoji_spans(

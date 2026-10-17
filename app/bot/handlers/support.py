@@ -20,7 +20,7 @@ from app.services.support_contacts import (
 from app.services.tickets import create_ticket, get_ticket, list_user_tickets, reply_ticket
 from app.services.users import get_all_settings
 from app.services import bot_feedback_texts as feedback
-from app.services.screen_titles import screen_title
+from app.services.screen_titles import screen_title_raw
 
 router = Router(name="support")
 
@@ -43,7 +43,7 @@ async def support_home(callback: CallbackQuery, session: AsyncSession):
     default_support = "تیکت جدید بسازید یا تیکت‌های قبلی را ببینید."
     text, send_kw = outbound_setting_text(
         ui.get("support_text") or default_support,
-        title=screen_title(ui, "c.support"),
+        title_raw=screen_title_raw(ui, "c.support"),
     )
     if callback.message:
         from app.bot.nav_inline import support_hub_keyboard

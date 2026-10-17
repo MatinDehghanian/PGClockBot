@@ -4,7 +4,8 @@
 ``shop_router`` (shop owner, own shop only, shop bot only) share the views.
 Callback data ``ed:<a|r>:<view>[:<screen>[:<button>[:<color>]]]``:
 ``h`` switches, ``f1``/``f0`` feature on/off (owner), ``m1``/``m0`` my edit
-mode, ``o`` a menu's buttons, ``b`` one button, ``t`` new text, ``c`` color;
+mode, ``o`` a menu's buttons, ``b`` one button, ``t`` new text, ``c`` color,
+``n``/``nr`` new/default title, ``d``/``dh``/``dr`` new/hidden/default caption;
 every view but the switches needs my edit mode to be on.
 Button numbers are positions in ``screen_buttons``; every step rebuilds the
 real menu and re-checks the position and permissions before acting.
@@ -48,12 +49,24 @@ from app.services.screen_editor import (
     can_edit_label,
     edit_mode_store,
     is_editor_enabled,
+    hide_screen_caption,
+    reset_screen_text,
     save_button_label,
+    save_screen_caption,
     save_screen_title,
     set_editor_enabled,
     validate_button_label,
 )
-from app.services.screen_titles import TITLE_MAX_LENGTH, has_title, screen_title
+from app.services.screen_titles import (
+    CAPTION_MAX_LENGTH,
+    CAPTION_MAX_LINES,
+    TITLE_MAX_LENGTH,
+    can_hide_caption,
+    has_caption,
+    has_title,
+    screen_caption_plain,
+    screen_title,
+)
 from app.services.users import DEFAULT_SETTINGS, get_all_settings
 
 logger = logging.getLogger(__name__)
@@ -79,6 +92,16 @@ TEXT_FEATURE_OFF = "قابلیت ویرایش منوها خاموش است."
 TEXT_SHOP_BOT_ONLY = "حالت ویرایش فروشگاه فقط داخل ربات فروشگاه کار می‌کند."
 TEXT_LABEL_SAVED = "✅ متن دکمه ذخیره شد."
 TEXT_TITLE_SAVED = "✅ تیتر منو ذخیره شد."
+TEXT_CAPTION_SAVED = "✅ توضیح منو ذخیره شد."
+TEXT_CAPTION_HIDDEN = "✅ توضیح این منو دیگر نمایش داده نمی‌شود."
+TEXT_TITLE_RESET = "✅ تیتر به متن پیش‌فرض برگشت."
+TEXT_CAPTION_RESET = "✅ توضیح به متن پیش‌فرض برگشت."
+BTN_HIDE_CAPTION = "🙈 نمایش نده"
+BTN_RESET_TITLE = "↺ تیتر پیش‌فرض"
+BTN_RESET_CAPTION = "↺ توضیح پیش‌فرض"
+CAPTION_PREVIEW_LENGTH = 28
+# Screen-text actions that change a setting right away, with the toast they answer.
+_SCREEN_TEXT_ACTIONS = {"nr": ("title", TEXT_TITLE_RESET), "dr": ("caption", TEXT_CAPTION_RESET)}
 TEXT_MENU_CHANGED = "این منو تغییر کرده؛ دوباره باز کنید."
 TEXT_EDIT_MODE_ON = f"✅ حالت ویرایش روشن شد؛ تا {EDIT_MODE_MINUTES} دقیقه بعد از آخرین تغییر روشن می‌ماند."
 TEXT_EDIT_MODE_OFF = "حالت ویرایش خاموش شد."
@@ -111,7 +134,7 @@ def parse_request(data: str | None) -> EditRequest | None:
     try:
         if view in {"h", "f1", "f0", "m1", "m0"} and not rest:
             return EditRequest(audience, view)
-        if view in {"o", "n"} and len(rest) == 1 and rest[0] in SCREENS:
+        if view in {"o", "n", "nr", "d", "dh", "dr"} and len(rest) == 1 and rest[0] in SCREENS:
             return EditRequest(audience, view, screen_id=rest[0])
         if view in {"b", "t"} and len(rest) == 2 and rest[0] in SCREENS:
             return EditRequest(audience, view, screen_id=rest[0], index=int(rest[1]))
@@ -169,12 +192,27 @@ def panel_view(
         for index, button in enumerate(buttons)
         if _editable_parts(actor, button, ui) != (False, False)
     ]
+    text_rows = []
     if has_title(spec.id):
-        rows.insert(0, [_button(f"📝 تیتر: {screen_title(ui, spec.id)}", _cb(actor, "n", spec.id))])
+        text_rows.append([_button(f"📝 تیتر: {screen_title(ui, spec.id)}", _cb(actor, "n", spec.id))])
+    if has_caption(spec.id):
+        text_rows.append([_button(f"📄 توضیح: {_caption_preview(ui, spec.id)}", _cb(actor, "d", spec.id))])
+    rows = text_rows + rows
     rows.append([_button(BTN_BACK_TO_MENU, spec.reopen_callback)])
-    hint = "روی تیتر یا یک دکمه بزنید تا آن را عوض کنید." if len(rows) > 1 else "در این منو چیزی برای ویرایش شما نیست."
+    hint = (
+        "روی تیتر، توضیح یا یک دکمه بزنید تا آن را عوض کنید."
+        if len(rows) > 1
+        else "در این منو چیزی برای ویرایش شما نیست."
+    )
     text = f"✏️ <b>ویرایش: {html.escape(spec.title)}</b>\n{hint}\n⏱ حالت ویرایش تا {minutes_left} دقیقهٔ دیگر روشن است."
     return text, InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def _caption_preview(ui: dict[str, str], screen_id: str) -> str:
+    caption = " ".join(screen_caption_plain(ui, screen_id).split())
+    if not caption:
+        return "(نمایش داده نمی‌شود)"
+    return caption if len(caption) <= CAPTION_PREVIEW_LENGTH else caption[: CAPTION_PREVIEW_LENGTH - 1] + "…"
 
 
 def button_view(
@@ -291,8 +329,11 @@ async def _screen_views(
         minutes_left = edit_mode_store.minutes_left(actor)
         await _show(callback, panel_view(actor, screen.spec, screen.buttons, screen.ui, minutes_left=minutes_left))
         return
-    if request.view == "n":
-        await _ask_title(callback, actor, screen, state)
+    if request.view in {"n", "d"}:
+        await _ask_screen_text(callback, actor, screen, state, part="title" if request.view == "n" else "caption")
+        return
+    if request.view in {"nr", "dr", "dh"}:
+        await _change_screen_text(callback, session, actor, screen, request.view)
         return
     button = _button_at(screen, request.index)
     if request.view == "t":
@@ -330,7 +371,7 @@ async def _ask_label(
     if not can_edit_label(actor, button.label_key):
         raise ValueError("متن این دکمه قابل ویرایش نیست.")
     await state.set_state(EditorStates.shop_label if actor.for_reseller else EditorStates.owner_label)
-    await state.update_data(ed_screen=screen.spec.id, ed_title=False, ed_index=index, ed_key=button.label_key)
+    await state.update_data(ed_screen=screen.spec.id, ed_kind="label", ed_index=index, ed_key=button.label_key)
     await callback.answer()
     prompt = (
         f"✏️ متن جدید دکمهٔ «{html.escape(button.text)}» را بفرستید.\n"
@@ -341,19 +382,53 @@ async def _ask_label(
     await _show(callback, (prompt, InlineKeyboardMarkup(inline_keyboard=rows)))
 
 
-async def _ask_title(callback: CallbackQuery, actor: EditorActor, screen: _Screen, state: FSMContext) -> None:
-    if not has_title(screen.spec.id):
-        raise ValueError("تیتر این منو قابل ویرایش نیست.")
+async def _ask_screen_text(
+    callback: CallbackQuery, actor: EditorActor, screen: _Screen, state: FSMContext, *, part: str
+) -> None:
+    spec_id = screen.spec.id
+    if not (has_title(spec_id) if part == "title" else has_caption(spec_id)):
+        raise ValueError("تیتر این منو قابل ویرایش نیست." if part == "title" else "توضیح این منو قابل ویرایش نیست.")
     await state.set_state(EditorStates.shop_label if actor.for_reseller else EditorStates.owner_label)
-    await state.update_data(ed_screen=screen.spec.id, ed_title=True, ed_index=None, ed_key=None)
+    await state.update_data(ed_screen=spec_id, ed_kind=part, ed_index=None, ed_key=None)
     await callback.answer()
-    prompt = (
-        f"📝 تیتر جدید منوی «{html.escape(screen_title(screen.ui, screen.spec.id))}» را بفرستید.\n"
-        f"یک خط، حداکثر {TITLE_MAX_LENGTH} کاراکتر، بدون &lt; و &gt; و &amp;.\n"
-        "برای انصراف: انصراف"
-    )
-    rows = [[_button(BTN_BACK, _cb(actor, "o", screen.spec.id))]]
+    if part == "title":
+        prompt = (
+            f"📝 تیتر جدید منوی «{html.escape(screen_title(screen.ui, spec_id))}» را بفرستید.\n"
+            f"یک خط، حداکثر {TITLE_MAX_LENGTH} کاراکتر، بدون &lt; و &gt; و &amp;. ایموجی پریمیوم هم می‌شود.\n"
+            "برای انصراف: انصراف"
+        )
+        rows = [[_button(BTN_RESET_TITLE, _cb(actor, "nr", spec_id))]]
+    else:
+        current = screen_caption_plain(screen.ui, spec_id)
+        shown = html.escape(current) if current else "(نمایش داده نمی‌شود)"
+        prompt = (
+            f"📄 توضیح زیر تیتر منوی «{html.escape(screen_title(screen.ui, spec_id))}»:\n"
+            f"<blockquote>{shown}</blockquote>\n"
+            f"متن جدید را بفرستید؛ حداکثر {CAPTION_MAX_LINES} خط و {CAPTION_MAX_LENGTH} کاراکتر. ایموجی پریمیوم هم می‌شود.\n"
+            "برای انصراف: انصراف"
+        )
+        rows = [[_button(BTN_HIDE_CAPTION, _cb(actor, "dh", spec_id))]] if can_hide_caption(spec_id) else []
+        rows.append([_button(BTN_RESET_CAPTION, _cb(actor, "dr", spec_id))])
+    rows.append([_button(BTN_BACK, _cb(actor, "o", spec_id))])
     await _show(callback, (prompt, InlineKeyboardMarkup(inline_keyboard=rows)))
+
+
+async def _change_screen_text(
+    callback: CallbackQuery, session: AsyncSession, actor: EditorActor, screen: _Screen, view: str
+) -> None:
+    """Reset the title or caption, or hide the caption, then show the menu's panel again."""
+    spec = screen.spec
+    if view == "dh":
+        await hide_screen_caption(session, actor, screen_id=spec.id, audience=spec.audience.value)
+        toast = TEXT_CAPTION_HIDDEN
+    else:
+        part, toast = _SCREEN_TEXT_ACTIONS[view]
+        await reset_screen_text(session, actor, screen_id=spec.id, audience=spec.audience.value, part=part)
+    edit_mode_store.extend(actor)
+    screen = await _load_screen(session, actor, spec.id)
+    await callback.answer(toast)
+    minutes_left = edit_mode_store.minutes_left(actor)
+    await _show(callback, panel_view(actor, screen.spec, screen.buttons, screen.ui, minutes_left=minutes_left))
 
 
 async def _handle(
@@ -402,8 +477,8 @@ async def _save_label_message(message: Message, state: FSMContext, session: Asyn
         # The person left the editor by tapping a menu button: stop waiting and let navigation run.
         await state.set_state(None)
         raise SkipHandler()
-    if data.get("ed_title"):
-        await _save_title_message(message, state, session, actor, screen_id, raw)
+    if data.get("ed_kind") in {"title", "caption"}:
+        await _save_screen_text_message(message, state, session, actor, screen_id, part=data["ed_kind"])
         return
     try:
         screen = await _load_screen(session, actor, screen_id)
@@ -425,20 +500,24 @@ async def _save_label_message(message: Message, state: FSMContext, session: Asyn
     await _answer_with_panel(message, session, actor, screen_id, TEXT_LABEL_SAVED)
 
 
-async def _save_title_message(
-    message: Message, state: FSMContext, session: AsyncSession, actor: EditorActor, screen_id: str, raw: str
+async def _save_screen_text_message(
+    message: Message, state: FSMContext, session: AsyncSession, actor: EditorActor, screen_id: str, *, part: str
 ) -> None:
     spec = SCREENS.get(screen_id)
+    save = save_screen_title if part == "title" else save_screen_caption
     try:
         if spec is None:
             raise ValueError(TEXT_MENU_CHANGED)
-        await save_screen_title(session, actor, screen_id=screen_id, audience=spec.audience.value, text=raw)
+        await save(
+            session, actor, screen_id=screen_id, audience=spec.audience.value,
+            text=message.text or "", entities=message.entities,
+        )
         edit_mode_store.extend(actor)
     except ValueError as exc:
         await message.answer(str(exc))
         return
     await state.set_state(None)
-    await _answer_with_panel(message, session, actor, screen_id, TEXT_TITLE_SAVED)
+    await _answer_with_panel(message, session, actor, screen_id, TEXT_TITLE_SAVED if part == "title" else TEXT_CAPTION_SAVED)
 
 
 async def _answer_with_panel(

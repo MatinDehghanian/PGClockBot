@@ -47,7 +47,7 @@ from app.services.users import current_shop_reseller_id, get_all_settings, get_s
 from app.services.redact import user_safe_error
 from app.services import bot_feedback_texts as feedback
 from app.services.button_color_editor import PLATFORM_SCOPE
-from app.services.screen_titles import screen_heading, screen_title
+from app.services.screen_titles import screen_caption, screen_heading, screen_title_html, with_caption
 
 router = Router(name="loyalty")
 
@@ -210,7 +210,7 @@ async def build_loyalty_text(session: AsyncSession, db_user: BotUser) -> str:
             kv_line("📅", "امتیاز این ماه", str(month)),
         ]
     )
-    return format_message(screen_title(ui, "c.loyalty"), "\n".join(lines))
+    return format_message(screen_title_html(ui, "c.loyalty"), with_caption("\n".join(lines), screen_caption(ui, "c.loyalty")))
 
 # ---------------------------------------------------------------------------
 # Staff ACL — fail closed; never use Owner PG from reseller path
@@ -277,7 +277,7 @@ async def open_loyalty_home_message(
 
     ui = await get_all_settings(session)
     if not await loyalty_enabled(session, reseller_id=current_shop_reseller_id()):
-        disabled = format_message(screen_title(ui, "c.loyalty"), "این بخش فعلاً غیرفعال است.")
+        disabled = format_message(screen_title_html(ui, "c.loyalty"), "این بخش فعلاً غیرفعال است.")
         if state is not None:
             await nav.set_nav_level(state, nav.NAV_LOYALTY, push=push)
         await present_inline_only(
@@ -325,7 +325,7 @@ async def open_loyalty_points_message(
     from app.bot.nav_inline import present_inline_only
 
     if not await loyalty_enabled(session, reseller_id=current_shop_reseller_id()):
-        disabled = format_message(screen_title(ui, "c.loyalty"), "این بخش فعلاً غیرفعال است.")
+        disabled = format_message(screen_title_html(ui, "c.loyalty"), "این بخش فعلاً غیرفعال است.")
         await present_inline_only(
             message,
             text=disabled,
@@ -454,7 +454,7 @@ async def open_loyalty_wheel_message(
     from app.bot.nav_inline import present_inline_only
 
     if not await loyalty_enabled(session, reseller_id=current_shop_reseller_id()):
-        disabled = format_message(screen_title(ui, "c.loyalty"), "این بخش فعلاً غیرفعال است.")
+        disabled = format_message(screen_title_html(ui, "c.loyalty"), "این بخش فعلاً غیرفعال است.")
         await present_inline_only(
             message,
             text=disabled,
@@ -614,9 +614,7 @@ async def open_admin_loyalty_hub(
 
     ui = await get_all_settings(session)
     body = (
-        f"{screen_heading(ui, 'a.loyalty')} ({who})\n"
-        f"وضعیت: <b>{status}</b>\n"
-        + feedback.PICK_SECTION_BELOW
+        with_caption(f"{screen_heading(ui, 'a.loyalty')} ({who})", f"وضعیت: <b>{status}</b>", screen_caption(ui, "a.loyalty"))
         + f"{extra}"
     )
     if state is not None:
@@ -1081,7 +1079,7 @@ async def loyalty_home(callback: CallbackQuery, session: AsyncSession, db_user: 
         if callback.message:
             await safe_edit_text(
                 callback.message,
-                format_message(screen_title(ui, "c.loyalty"), "این بخش فعلاً غیرفعال است."),
+                format_message(screen_title_html(ui, "c.loyalty"), "این بخش فعلاً غیرفعال است."),
                 reply_markup=None,
             )
         return
@@ -1812,7 +1810,7 @@ async def staff_save_referral_text(
             message,
             session,
             db_user,
-            format_message(screen_title(ui, "a.loyalty"), feedback.CANCELLED_BACK_TO_HUB),
+            format_message(screen_title_html(ui, "a.loyalty"), feedback.CANCELLED_BACK_TO_HUB),
             can_tiers=can_tiers,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
@@ -1831,7 +1829,7 @@ async def staff_save_referral_text(
         message,
         session,
         db_user,
-        format_message(screen_title(ui, "a.loyalty"), "متن دعوت ذخیره شد ✅"),
+        format_message(screen_title_html(ui, "a.loyalty"), "متن دعوت ذخیره شد ✅"),
         can_tiers=can_tiers,
         is_reseller_bot=is_reseller_bot,
         reseller_owner_id=reseller_owner_id,

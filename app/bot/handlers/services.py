@@ -24,7 +24,7 @@ from app.services.users import current_shop_reseller_id, get_all_settings
 from app.services.redact import user_safe_error
 from app.services.service_live_info import fetch_live_service_info
 from app.services import bot_feedback_texts as feedback
-from app.services.screen_titles import screen_heading
+from app.services.screen_titles import screen_caption, screen_heading, with_caption
 
 router = Router(name="services")
 
@@ -320,7 +320,8 @@ async def svc_list(
         )
         await safe_edit_text(
             callback.message,
-            screen_heading(ui, "c.services") + kb.list_overflow_line(len(services)),
+            with_caption(screen_heading(ui, "c.services"), screen_caption(ui, "c.services"))
+            + kb.list_overflow_line(len(services)),
             reply_markup=markup,
         )
 

@@ -35,7 +35,7 @@ from app.services.backup import (
 )
 from app.services.updates import local_version
 from app.services import bot_feedback_texts as feedback
-from app.services.screen_titles import screen_heading
+from app.services.screen_titles import screen_caption, screen_heading
 from app.services.users import get_all_settings
 
 
@@ -90,13 +90,10 @@ def _hub_text(backups: list[dict], ui: dict[str, str] | None = None) -> str:
         screen_heading(ui, "a.backup"),
         f"نسخه: <code>{local_version()}</code>",
         "",
-        "بکاپ کامل = دیتابیس کل پلتفرم (همه فروشگاه‌ها) + آپلودها + یوزر وب.",
-        "پیش‌فرض <b>بدون</b> <code>.env</code> است (مثل زمان‌بندی).",
-        "بکاپ با .env فقط بعد از تأیید امنیتی جداگانه — توکن/اسرار داخل فایل می‌رود.",
-        "حتی بدون .env، فایل ورود وب‌پنل در بکاپ هست.",
-        "قبل از ریستور، بکاپ ایمنی خودکار (با .env) ساخته می‌شود.",
-        "",
     ]
+    caption = screen_caption(ui, "a.backup")
+    if caption:
+        lines.extend([caption, ""])
     if not backups:
         lines.append("هنوز بکاپی نیست.")
     else:

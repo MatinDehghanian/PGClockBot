@@ -33,7 +33,7 @@ from app.bot import menu_nav as nav
 from app.bot.tg_utils import parse_bot_float, parse_bot_int, safe_edit_text
 from app.services.users import get_all_settings, get_setting, on, set_setting
 from app.services import bot_feedback_texts as feedback
-from app.services.screen_titles import screen_heading
+from app.services.screen_titles import screen_caption, screen_heading, with_caption
 
 router = Router(name="admin_plans")
 
@@ -113,14 +113,11 @@ async def sync_plans_reply_keyboard(
         body = feedback.PICK_PLAN_TYPE
     elif level == nav.NAV_ADMIN_PLANS_KIND:
         inline = admin_plans_kind_hub_keyboard(aud, ui)
-        body = (
-            f"{screen_heading(ui, 'a.plans.users')}\n"
-            if aud == "users"
-            else f"{screen_heading(ui, 'a.plans.resellers')}\n"
-        ) + "افزودن/کاتالوگ از دکمه‌های زیر."
+        screen_id = "a.plans.users" if aud == "users" else "a.plans.resellers"
+        body = with_caption(screen_heading(ui, screen_id), screen_caption(ui, screen_id))
     else:
         inline = admin_plans_audience_hub_keyboard(ui)
-        body = f"{screen_heading(ui, 'a.plans')}\nمخاطب یا ابزار کاتالوگ را انتخاب کنید."
+        body = with_caption(screen_heading(ui, "a.plans"), screen_caption(ui, "a.plans"))
     await present_inline_only(message, text=body, inline=inline)
     return
 

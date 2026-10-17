@@ -42,7 +42,7 @@ from app.services.settings_button_labels import (
     shop_button_subs,
 )
 from app.services import bot_feedback_texts as feedback
-from app.services.screen_titles import screen_heading
+from app.services.screen_titles import screen_caption, screen_heading, with_caption
 from app.bot.handlers.button_colors import COLORS_SECTION
 from app.bot.handlers.button_colors import entry_button as colors_entry_button
 
@@ -409,11 +409,8 @@ def _kb(rows: list[list[InlineKeyboardButton]]) -> InlineKeyboardMarkup:
 # ----- render helpers -----
 
 
-_SETTINGS_HUB_CAPTION = "یک بخش را از دکمه‌های زیر انتخاب کنید.\nظاهر، رنگ، گزارش روزانه → وب‌پنل."
-
-
 def _settings_hub_text(ui: dict[str, str] | None) -> str:
-    return f"{screen_heading(ui, 'a.settings')}\n{_SETTINGS_HUB_CAPTION}"
+    return with_caption(screen_heading(ui, "a.settings"), screen_caption(ui, "a.settings"))
 
 
 async def _panel_settings_url(
