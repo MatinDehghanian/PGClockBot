@@ -17,6 +17,13 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from app.bot.edit_mode import editable_screen
 from app.bot.keyboards import _ikb, _t
+from app.bot.reseller_hub_groups import (
+    RESELLER_GROUPS,
+    RESELLER_HOME_CALLBACK,
+    back_callback_for,
+    group_entries,
+    reseller_group,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -860,6 +867,23 @@ def admin_loyalty_manage_hub_keyboard(
     return _pack_hub_keyboard(buttons, ui, back_callback=back_callback)
 
 
+def _reseller_entry_buttons(
+    entries: list[tuple[str, str]], ui: dict | None, badge_for: dict[str, int]
+) -> list[InlineKeyboardButton]:
+    from app.services.admin_counters import with_badge
+
+    return [
+        _ikb(
+            with_badge(text, badge_for.get(key, 0)),
+            callback_data=f"nv:res:ra:{key}",
+            ui=ui,
+            action=key,
+            style_id=key, style_fallback="primary",
+        )
+        for key, text in entries
+    ]
+
+
 @editable_screen("r.home")
 def reseller_manage_hub_keyboard(
     profile,
@@ -870,26 +894,24 @@ def reseller_manage_hub_keyboard(
     pending_tickets: int = 0,
     pending_cancellations: int = 0,
 ) -> InlineKeyboardMarkup:
-    """Reseller shop-bot manage hub (Wave D) — ``nv:res:ra:<action>``."""
+    """Shop panel home: queue shortcuts, then one button per group that has an entry."""
     from app.bot.reply_keyboards import _reseller_submenu_entries
     from app.services.admin_counters import with_badge
 
     entries = _reseller_submenu_entries(
         profile, can_add_representative=can_add_representative, ui=ui
     )
-    badge_for = {
-        "res_payments": pending_payments,
-        "res_tickets": pending_tickets,
-    }
+    group_badge = {"daily": pending_payments + pending_tickets}
     buttons = [
         _ikb(
-            with_badge(text, badge_for.get(key, 0)),
-            callback_data=f"nv:res:ra:{key}",
+            with_badge(_t(ui, group.label_key), group_badge.get(group.id, 0)),
+            callback_data=group.callback,
             ui=ui,
-            action=key,
-            style_id=key, style_fallback="primary",
+            label_key=group.label_key,
+            style_id=group.label_key.removeprefix("btn_"), style_fallback="primary",
         )
-        for key, text in entries
+        for group in RESELLER_GROUPS
+        if group_entries(group, entries)
     ]
     rows: list[list[InlineKeyboardButton]] = []
     shortcuts = queue_shortcut_row(
@@ -907,6 +929,30 @@ def reseller_manage_hub_keyboard(
         rows.append(buttons[i : i + 2])
     rows.append(_hub_back_row(ui, callback_data="menu:home"))
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+@editable_screen(lambda group_id, *_a, **_kw: f"r.{group_id}")
+def reseller_group_hub_keyboard(
+    group_id: str,
+    profile,
+    ui: dict | None = None,
+    *,
+    can_add_representative: bool = False,
+    pending_payments: int = 0,
+    pending_tickets: int = 0,
+) -> InlineKeyboardMarkup:
+    """One shop panel group; «بازگشت» returns to the panel home."""
+    from app.bot.reply_keyboards import _reseller_submenu_entries
+
+    group = reseller_group(group_id)
+    entries = _reseller_submenu_entries(
+        profile, can_add_representative=can_add_representative, ui=ui
+    )
+    shown = group_entries(group, entries) if group else []
+    badge_for = {"res_payments": pending_payments, "res_tickets": pending_tickets}
+    return _pack_hub_keyboard(
+        _reseller_entry_buttons(shown, ui, badge_for), ui, back_callback=RESELLER_HOME_CALLBACK
+    )
 
 
 def reseller_access_card_keyboard(
@@ -1236,7 +1282,7 @@ def reseller_settings_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMark
         )
         for key, text in _reseller_settings_submenu_entries(ui)
     ]
-    return _pack_hub_keyboard(buttons, ui, back_callback="nv:res:home")
+    return _pack_hub_keyboard(buttons, ui, back_callback=back_callback_for("res_settings"))
 
 
 @editable_screen("r.plans")
@@ -1253,7 +1299,7 @@ def reseller_plans_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
         )
         for key, text in _reseller_plans_submenu_entries(ui)
     ]
-    return _pack_hub_keyboard(buttons, ui, back_callback="nv:res:home")
+    return _pack_hub_keyboard(buttons, ui, back_callback=back_callback_for("res_plans"))
 
 
 @editable_screen("c.service")

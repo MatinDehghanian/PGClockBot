@@ -247,6 +247,10 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "bc_aud_resellers", "label": "همگانی: نمایندگان", "group": "پیام همگانی", "default": ""},
     {"id": "bc_aud_admins", "label": "همگانی: ادمین‌ها", "group": "پیام همگانی", "default": ""},
     # ── Reseller hub (shop bot / reseller panel) ────────────────────────────
+    {"id": "res_grp_daily", "label": "گروه کارهای روزانه", "group": "منوی نماینده", "default": "success"},
+    {"id": "res_grp_customers", "label": "گروه مشتریان", "group": "منوی نماینده", "default": "success"},
+    {"id": "res_grp_shop", "label": "گروه فروشگاه من", "group": "منوی نماینده", "default": "primary"},
+    {"id": "res_grp_account", "label": "گروه حساب من", "group": "منوی نماینده", "default": "primary"},
     {"id": "res_dash", "label": "خانه نماینده", "group": "منوی نماینده", "default": "success"},
     {"id": "res_users", "label": "مشتریان نماینده", "group": "منوی نماینده", "default": "success"},
     {"id": "res_add_rep", "label": "افزودن نماینده", "group": "منوی نماینده", "default": "primary"},

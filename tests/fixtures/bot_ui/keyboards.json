@@ -906,68 +906,21 @@
       ],
       [
         {
-          "callback_data": "nv:res:ra:res_dash",
+          "callback_data": "nv:res:grp:daily",
           "style": "success",
-          "text": "🏠 خانه نماینده"
+          "text": "📥 کارهای روزانه (۳)"
         },
         {
-          "callback_data": "nv:res:ra:res_users",
+          "callback_data": "nv:res:grp:customers",
           "style": "success",
-          "text": "👥 مشتریان من"
+          "text": "👥 مشتریان"
         }
       ],
       [
         {
-          "callback_data": "nv:res:ra:res_add_rep",
+          "callback_data": "nv:res:grp:shop",
           "style": "primary",
-          "text": "➕ افزودن نماینده"
-        },
-        {
-          "callback_data": "nv:res:ra:res_reports",
-          "style": "success",
-          "text": "📈 گزارشات"
-        }
-      ],
-      [
-        {
-          "callback_data": "nv:res:ra:res_stats",
-          "style": "success",
-          "text": "📊 آمار"
-        },
-        {
-          "callback_data": "nv:res:ra:res_plans",
-          "style": "primary",
-          "text": "💎 پلن‌های فروش"
-        }
-      ],
-      [
-        {
-          "callback_data": "nv:res:ra:res_orders",
-          "style": "success",
-          "text": "🛒 سفارش‌های مشتریان"
-        },
-        {
-          "callback_data": "nv:res:ra:res_payments",
-          "style": "success",
-          "text": "🧾 رسیدهای در انتظار (۲)"
-        }
-      ],
-      [
-        {
-          "callback_data": "nv:res:ra:res_tickets",
-          "style": "success",
-          "text": "🎫 تیکت‌های مشتریان (۱)"
-        },
-        {
-          "callback_data": "nv:res:ra:res_loyalty",
-          "style": "success",
-          "text": "⭐ باشگاه مشتریان"
-        }
-      ],
-      [
-        {
-          "callback_data": "nv:res:ra:res_settings",
-          "text": "⚙️ تنظیمات فروشگاه"
+          "text": "🏪 فروشگاه من"
         }
       ],
       [
@@ -983,68 +936,26 @@
     "inline_keyboard": [
       [
         {
-          "callback_data": "nv:res:ra:res_dash",
+          "callback_data": "nv:res:grp:daily",
           "style": "success",
-          "text": "🏠 خانه نماینده"
+          "text": "📥 کارهای روزانه"
         },
         {
-          "callback_data": "nv:res:ra:res_users",
+          "callback_data": "nv:res:grp:customers",
           "style": "success",
-          "text": "👥 مشتریان من"
+          "text": "👥 مشتریان"
         }
       ],
       [
         {
-          "callback_data": "nv:res:ra:res_billing",
-          "style": "success",
-          "text": "💰 کیف پول PAYG"
-        },
-        {
-          "callback_data": "nv:res:ra:res_reports",
-          "style": "success",
-          "text": "📈 گزارشات"
-        }
-      ],
-      [
-        {
-          "callback_data": "nv:res:ra:res_stats",
-          "style": "success",
-          "text": "📊 آمار"
-        },
-        {
-          "callback_data": "nv:res:ra:res_plans",
+          "callback_data": "nv:res:grp:shop",
           "style": "primary",
-          "text": "💎 پلن‌های فروش"
-        }
-      ],
-      [
-        {
-          "callback_data": "nv:res:ra:res_orders",
-          "style": "success",
-          "text": "🛒 سفارش‌های مشتریان"
+          "text": "🏪 فروشگاه من"
         },
         {
-          "callback_data": "nv:res:ra:res_payments",
-          "style": "success",
-          "text": "🧾 رسیدهای در انتظار"
-        }
-      ],
-      [
-        {
-          "callback_data": "nv:res:ra:res_tickets",
-          "style": "success",
-          "text": "🎫 تیکت‌های مشتریان"
-        },
-        {
-          "callback_data": "nv:res:ra:res_loyalty",
-          "style": "success",
-          "text": "⭐ باشگاه مشتریان"
-        }
-      ],
-      [
-        {
-          "callback_data": "nv:res:ra:res_settings",
-          "text": "⚙️ تنظیمات فروشگاه"
+          "callback_data": "nv:res:grp:account",
+          "style": "primary",
+          "text": "💼 حساب من"
         }
       ],
       [
@@ -1078,7 +989,7 @@
       ],
       [
         {
-          "callback_data": "nv:res:home",
+          "callback_data": "nv:res:grp:shop",
           "text": "⬅️ بازگشت"
         }
       ]
@@ -1150,7 +1061,7 @@
       ],
       [
         {
-          "callback_data": "nv:res:home",
+          "callback_data": "nv:res:grp:shop",
           "text": "⬅️ بازگشت"
         }
       ]

@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot import keyboards as kb
 from app.bot import menu_nav as nav
 from app.bot.menu_nav import restore_main_reply
+from app.bot.reseller_hub_groups import back_callback_for
 from app.bot.reply_keyboards import _reply_admin_marketing_entries
 from app.db.models import BotUser, Order, Role
 from app.services.formatting import format_message
@@ -837,55 +838,20 @@ async def open_reseller_home(
     reseller_owner_id: int | None,
     push: bool = True,
 ) -> None:
+    from app.bot.handlers.reseller_hub import load_reseller_hub
     from app.bot.nav_inline import present_nav_panel, reseller_manage_hub_keyboard
-    from app.services.reseller_access import load_reseller_actor
+    from app.services.admin_counters import format_queue_summary
 
     if not is_reseller_bot:
         await _open_main_bot_reseller_hub(
             message, session, db_user, state, push=push
         )
         return
-    owner_id, profile = await load_reseller_actor(
-        session,
-        db_user,
-        is_reseller_bot=is_reseller_bot,
-        reseller_owner_id=reseller_owner_id,
-    )
-    if not owner_id or not profile:
+    hub = await load_reseller_hub(session, db_user, reseller_owner_id=reseller_owner_id)
+    if hub is None:
         await message.answer(feedback.RESELLER_ACCESS_NOT_FOUND)
         return
-    ui = await get_all_settings(session)
-    can_add = False
-    try:
-        from app.services.representative_unification import (
-            shop_bot_can_manage_representatives,
-        )
-
-        can_add = await shop_bot_can_manage_representatives(
-            session,
-            db_user,
-            is_reseller_bot=True,
-            reseller_owner_id=reseller_owner_id,
-            reseller_profile_id=int(getattr(profile, "id", 0) or 0) or None,
-        )
-    except Exception:
-        can_add = False
-    from app.services.admin_counters import (
-        PendingCounts,
-        format_queue_summary,
-        pending_counts,
-    )
-
-    # Shop-scoped only — platform queue must never appear on reseller hub.
-    try:
-        queue = await pending_counts(session, shop_id=int(owner_id))
-    except Exception:
-        logger.warning(
-            "reseller hub pending_counts failed shop_id=%s",
-            owner_id,
-            exc_info=True,
-        )
-        queue = PendingCounts()
+    ui, queue = hub.ui, hub.queue
     body = format_message(screen_title_html(ui, "r.home"), screen_caption(ui, "r.home"))
     queue_line = format_queue_summary(queue)
     if queue_line:
@@ -896,16 +862,16 @@ async def open_reseller_home(
         message,
         text=body,
         inline=reseller_manage_hub_keyboard(
-            profile,
+            hub.profile,
             ui,
-            can_add_representative=can_add,
+            can_add_representative=hub.can_add_representative,
             pending_payments=queue.payments,
             pending_tickets=queue.tickets,
             pending_cancellations=queue.cancellations,
         ),
         state=state,
     )
-    return
+
 
 async def open_reseller_creds(
     message: Message,
@@ -1476,7 +1442,7 @@ async def open_reseller_plans_hub(
     hub = reseller_plans_hub_keyboard(ui)
     hub_rows = [list(r) for r in hub.inline_keyboard[:-1]]
     list_kb = with_inline_back(
-        kb.reseller_plans_list_keyboard(plans, ui), ui, "nv:res:home"
+        kb.reseller_plans_list_keyboard(plans, ui), ui, back_callback_for("res_plans")
     )
     combined = InlineKeyboardMarkup(
         inline_keyboard=hub_rows + [list(r) for r in list_kb.inline_keyboard]
@@ -2420,7 +2386,7 @@ async def _soft_reseller(
         return
     if action == "res_plan_add":
         bubble = await _live_bubble(message)
-        cb = _SoftCallback(bubble, "res:plan:add", back_callback=_RESELLER_HUB_BACK)
+        cb = _SoftCallback(bubble, "res:plan:add", back_callback=back_callback_for("res_plans"))
         try:
             await res_plans_h.res_plan_add(
                 cb,
@@ -2478,7 +2444,7 @@ async def _soft_reseller(
             )
             return
         bubble = await _live_bubble(message)
-        cb = _SoftCallback(bubble, f"res:st:sec:{sec}", back_callback=_RESELLER_HUB_BACK)
+        cb = _SoftCallback(bubble, f"res:st:sec:{sec}", back_callback=back_callback_for("res_settings"))
         try:
             await res_st_h.settings_section(
                 cb,
@@ -2518,7 +2484,7 @@ async def _soft_reseller(
     if fn_name == "res_users":
         fn_name = "res_users_list"
     bubble = await _live_bubble(message)
-    cb = _SoftCallback(bubble, data, back_callback=_RESELLER_HUB_BACK)
+    cb = _SoftCallback(bubble, data, back_callback=back_callback_for(action))
     fn = getattr(res_h, fn_name, None)
     if fn is None:
         await bubble.edit_text(

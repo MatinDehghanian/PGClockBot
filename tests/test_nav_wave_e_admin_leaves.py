@@ -82,7 +82,7 @@ class LeafHubKeyboardTests(unittest.TestCase):
             for b in row
         ]
         self.assertIn("nv:res:ra:res_st_shop", rs)
-        self.assertIn("nv:res:home", rs)
+        self.assertEqual(rs[-1], "nv:res:grp:shop")
         self.assertNotIn("nv:res:close", rs)
 
         rp = [

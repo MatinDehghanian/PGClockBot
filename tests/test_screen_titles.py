@@ -64,6 +64,13 @@ OLD_PLAIN_TITLES = {
     "c.loyalty": "⭐ باشگاه مشتریان",
     "r.home": "🤝 پنل نماینده",
 }
+# Shop panel groups added after the titles became editable; they never had an old heading.
+GROUP_TITLES = {
+    "r.daily": "📥 کارهای روزانه",
+    "r.customers": "👥 مشتریان",
+    "r.shop": "🏪 فروشگاه من",
+    "r.account": "💼 حساب من",
+}
 OWNER = EditorActor(user_id=7, shop_id=None)
 SHOP_A = 501
 SHOP_OWNER = EditorActor(user_id=8, shop_id=SHOP_A)
@@ -80,7 +87,9 @@ class TitleDefaultTests(unittest.TestCase):
                 self.assertEqual(screen_title(dict(DEFAULT_SETTINGS), screen_id), title)
 
     def test_every_title_belongs_to_a_registered_menu(self) -> None:
-        self.assertEqual(set(SCREEN_TITLE_DEFAULTS), set(OLD_HEADINGS) | set(OLD_PLAIN_TITLES))
+        self.assertEqual(set(SCREEN_TITLE_DEFAULTS), set(OLD_HEADINGS) | set(OLD_PLAIN_TITLES) | set(GROUP_TITLES))
+        for screen_id, title in GROUP_TITLES.items():
+            self.assertEqual(SCREEN_TITLE_DEFAULTS[screen_id], title)
         self.assertLessEqual(set(SCREEN_TITLE_DEFAULTS), set(SCREENS))
 
     def test_stored_title_wins_and_blank_falls_back(self) -> None:

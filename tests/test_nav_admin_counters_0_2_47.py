@@ -62,24 +62,30 @@ class KeyboardBadgeTests(unittest.TestCase):
         from app.bot.nav_inline import reseller_manage_hub_keyboard
 
         profile = MagicMock()
-        with patch(
-            "app.bot.reply_keyboards._reseller_submenu_entries",
-            return_value=[
-                ("res_payments", "🧾 رسیدهای در انتظار"),
-                ("res_tickets", "🎫 تیکت‌های مشتریان"),
-                ("res_dash", "خانه"),
-            ],
-        ):
-            texts = [
+        from app.bot.nav_inline import reseller_group_hub_keyboard
+
+        entries = [
+            ("res_payments", "🧾 رسیدهای در انتظار"),
+            ("res_tickets", "🎫 تیکت‌های مشتریان"),
+            ("res_dash", "خانه"),
+        ]
+        with patch("app.bot.reply_keyboards._reseller_submenu_entries", return_value=entries):
+            home = [
                 b.text
                 for row in reseller_manage_hub_keyboard(
-                    profile,
-                    {},
-                    pending_payments=7,
-                    pending_tickets=1,
+                    profile, {"btn_res_grp_daily": "📥 کارهای روزانه"}, pending_payments=7, pending_tickets=1
                 ).inline_keyboard
                 for b in row
             ]
+            texts = [
+                b.text
+                for row in reseller_group_hub_keyboard(
+                    "daily", profile, {}, pending_payments=7, pending_tickets=1
+                ).inline_keyboard
+                for b in row
+            ]
+        # The group carries the sum, its entries their own count.
+        self.assertIn("📥 کارهای روزانه (۸)", home)
         self.assertTrue(any("رسید" in t and "(۷)" in t for t in texts))
         self.assertTrue(any("تیکت" in t and "(۱)" in t for t in texts))
         self.assertTrue(any(t == "خانه" for t in texts))
