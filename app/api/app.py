@@ -101,6 +101,7 @@ from app.api.catalog_discounts import register_catalog_discounts
 from app.api.connection_status_pages import register_connection_status_pages
 from app.api.funnel_pages import register_funnel_pages
 from app.api.gift_code_pages import legacy_gift_modal_redirect, register_gift_code_pages
+from app.api.dashboard_trend_pages import register_dashboard_trend_pages
 from app.api.home_pages import register_home_pages
 from app.api.pg_pages import register_pg_pages
 from app.api.service_import_pages import register_service_import_pages
@@ -130,6 +131,7 @@ templates.env.globals["panel_script_cache_key"] = get_panel_asset_cache_key("pan
 templates.env.globals["panel_widget_cache_key"] = get_panel_asset_cache_key("panel_widget_request.js")
 templates.env.globals["money_inputs_cache_key"] = get_panel_asset_cache_key("money-inputs.js")
 templates.env.globals["list_inputs_cache_key"] = get_panel_asset_cache_key("list-inputs.js")
+templates.env.globals["sales_chart_cache_key"] = get_panel_asset_cache_key("sales-chart.js")
 try:
     from app.services.update_channel import badge_context as _badge_context_boot
 
@@ -1374,6 +1376,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         require_staff=require_staff,
         get_db=get_db,
     )
+    register_dashboard_trend_pages(app, require_staff=require_staff, get_db=get_db)
     register_pg_pages(
         app,
         render=render,

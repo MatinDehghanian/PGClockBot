@@ -213,6 +213,7 @@ class Order(Base):
     __tablename__ = "orders"
     __table_args__ = (
         Index("uq_orders_renewal_request_key", "renewal_request_key", unique=True),
+        Index("ix_orders_created_at", "created_at"),
         Index(
             "uq_orders_service_quota_mutation", "service_id", unique=True,
             sqlite_where=text("service_mutation_pending = true"),

@@ -47,7 +47,7 @@ class OverviewSurfaceTests(unittest.TestCase):
         home = (ROOT / "app/web/templates/_home_dash_body.html").read_text(encoding="utf-8")
         self.assertNotIn("home-gauge", home)
         self.assertNotIn("/home/metrics", home)
-        self.assertIn("home-conn", home)
+        self.assertIn("status_tiles", home)
 
     def test_dashboard_has_gauges_no_quick_access(self):
         dash = (ROOT / "app/web/templates/dashboard.html").read_text(encoding="utf-8")
