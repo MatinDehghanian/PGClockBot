@@ -26,6 +26,14 @@ log = logging.getLogger(__name__)
 ALIAS_SETTING_KEY = "reply_btn_label_aliases"
 MAX_ALIASES_PER_ACTION = 12
 
+# Labels the code shipped as defaults before they were reworded. Customers keep
+# the old keyboard until the bot sends a new one, so these must keep resolving
+# wherever the button is still enabled. Append when changing a btn_* default.
+RETIRED_DEFAULT_LABELS: dict[str, tuple[str, ...]] = {
+    "btn_connection_status": ("📡 وضعیت از دید سرور",),
+    "btn_connection_status_admin": ("📡 تست و وضعیت اتصال",),
+}
+
 # Reverse of special action→btn_* map (btn key may map to several actions).
 _BTN_KEY_TO_ACTIONS: dict[str, list[str]] = {}
 for _action, _btn in _ACTION_TO_BTN_KEY.items():
@@ -182,9 +190,9 @@ def register_aliases_on_mapping(mapping: dict[str, str], ui: dict | None) -> Non
     for btn_key, default_raw in DEFAULT_SETTINGS.items():
         if not is_button_label_key(btn_key):
             continue
-        current_raw = ui.get(btn_key, default_raw)
-        current_labels = set(label_variants(current_raw))
-        for default_label in label_variants(default_raw):
+        current_labels = set(label_variants(ui.get(btn_key, default_raw)))
+        default_labels = label_variants(default_raw) + list(RETIRED_DEFAULT_LABELS.get(btn_key, ()))
+        for default_label in default_labels:
             if not default_label or default_label in current_labels:
                 continue
             for action in actions_for_btn_setting_key(btn_key):
