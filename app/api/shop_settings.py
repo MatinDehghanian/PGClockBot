@@ -21,6 +21,7 @@ from app.services.resellers import (
     complete_reseller_setup,
 )
 from app.services.secret_box import reveal_bot_token
+from app.services.settings_button_labels import PLATFORM_ONLY_BTN_KEYS
 from app.services.settings_tab_groups import group_settings_tabs, tabs_with_message_variables
 from app.services.rich_text import merge_rich_settings_on_save, prepare_settings_values_for_web
 from app.services.screen_titles import SCREEN_TEXT_TAB, platform_only_screen_text_keys, validate_screen_text_settings
@@ -207,11 +208,10 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
             for name, fields in list(groups.items()):
                 groups[name] = [f for f in fields if f[0] != "show_reseller_apply"]
         if tab == "buttons":
-            # Shop bots don't need platform-admin / apply / miniapp button labels
-            from app.services.settings_button_labels import PLATFORM_ONLY_BTN_KEYS
-
-            for name, fields in list(groups.items()):
-                groups[name] = [f for f in fields if f[0] not in PLATFORM_ONLY_BTN_KEYS]
+            # Shop bots don't need platform-admin / apply button labels
+            groups = {
+                name: kept for name, fields in groups.items() if (kept := [f for f in fields if f[0] not in PLATFORM_ONLY_BTN_KEYS])
+            }
         if tab == SCREEN_TEXT_TAB:
             # A shop edits its customer and reseller menus only.
             hidden = platform_only_screen_text_keys()
@@ -403,7 +403,7 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         from app.services.service_import_config import PLATFORM_ONLY_KEYS
 
         # Subscription paths and extra panel admins describe the one panel: Owner only.
-        known = keys_for_tab(tab) - PLATFORM_ONLY_KEYS
+        known = keys_for_tab(tab) - PLATFORM_ONLY_KEYS - PLATFORM_ONLY_BTN_KEYS
         if tab == "menu":
             known = known | {"menu_order"}
             known.discard("show_reseller_apply")

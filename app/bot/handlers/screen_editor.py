@@ -27,6 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot import keyboards as kb
 from app.bot.edit_mode import EDIT_CALLBACK_ROOT, audience_code
 from app.bot.handlers.button_colors import shop_settings_shop_id
+from app.bot.reply_keyboard_state import is_menu_tap
 from app.bot.screen_registry import SCREENS, ScreenButton, ScreenContext, ScreenSpec, screen_buttons
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser
@@ -41,7 +42,7 @@ from app.services.button_color_editor import (
     shared_button_count,
 )
 from app.services.resellers import get_reseller_profile
-from app.services.rich_text import first_custom_emoji_id, is_button_label_key, pack_setting_from_message
+from app.services.rich_text import pack_setting_from_message
 from app.services.screen_editor import (
     EDIT_MODE_MINUTES,
     LABEL_MAX_LENGTH,
@@ -67,7 +68,7 @@ from app.services.screen_titles import (
     screen_caption_plain,
     screen_title,
 )
-from app.services.users import DEFAULT_SETTINGS, get_all_settings
+from app.services.users import get_all_settings
 
 logger = logging.getLogger(__name__)
 
@@ -443,26 +444,10 @@ async def _handle(
         await callback.answer(str(exc), show_alert=True)
 
 
-def _visible_button_labels(ui: dict[str, str]) -> set[str]:
-    """Texts a menu button can send when tapped, with this bot's settings."""
-    keys = {key for key in (*DEFAULT_SETTINGS, *ui) if is_button_label_key(key)}
-    labels = {kb._t(ui, key).strip() for key in keys}
-    labels |= {kb.BTN_BACK, kb.BTN_RESTART, kb._home_label(ui).strip(), kb._back_label(ui).strip()}
-    labels.discard("")
-    return labels
-
-
 async def _is_menu_tap(message: Message, session: AsyncSession, actor: EditorActor) -> bool:
-    """A tap on a menu button sends exactly that button's text and never a premium emoji.
-
-    A typed new name differs from every visible label (another emoji, a premium emoji or other
-    words), so it is saved even when its letters match a menu label, e.g. «👍 کاربران».
-    """
-    text = (message.text or "").strip()
-    if not text or first_custom_emoji_id(message.entities):
-        return False
-    ui = await get_all_settings(session, reseller_id=actor.settings_scope)
-    return text in _visible_button_labels(ui)
+    """A typed new name differs from every visible label (another emoji, a premium emoji or other
+    words), so it is saved even when its letters match a menu label, e.g. «👍 کاربران»."""
+    return is_menu_tap(message, await get_all_settings(session, reseller_id=actor.settings_scope))
 
 
 async def _save_label_message(message: Message, state: FSMContext, session: AsyncSession, actor: EditorActor) -> None:

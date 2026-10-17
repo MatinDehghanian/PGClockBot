@@ -16,6 +16,7 @@ from app.config import get_settings
 from app.db.models import BotUser, Order, Role, Setting, UserService
 from app.services.button_styles import default_settings as button_style_defaults
 from app.services.screen_titles import SCREEN_TEXT_TAB, screen_text_defaults, screen_text_setting_groups
+from app.services.settings_button_labels import appearance_button_subs, shop_button_subs
 from app.services.button_styles import setting_group_fields as button_style_setting_fields
 from app.services.connection_status_texts import MONITOR_TEXT_DEFAULTS, readable_monitor_texts
 from app.services.user_purge import purge_user_references
@@ -1149,6 +1150,8 @@ PANEL_SETTINGS_TABS: list[tuple[str, str]] = [
 PANEL_SETTINGS_KEYS = {t[0] for t in PANEL_SETTINGS_TABS}
 ALL_SETTINGS_TABS: list[tuple[str, str]] = [*SETTINGS_TABS, *PANEL_SETTINGS_TABS]
 
+BUTTON_LABELS_GROUP = "متن دکمه‌های منو"
+
 SETTING_GROUPS = {
     "خوش‌آمد و هویت": [
         ("shop_title", "نام فروشگاه", "text", "بالای منوی اصلی ربات دیده می‌شود"),
@@ -1254,7 +1257,7 @@ SETTING_GROUPS = {
     "متن دعوت دوستان": [
         ("referral_text", "متن دعوت دوستان", "textarea", "متغیرها: {code} {link} — فهرست: /message-variables"),
     ],
-    "متن دکمه‌های منو": [
+    BUTTON_LABELS_GROUP: [
         ("btn_shop", "دکمه خرید", "text", ""),
         ("btn_services", "دکمه سرویس‌ها", "text", ""),
         ("btn_wallet", "دکمه کیف پول", "text", ""),
@@ -1750,12 +1753,30 @@ SETTING_GROUPS = {
 }
 SETTING_GROUPS.update(screen_text_setting_groups())
 
+
+def _remaining_button_label_groups(groups: dict[str, list]) -> dict[str, list[tuple[str, str, str, str]]]:
+    """Every bot button label the «متن دکمه‌ها» tab does not list yet, in the bot's own categories."""
+    seen = {field[0] for field in groups[BUTTON_LABELS_GROUP]}
+    extra: dict[str, list[tuple[str, str, str, str]]] = {}
+    for _sub_id, title, fields in (*shop_button_subs(include_platform=True), *appearance_button_subs()):
+        rest = [(key, label, "text", "") for key, label, *_ in fields if key not in seen]
+        seen.update(field[0] for field in rest)
+        if rest:
+            extra.setdefault(title, []).extend(rest)
+    if set(extra) & set(groups):
+        raise RuntimeError("button label group name clashes with a settings group")
+    return extra
+
+
+BUTTON_LABEL_GROUPS_MORE = _remaining_button_label_groups(SETTING_GROUPS)
+SETTING_GROUPS.update(BUTTON_LABEL_GROUPS_MORE)
+
 # Map tab id → which SETTING_GROUPS cards to show (menu/notifications/update/naming special)
 TAB_SETTING_GROUPS: dict[str, list[str]] = {
     "menu": [],
     "welcome": ["خوش‌آمد و هویت"],
     "messages": ["متن پیام‌ها"],
-    "buttons": ["متن دکمه‌های منو"],
+    "buttons": [BUTTON_LABELS_GROUP, *BUTTON_LABEL_GROUPS_MORE],
     SCREEN_TEXT_TAB: list(screen_text_setting_groups()),
     "colors": ["رنگ دکمه‌ها"],
     "qr": ["QR اشتراک"],

@@ -110,9 +110,10 @@ BTN_ADMIN_SYS: list[Field] = [
     ("btn_adm_st_find", "تنظیمات: جستجو", "text"),
 ]
 
+# btn_miniapp is not offered: the Mini App opens from Telegram's menu button, and that label only
+# keeps old reply keyboards working (reply_keyboards maps it), so editing it would change nothing visible.
 BTN_STORE_EXTRA: list[Field] = [
     ("btn_buy_continue", "ادامه خرید", "text"),
-    ("btn_miniapp", "مینی‌اپ", "text"),
 ]
 
 BTN_ADMIN_HUBS: list[Field] = [
