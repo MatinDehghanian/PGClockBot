@@ -759,6 +759,8 @@ async def plans_aud_inline_back(
     if aud not in {"users", "resellers"}:
         await callback.answer(feedback.INVALID, show_alert=True)
         return
+    # Back out of an unfinished plan prompt: a later message must not be read as its answer.
+    await state.set_state(None)
     await state.update_data(_adm_plans_aud=aud, _adm_plans_kind=None)
     await nav.set_nav_level(state, nav.NAV_ADMIN_PLANS_KIND, push=False)
     await callback.answer()
@@ -2060,6 +2062,10 @@ async def resplan_edit_save(
         await state.clear()
         return
     if kb.is_cancel_text(message.text):
+        from app.bot.nav_input import try_legacy_cancel
+
+        if await try_legacy_cancel(message, state, session, db_user):
+            return
         await _answer_plans_cancel(message, state, session)
         return
     data = await state.get_data()

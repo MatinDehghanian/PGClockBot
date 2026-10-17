@@ -1058,7 +1058,17 @@ async def wholesale_qty_entered(
     ui = await get_all_settings(session)
     if kb.is_cancel_text(message.text):
         from app.bot.menu_nav import restore_main_reply
+        from app.bot.nav_input import try_legacy_cancel
 
+        if await try_legacy_cancel(
+            message,
+            state,
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        ):
+            return
         await restore_main_reply(
             message,
             session,

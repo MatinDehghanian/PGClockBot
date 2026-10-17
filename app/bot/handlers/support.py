@@ -111,8 +111,18 @@ async def support_subject(
     reseller_owner_id: int | None = None,
 ):
     if kb.is_cancel_text(message.text):
+        from app.bot.nav_input import try_legacy_cancel
         from app.bot.tg_utils import clear_fsm_with_reply
 
+        if await try_legacy_cancel(
+            message,
+            state,
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        ):
+            return
         await clear_fsm_with_reply(
             message,
             state,
@@ -147,8 +157,18 @@ async def support_body(
     reseller_owner_id: int | None = None,
 ):
     if kb.is_cancel_text(message.text):
+        from app.bot.nav_input import try_legacy_cancel
         from app.bot.tg_utils import clear_fsm_with_reply
 
+        if await try_legacy_cancel(
+            message,
+            state,
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        ):
+            return
         await clear_fsm_with_reply(
             message,
             state,

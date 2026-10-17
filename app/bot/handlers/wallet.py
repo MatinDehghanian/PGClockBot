@@ -310,11 +310,19 @@ async def present_topup_methods(
 async def wallet_topup_amount(message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser,
     is_reseller_bot: bool = False, reseller_owner_id: int | None = None):
     from app.bot.menu_nav import restore_main_reply
-    from app.bot.nav_input import finish_text_step
+    from app.bot.nav_input import finish_text_step, try_legacy_cancel
 
     ui = await get_all_settings(session)
     if kb.is_cancel_text(message.text) or kb.is_home_text(message.text, ui):
-        # Legacy reply-label انصراف (stale cancel_reply keyboards).
+        if kb.is_cancel_text(message.text) and await try_legacy_cancel(
+            message,
+            state,
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        ):
+            return
         await restore_main_reply(
             message,
             session,
