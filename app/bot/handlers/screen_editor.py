@@ -4,7 +4,8 @@
 ``shop_router`` (shop owner, own shop only, shop bot only) share the views.
 Callback data ``ed:<a|r>:<view>[:<screen>[:<button>[:<color>]]]``:
 ``h`` switches, ``f1``/``f0`` feature on/off (owner), ``m1``/``m0`` my edit
-mode, ``o`` a menu's buttons, ``b`` one button, ``t`` new text, ``c`` color.
+mode, ``o`` a menu's buttons, ``b`` one button, ``t`` new text, ``c`` color;
+every view but the switches needs my edit mode to be on.
 Button numbers are positions in ``screen_buttons``; every step rebuilds the
 real menu and re-checks the position and permissions before acting.
 """
@@ -78,6 +79,9 @@ TEXT_SHOP_BOT_ONLY = "حالت ویرایش فروشگاه فقط داخل رب�
 TEXT_LABEL_SAVED = "✅ متن دکمه ذخیره شد."
 TEXT_TITLE_SAVED = "✅ تیتر منو ذخیره شد."
 TEXT_MENU_CHANGED = "این منو تغییر کرده؛ دوباره باز کنید."
+TEXT_EDIT_MODE_ON = f"✅ حالت ویرایش روشن شد؛ تا {EDIT_MODE_MINUTES} دقیقه بعد از آخرین تغییر روشن می‌ماند."
+TEXT_EDIT_MODE_OFF = "حالت ویرایش خاموش شد."
+TEXT_EDIT_MODE_EXPIRED = f"⏱ زمان حالت ویرایش تمام شده. از «{BTN_ENTRY}» دوباره روشنش کنید."
 
 
 class EditorStates(StatesGroup):
@@ -144,15 +148,20 @@ def switches_view(actor: EditorActor, *, feature_on: bool, minutes_left: int) ->
     if feature_on:
         mine = f"روشن ({minutes_left} دقیقه)" if minutes_left else "خاموش"
         lines.append(f"حالت ویرایش شما: {mine}")
-        lines.extend(["", f"وقتی روشن است، زیر هر منو «✏️ ویرایش این منو» می‌آید و بعد از {EDIT_MODE_MINUTES} دقیقه خاموش می‌شود."])
+        lines.extend([
+            "",
+            "وقتی روشن است، زیر هر منو «✏️ ویرایش این منو» می‌آید.",
+            f"اگر {EDIT_MODE_MINUTES} دقیقه تغییری ندهید، خودش خاموش می‌شود.",
+        ])
         rows.append([_button(f"✏️ حالت ویرایش من: {mine}", _cb(actor, "m0" if minutes_left else "m1"))])
-        rows.append([_button(BTN_EDIT_MAIN_MENU, _cb(actor, "o", "c.main"))])
+        if minutes_left:
+            rows.append([_button(BTN_EDIT_MAIN_MENU, _cb(actor, "o", "c.main"))])
     rows.append([_button(BTN_BACK, _SETTINGS_BACK[audience_code(actor)])])
     return "\n".join(lines), InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def panel_view(
-    actor: EditorActor, spec: ScreenSpec, buttons: list[ScreenButton], ui: dict[str, str]
+    actor: EditorActor, spec: ScreenSpec, buttons: list[ScreenButton], ui: dict[str, str], *, minutes_left: int
 ) -> tuple[str, InlineKeyboardMarkup]:
     rows = [
         [_button(f"{_button_marker(actor, button, ui)} {button.text}", _cb(actor, "b", spec.id, index))]
@@ -162,9 +171,8 @@ def panel_view(
     if has_title(spec.id):
         rows.insert(0, [_button(f"📝 تیتر: {screen_title(ui, spec.id)}", _cb(actor, "n", spec.id))])
     rows.append([_button(BTN_BACK_TO_MENU, spec.reopen_callback)])
-    text = f"✏️ <b>ویرایش: {html.escape(spec.title)}</b>\nروی تیتر یا یک دکمه بزنید تا آن را عوض کنید."
-    if len(rows) == 1:
-        text = f"✏️ <b>ویرایش: {html.escape(spec.title)}</b>\nدر این منو چیزی برای ویرایش شما نیست."
+    hint = "روی تیتر یا یک دکمه بزنید تا آن را عوض کنید." if len(rows) > 1 else "در این منو چیزی برای ویرایش شما نیست."
+    text = f"✏️ <b>ویرایش: {html.escape(spec.title)}</b>\n{hint}\n⏱ حالت ویرایش تا {minutes_left} دقیقهٔ دیگر روشن است."
     return text, InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -252,13 +260,16 @@ async def _switches(callback: CallbackQuery, session: AsyncSession, actor: Edito
             raise ValueError(feedback.INVALID)
         await set_editor_enabled(session, request.view == "f1")
     feature_on = await is_editor_enabled(session)
+    toast = None
     if request.view == "m1":
         if not feature_on:
             raise ValueError(TEXT_FEATURE_OFF)
         edit_mode_store.activate(actor)
+        toast = TEXT_EDIT_MODE_ON
     elif request.view == "m0" or not feature_on:
         edit_mode_store.deactivate(actor)
-    await callback.answer()
+        toast = TEXT_EDIT_MODE_OFF if request.view == "m0" else None
+    await callback.answer(toast)
     if actor.for_reseller and not feature_on:
         rows = [[_button(BTN_BACK, _SETTINGS_BACK["r"])]]
         await _show(callback, (TEXT_FEATURE_OFF_FOR_SHOP, InlineKeyboardMarkup(inline_keyboard=rows)))
@@ -271,10 +282,13 @@ async def _screen_views(
 ) -> None:
     if not await is_editor_enabled(session):
         raise ValueError(TEXT_FEATURE_OFF)
+    if not edit_mode_store.is_active(actor):
+        raise ValueError(TEXT_EDIT_MODE_EXPIRED)
     screen = await _load_screen(session, actor, request.screen_id)
     if request.view == "o":
         await callback.answer()
-        await _show(callback, panel_view(actor, screen.spec, screen.buttons, screen.ui))
+        minutes_left = edit_mode_store.minutes_left(actor)
+        await _show(callback, panel_view(actor, screen.spec, screen.buttons, screen.ui, minutes_left=minutes_left))
         return
     if request.view == "n":
         await _ask_title(callback, actor, screen, state)
@@ -305,6 +319,7 @@ async def _save_color(
         )
     else:
         raise ValueError(feedback.INVALID)
+    edit_mode_store.extend(actor)
     return await _load_screen(session, actor, screen.spec.id)
 
 
@@ -375,6 +390,7 @@ async def _save_label_message(message: Message, state: FSMContext, session: Asyn
         )
         stored = pack_setting_from_message(key, message) if message.entities and label == raw.strip() else label
         await save_button_label(session, actor, label_key=key, stored_value=stored)
+        edit_mode_store.extend(actor)
     except ValueError as exc:
         await message.answer(str(exc))
         return
@@ -390,6 +406,7 @@ async def _save_title_message(
         if spec is None:
             raise ValueError(TEXT_MENU_CHANGED)
         await save_screen_title(session, actor, screen_id=screen_id, audience=spec.audience.value, text=raw)
+        edit_mode_store.extend(actor)
     except ValueError as exc:
         await message.answer(str(exc))
         return

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -158,6 +159,7 @@ class TitleEditorFlowTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self) -> None:
         edit_mode_store.deactivate(OWNER)
+        edit_mode_store.deactivate(SHOP_OWNER)
         clear_settings_cache()
         await self.engine.dispose()
         self._tmpdir.cleanup()
@@ -167,6 +169,11 @@ class TitleEditorFlowTests(unittest.IsolatedAsyncioTestCase):
         async with self.Session() as session:
             await ui_module.owner_editor(callback, session, MagicMock(id=OWNER.user_id), self.state)
         return callback
+
+    async def _start_editing(self) -> None:
+        await self._owner("ed:a:f1")
+        await self._owner("ed:a:m1")
+        edit_mode_store.activate(SHOP_OWNER)
 
     async def _owner_text(self, text: str) -> MagicMock:
         message = _message(text)
@@ -185,30 +192,32 @@ class TitleEditorFlowTests(unittest.IsolatedAsyncioTestCase):
             )
 
     async def test_panel_offers_the_title_first(self) -> None:
-        await self._owner("ed:a:f1")
+        await self._start_editing()
         callback = await self._owner("ed:a:o:a.ops")
         markup = callback.message.edit_text.await_args.kwargs["reply_markup"]
         self.assertEqual(markup.inline_keyboard[0][0].callback_data, "ed:a:n:a.ops")
         self.assertIn("🗓 عملیات روزانه", markup.inline_keyboard[0][0].text)
 
     async def test_owner_changes_a_title_and_returns_to_the_menu(self) -> None:
-        await self._owner("ed:a:f1")
+        await self._start_editing()
+        edit_mode_store.activate(OWNER, now=time.monotonic() - 25 * 60)
         await self._owner("ed:a:n:a.ops")
         message = await self._owner_text("🚀 کارهای امروز")
         self.assertEqual(await self._platform(title_setting_key("a.ops")), "🚀 کارهای امروز")
+        self.assertEqual(edit_mode_store.minutes_left(OWNER), 30)
         self.assertIsNone(await self.state.get_state())
         markup = message.answer.await_args.kwargs["reply_markup"]
         self.assertEqual(markup.inline_keyboard[0][0].callback_data, "nv:adm:ops")
 
     async def test_unsafe_title_is_refused_and_input_stays_open(self) -> None:
-        await self._owner("ed:a:f1")
+        await self._start_editing()
         await self._owner("ed:a:n:a.ops")
         await self._owner_text("<b>x</b>")
         self.assertIsNone(await self._platform(title_setting_key("a.ops")))
         self.assertEqual(await self.state.get_state(), ui_module.EditorStates.owner_label.state)
 
     async def test_button_edit_after_a_title_edit_saves_a_button_label(self) -> None:
-        await self._owner("ed:a:f1")
+        await self._start_editing()
         await self._owner("ed:a:n:a.ops")
         await self._owner_text("🚀 کارهای امروز")
         await self._owner("ed:a:t:c.wallet:0")
@@ -217,7 +226,7 @@ class TitleEditorFlowTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(await self._platform(title_setting_key("c.wallet")))
 
     async def test_shop_owner_titles_stay_in_their_shop(self) -> None:
-        await self._owner("ed:a:f1")
+        await self._start_editing()
         with patch.object(ui_module, "shop_settings_shop_id", AsyncMock(return_value=SHOP_A)):
             async with self.Session() as session:
                 await ui_module.shop_editor(

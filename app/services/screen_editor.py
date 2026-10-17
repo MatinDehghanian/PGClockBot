@@ -1,15 +1,17 @@
 """Rules for the in-menu screen editor (edit mode).
 
-Edit mode is switched on per person and per bot for ``EDIT_MODE_MINUTES``,
-and only while the platform owner has enabled the feature
-(``SCREEN_EDITOR_SETTING``, off by default). The platform owner may edit
-customer and admin menus in platform settings; a shop owner may edit customer
-and reseller menus in their own shop's settings. Every save re-checks what the
-actor may change, independent of which buttons were shown.
+Edit mode is switched on per person and per bot and stays on until
+``EDIT_MODE_MINUTES`` pass without a saved change, and only while the platform
+owner has enabled the feature (``SCREEN_EDITOR_SETTING``, off by default).
+The platform owner may edit customer and admin menus in platform settings; a
+shop owner may edit customer and reseller menus in their own shop's settings.
+Every save re-checks what the actor may change, independent of which buttons
+were shown.
 """
 
 from __future__ import annotations
 
+import math
 import time
 from dataclasses import dataclass
 
@@ -69,6 +71,14 @@ class EditModeStore:
         self._until[self._key(actor)] = expires
         return expires
 
+    def extend(self, actor: EditorActor, *, now: float | None = None) -> bool:
+        """Restart the window of a switch that is still on; an expired one stays off."""
+        now = time.monotonic() if now is None else now
+        if not self.is_active(actor, now=now):
+            return False
+        self._until[self._key(actor)] = now + self._seconds
+        return True
+
     def deactivate(self, actor: EditorActor) -> None:
         self._until.pop(self._key(actor), None)
 
@@ -86,7 +96,7 @@ class EditModeStore:
         now = time.monotonic() if now is None else now
         if expires is None or now >= expires:
             return 0
-        return max(1, int((expires - now) // 60))
+        return max(1, math.ceil((expires - now) / 60))
 
     def _drop_expired(self, now: float) -> None:
         for key in [key for key, expires in self._until.items() if now >= expires]:

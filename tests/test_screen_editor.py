@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -43,6 +44,15 @@ class EditModeStoreTests(unittest.TestCase):
         self.assertTrue(store.is_active(OWNER, now=1000.0 + 29 * 60))
         self.assertEqual(store.minutes_left(OWNER, now=1000.0 + 10 * 60), 20)
         self.assertFalse(store.is_active(OWNER, now=1000.0 + 30 * 60))
+
+    def test_a_change_restarts_the_window_but_never_revives_an_expired_switch(self) -> None:
+        store = EditModeStore(minutes=30)
+        store.activate(OWNER, now=0.0)
+        self.assertEqual(store.minutes_left(OWNER, now=0.0), 30)
+        self.assertTrue(store.extend(OWNER, now=25 * 60.0))
+        self.assertTrue(store.is_active(OWNER, now=50 * 60.0))
+        self.assertFalse(store.extend(OWNER, now=60 * 60.0))
+        self.assertFalse(store.is_active(OWNER, now=60 * 60.0))
 
     def test_switch_is_per_person_and_per_shop(self) -> None:
         store = EditModeStore()
@@ -252,6 +262,11 @@ class EditorFlowTests(unittest.IsolatedAsyncioTestCase):
         buttons = screen_buttons(screen_id, ScreenContext(ui=dict(DEFAULT_SETTINGS), profile=sample_reseller_profile()))
         return next(i for i, b in enumerate(buttons) if b.label_key == label_key)
 
+    async def _start_editing(self) -> None:
+        await self._owner("ed:a:f1")
+        await self._owner("ed:a:m1")
+        await self._shop("ed:r:m1")
+
     def _alerted(self, callback: MagicMock) -> bool:
         return bool(callback.answer.await_args and callback.answer.await_args.kwargs.get("show_alert"))
 
@@ -265,8 +280,48 @@ class EditorFlowTests(unittest.IsolatedAsyncioTestCase):
         await self._owner("ed:a:f0")
         self.assertFalse(edit_mode_store.is_active(OWNER))
 
-    async def test_owner_changes_a_color_and_a_label_from_the_menu(self) -> None:
+    async def test_switching_edit_mode_tells_how_long_it_stays_on(self) -> None:
         await self._owner("ed:a:f1")
+        on = await self._owner("ed:a:m1")
+        self.assertIn("30 دقیقه", on.answer.await_args.args[0])
+        text = on.message.edit_text.await_args.args[0]
+        self.assertIn("30 دقیقه تغییری ندهید", text)
+        off = await self._owner("ed:a:m0")
+        self.assertEqual(off.answer.await_args.args[0], ui_module.TEXT_EDIT_MODE_OFF)
+        main_menu = [b.callback_data for row in off.message.edit_text.await_args.kwargs["reply_markup"].inline_keyboard for b in row]
+        self.assertNotIn("ed:a:o:c.main", main_menu)
+
+    async def test_menu_panel_shows_the_minutes_left(self) -> None:
+        await self._start_editing()
+        callback = await self._owner("ed:a:o:c.wallet")
+        self.assertIn("⏱ حالت ویرایش تا 30 دقیقهٔ دیگر روشن است.", callback.message.edit_text.await_args.args[0])
+
+    async def test_old_editor_buttons_explain_that_edit_mode_expired(self) -> None:
+        await self._start_editing()
+        index = self._index("c.wallet", "btn_wallet_topup")
+        edit_mode_store.deactivate(OWNER)
+        for data in ("ed:a:o:c.wallet", f"ed:a:c:c.wallet:{index}:d", f"ed:a:t:c.wallet:{index}", "ed:a:n:c.wallet"):
+            with self.subTest(data=data):
+                callback = await self._owner(data)
+                self.assertTrue(self._alerted(callback))
+                self.assertEqual(callback.answer.await_args.args[0], ui_module.TEXT_EDIT_MODE_EXPIRED)
+        self.assertIsNone(await self._platform("btn_style_wallet_topup"))
+        self.assertIsNone(await self.state.get_state())
+
+    async def test_each_saved_change_restarts_the_edit_window(self) -> None:
+        await self._start_editing()
+        edit_mode_store.activate(OWNER, now=time.monotonic() - 25 * 60)
+        index = self._index("c.wallet", "btn_wallet_topup")
+        await self._owner(f"ed:a:c:c.wallet:{index}:d")
+        self.assertEqual(edit_mode_store.minutes_left(OWNER), 30)
+        edit_mode_store.activate(OWNER, now=time.monotonic() - 25 * 60)
+        await self._owner(f"ed:a:t:c.wallet:{index}")
+        async with self.Session() as session:
+            await ui_module.owner_label_text(_message("💳 شارژ"), self.state, session, MagicMock(id=OWNER.user_id))
+        self.assertEqual(edit_mode_store.minutes_left(OWNER), 30)
+
+    async def test_owner_changes_a_color_and_a_label_from_the_menu(self) -> None:
+        await self._start_editing()
         index = self._index("c.wallet", "btn_wallet_topup")
         await self._owner(f"ed:a:c:c.wallet:{index}:d")
         self.assertEqual(await self._platform("btn_style_wallet_topup"), "danger")
@@ -281,7 +336,7 @@ class EditorFlowTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(markup.inline_keyboard[0][0].callback_data, "nv:w:home")
 
     async def test_label_that_repeats_another_button_is_refused(self) -> None:
-        await self._owner("ed:a:f1")
+        await self._start_editing()
         index = self._index("c.wallet", "btn_wallet_topup")
         await self._owner(f"ed:a:t:c.wallet:{index}")
         other = screen_buttons("c.wallet", ScreenContext(ui=dict(DEFAULT_SETTINGS)))[index + 1].text
@@ -292,7 +347,7 @@ class EditorFlowTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self.state.get_state(), ui_module.EditorStates.owner_label.state)
 
     async def test_cancel_leaves_the_label_unchanged(self) -> None:
-        await self._owner("ed:a:f1")
+        await self._start_editing()
         await self._owner(f"ed:a:t:c.wallet:{self._index('c.wallet', 'btn_wallet_topup')}")
         async with self.Session() as session:
             await ui_module.owner_label_text(_message("انصراف"), self.state, session, MagicMock(id=OWNER.user_id))
@@ -300,7 +355,7 @@ class EditorFlowTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(await self.state.get_state())
 
     async def test_shop_owner_edits_only_their_own_shop(self) -> None:
-        await self._owner("ed:a:f1")
+        await self._start_editing()
         index = self._index("c.wallet", "btn_wallet_topup")
         await self._shop(f"ed:r:c:c.wallet:{index}:d")
         await self._shop(f"ed:r:t:c.wallet:{index}")
@@ -317,7 +372,7 @@ class EditorFlowTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(await self._platform("btn_style_wallet_topup"))
 
     async def test_shop_owner_cannot_open_admin_menus_or_work_from_the_main_bot(self) -> None:
-        await self._owner("ed:a:f1")
+        await self._start_editing()
         self.assertTrue(self._alerted(await self._shop("ed:r:o:a.home")))
         self.assertTrue(self._alerted(await self._shop("ed:r:h", on_shop_bot=False)))
         self.assertTrue(self._alerted(await self._shop("ed:r:h", has_access=False)))
@@ -325,7 +380,7 @@ class EditorFlowTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self._platform(SCREEN_EDITOR_SETTING), "1")
 
     async def test_forged_or_stale_button_numbers_are_refused(self) -> None:
-        await self._owner("ed:a:f1")
+        await self._start_editing()
         for data in ("ed:a:c:c.wallet:99:d", "ed:a:t:c.wallet:-1", "ed:a:c:c.wallet:0:z"):
             with self.subTest(data=data):
                 self.assertTrue(self._alerted(await self._owner(data)))
