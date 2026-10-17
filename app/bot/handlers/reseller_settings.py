@@ -34,13 +34,20 @@ from app.services.settings_button_labels import (
     BTN_PAY_PSP,
     BTN_PAY_STARS,
     BTN_PAY_WALLET_DISCOUNT,
-    shop_button_subs,
+    button_label_subs,
 )
 from app.services import bot_feedback_texts as feedback
 from app.services.screen_titles import screen_caption, screen_heading, with_caption
 from app.bot.handlers.button_colors import COLORS_SECTION
 from app.bot.handlers.button_colors import entry_button as colors_entry_button
 from app.bot.handlers.guide_editor import GUIDES_SECTION
+from app.bot.handlers.settings_labels import (
+    LABELS_SECTION,
+    labels_audience_panel,
+    labels_home_panel,
+    resolve_sub,
+    sub_back,
+)
 from app.bot.handlers.guide_editor import entry_button as guides_entry_button
 from app.bot.handlers.screen_editor import entry_button as editor_entry_button
 from app.services.screen_editor import is_editor_enabled
@@ -63,7 +70,7 @@ Field = tuple[str, str, str]
 SECTIONS: dict[str, dict] = {
     # Same IA as owner hub — shop-scoped only (no platform keys).
     "shop": {
-        "title": "فروشگاه",
+        "title": "نام و متن‌ها",
         "subs": [
             ("identity", "نام و خوش‌آمد", [
                 ("shop_title", "نام فروشگاه", "text"),
@@ -75,15 +82,19 @@ SECTIONS: dict[str, dict] = {
                 ("purchase_success_text", "موفقیت خرید", "textarea"),
                 ("payment_reject_text", "رد پرداخت", "textarea"),
             ]),
-            *shop_button_subs(include_platform=False),
         ],
     },
     "menu": {
-        "title": "منو",
+        "title": "ظاهر منو",
         "subs": [
             ("layout", "چیدمان کیبورد", "menu_layout"),
             ("order", "ترتیب دکمه‌ها", "menu_order"),
         ],
+    },
+    LABELS_SECTION: {
+        "title": "متن دکمه‌ها",
+        "kind": "labels",
+        "subs": button_label_subs(include_platform=False),
     },
     "pay": {
         "title": "پرداخت",
@@ -142,7 +153,7 @@ SECTIONS: dict[str, dict] = {
         "kind": "supports",
     },
     "access": {
-        "title": "دسترسی",
+        "title": "تحویل سرویس",
         "subs": [
             ("qr", "QR اشتراک", [
                 ("qr_enabled", "ارسال خودکار QR", "toggle"),
@@ -152,12 +163,30 @@ SECTIONS: dict[str, dict] = {
         ],
     },
     "limits": {
-        "title": "محدودیت",
+        "title": "ورود و عضویت",
         "subs": [
+            ("force", "کانال اجباری", [
+                ("force_join_enabled", "فعال", "toggle"),
+                ("force_join_channel", "کانال‌ها (هر خط یکی)", "text"),
+                ("force_join_msg", "متن پیام عضویت", "textarea"),
+                ("btn_force_join", "متن دکمه لینک کانال", "text"),
+                ("btn_force_join_check", "متن دکمه بررسی", "text"),
+            ]),
+            ("terms", "قوانین ورود", [
+                ("terms_entry_enabled", "فعال ورود", "toggle"),
+                ("terms_entry_text", "متن قوانین ورود", "textarea"),
+                ("terms_entry_btn", "دکمه موافقت ورود", "text"),
+                ("terms_entry_reaccept", "پذیرش مجدد ورود", "toggle"),
+            ]),
             ("referral", "معرف اجباری", [
                 ("referral_required", "معرف اجباری", "toggle"),
                 ("referral_required_text", "پیام دریافت معرف", "textarea"),
             ]),
+        ],
+    },
+    "buy": {
+        "title": "قوانین خرید",
+        "subs": [
             ("trial_gate", "اکانت تست", [
                 ("trial_require_contact", "تأیید شماره تماس", "toggle"),
                 ("trial_require_iran_phone", "فقط شماره ایران", "toggle"),
@@ -168,18 +197,7 @@ SECTIONS: dict[str, dict] = {
             ("receipt_dup", "ضدتقلب رسید", [
                 ("receipt_dup_policy", "رسید تکراری (warn/block)", "text"),
             ]),
-            ("force", "کانال اجباری", [
-                ("force_join_enabled", "فعال", "toggle"),
-                ("force_join_channel", "کانال‌ها (هر خط یکی)", "text"),
-                ("force_join_msg", "متن پیام عضویت", "textarea"),
-                ("btn_force_join", "متن دکمه لینک کانال", "text"),
-                ("btn_force_join_check", "متن دکمه بررسی", "text"),
-            ]),
-            ("terms", "قوانین", [
-                ("terms_entry_enabled", "فعال ورود", "toggle"),
-                ("terms_entry_text", "متن قوانین ورود", "textarea"),
-                ("terms_entry_btn", "دکمه موافقت ورود", "text"),
-                ("terms_entry_reaccept", "پذیرش مجدد ورود", "toggle"),
+            ("terms_buy", "قوانین خرید", [
                 ("terms_buy_user_enabled", "فعال خرید کاربر", "toggle"),
                 ("terms_buy_user_text", "متن قوانین خرید کاربر", "textarea"),
                 ("terms_buy_user_btn", "دکمه موافقت خرید کاربر", "text"),
@@ -211,7 +229,7 @@ SECTIONS: dict[str, dict] = {
     },
 }
 
-HUB_ORDER = ["shop", "menu", "pay", "support", "access", "limits", "guides", "notify", "bot"]
+HUB_ORDER = ["shop", "menu", LABELS_SECTION, "pay", "access", "limits", "buy", "support", "guides", "notify", "bot"]
 
 
 class ResellerSettingsStates(StatesGroup):
@@ -450,6 +468,8 @@ async def _section_panel(session: AsyncSession, sec_id: str, reseller_id: int) -
     sec = SECTIONS.get(sec_id)
     if not sec or sec.get("kind") == "notify":
         return None
+    if sec.get("kind") == "labels":
+        return labels_home_panel("res", sec["subs"])
     with _Scoped(reseller_id):
         if sec.get("kind") == "supports":
             contacts = await get_support_contacts(session, reseller_id=reseller_id)
@@ -541,8 +561,10 @@ async def _render_sub(
     sub_id: str,
     reseller_id: int,
 ):
-    sec = SECTIONS.get(sec_id) or {}
-    fields = next((payload for sid, _label, payload in sec.get("subs") or [] if sid == sub_id), None)
+    found = resolve_sub(SECTIONS, sec_id, sub_id)
+    fields = found[1][2] if found else None
+    if found:
+        sec_id, sub_id = found[0], found[1][0]
     if fields == "menu_layout":
         with _Scoped(reseller_id):
             cur = await get_setting(session, "menu_layout", reseller_id=reseller_id) or "compact"
@@ -576,10 +598,10 @@ async def _render_sub(
 
 async def _sub_panel(session: AsyncSession, sec_id: str, sub_id: str, reseller_id: int) -> Panel | None:
     """A subsection's field list; None when it is not a plain field list."""
-    sub = next((s for s in (SECTIONS.get(sec_id) or {}).get("subs") or [] if s[0] == sub_id), None)
-    if sub is None or not isinstance(sub[2], list):
+    found = resolve_sub(SECTIONS, sec_id, sub_id)
+    if found is None or not isinstance(found[1][2], list):
         return None
-    _sid, title, fields = sub
+    sec_id, (sub_id, title, fields) = found
     with _Scoped(reseller_id):
         rows = []
         for key, label, kind in fields:
@@ -591,7 +613,7 @@ async def _sub_panel(session: AsyncSession, sec_id: str, sub_id: str, reseller_i
                 rows.append(
                     [InlineKeyboardButton(text=f"✏️ {label}: {_preview(cur, limit=28)}", callback_data=f"res:st:edit:{key}")]
                 )
-    rows.append([kb.back_button(None, f"res:st:sec:{sec_id}")])
+    rows.append([kb.back_button(None, sub_back("res", sec_id, sub_id))])
     return f"⚙️ <b>{title}</b>", _kb(rows)
 
 
@@ -713,6 +735,23 @@ async def settings_sub(callback: CallbackQuery, session: AsyncSession, db_user: 
     sec_id, sub_id = parts[3], parts[4]
     await callback.answer()
     await _render_sub(callback, session, sec_id, sub_id, profile.user_id)
+
+
+@router.callback_query(F.data.startswith("res:st:lab:"))
+async def settings_labels_audience(callback: CallbackQuery, session: AsyncSession, db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None):
+    _profile, err = await _gate(session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id)
+    if err:
+        await callback.answer(err, show_alert=True)
+        return
+    panel = labels_audience_panel("res", callback.data.rsplit(":", 1)[-1], SECTIONS[LABELS_SECTION]["subs"])
+    if panel is None:
+        await callback.answer(feedback.INVALID, show_alert=True)
+        return
+    await callback.answer()
+    if callback.message:
+        await safe_edit_text(callback.message, panel[0], reply_markup=panel[1])
 
 
 @router.callback_query(F.data.startswith("res:st:tog:"))

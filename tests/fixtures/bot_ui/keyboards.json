@@ -708,31 +708,41 @@
       [
         {
           "callback_data": "adm:st:sec:shop",
-          "text": "فروشگاه"
+          "text": "نام و متن‌ها"
         },
         {
           "callback_data": "adm:st:sec:menu",
-          "text": "ظاهر و دکمه‌ها"
+          "text": "ظاهر منو"
         }
       ],
       [
         {
-          "callback_data": "adm:st:sec:pay",
-          "text": "پرداخت"
+          "callback_data": "adm:st:sec:labels",
+          "text": "متن دکمه‌ها"
         },
         {
-          "callback_data": "adm:st:sec:support",
-          "text": "پشتیبان‌ها"
+          "callback_data": "adm:st:sec:pay",
+          "text": "پرداخت"
         }
       ],
       [
         {
           "callback_data": "adm:st:sec:access",
-          "text": "دسترسی"
+          "text": "تحویل سرویس"
         },
         {
           "callback_data": "adm:st:sec:limits",
-          "text": "محدودیت"
+          "text": "ورود و عضویت"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:st:sec:buy",
+          "text": "قوانین خرید"
+        },
+        {
+          "callback_data": "adm:st:sec:support",
+          "text": "پشتیبان‌ها"
         }
       ],
       [
@@ -1080,31 +1090,41 @@
       [
         {
           "callback_data": "nv:res:ra:res_st_shop",
-          "text": "فروشگاه"
+          "text": "نام و متن‌ها"
         },
         {
           "callback_data": "nv:res:ra:res_st_menu",
-          "text": "منو"
+          "text": "ظاهر منو"
         }
       ],
       [
         {
-          "callback_data": "nv:res:ra:res_st_pay",
-          "text": "پرداخت"
+          "callback_data": "nv:res:ra:res_st_labels",
+          "text": "متن دکمه‌ها"
         },
         {
-          "callback_data": "nv:res:ra:res_st_support",
-          "text": "پشتیبان‌ها"
+          "callback_data": "nv:res:ra:res_st_pay",
+          "text": "پرداخت"
         }
       ],
       [
         {
           "callback_data": "nv:res:ra:res_st_access",
-          "text": "دسترسی"
+          "text": "تحویل سرویس"
         },
         {
           "callback_data": "nv:res:ra:res_st_limits",
-          "text": "محدودیت"
+          "text": "ورود و عضویت"
+        }
+      ],
+      [
+        {
+          "callback_data": "nv:res:ra:res_st_buy",
+          "text": "قوانین خرید"
+        },
+        {
+          "callback_data": "nv:res:ra:res_st_support",
+          "text": "پشتیبان‌ها"
         }
       ],
       [
@@ -3793,26 +3813,34 @@
     "keyboard": [
       [
         {
-          "text": "فروشگاه"
+          "text": "نام و متن‌ها"
         },
         {
-          "text": "ظاهر و دکمه‌ها"
+          "text": "ظاهر منو"
         }
       ],
       [
         {
+          "text": "متن دکمه‌ها"
+        },
+        {
           "text": "پرداخت"
+        }
+      ],
+      [
+        {
+          "text": "تحویل سرویس"
+        },
+        {
+          "text": "ورود و عضویت"
+        }
+      ],
+      [
+        {
+          "text": "قوانین خرید"
         },
         {
           "text": "پشتیبان‌ها"
-        }
-      ],
-      [
-        {
-          "text": "دسترسی"
-        },
-        {
-          "text": "محدودیت"
         }
       ],
       [
@@ -4364,26 +4392,34 @@
     "keyboard": [
       [
         {
-          "text": "فروشگاه"
+          "text": "نام و متن‌ها"
         },
         {
-          "text": "منو"
+          "text": "ظاهر منو"
         }
       ],
       [
         {
+          "text": "متن دکمه‌ها"
+        },
+        {
           "text": "پرداخت"
+        }
+      ],
+      [
+        {
+          "text": "تحویل سرویس"
+        },
+        {
+          "text": "ورود و عضویت"
+        }
+      ],
+      [
+        {
+          "text": "قوانین خرید"
         },
         {
           "text": "پشتیبان‌ها"
-        }
-      ],
-      [
-        {
-          "text": "دسترسی"
-        },
-        {
-          "text": "محدودیت"
         }
       ],
       [

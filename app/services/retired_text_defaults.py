@@ -41,6 +41,15 @@ RETIRED_TEXT_DEFAULTS: dict[str, tuple[str, ...]] = {
     "screen_caption_a_plans": ("مخاطب یا ابزار کاتالوگ را از دکمه‌های زیر انتخاب کنید.",),
     "screen_caption_a_plans_users": ("فهرست پلن‌ها را با «مشاهده پلن‌ها» ببینید؛ افزودن/کاتالوگ از دکمه‌های زیر.",),
     "screen_caption_a_plans_resellers": ("فهرست پلن‌ها را با «مشاهده پلن‌ها» ببینید؛ افزودن/کاتالوگ از دکمه‌های زیر.",),
+    # Settings sections renamed when each section got one subject.
+    "btn_adm_st_shop": ("فروشگاه",),
+    "btn_adm_st_menu": ("ظاهر و دکمه‌ها",),
+    "btn_adm_st_access": ("دسترسی",),
+    "btn_adm_st_limits": ("محدودیت",),
+    "btn_res_st_shop": ("فروشگاه",),
+    "btn_res_st_menu": ("منو",),
+    "btn_res_st_access": ("دسترسی",),
+    "btn_res_st_limits": ("محدودیت",),
 }
 
 

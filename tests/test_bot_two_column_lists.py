@@ -75,14 +75,18 @@ class AdminSettingsListsTests(unittest.IsolatedAsyncioTestCase):
         await admin_settings._render_section(callback, None, sec_id)
         return _markup(callback)
 
-    async def test_the_shop_section_with_eleven_entries_is_two_column_with_a_full_width_back_row(self):
-        markup = await self._section("shop")
+    async def test_the_admin_button_groups_are_two_column_with_a_full_width_back_row(self):
+        from app.bot.handlers.settings_labels import labels_audience_panel
+        from app.services.settings_button_labels import label_subs_for
+
+        subs = admin_settings.SECTIONS["labels"]["subs"]
+        _text, markup = labels_audience_panel("adm", "admin", subs)
         entries = [r for r in markup.inline_keyboard[:-1]]
         self.assertGreater(len(entries), 0)
         self.assertTrue(any(len(row) == 2 for row in entries))
         self.assertTrue(all(len(row) <= 2 for row in markup.inline_keyboard))
-        self.assertEqual(len(markup.inline_keyboard[-1]), 1)
-        expected = [f"adm:st:sub:shop:{sub[0]}" for sub in admin_settings.SECTIONS["shop"]["subs"]]
+        self.assertEqual(markup.inline_keyboard[-1][0].callback_data, "adm:st:sec:labels")
+        expected = [f"adm:st:sub:labels:{sub[0]}" for sub in label_subs_for("admin", subs)]
         self.assertEqual(sorted(c for c in _callbacks(markup) if c.startswith("adm:st:sub:")), sorted(expected))
 
     async def test_a_section_with_six_entries_or_fewer_keeps_one_per_row(self):
@@ -94,7 +98,7 @@ class AdminSettingsListsTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(all(len(row) == 1 for row in markup.inline_keyboard), sec_id)
 
     async def test_the_field_list_of_a_long_subsection_is_two_column_and_loses_nothing(self):
-        fields = next(sub[2] for sub in admin_settings.SECTIONS["shop"]["subs"] if sub[0] == "btn_main")
+        fields = next(sub[2] for sub in admin_settings.SECTIONS["labels"]["subs"] if sub[0] == "btn_main")
         self.assertGreaterEqual(len(fields), kb.LONG_LIST_MIN_ITEMS)
         callback = _callback()
         with patch.object(admin_settings, "get_all_settings", AsyncMock(return_value={})):
@@ -120,14 +124,16 @@ class AdminSettingsListsTests(unittest.IsolatedAsyncioTestCase):
 
 
 class ResellerSettingsListsTests(unittest.IsolatedAsyncioTestCase):
-    async def test_the_shop_section_is_two_column_for_a_shop_owner_too(self):
-        callback = _callback()
-        with patch.object(reseller_settings, "safe_edit_text", AsyncMock()) as edit:
-            await reseller_settings._render_section(callback, None, "shop", 5)
-        markup = edit.await_args.kwargs["reply_markup"]
-        self.assertGreaterEqual(len(reseller_settings.SECTIONS["shop"]["subs"]), kb.LONG_LIST_MIN_ITEMS)
+    async def test_the_customer_button_groups_are_two_column_for_a_shop_owner_too(self):
+        from app.bot.handlers.settings_labels import labels_audience_panel
+        from app.services.settings_button_labels import label_subs_for
+
+        subs = reseller_settings.SECTIONS["labels"]["subs"]
+        self.assertGreaterEqual(len(label_subs_for("user", subs)), kb.LONG_LIST_MIN_ITEMS)
+        _text, markup = labels_audience_panel("res", "user", subs)
         self.assertTrue(any(len(row) == 2 for row in markup.inline_keyboard))
         self.assertEqual(len(markup.inline_keyboard[-1]), 1)
+        self.assertEqual(markup.inline_keyboard[-1][0].callback_data, "res:st:sec:labels")
 
     async def test_editable_values_stay_one_per_row_because_their_width_follows_the_value(self):
         callback = _callback()

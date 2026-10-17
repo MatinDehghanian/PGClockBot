@@ -13,14 +13,14 @@ class BotSettingsHubIATests(unittest.TestCase):
 
         self.assertEqual(
             HUB_ORDER,
-            ["shop", "menu", "pay", "support", "access", "limits", "guides", "notify"],
+            ["shop", "menu", "labels", "pay", "access", "limits", "buy", "support", "guides", "notify"],
         )
         self.assertNotIn("service", HUB_ORDER)
         self.assertIn("service", SECTIONS)  # deep plans callbacks still resolve
         self.assertIn("access", SECTIONS)
-        self.assertEqual(SECTIONS["shop"]["title"], "فروشگاه")
-        self.assertEqual(SECTIONS["menu"]["title"], "ظاهر و دکمه‌ها")
-        self.assertEqual(SECTIONS["access"]["title"], "دسترسی")
+        self.assertEqual(SECTIONS["shop"]["title"], "نام و متن‌ها")
+        self.assertEqual(SECTIONS["menu"]["title"], "ظاهر منو")
+        self.assertEqual(SECTIONS["access"]["title"], "تحویل سرویس")
 
         labels = [lab for _, lab in _admin_settings_submenu_entries()]
         self.assertEqual(
@@ -39,10 +39,12 @@ class BotSettingsHubIATests(unittest.TestCase):
             [
                 "shop",
                 "menu",
+                "labels",
                 "pay",
-                "support",
                 "access",
                 "limits",
+                "buy",
+                "support",
                 "guides",
                 "notify",
                 "bot",
@@ -54,12 +56,14 @@ class BotSettingsHubIATests(unittest.TestCase):
         self.assertEqual(
             labels,
             [
-                "فروشگاه",
-                "منو",
+                "نام و متن‌ها",
+                "ظاهر منو",
+                "متن دکمه‌ها",
                 "پرداخت",
+                "تحویل سرویس",
+                "ورود و عضویت",
+                "قوانین خرید",
                 "پشتیبان‌ها",
-                "دسترسی",
-                "محدودیت",
                 "آموزش اتصال",
                 "اعلان‌ها",
                 "ربات",
@@ -91,7 +95,7 @@ class BotSettingsHubIATests(unittest.TestCase):
         from app.services.settings_button_labels import PLATFORM_ONLY_BTN_KEYS
 
         for sections in (admin_s, res_s):
-            sub_ids = {s[0] for s in sections["shop"]["subs"]}
+            sub_ids = {s[0] for s in sections["shop"]["subs"]} | {s[0] for s in sections["labels"]["subs"]}
             self.assertIn("identity", sub_ids)
             self.assertIn("btn_main", sub_ids)
             self.assertNotIn("help_texts", sub_ids)
@@ -100,7 +104,7 @@ class BotSettingsHubIATests(unittest.TestCase):
 
         admin_btn_keys = {
             f[0]
-            for sub in admin_s["shop"]["subs"]
+            for sub in admin_s["labels"]["subs"]
             if isinstance(sub[2], list)
             for f in sub[2]
             if str(f[0]).startswith("btn_")
@@ -111,7 +115,7 @@ class BotSettingsHubIATests(unittest.TestCase):
 
         res_btn_keys = {
             f[0]
-            for sub in res_s["shop"]["subs"]
+            for sub in res_s["labels"]["subs"]
             if isinstance(sub[2], list)
             for f in sub[2]
             if str(f[0]).startswith("btn_")
@@ -139,13 +143,15 @@ class BotSettingsHubIATests(unittest.TestCase):
             is_reseller_bot=True,
             profile=profile,
         )
+        self.assertEqual(mapping["نام و متن‌ها"], "res_st_shop")
+        # A shop keyboard sent before the rename still opens the same section.
         self.assertEqual(mapping["فروشگاه"], "res_st_shop")
         self.assertEqual(mapping["ربات"], "res_st_bot")
         self.assertEqual(mapping["اعلان‌ها"], "res_st_notify")
         self.assertEqual(mapping["🌐 وب‌پنل"], "res_st_panel")
         self.assertNotIn("فروشگاه و متون", mapping)
         flat = [b.text for row in reseller_settings_reply_keyboard(ui).keyboard for b in row]
-        self.assertIn("فروشگاه", flat)
+        self.assertIn("نام و متن‌ها", flat)
         self.assertIn("🌐 وب‌پنل", flat)
 
     def test_user_cannot_see_settings_hub_labels(self):
@@ -154,6 +160,7 @@ class BotSettingsHubIATests(unittest.TestCase):
         ui = {"btn_menu_home": "🏠 منوی اصلی", "btn_back": "⬅️ بازگشت", "menu_order": "shop"}
         mapping = reply_action_map("user", ui=ui, include_submenus=True, is_reseller_bot=False)
         self.assertNotIn("فروشگاه", mapping)
+        self.assertNotIn("نام و متن‌ها", mapping)
         self.assertNotIn("🌐 وب‌پنل", mapping)
         self.assertNotIn("اعلان‌ها", mapping)
 
