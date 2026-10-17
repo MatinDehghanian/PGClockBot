@@ -9,6 +9,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import TelegramObject
 
 from app.bot.edit_mode import EditModeMiddleware
+from app.bot.reply_keyboard_state import ReplyKeyboardStateMiddleware
 from app.bot.middlewares import (
     DbSessionMiddleware,
     ErrorLogMiddleware,
@@ -185,6 +186,8 @@ def create_dispatcher() -> Dispatcher:
     dp.update.middleware(ForceJoinMiddleware())
     dp.update.middleware(TermsEntryMiddleware())
     dp.update.middleware(EditModeMiddleware())
+    # Notes typed text so the next main menu unfolds the reply keyboard again.
+    dp.message.outer_middleware(ReplyKeyboardStateMiddleware())
 
     for router in bot_routers():
         dp.include_router(router)
