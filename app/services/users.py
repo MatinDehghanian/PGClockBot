@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.db.models import BotUser, Order, Role, Setting, UserService
 from app.services.button_styles import default_settings as button_style_defaults
-from app.services.screen_titles import screen_text_defaults
+from app.services.screen_titles import SCREEN_TEXT_TAB, screen_text_defaults, screen_text_setting_groups
 from app.services.button_styles import setting_group_fields as button_style_setting_fields
 from app.services.connection_status_texts import MONITOR_TEXT_DEFAULTS, readable_monitor_texts
 from app.services.user_purge import purge_user_references
@@ -1109,6 +1109,7 @@ SETTINGS_TABS: list[tuple[str, str]] = [
     ("appearance", "هویت ربات"),
     ("messages", "متن پیام‌ها"),
     ("buttons", "متن دکمه‌ها"),
+    (SCREEN_TEXT_TAB, "تیتر و توضیح منوها"),
     ("colors", "رنگبندی دکمه‌ها"),
     ("menu", "منوی بات"),
     ("links", "لینک‌های سریع"),
@@ -1747,6 +1748,7 @@ SETTING_GROUPS = {
         ),
     ],
 }
+SETTING_GROUPS.update(screen_text_setting_groups())
 
 # Map tab id → which SETTING_GROUPS cards to show (menu/notifications/update/naming special)
 TAB_SETTING_GROUPS: dict[str, list[str]] = {
@@ -1754,6 +1756,7 @@ TAB_SETTING_GROUPS: dict[str, list[str]] = {
     "welcome": ["خوش‌آمد و هویت"],
     "messages": ["متن پیام‌ها"],
     "buttons": ["متن دکمه‌های منو"],
+    SCREEN_TEXT_TAB: list(screen_text_setting_groups()),
     "colors": ["رنگ دکمه‌ها"],
     "qr": ["QR اشتراک"],
     "payment": [
@@ -1837,6 +1840,19 @@ def keys_for_tab(tab: str) -> set[str]:
         for item in SETTING_GROUPS.get(name, []):
             keys.add(item[0])
     return keys
+
+
+# Tabs whose texts and colors the web panel can put back to the shipped defaults in one step.
+RESETTABLE_SETTINGS_TABS = frozenset({"buttons", "colors", SCREEN_TEXT_TAB})
+
+
+def default_values_for_keys(keys: set[str]) -> dict[str, str]:
+    """Shipped defaults for ``keys``; switches and images keep their current value."""
+    return {
+        key: str(DEFAULT_SETTINGS.get(key, ""))
+        for key in keys
+        if key not in TOGGLE_KEYS and key not in IMAGE_KEYS
+    }
 
 
 _defaults_ready = False

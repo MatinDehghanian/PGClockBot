@@ -1,0 +1,10 @@
+{# «Back to defaults» for texts and colors of one settings tab. Expects: tab, reset_action, reset_tabs. #}
+{% if reset_tabs and tab in reset_tabs %}
+<form method="post" action="{{ reset_action }}" class="settings-reset-form"
+      data-confirm="همهٔ متن‌ها و رنگ‌های همین بخش به پیش‌فرض ربات برمی‌گردد و تغییرهای شما در این بخش پاک می‌شود. ادامه می‌دهید؟"
+      data-confirm-title="بازگردانی به پیش‌فرض" data-confirm-danger="1" data-confirm-label="بازگردانی">
+  {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% endif %}
+  <input type="hidden" name="reset_defaults" value="1">
+  <button class="btn btn-ghost" type="submit">↺ بازگردانی همه به پیش‌فرض</button>
+</form>
+{% endif %}
