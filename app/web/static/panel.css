@@ -11576,3 +11576,23 @@ html[data-theme="light"] .panel-status-card {
   }
 }
 
+
+/* Card titles with a line icon (macros.card_title): neutral like the web-panel sidebar, orange in the bot panel. */
+.card h2.card-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.card-title-ico {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.card-title--neutral .card-title-ico { color: var(--foreground); }
+.card-title--bot .card-title-ico { color: #f0b27a; }
+html[data-theme="light"] .card-title--bot .card-title-ico { color: #c2691c; }

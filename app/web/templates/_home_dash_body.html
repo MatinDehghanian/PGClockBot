@@ -1,5 +1,5 @@
 {# Single-root dash body for /home and /home/body fragment swap. #}
-{% from "macros.html" import page_title %}
+{% from "macros.html" import page_title, card_title %}
 {% set ov = overview %}
 {% set bot = ov.bot %}
 {% set nodes = ov.nodes %}
@@ -24,7 +24,7 @@
   </div>
 
   <div class="card home-conn-card">
-    <h2>وضعیت اتصال</h2>
+    {{ card_title('connection', 'وضعیت اتصال') }}
     <div class="home-conn-row">
       <a class="home-conn {% if bot.unchecked %}is-neutral{% elif bot.ok %}is-ok{% else %}is-err{% endif %}" href="/settings?tab=bot">
         <svg class="home-conn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4.5 6.5v5.2c0 4.7 3.2 8 7.5 9.3 4.3-1.3 7.5-4.6 7.5-9.3V6.5L12 3z"/><path d="M9 12l2 2 4-4"/></svg>
@@ -91,7 +91,7 @@
 
   {% if wallet_card %}
   <div class="card home-conn-card">
-    <h2>کیف پول</h2>
+    {{ card_title('wallet', 'کیف پول') }}
     <p class="muted">موجودی فروشگاه همین حساب</p>
     <p class="home-balance"><strong><span dir="ltr">{{ wallet_card.balance | money }}</span> تومان</strong></p>
   </div>

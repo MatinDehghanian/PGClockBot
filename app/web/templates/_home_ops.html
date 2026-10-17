@@ -2,7 +2,7 @@
    Expects: periods, action_center (optional), portal_bot_href, portal_pg_href,
             portal_bot_show (bool, default true), portal_pg_show (bool, default true)
 #}
-{% from "macros.html" import action_center_icon, inbox_dismiss_btn %}
+{% from "macros.html" import action_center_icon, inbox_dismiss_btn, card_title %}
 {% set ac = action_center or {} %}
 {% set periods = periods or {} %}
 {% set day = periods.day or {} %}
@@ -47,7 +47,7 @@
 {% endif %}
 
 <section class="card home-action-card" aria-label="صف کار">
-  <h2>صف کار</h2>
+  {{ card_title('queue', 'صف کار') }}
   {% if ac.has_items %}
   <div class="home-action-list">
     {% for item in ac.entries %}
@@ -73,7 +73,7 @@
 
 <section class="card home-periods-card" aria-label="فروش دوره‌ای">
   <header class="home-periods-head">
-    <h2>فروش</h2>
+    {{ card_title('sales', 'فروش') }}
     <p class="muted">امروز · ۷ روز · ۳۰ روز</p>
   </header>
   <div class="home-period-grid">
