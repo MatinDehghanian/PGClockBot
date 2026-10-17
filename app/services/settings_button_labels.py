@@ -26,6 +26,7 @@ PLATFORM_ONLY_BTN_KEYS: frozenset[str] = frozenset(
         "btn_adm_settings",
         "btn_adm_broadcast",
         "btn_adm_preview",
+        "btn_adm_edit_mode",
         "btn_adm_hub_ops",
         "btn_adm_hub_people",
         "btn_adm_hub_product",
@@ -118,6 +119,7 @@ BTN_ADMIN_HUBS: list[Field] = [
     ("btn_adm_hub_product", "گروه محصول و PG", "text"),
     ("btn_adm_hub_marketing", "گروه بازاریابی", "text"),
     ("btn_adm_hub_system", "گروه سیستم", "text"),
+    ("btn_adm_edit_mode", "حالت ویرایش منوها", "text"),
 ]
 
 BTN_ADMIN_HUB_ITEMS: list[Field] = [

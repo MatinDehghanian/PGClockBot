@@ -39,6 +39,7 @@ from app.services import bot_feedback_texts as feedback
 from app.bot.handlers.button_colors import COLORS_SECTION
 from app.bot.handlers.button_colors import entry_button as colors_entry_button
 from app.bot.handlers.screen_editor import entry_button as editor_entry_button
+from app.services.screen_editor import is_editor_enabled
 
 
 
@@ -509,7 +510,9 @@ async def _render_section(callback: CallbackQuery, session: AsyncSession, sec_id
         )
         if sec_id == COLORS_SECTION:
             rows.append([colors_entry_button(for_reseller=True)])
-            rows.append([editor_entry_button(for_reseller=True)])
+            # Shop owners can only edit while the platform owner has the editor enabled.
+            if await is_editor_enabled(session):
+                rows.append([editor_entry_button(for_reseller=True)])
         rows.append([kb.back_button(None, "res:st:hub")])
         if callback.message:
             await safe_edit_text(

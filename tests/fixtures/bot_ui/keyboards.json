@@ -102,6 +102,12 @@
       ],
       [
         {
+          "callback_data": "ed:a:h",
+          "text": "✏️ حالت ویرایش منوها"
+        }
+      ],
+      [
+        {
           "callback_data": "menu:home",
           "text": "⬅️ بازگشت"
         }
@@ -161,6 +167,12 @@
           "callback_data": "cma:home:0",
           "style": "primary",
           "text": "📡 وضعیت اتصال"
+        }
+      ],
+      [
+        {
+          "callback_data": "ed:a:h",
+          "text": "✏️ حالت ویرایش منوها"
         }
       ],
       [

@@ -263,7 +263,8 @@ async def _show(callback: CallbackQuery, view: tuple[str, InlineKeyboardMarkup])
     await safe_edit_text(callback.message, text, reply_markup=markup)
 
 
-@owner_router.callback_query(F.data.startswith(f"{_CALLBACK_ROOT}:a:"))
+# Literal prefixes (_CALLBACK_ROOT) keep the handlers visible to the callback contract check.
+@owner_router.callback_query(F.data.startswith("bcl:a:"))
 async def owner_colors(callback: CallbackQuery, session: AsyncSession, db_user: BotUser) -> None:
     # The owner-principal middleware on this router already admitted the actor.
     request = parse_request(callback.data)
@@ -273,7 +274,7 @@ async def owner_colors(callback: CallbackQuery, session: AsyncSession, db_user: 
     await _handle(callback, session, _Actor(for_reseller=False, shop_id=None), request)
 
 
-@shop_router.callback_query(F.data.startswith(f"{_CALLBACK_ROOT}:r:"))
+@shop_router.callback_query(F.data.startswith("bcl:r:"))
 async def shop_colors(
     callback: CallbackQuery,
     session: AsyncSession,
