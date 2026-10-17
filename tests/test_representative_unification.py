@@ -501,8 +501,17 @@ class RepresentativeUnificationTests(unittest.IsolatedAsyncioTestCase):
         keyboards = (ROOT / "app/bot/keyboards.py").read_text(encoding="utf-8")
         reply_kb = (ROOT / "app/bot/reply_keyboards.py").read_text(encoding="utf-8")
         self.assertIn("REPLY_ACTION_RES_ADD_REP", keyboards)
-        # Reply builders (incl. «افزودن نماینده») live in reply_keyboards after extract.
-        self.assertIn("افزودن نماینده", reply_kb)
+        # The label now comes from settings; check the button the panel actually builds.
+        from app.bot.keyboards import REPLY_ACTION_RES_ADD_REP  # loads reply_keyboards in order
+        from app.bot.reply_keyboards import _reseller_submenu_entries
+        from app.db.models import ResellerProfile
+
+        entries = dict(
+            _reseller_submenu_entries(
+                ResellerProfile(id=1, user_id=2, is_active=True), can_add_representative=True
+            )
+        )
+        self.assertIn("افزودن نماینده", entries[REPLY_ACTION_RES_ADD_REP])
         self.assertIn("can_add_representative", reply_kb)
         self.assertIn("REPLY_ACTION_RES_ADD_REP", reply_kb)
         handler = (ROOT / "app/bot/handlers/reseller_reps.py").read_text(encoding="utf-8")

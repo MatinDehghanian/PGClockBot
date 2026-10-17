@@ -11,7 +11,6 @@ from app.services.service_import import SETTING_KEY
 from app.services.users import current_shop_reseller_id, on
 
 ADD_CALLBACK = "svc:add"
-ADD_BUTTON_LABEL = "🔗 اتصال اشتراک قبلی"
 EMPTY_LIST_HINT = "اگر سرویسی بیرون از ربات گرفته‌اید، با لینک اشتراک آن را اضافه کنید."
 
 
@@ -20,7 +19,15 @@ def import_enabled(ui: Mapping[str, str] | None) -> bool:
 
 
 def add_existing_row(ui: dict | None) -> list[InlineKeyboardButton]:
-    return [_ikb(ADD_BUTTON_LABEL, callback_data=ADD_CALLBACK, ui=ui, style_id="svc_add_existing")]
+    return [
+        _ikb(
+            _t(ui, "btn_svc_add_existing"),
+            callback_data=ADD_CALLBACK,
+            ui=ui,
+            label_key="btn_svc_add_existing",
+            style_id="svc_add_existing",
+        )
+    ]
 
 
 def empty_services_keyboard(ui: dict | None) -> InlineKeyboardMarkup:

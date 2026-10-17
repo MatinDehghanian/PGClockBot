@@ -21,6 +21,7 @@ from app.services.users import current_shop_reseller_id, get_all_settings, on
 from app.services.wallet import list_activity
 from app.services.message_variables import DOMAIN_PAYMENT, render_message_template
 from app.services import bot_feedback_texts as feedback
+from app.services.screen_titles import screen_title
 
 router = Router(name="wallet")
 
@@ -181,7 +182,7 @@ async def wallet_home(callback: CallbackQuery, session: AsyncSession, db_user: B
 
     bal = await wallet_balance_for_context(session, db_user)
     text = format_message(
-        "👛 کیف پول",
+        screen_title(ui, "c.wallet"),
         "\n".join(
             [
                 kv_line(

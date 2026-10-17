@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import BotUser
 from app.services.users import get_all_settings
 from app.services import bot_feedback_texts as feedback
+from app.services.screen_titles import screen_title
 
 router = Router(name="nav_hubs")
 
@@ -125,7 +126,7 @@ async def nv_wallet_home(
     ui = await get_all_settings(session)
     bal = await wallet_balance_for_context(session, db_user)
     text = format_message(
-        "👛 کیف پول",
+        screen_title(ui, "c.wallet"),
         "\n".join(
             [
                 kv_line(

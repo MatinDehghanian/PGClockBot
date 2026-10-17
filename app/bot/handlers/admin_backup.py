@@ -9,6 +9,7 @@ from pathlib import Path
 from aiogram import Bot, F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from sqlalchemy.ext.asyncio import AsyncSession
 from aiogram.types import (
     CallbackQuery,
     Document,
@@ -34,6 +35,8 @@ from app.services.backup import (
 )
 from app.services.updates import local_version
 from app.services import bot_feedback_texts as feedback
+from app.services.screen_titles import screen_heading
+from app.services.users import get_all_settings
 
 
 async def _lasting_kb(session, db_user, classic):
@@ -82,9 +85,9 @@ def _item_keyboard(backup_id: str) -> InlineKeyboardMarkup:
     )
 
 
-def _hub_text(backups: list[dict]) -> str:
+def _hub_text(backups: list[dict], ui: dict[str, str] | None = None) -> str:
     lines = [
-        "💾 <b>بکاپ / ریستور</b>",
+        screen_heading(ui, "a.backup"),
         f"نسخه: <code>{local_version()}</code>",
         "",
         "بکاپ کامل = دیتابیس کل پلتفرم (همه فروشگاه‌ها) + آپلودها + یوزر وب.",
@@ -108,7 +111,7 @@ def _hub_text(backups: list[dict]) -> str:
 
 @router.callback_query(F.data == "adm:backup")
 @require_bot_owner_handler
-async def backup_hub(callback: CallbackQuery, db_user: BotUser, state: FSMContext):
+async def backup_hub(callback: CallbackQuery, db_user: BotUser, state: FSMContext, session: AsyncSession):
     if not _is_admin(db_user):
         await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
@@ -118,7 +121,7 @@ async def backup_hub(callback: CallbackQuery, db_user: BotUser, state: FSMContex
     if callback.message:
         await safe_edit_text(
             callback.message,
-            _hub_text(backups),
+            _hub_text(backups, await get_all_settings(session)),
             reply_markup=_hub_keyboard(backups),
         )
 
@@ -164,7 +167,7 @@ async def backup_create_env_ask(callback: CallbackQuery, db_user: BotUser):
 
 @router.callback_query(F.data.startswith("adm:backup:create"))
 @require_bot_owner_handler
-async def backup_create(callback: CallbackQuery, db_user: BotUser):
+async def backup_create(callback: CallbackQuery, db_user: BotUser, session: AsyncSession):
     if not _is_admin(db_user):
         await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
@@ -209,7 +212,7 @@ async def backup_create(callback: CallbackQuery, db_user: BotUser):
             )
         backups = await asyncio.to_thread(list_backups)
         await callback.message.answer(
-            _hub_text(backups),
+            _hub_text(backups, await get_all_settings(session)),
             reply_markup=_hub_keyboard(backups),
         )
 
@@ -267,7 +270,7 @@ async def backup_download(callback: CallbackQuery, db_user: BotUser):
 
 @router.callback_query(F.data.startswith("adm:backup:del:"))
 @require_bot_owner_handler
-async def backup_delete(callback: CallbackQuery, db_user: BotUser):
+async def backup_delete(callback: CallbackQuery, db_user: BotUser, session: AsyncSession):
     if not _is_admin(db_user):
         await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
@@ -278,7 +281,7 @@ async def backup_delete(callback: CallbackQuery, db_user: BotUser):
     if callback.message:
         await safe_edit_text(
             callback.message,
-            _hub_text(backups),
+            _hub_text(backups, await get_all_settings(session)),
             reply_markup=_hub_keyboard(backups),
         )
 

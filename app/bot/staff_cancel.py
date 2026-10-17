@@ -8,6 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser
 from app.services import bot_feedback_texts as feedback
+from app.services.button_color_editor import PLATFORM_SCOPE
+from app.services.screen_titles import screen_title
+from app.services.users import get_all_settings
 
 
 async def reopen_admin_plans(
@@ -394,11 +397,13 @@ async def reopen_loyalty_staff(
         await present_nav_panel(message, text=feedback.CANCELLED, inline=None, state=state)
         return
     scope, can_tiers = scope_info
+    # The club hub belongs to the platform (scope None) or to one shop.
+    ui = await get_all_settings(session, reseller_id=scope or PLATFORM_SCOPE)
     await _staff_loyalty_answer(
         message,
         session,
         db_user,
-        format_message("⭐ باشگاه مشتریان", feedback.CANCELLED_BACK_TO_HUB),
+        format_message(screen_title(ui, "a.loyalty"), feedback.CANCELLED_BACK_TO_HUB),
         can_tiers=can_tiers,
         is_reseller_bot=is_reseller_bot,
         reseller_owner_id=reseller_owner_id,

@@ -61,7 +61,12 @@ class AdminSettingsInPlaceTests(unittest.IsolatedAsyncioTestCase):
         message.answer.assert_not_awaited()
         edit = message.bot.edit_message_text
         self.assertEqual(edit.await_args.kwargs["message_id"], PROMPT_ID)
-        self.assertEqual(edit.await_args.kwargs["text"], admin_settings._SETTINGS_HUB_TEXT)
+        self.assertEqual(
+            edit.await_args.kwargs["text"],
+            "⚙️ <b>تنظیمات سریع</b>\n"
+            "یک بخش را از دکمه‌های زیر انتخاب کنید.\n"
+            "ظاهر، رنگ، گزارش روزانه → وب‌پنل.",
+        )
 
     async def test_save_sends_one_panel_when_prompt_is_unknown(self):
         state = FSMContext(
@@ -94,10 +99,13 @@ class ResellerSettingsInPlaceTests(unittest.IsolatedAsyncioTestCase):
     async def test_close_input_edits_prompt_and_deletes_reply(self):
         state = await _prompted_state()
         message = _message()
-        profile = SimpleNamespace(bot_username="shopbot")
-        with patch(
-            "app.services.resellers.get_reseller_panel_base_url",
-            AsyncMock(return_value=""),
+        profile = SimpleNamespace(bot_username="shopbot", user_id=5)
+        with (
+            patch(
+                "app.services.resellers.get_reseller_panel_base_url",
+                AsyncMock(return_value=""),
+            ),
+            patch.object(reseller_settings, "get_all_settings", AsyncMock(return_value={})),
         ):
             await reseller_settings._close_input_to_hub(
                 message, state, MagicMock(), profile, note="✅ ذخیره شد."
