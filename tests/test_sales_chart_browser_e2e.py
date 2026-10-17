@@ -119,7 +119,10 @@ class SalesChartBrowserTests(unittest.TestCase):
     def test_month_view_labels_use_latin_digits_in_date_order(self) -> None:
         def check(page) -> None:
             page.click('[data-range="30"]')
-            page.wait_for_function("document.querySelectorAll('.sc-xtick').length > 3")
+            # The week view already has seven labels; wait for the month labels (they carry day numbers).
+            page.wait_for_function(
+                "Array.from(document.querySelectorAll('.sc-xtick')).some(t => /\\d/.test(t.textContent))"
+            )
             ticks = sorted(self._ticks(page), key=lambda tick: -tick[1])
             labels = [text for text, _ in ticks]
             self.assertEqual(labels[-1], "امروز")
