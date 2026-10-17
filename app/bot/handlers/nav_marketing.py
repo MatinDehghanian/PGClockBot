@@ -13,16 +13,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import menu_nav as nav
 from app.db.models import BotUser
-from app.services.screen_titles import screen_heading
+from app.services.screen_titles import screen_caption, screen_heading, with_caption
 from app.services.users import get_all_settings
 
 router = Router(name="nav_marketing")
 
 # Panels that open below the hub and push it on the back stack.
 MARKETING_CHILD_LEVELS = frozenset({nav.NAV_ADMIN_GIFTS, nav.NAV_ADMIN_CAMPAIGNS})
-MARKETING_HUB_CAPTION = "باشگاه مشتریان، پیام گروهی، کد هدیه و کمپین‌ها."
-
-
 async def open_admin_marketing_hub(
     message: Message,
     session: AsyncSession,
@@ -50,7 +47,7 @@ async def open_admin_marketing_hub(
         await nav.set_nav_level(state, nav.NAV_ADMIN_MARKETING, push=push)
     await present_nav_panel(
         message,
-        text=f"{screen_heading(ui, 'a.marketing')}\n{MARKETING_HUB_CAPTION}",
+        text=with_caption(screen_heading(ui, "a.marketing"), screen_caption(ui, "a.marketing")),
         inline=admin_marketing_hub_keyboard(ui),
         state=state,
     )
