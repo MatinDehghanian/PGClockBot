@@ -23,7 +23,8 @@
     </div>
   </div>
 
-  {% from "_home_widgets.html" import kpi_strip, status_tiles %}
+  {% from "_home_widgets.html" import kpi_strip, status_tiles, update_notice %}
+  {{ update_notice(update if update is defined else none) }}
   {{ kpi_strip(periods, action_center, trend if trend is defined else none, kpi_links if kpi_links is defined else none) }}
 
   {% set tiles = [] %}
@@ -37,9 +38,6 @@
   {% set node_state = 'ok' if (nodes.ok and nodes.overall == 'ok') else ('warn' if (nodes.ok and nodes.overall == 'warn') else ('err' if (not nodes.ok or nodes.overall == 'err') else 'neutral')) %}
   {% set node_detail = (nodes.connected ~ '/' ~ nodes.total ~ ' متصل') if (nodes.ok and nodes.total) else (nodes.error or 'ثبت‌نشده') %}
   {% set _ = tiles.append({'name': 'نود', 'detail': node_detail, 'state': node_state, 'icon': 'nodes', 'href': '/pg/nodes'}) %}
-  {% endif %}
-  {% if update and update.update_available %}
-  {% set _ = tiles.append({'name': 'نسخهٔ جدید', 'detail': 'نسخه ' ~ update.remote_version ~ ' آمادهٔ نصب است', 'state': 'warn', 'icon': 'bell', 'href': '/settings?tab=update', 'note': true}) %}
   {% endif %}
   {{ status_tiles(tiles) }}
 

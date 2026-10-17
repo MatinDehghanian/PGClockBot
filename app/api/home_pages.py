@@ -10,6 +10,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.session import SessionLocal
 from app.services.authz import authz_from_staff, can_shop
 from app.services.dashboard_trend import empty_trend, own_account_summary, sales_trend
 from app.services.host_gauges import gauges_json, local_host_gauges
@@ -102,8 +103,6 @@ async def _safe_periods(session: AsyncSession, *, reseller_id: int | None):
 
 async def _safe_trend(*, reseller_id: int | None):
     """Seven-day sales trend on its own session; a failure shows an empty chart, never an error page."""
-    from app.db.session import SessionLocal
-
     try:
         async with SessionLocal() as session:
             return await sales_trend(session, reseller_id=reseller_id, days=7)
@@ -136,7 +135,6 @@ async def _safe_action_center(session: AsyncSession, *, reseller_id: int | None,
 
 async def _parallel_home_ops(*, reseller_id: int | None, funnel_enabled: bool, expire_days: int):
     """Run funnel / periods / action-center on isolated sessions (safe gather)."""
-    from app.db.session import SessionLocal
     from app.services.home_overview import empty_period_stats
 
     async def _funnel():

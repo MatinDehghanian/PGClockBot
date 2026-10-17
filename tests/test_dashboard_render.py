@@ -76,12 +76,14 @@ class DashboardRenderTests(unittest.TestCase):
         stale = dict(ACTION, has_items=True, entries=[])
         self.assertIn("صف کار خالی است", render(action_center=stale))
 
-    def test_update_notice_is_a_single_warning_tile_only_when_an_update_exists(self) -> None:
+    def test_update_notice_is_its_own_bar_outside_the_connection_status(self) -> None:
         self.assertNotIn("نسخهٔ جدید", render())
         html = render(update={"update_available": True, "remote_version": "0.4.12"})
         self.assertIn("نسخهٔ جدید", html)
-        self.assertIn('data-state="warn"', html)
-        self.assertIn("has-note", html)
+        self.assertIn('href="/settings?tab=update"', html)
+        status_row = html.split('class="status-box card"', 1)[1].split("</div>\n</div>", 1)[0]
+        self.assertNotIn("نسخهٔ جدید", status_row)
+        self.assertLess(html.index("نسخهٔ جدید"), html.index("فروش امروز"))
 
     def test_unhealthy_services_get_their_own_state_and_text_is_escaped(self) -> None:
         html = render(

@@ -37,15 +37,12 @@
 {% if href %}</a>{% else %}</div>{% endif %}
 {%- endmacro %}
 
-{# tiles: list of {name, detail, state (ok|warn|err|neutral), icon, href}. A tile with note=true is the
-   single-line notice and always uses the warning colour. #}
+{# tiles: list of {name, detail, state (ok|warn|err|neutral), icon, href, id?} — connection status only. #}
 {% macro status_tiles(tiles) -%}
-{% set notes = tiles | selectattr('note') | list %}
-{% set plain = tiles | rejectattr('note') | list %}
 <div class="status-box card">
-  <div class="status{% if notes %} has-note{% endif %}" style="--plain: {{ plain | length }}" role="list" aria-label="وضعیت اتصال">
-    {% for t in plain + notes %}
-    <a class="st" role="listitem" data-state="{{ 'warn' if t.note else t.state }}" href="{{ t.href }}"{% if t.id %} id="{{ t.id }}"{% endif %}>
+  <div class="status" style="--plain: {{ tiles | length }}" role="list" aria-label="وضعیت اتصال">
+    {% for t in tiles %}
+    <a class="st" role="listitem" data-state="{{ t.state }}" href="{{ t.href }}"{% if t.id %} id="{{ t.id }}"{% endif %}>
       <svg class="st-ico" viewBox="0 0 24 24" aria-hidden="true">
         {%- if t.icon == 'bot' -%}<rect x="4" y="8" width="16" height="11" rx="2.5"/><path d="M12 8V5H9M2 14h2M20 14h2"/><circle cx="9.5" cy="13.5" r="1.1"/><circle cx="14.5" cy="13.5" r="1.1"/>
         {%- elif t.icon == 'pg' -%}<rect x="3" y="4" width="7" height="7" rx="1.5"/><rect x="14" y="4" width="7" height="7" rx="1.5"/><rect x="8.5" y="13" width="7" height="7" rx="1.5"/>
@@ -58,6 +55,18 @@
     {% endfor %}
   </div>
 </div>
+{%- endmacro %}
+
+{# A new panel version is news, not connection health: one slim bar above the figures. #}
+{% macro update_notice(update) -%}
+{% if update and update.update_available %}
+<a class="st home-update-note" data-state="warn" href="/settings?tab=update">
+  <svg class="st-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6z"/><path d="M10 19a2 2 0 0 0 4 0"/></svg>
+  <b>نسخهٔ جدید</b>
+  <span>نسخه <span dir="ltr">{{ update.remote_version }}</span> آمادهٔ نصب است</span>
+  <em class="home-update-go">مشاهده و نصب</em>
+</a>
+{% endif %}
 {%- endmacro %}
 
 {% macro account_card(me) -%}
