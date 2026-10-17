@@ -368,7 +368,8 @@ class _Scoped:
             reset_shop_reseller_id(self._token)
 
 
-HubPanel = tuple[str, InlineKeyboardMarkup | None]
+Panel = tuple[str, InlineKeyboardMarkup]
+HubPanel = Panel
 
 
 async def _hub_panel(session: AsyncSession, profile) -> HubPanel:
@@ -377,15 +378,15 @@ async def _hub_panel(session: AsyncSession, profile) -> HubPanel:
     text = with_caption(
         screen_heading(ui, "r.settings"), f"ربات: <code>{bot_line}</code>", screen_caption(ui, "r.settings")
     )
-    rows: list[list[InlineKeyboardButton]] = []
+    # nav_inline imports this package's helpers; defer to avoid an import cycle.
+    from app.bot.nav_inline import reseller_settings_hub_keyboard
     from app.services.resellers import get_reseller_panel_base_url
 
+    rows = list(reseller_settings_hub_keyboard(ui).inline_keyboard)
     base = (await get_reseller_panel_base_url(session) or "").rstrip("/")
     if base.startswith("http"):
-        rows.append(
-            [InlineKeyboardButton(text="🌐 تنظیمات کامل در وب‌پنل", url=f"{base}/shop-settings")]
-        )
-    return text, (_kb(rows) if rows else None)
+        rows.insert(-1, [InlineKeyboardButton(text="🌐 تنظیمات کامل در وب‌پنل", url=f"{base}/shop-settings")])
+    return text, _kb(rows)
 
 
 async def _close_input(
@@ -399,21 +400,6 @@ async def _close_input(
     await finish_text_step(message, state, text=text, inline=markup)
     await state.clear()
     await delete_user_message(message)
-
-
-async def _close_input_to_hub(
-    message: Message,
-    state: FSMContext,
-    session: AsyncSession,
-    profile,
-    *,
-    note: str | None = None,
-) -> None:
-    text, markup = await _hub_panel(session, profile)
-    await _close_input(
-        message, state, text=f"{note}\n\n{text}" if note else text, markup=markup
-    )
-
 
 
 async def _render_hub(
@@ -451,6 +437,19 @@ async def _render_section(callback: CallbackQuery, session: AsyncSession, sec_id
     if not sec:
         await callback.answer(feedback.INVALID, show_alert=True)
         return
+    if sec.get("kind") == "notify":
+        await _render_notify(callback, session, reseller_id)
+        return
+    panel = await _section_panel(session, sec_id, reseller_id)
+    if panel is not None and callback.message:
+        await safe_edit_text(callback.message, panel[0], reply_markup=panel[1])
+
+
+async def _section_panel(session: AsyncSession, sec_id: str, reseller_id: int) -> Panel | None:
+    """One settings section (supports list, bot token, or its subsections); None for unknown ids."""
+    sec = SECTIONS.get(sec_id)
+    if not sec or sec.get("kind") == "notify":
+        return None
     with _Scoped(reseller_id):
         if sec.get("kind") == "supports":
             contacts = await get_support_contacts(session, reseller_id=reseller_id)
@@ -470,13 +469,7 @@ async def _render_section(callback: CallbackQuery, session: AsyncSession, sec_id
             )
             rows.append([kb.back_button(None, "res:st:hub")])
             body = "پشتیبان فعال نیست." if not contacts else "برای حذف روی مورد بزنید."
-            if callback.message:
-                await safe_edit_text(
-                    callback.message,
-                    f"💬 <b>پشتیبان‌ها</b>\n\n{body}",
-                    reply_markup=_kb(rows),
-                )
-            return
+            return f"💬 <b>پشتیبان‌ها</b>\n\n{body}", _kb(rows)
 
         if sec.get("kind") == "bot":
             profile = await get_reseller_profile(session, reseller_id)
@@ -492,13 +485,7 @@ async def _render_section(callback: CallbackQuery, session: AsyncSession, sec_id
                 "توکن ربات اصلی/پلتفرم اینجا کار نمی‌کند و ذخیره نمی‌شود به‌عنوان پلتفرم.\n"
                 "پس از تغییر، ربات ظرف چند ثانیه وصل می‌شود."
             )
-            if callback.message:
-                await safe_edit_text(callback.message, text, reply_markup=_kb(rows))
-            return
-
-        if sec.get("kind") == "notify":
-            await _render_notify(callback, session, reseller_id)
-            return
+            return text, _kb(rows)
 
         rows = kb.pack_long_list(
             [
@@ -514,12 +501,7 @@ async def _render_section(callback: CallbackQuery, session: AsyncSession, sec_id
             if await is_editor_enabled(session):
                 rows.append([editor_entry_button(for_reseller=True)])
         rows.append([kb.back_button(None, "res:st:hub")])
-        if callback.message:
-            await safe_edit_text(
-                callback.message,
-                f"⚙️ <b>{sec['title']}</b>",
-                reply_markup=_kb(rows),
-            )
+        return f"⚙️ <b>{sec['title']}</b>", _kb(rows)
 
 
 async def _render_notify(callback: CallbackQuery, session: AsyncSession, reseller_id: int):
@@ -560,13 +542,7 @@ async def _render_sub(
     reseller_id: int,
 ):
     sec = SECTIONS.get(sec_id) or {}
-    fields = None
-    title = sub_id
-    for sid, label, payload in sec.get("subs") or []:
-        if sid == sub_id:
-            title = label
-            fields = payload
-            break
+    fields = next((payload for sid, _label, payload in sec.get("subs") or [] if sid == sub_id), None)
     if fields == "menu_layout":
         with _Scoped(reseller_id):
             cur = await get_setting(session, "menu_layout", reseller_id=reseller_id) or "compact"
@@ -590,41 +566,96 @@ async def _render_sub(
     if fields == "menu_order":
         await _render_menu_order(callback, session, reseller_id, back=f"res:st:sec:{sec_id}")
         return
-    if not isinstance(fields, list):
+    panel = await _sub_panel(session, sec_id, sub_id, reseller_id)
+    if panel is None:
         await callback.answer(feedback.INVALID, show_alert=True)
         return
+    if callback.message:
+        await safe_edit_text(callback.message, panel[0], reply_markup=panel[1])
+
+
+async def _sub_panel(session: AsyncSession, sec_id: str, sub_id: str, reseller_id: int) -> Panel | None:
+    """A subsection's field list; None when it is not a plain field list."""
+    sub = next((s for s in (SECTIONS.get(sec_id) or {}).get("subs") or [] if s[0] == sub_id), None)
+    if sub is None or not isinstance(sub[2], list):
+        return None
+    _sid, title, fields = sub
     with _Scoped(reseller_id):
         rows = []
         for key, label, kind in fields:
             cur = await get_setting(session, key, reseller_id=reseller_id)
             if kind == "toggle":
                 mark = "✅" if on(cur) else "❌"
-                rows.append(
-                    [
-                        InlineKeyboardButton(
-                            text=f"{mark} {label}",
-                            callback_data=f"res:st:tog:{key}",
-                        )
-                    ]
-                )
+                rows.append([InlineKeyboardButton(text=f"{mark} {label}", callback_data=f"res:st:tog:{key}")])
             else:
                 rows.append(
-                    [
-                        InlineKeyboardButton(
-                            text=f"✏️ {label}: {_preview(cur, limit=28)}",
-                            callback_data=f"res:st:edit:{key}",
-                        )
-                    ]
+                    [InlineKeyboardButton(text=f"✏️ {label}: {_preview(cur, limit=28)}", callback_data=f"res:st:edit:{key}")]
                 )
-        rows.append(
-            [kb.back_button(None, f"res:st:sec:{sec_id}")]
-        )
-        if callback.message:
-            await safe_edit_text(
-                callback.message,
-                f"⚙️ <b>{title}</b>",
-                reply_markup=_kb(rows),
-            )
+    rows.append([kb.back_button(None, f"res:st:sec:{sec_id}")])
+    return f"⚙️ <b>{title}</b>", _kb(rows)
+
+
+async def _location_panel(session: AsyncSession, profile, loc: list | tuple | None) -> Panel:
+    """Where a settings prompt was opened: a subsection, a section, or the hub."""
+    rid = profile.user_id
+    panel = None
+    if loc and len(loc) == 2:
+        panel = await _sub_panel(session, loc[0], loc[1], rid) if loc[1] else await _section_panel(session, loc[0], rid)
+    if panel is None:
+        text, markup = await _hub_panel(session, profile)
+        panel = (text, markup or _kb([]))
+    return panel
+
+
+async def _close_input_to_location(
+    message: Message, state: FSMContext, session: AsyncSession, profile, *, note: str | None = None
+) -> None:
+    """Typed cancel or save: the prompt bubble becomes the screen it was opened from."""
+    text, markup = await _location_panel(session, profile, (await state.get_data()).get("rs_loc"))
+    await _close_input(message, state, text=f"{note}\n\n{text}" if note else text, markup=markup)
+
+
+async def _typed_cancel(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    db_user: BotUser,
+    profile,
+    *,
+    is_reseller_bot: bool,
+    reseller_owner_id: int | None,
+) -> None:
+    """A typed «انصراف» behaves exactly like the inline one: back to where the prompt opened."""
+    from app.bot.nav_input import try_legacy_cancel
+
+    if await try_legacy_cancel(
+        message, state, session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
+    ):
+        return
+    await _close_input_to_location(message, state, session, profile)
+
+
+async def reopen_shop_settings_location(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+    *,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+) -> None:
+    """Inline «انصراف» (and typed, through ``try_legacy_cancel``) of a shop settings prompt."""
+    profile, err = await _gate(session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id)
+    if err:
+        await state.clear()
+        await message.answer(err)
+        return
+    text, markup = await _location_panel(session, profile, (await state.get_data()).get("rs_loc"))
+    await state.clear()
+    # nav_inline imports this package's helpers; defer to avoid an import cycle.
+    from app.bot.nav_inline import present_nav_panel
+
+    await present_nav_panel(message, text=text, inline=markup, state=state)
 
 
 def _owner_screen_for_key(key: str) -> tuple[str, str] | None:
@@ -861,7 +892,7 @@ async def settings_edit_ask(
 
         cur = format_force_join_for_edit(cur)
     await callback.answer()
-    await state.update_data(edit_key=key, reseller_id=profile.user_id)
+    await state.update_data(edit_key=key, reseller_id=profile.user_id, rs_loc=_owner_screen_for_key(key))
     hint = feedback.ENTER_NEW_TEXT
     if key == "force_join_channel":
         hint = "هر خط یک کانال (@channel یا آیدی).\nعضویت همه الزامی ذخیره می‌شود.\nبرای انصراف: انصراف"
@@ -900,7 +931,8 @@ async def settings_edit_save(message: Message, state: FSMContext, session: Async
     key = data.get("edit_key")
     text = (message.text or "").strip()
     if kb.is_cancel_text(text) or not key:
-        await _close_input_to_hub(message, state, session, profile)
+        await _typed_cancel(message, state, session, db_user, profile,
+                            is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id)
         return
     if key == "force_join_channel":
         from app.services.users import normalize_force_join_channel_value
@@ -910,7 +942,7 @@ async def settings_edit_save(message: Message, state: FSMContext, session: Async
 
     text = pack_setting_from_message(key, message)
     await set_setting(session, key, text, reseller_id=profile.user_id)
-    await _close_input_to_hub(message, state, session, profile, note=feedback.SAVED_WITH_ICON)
+    await _close_input_to_location(message, state, session, profile, note=feedback.SAVED_WITH_ICON)
 
 
 @router.callback_query(F.data == "res:st:sup:add")
@@ -922,7 +954,7 @@ async def support_add(callback: CallbackQuery, state: FSMContext, session: Async
         await callback.answer(err, show_alert=True)
         return
     await callback.answer()
-    await state.update_data(reseller_id=profile.user_id)
+    await state.update_data(reseller_id=profile.user_id, rs_loc=("support", ""))
     from app.bot.nav_input import ask_text
 
     await ask_text(
@@ -945,18 +977,8 @@ async def support_title_save(message: Message, state: FSMContext, session: Async
         return
     text = (message.text or "").strip()
     if kb.is_cancel_text(text):
-        from app.bot.nav_input import try_legacy_cancel
-
-        if await try_legacy_cancel(
-            message,
-            state,
-            session,
-            db_user,
-            is_reseller_bot=is_reseller_bot,
-            reseller_owner_id=reseller_owner_id,
-        ):
-            return
-        await _close_input_to_hub(message, state, session, profile)
+        await _typed_cancel(message, state, session, db_user, profile,
+                            is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id)
         return
     await state.update_data(support_title=text)
     from app.bot.nav_input import ask_text
@@ -981,7 +1003,8 @@ async def support_telegram_save(message: Message, state: FSMContext, session: As
         return
     text = (message.text or "").strip()
     if kb.is_cancel_text(text):
-        await _close_input_to_hub(message, state, session, profile)
+        await _typed_cancel(message, state, session, db_user, profile,
+                            is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id)
         return
     data = await state.get_data()
     title = data.get("support_title") or "پشتیبانی"
@@ -1028,7 +1051,7 @@ async def bot_token_ask(callback: CallbackQuery, state: FSMContext, session: Asy
         return
     await callback.answer()
     await state.set_state(ResellerSettingsStates.bot_token)
-    await state.update_data(reseller_id=profile.user_id)
+    await state.update_data(reseller_id=profile.user_id, rs_loc=("bot", ""))
     from app.bot.nav_input import ask_text
 
     await ask_text(
@@ -1051,7 +1074,8 @@ async def bot_token_save(message: Message, state: FSMContext, session: AsyncSess
         return
     text = (message.text or "").strip()
     if kb.is_cancel_text(text):
-        await _close_input_to_hub(message, state, session, profile)
+        await _typed_cancel(message, state, session, db_user, profile,
+                            is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id)
         return
     from app.services.resellers import complete_reseller_setup
     from app.services.reseller_bots import start_reseller_bot_for_profile
