@@ -22,6 +22,7 @@ from aiogram.types import InlineKeyboardMarkup, ReplyKeyboardMarkup
 from app.bot import nav_inline as hubs
 from app.bot import reply_keyboards as rk
 from app.bot.button_sources import recording_button_sources
+from app.bot.edit_mode import without_editor
 from app.services.button_styles import CATALOG_IDS, setting_key
 
 Markup = InlineKeyboardMarkup | ReplyKeyboardMarkup
@@ -48,10 +49,13 @@ class ScreenContext:
 
 @dataclass(frozen=True, slots=True)
 class ScreenSpec:
+    """``reopen_callback`` is the existing callback that shows this menu again."""
+
     id: str
     title: str
     audience: Audience
     build: Callable[[ScreenContext], Markup]
+    reopen_callback: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,83 +78,90 @@ class ScreenButton:
 
 
 def _customer_screens() -> list[ScreenSpec]:
+    def customer(
+        screen_id: str, title: str, build: Callable[[ScreenContext], Markup], reopen: str
+    ) -> ScreenSpec:
+        return ScreenSpec(screen_id, title, Audience.CUSTOMER, build, reopen_callback=reopen)
+
     return [
-        ScreenSpec(
+        customer(
             "c.main",
             "منوی اصلی",
-            Audience.CUSTOMER,
             lambda ctx: rk.main_reply_keyboard("user", has_services=True, ui=ctx.ui),
+            "menu:home",
         ),
-        ScreenSpec("c.wallet", "کیف پول", Audience.CUSTOMER, lambda ctx: hubs.wallet_hub_keyboard(ctx.ui)),
-        ScreenSpec("c.support", "پشتیبانی", Audience.CUSTOMER, lambda ctx: hubs.support_hub_keyboard(ctx.ui)),
-        ScreenSpec("c.loyalty", "باشگاه مشتریان", Audience.CUSTOMER, lambda ctx: hubs.loyalty_hub_keyboard(ctx.ui)),
-        ScreenSpec(
+        customer("c.wallet", "کیف پول", lambda ctx: hubs.wallet_hub_keyboard(ctx.ui), "nv:w:home"),
+        customer("c.support", "پشتیبانی", lambda ctx: hubs.support_hub_keyboard(ctx.ui), "nv:s:home"),
+        customer("c.loyalty", "باشگاه مشتریان", lambda ctx: hubs.loyalty_hub_keyboard(ctx.ui), "nv:loy:home"),
+        customer(
             "c.services",
             "سرویس‌های من",
-            Audience.CUSTOMER,
             lambda ctx: hubs.services_list_keyboard([], ctx.ui, allow_import=True),
+            "svc:list",
         ),
-        ScreenSpec(
-            "c.service",
-            "کارت سرویس",
-            Audience.CUSTOMER,
-            lambda ctx: hubs.service_card_keyboard(0, ctx.ui),
-        ),
+        # The card belongs to one service; the editor returns to the service list.
+        customer("c.service", "کارت سرویس", lambda ctx: hubs.service_card_keyboard(0, ctx.ui), "svc:list"),
     ]
 
 
 def _admin_screens() -> list[ScreenSpec]:
-    def admin(screen_id: str, title: str, build: Callable[[ScreenContext], Markup]) -> ScreenSpec:
-        return ScreenSpec(screen_id, title, Audience.ADMIN, build)
+    def admin(
+        screen_id: str, title: str, build: Callable[[ScreenContext], Markup], reopen: str
+    ) -> ScreenSpec:
+        return ScreenSpec(screen_id, title, Audience.ADMIN, build, reopen_callback=reopen)
 
     return [
-        admin("a.home", "پنل ادمین", lambda ctx: hubs.admin_groups_hub_keyboard(ctx.ui)),
-        admin("a.ops", "عملیات روزانه", lambda ctx: hubs.admin_ops_hub_keyboard(ctx.ui)),
-        admin("a.people", "کاربران و نمایندگان", lambda ctx: hubs.admin_people_hub_keyboard(ctx.ui)),
-        admin("a.product", "محصول و پنل", lambda ctx: hubs.admin_product_hub_keyboard(ctx.ui)),
-        admin("a.marketing", "بازاریابی", lambda ctx: hubs.admin_marketing_hub_keyboard(ctx.ui)),
-        admin("a.system", "سیستم", lambda ctx: hubs.admin_system_hub_keyboard(ctx.ui)),
-        admin("a.pg", "پاسارگارد", lambda ctx: hubs.pg_hub_keyboard(ctx.ui)),
-        admin("a.loyalty", "مدیریت باشگاه", lambda ctx: hubs.admin_loyalty_manage_hub_keyboard(ctx.ui)),
-        admin("a.users", "کاربران", lambda ctx: hubs.admin_users_hub_keyboard(ctx.ui)),
-        admin("a.resellers", "نمایندگان", lambda ctx: hubs.admin_resellers_hub_keyboard(ctx.ui)),
-        admin("a.settings", "تنظیمات", lambda ctx: hubs.admin_settings_hub_keyboard(ctx.ui)),
-        admin("a.backup", "بکاپ", lambda ctx: hubs.admin_backup_hub_keyboard(ctx.ui)),
-        admin("a.broadcast", "پیام همگانی", lambda ctx: hubs.admin_broadcast_hub_keyboard(ctx.ui)),
-        admin("a.plans", "پلن‌ها", lambda ctx: hubs.admin_plans_audience_hub_keyboard(ctx.ui)),
+        admin("a.home", "پنل ادمین", lambda ctx: hubs.admin_groups_hub_keyboard(ctx.ui), "nv:adm:home"),
+        admin("a.ops", "عملیات روزانه", lambda ctx: hubs.admin_ops_hub_keyboard(ctx.ui), "nv:adm:ops"),
+        admin(
+            "a.people", "کاربران و نمایندگان", lambda ctx: hubs.admin_people_hub_keyboard(ctx.ui), "nv:adm:people"
+        ),
+        admin("a.product", "محصول و پنل", lambda ctx: hubs.admin_product_hub_keyboard(ctx.ui), "nv:adm:product"),
+        admin(
+            "a.marketing", "بازاریابی", lambda ctx: hubs.admin_marketing_hub_keyboard(ctx.ui), "nv:adm:marketing"
+        ),
+        admin("a.system", "سیستم", lambda ctx: hubs.admin_system_hub_keyboard(ctx.ui), "nv:adm:system"),
+        admin("a.pg", "پاسارگارد", lambda ctx: hubs.pg_hub_keyboard(ctx.ui), "nv:adm:pg"),
+        admin(
+            "a.loyalty", "مدیریت باشگاه", lambda ctx: hubs.admin_loyalty_manage_hub_keyboard(ctx.ui), "nv:adm:loy"
+        ),
+        admin("a.users", "کاربران", lambda ctx: hubs.admin_users_hub_keyboard(ctx.ui), "nv:adm:users"),
+        admin("a.resellers", "نمایندگان", lambda ctx: hubs.admin_resellers_hub_keyboard(ctx.ui), "nv:adm:resellers"),
+        admin("a.settings", "تنظیمات", lambda ctx: hubs.admin_settings_hub_keyboard(ctx.ui), "nv:adm:settings"),
+        admin("a.backup", "بکاپ", lambda ctx: hubs.admin_backup_hub_keyboard(ctx.ui), "nv:adm:backup"),
+        admin(
+            "a.broadcast", "پیام همگانی", lambda ctx: hubs.admin_broadcast_hub_keyboard(ctx.ui), "nv:adm:broadcast"
+        ),
+        admin("a.plans", "پلن‌ها", lambda ctx: hubs.admin_plans_audience_hub_keyboard(ctx.ui), "nv:adm:plans"),
         admin(
             "a.plans.users",
             "پلن‌های کاربران",
             lambda ctx: hubs.admin_plans_kind_hub_keyboard("users", ctx.ui),
+            "nv:adm:plans:aud:users",
         ),
         admin(
             "a.plans.resellers",
             "پلن‌های نمایندگان",
             lambda ctx: hubs.admin_plans_kind_hub_keyboard("resellers", ctx.ui),
+            "nv:adm:plans:aud:resellers",
         ),
     ]
 
 
 def _reseller_screens() -> list[ScreenSpec]:
+    def reseller(
+        screen_id: str, title: str, build: Callable[[ScreenContext], Markup], reopen: str
+    ) -> ScreenSpec:
+        return ScreenSpec(screen_id, title, Audience.RESELLER, build, reopen_callback=reopen)
+
     return [
-        ScreenSpec(
-            "r.home",
-            "پنل نماینده",
-            Audience.RESELLER,
-            lambda ctx: hubs.reseller_manage_hub_keyboard(ctx.profile, ctx.ui),
+        reseller(
+            "r.home", "پنل نماینده", lambda ctx: hubs.reseller_manage_hub_keyboard(ctx.profile, ctx.ui), "nv:res:home"
         ),
-        ScreenSpec(
-            "r.settings",
-            "تنظیمات فروشگاه",
-            Audience.RESELLER,
-            lambda ctx: hubs.reseller_settings_hub_keyboard(ctx.ui),
+        reseller(
+            "r.settings", "تنظیمات فروشگاه", lambda ctx: hubs.reseller_settings_hub_keyboard(ctx.ui), "res:st:hub"
         ),
-        ScreenSpec(
-            "r.plans",
-            "پلن‌های فروش",
-            Audience.RESELLER,
-            lambda ctx: hubs.reseller_plans_hub_keyboard(ctx.ui),
-        ),
+        reseller("r.plans", "پلن‌های فروش", lambda ctx: hubs.reseller_plans_hub_keyboard(ctx.ui), "res:plans"),
     ]
 
 
@@ -175,7 +186,7 @@ def screen_buttons(screen_id: str, ctx: ScreenContext) -> list[ScreenButton]:
     spec = SCREENS.get(screen_id)
     if spec is None:
         raise ValueError(f"unknown screen {screen_id!r}")
-    with recording_button_sources() as log:
+    with without_editor(), recording_button_sources() as log:
         markup = spec.build(ctx)
     buttons: list[ScreenButton] = []
     for row_index, row in enumerate(_rows(markup)):

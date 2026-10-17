@@ -38,6 +38,7 @@ from app.services.settings_button_labels import (
 from app.services import bot_feedback_texts as feedback
 from app.bot.handlers.button_colors import COLORS_SECTION
 from app.bot.handlers.button_colors import entry_button as colors_entry_button
+from app.bot.handlers.screen_editor import entry_button as editor_entry_button
 
 
 
@@ -508,6 +509,7 @@ async def _render_section(callback: CallbackQuery, session: AsyncSession, sec_id
         )
         if sec_id == COLORS_SECTION:
             rows.append([colors_entry_button(for_reseller=True)])
+            rows.append([editor_entry_button(for_reseller=True)])
         rows.append([kb.back_button(None, "res:st:hub")])
         if callback.message:
             await safe_edit_text(

@@ -15,6 +15,7 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 
+from app.bot.edit_mode import editable_screen
 from app.bot.keyboards import _ikb, _t
 
 logger = logging.getLogger(__name__)
@@ -338,6 +339,7 @@ def topup_methods_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+@editable_screen("c.wallet")
 def wallet_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
     rows = [
         [
@@ -369,6 +371,7 @@ def wallet_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+@editable_screen("c.support")
 def support_hub_keyboard(
     ui: dict | None = None,
     *,
@@ -408,6 +411,7 @@ def support_hub_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+@editable_screen("c.loyalty")
 def loyalty_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
     """Inline club hub from loyalty_submenu_order (same labels as reply submenu)."""
     from app.bot.reply_keyboards import (
@@ -533,6 +537,7 @@ def queue_shortcut_row(
     return row
 
 
+@editable_screen("a.home")
 def admin_groups_hub_keyboard(
     ui: dict | None = None,
     *,
@@ -580,6 +585,7 @@ def admin_groups_hub_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+@editable_screen("a.ops")
 def admin_ops_hub_keyboard(
     ui: dict | None = None,
     *,
@@ -622,6 +628,7 @@ def admin_ops_hub_keyboard(
     return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:home")
 
 
+@editable_screen("a.people")
 def admin_people_hub_keyboard(
     ui: dict | None = None, *, can_manage_representatives: bool = True
 ) -> InlineKeyboardMarkup:
@@ -651,6 +658,7 @@ def admin_people_hub_keyboard(
     return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:home")
 
 
+@editable_screen("a.product")
 def admin_product_hub_keyboard(
     ui: dict | None = None,
     *,
@@ -680,6 +688,7 @@ def admin_product_hub_keyboard(
     return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:home")
 
 
+@editable_screen("a.marketing")
 def admin_marketing_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
     """Club and broadcast leaves reuse ``nv:adm:*``; gift codes and campaigns are inline-only."""
     from app.bot.marketing_panels import (
@@ -729,6 +738,7 @@ def admin_marketing_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup
     return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:home")
 
 
+@editable_screen("a.system")
 def admin_system_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
     from app.bot.reply_keyboards import (
         REPLY_ACTION_ADMIN_BACKUP,
@@ -756,6 +766,7 @@ def admin_system_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
     return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:home")
 
 
+@editable_screen("a.pg")
 def pg_hub_keyboard(
     ui: dict | None = None,
     *,
@@ -800,6 +811,7 @@ def pg_hub_keyboard(
     return _pack_hub_keyboard(buttons, ui, back_callback=back_callback)
 
 
+@editable_screen("a.loyalty")
 def admin_loyalty_manage_hub_keyboard(
     ui: dict | None = None,
     *,
@@ -840,6 +852,7 @@ def admin_loyalty_manage_hub_keyboard(
     return _pack_hub_keyboard(buttons, ui, back_callback=back_callback)
 
 
+@editable_screen("r.home")
 def reseller_manage_hub_keyboard(
     profile,
     ui: dict | None = None,
@@ -960,6 +973,7 @@ def reseller_main_bot_hub_keyboard(
 # ── Wave E: admin / reseller leaf hubs ─────────────────────────────────────
 
 
+@editable_screen("a.users")
 def admin_users_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
     from app.bot.reply_keyboards import (
         REPLY_ACTION_ADM_USERS_LIST,
@@ -987,6 +1001,7 @@ def admin_users_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
     return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:people")
 
 
+@editable_screen("a.resellers")
 def admin_resellers_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
     from app.bot.reply_keyboards import (
         REPLY_ACTION_ADM_RES_ADD,
@@ -1018,6 +1033,7 @@ def admin_resellers_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+@editable_screen("a.settings")
 def admin_settings_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
     from app.bot.reply_keyboards import (
         REPLY_ACTION_ADM_ST_PANEL,
@@ -1050,6 +1066,7 @@ def admin_settings_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
     return markup
 
 
+@editable_screen("a.backup")
 def admin_backup_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
     cb_map = {
         "backup_create": "adm:backup:create:noenv",
@@ -1073,6 +1090,7 @@ def admin_backup_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
     return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:system")
 
 
+@editable_screen("a.broadcast")
 def admin_broadcast_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
     from app.bot.reply_keyboards import _admin_broadcast_submenu_entries
 
@@ -1090,6 +1108,7 @@ def admin_broadcast_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup
     return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:marketing")
 
 
+@editable_screen("a.plans")
 def admin_plans_audience_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
     from app.bot.reply_keyboards import (
         REPLY_ACTION_ADM_PLANS_ADDONS,
@@ -1122,6 +1141,12 @@ def admin_plans_audience_hub_keyboard(ui: dict | None = None) -> InlineKeyboardM
 PLANS_VIEW_LABEL = "📋 مشاهده پلن‌ها"
 
 
+
+def _plans_kind_screen_id(audience: str, *_args: object, **_kwargs: object) -> str:
+    return f"a.plans.{audience}"
+
+
+@editable_screen(_plans_kind_screen_id)
 def admin_plans_kind_hub_keyboard(
     audience: str, ui: dict | None = None
 ) -> InlineKeyboardMarkup:
@@ -1183,6 +1208,7 @@ def admin_plans_add_type_hub_keyboard(
     return _pack_hub_keyboard(buttons, ui, back_callback=back)
 
 
+@editable_screen("r.settings")
 def reseller_settings_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
     from app.bot.reply_keyboards import _reseller_settings_submenu_entries
 
@@ -1199,6 +1225,7 @@ def reseller_settings_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMark
     return _pack_hub_keyboard(buttons, ui, back_callback="nv:res:home")
 
 
+@editable_screen("r.plans")
 def reseller_plans_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
     from app.bot.reply_keyboards import _reseller_plans_submenu_entries
 
@@ -1215,6 +1242,7 @@ def reseller_plans_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
     return _pack_hub_keyboard(buttons, ui, back_callback="nv:res:home")
 
 
+@editable_screen("c.service")
 def service_card_keyboard(
     service_id: int, ui: dict | None = None, *, external: bool = False
 ) -> InlineKeyboardMarkup:
@@ -1298,6 +1326,7 @@ def service_card_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+@editable_screen("c.services")
 def services_list_keyboard(
     services: list,
     ui: dict | None = None,

@@ -848,6 +848,8 @@ DEFAULT_SETTINGS = {
     "btn_support": "🟣🎧 پشتیبانی",
     "btn_restart": "🔄 شروع مجدد",
     "show_restart_button": "1",
+    # In-menu «✏️ ویرایش این منو» for owners; off until the platform owner enables it.
+    "screen_editor_enabled": "0",
     "btn_support_new": "🟣✉️ تیکت جدید",
     "btn_support_list": "📋 تیکت‌های من",
     "btn_guide": "📘 راهنما",

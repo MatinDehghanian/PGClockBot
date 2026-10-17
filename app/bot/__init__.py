@@ -8,6 +8,7 @@ from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import TelegramObject
 
+from app.bot.edit_mode import EditModeMiddleware
 from app.bot.middlewares import (
     DbSessionMiddleware,
     ErrorLogMiddleware,
@@ -98,6 +99,7 @@ def create_dispatcher() -> Dispatcher:
     dp.update.middleware(UserMiddleware())
     dp.update.middleware(ForceJoinMiddleware())
     dp.update.middleware(TermsEntryMiddleware())
+    dp.update.middleware(EditModeMiddleware())
 
     from app.bot.handlers import (
         admin,
@@ -122,6 +124,7 @@ def create_dispatcher() -> Dispatcher:
         reseller_plans,
         reseller_reps,
         reseller_settings,
+        screen_editor,
         service_import,
         shop,
         stale_menu,
@@ -142,6 +145,8 @@ def create_dispatcher() -> Dispatcher:
     dp.include_router(nav_hubs.router)
     dp.include_router(nav_marketing.router)
     dp.include_router(marketing_tools.router)
+    dp.include_router(screen_editor.owner_router)
+    dp.include_router(screen_editor.shop_router)
     from app.bot import nav_input as nav_input_mod
     from app.bot import staff_cancel as _staff_cancel  # noqa: F401 — cancel registry
 
@@ -181,6 +186,7 @@ def create_dispatcher() -> Dispatcher:
         admin_backup.router,
         admin_settings.router,
         button_colors.owner_router,
+        screen_editor.owner_router,
         admin_plans.router,
         connection_status_admin.router,
         connection_status_admin_input.router,
