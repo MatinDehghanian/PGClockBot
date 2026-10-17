@@ -6,7 +6,7 @@ from collections.abc import Mapping
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-from app.bot.keyboards import _ikb, _style, _t
+from app.bot.keyboards import _ikb, _t
 from app.services.service_import import SETTING_KEY
 from app.services.users import current_shop_reseller_id, on
 
@@ -20,12 +20,12 @@ def import_enabled(ui: Mapping[str, str] | None) -> bool:
 
 
 def add_existing_row(ui: dict | None) -> list[InlineKeyboardButton]:
-    return [_ikb(ADD_BUTTON_LABEL, callback_data=ADD_CALLBACK, ui=ui, style=_style(ui, "svc_add_existing"))]
+    return [_ikb(ADD_BUTTON_LABEL, callback_data=ADD_CALLBACK, ui=ui, style_id="svc_add_existing")]
 
 
 def empty_services_keyboard(ui: dict | None) -> InlineKeyboardMarkup:
     """Customer without services: buy a new one, or connect one bought before."""
-    buy = [_ikb(_t(ui, "btn_shop"), callback_data="shop:list", ui=ui, style=_style(ui, "shop", fallback="primary"), label_key="btn_shop")]
+    buy = [_ikb(_t(ui, "btn_shop"), callback_data="shop:list", ui=ui, style_id="shop", style_fallback="primary", label_key="btn_shop")]
     return InlineKeyboardMarkup(inline_keyboard=[buy, add_existing_row(ui)])
 
 

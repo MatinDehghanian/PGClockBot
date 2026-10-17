@@ -15,6 +15,7 @@ from types import SimpleNamespace
 from aiogram.types import InlineKeyboardMarkup, ReplyKeyboardMarkup
 
 from app.bot import keyboards as kb
+from app.bot import nav_inline as hubs
 from app.bot import reply_keyboards as rk
 from app.db.models import Plan, ResellerProfile
 from app.services.resellers import FEATURE_PERMS
@@ -222,10 +223,69 @@ def _inline_scenarios(ui: dict[str, str]) -> dict[str, Callable[[], Markup]]:
     }
 
 
+def _hub_scenarios(ui: dict[str, str]) -> dict[str, Callable[[], Markup]]:
+    """Inline panels: since inline-only navigation these are the menus people see."""
+    profile = sample_reseller_profile()
+    payg_profile = sample_reseller_profile(billing_mode="payg")
+    services = [sample_service(7), sample_service(8)]
+    return {
+        "hub.wallet": lambda: hubs.wallet_hub_keyboard(ui),
+        "hub.wallet_topup_presets": lambda: hubs.wallet_topup_presets_keyboard(ui),
+        "hub.topup_methods": lambda: hubs.topup_methods_keyboard(ui),
+        "hub.support": lambda: hubs.support_hub_keyboard(ui),
+        "hub.loyalty": lambda: hubs.loyalty_hub_keyboard(ui),
+        "hub.services_list": lambda: hubs.services_list_keyboard(services, ui),
+        "hub.services_list_with_import": lambda: hubs.services_list_keyboard(
+            services, ui, allow_import=True, reseller_capacity_label="ظرفیت: ۳ از ۱۰"
+        ),
+        "hub.service_card": lambda: hubs.service_card_keyboard(7, ui),
+        "hub.service_card_external": lambda: hubs.service_card_keyboard(7, ui, external=True),
+        "hub.admin.groups": lambda: hubs.admin_groups_hub_keyboard(ui),
+        "hub.admin.groups_with_queues": lambda: hubs.admin_groups_hub_keyboard(
+            ui, pending_payments=3, pending_tickets=1, pending_cancellations=2
+        ),
+        "hub.admin.ops": lambda: hubs.admin_ops_hub_keyboard(ui, pending_payments=3, pending_tickets=1),
+        "hub.admin.people": lambda: hubs.admin_people_hub_keyboard(ui),
+        "hub.admin.people_without_representatives": lambda: hubs.admin_people_hub_keyboard(
+            ui, can_manage_representatives=False
+        ),
+        "hub.admin.product": lambda: hubs.admin_product_hub_keyboard(ui),
+        "hub.admin.marketing": lambda: hubs.admin_marketing_hub_keyboard(ui),
+        "hub.admin.system": lambda: hubs.admin_system_hub_keyboard(ui),
+        "hub.admin.pg": lambda: hubs.pg_hub_keyboard(ui),
+        "hub.admin.pg_read_only": lambda: hubs.pg_hub_keyboard(ui, can_create_user=False),
+        "hub.admin.loyalty": lambda: hubs.admin_loyalty_manage_hub_keyboard(ui),
+        "hub.admin.loyalty_without_tiers": lambda: hubs.admin_loyalty_manage_hub_keyboard(
+            ui, include_tiers=False
+        ),
+        "hub.admin.users": lambda: hubs.admin_users_hub_keyboard(ui),
+        "hub.admin.resellers": lambda: hubs.admin_resellers_hub_keyboard(ui),
+        "hub.admin.settings": lambda: hubs.admin_settings_hub_keyboard(ui),
+        "hub.admin.backup": lambda: hubs.admin_backup_hub_keyboard(ui),
+        "hub.admin.broadcast": lambda: hubs.admin_broadcast_hub_keyboard(ui),
+        "hub.admin.plans_audience": lambda: hubs.admin_plans_audience_hub_keyboard(ui),
+        "hub.admin.plans_kind_users": lambda: hubs.admin_plans_kind_hub_keyboard("users", ui),
+        "hub.admin.plans_kind_resellers": lambda: hubs.admin_plans_kind_hub_keyboard("resellers", ui),
+        "hub.admin.plans_add_users": lambda: hubs.admin_plans_add_type_hub_keyboard("users", ui),
+        "hub.admin.plans_add_resellers": lambda: hubs.admin_plans_add_type_hub_keyboard(
+            "resellers", ui
+        ),
+        "hub.reseller.manage": lambda: hubs.reseller_manage_hub_keyboard(
+            profile, ui, can_add_representative=True, pending_payments=2, pending_tickets=1
+        ),
+        "hub.reseller.manage_payg": lambda: hubs.reseller_manage_hub_keyboard(payg_profile, ui),
+        "hub.reseller.main_bot": lambda: hubs.reseller_main_bot_hub_keyboard(profile, ui, show_pg=True),
+        "hub.reseller.access_card": lambda: hubs.reseller_access_card_keyboard(profile, ui),
+        "hub.reseller.settings": lambda: hubs.reseller_settings_hub_keyboard(ui),
+        "hub.reseller.plans": lambda: hubs.reseller_plans_hub_keyboard(ui),
+    }
+
+
 def all_scenarios() -> dict[str, Callable[[], Markup]]:
     ui = default_ui()
     scenarios = _reply_scenarios(ui)
     scenarios.update(_inline_scenarios(ui))
+    scenarios.update(_hub_scenarios(ui))
     return scenarios
 
 

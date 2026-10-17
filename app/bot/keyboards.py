@@ -7,6 +7,7 @@ from aiogram.types import (
     ReplyKeyboardMarkup,
 )
 
+from app.bot.button_sources import is_recording, note_button_source
 from app.services.catalog_pricing import sale_price
 from app.config import get_settings
 from app.db.models import Plan, Role
@@ -312,7 +313,7 @@ def main_menu(
                 _ikb(
                     _t(ui, "btn_shop"),
                     callback_data="shop:list",
-                    style=_style(ui, "shop", fallback="primary"),
+                    style_id="shop", style_fallback="primary",
                     ui=ui,
                     label_key="btn_shop",
                 )
@@ -322,7 +323,7 @@ def main_menu(
                 _ikb(
                     _t(ui, "btn_services"),
                     callback_data="svc:list",
-                    style=_style(ui, "services", fallback="primary"),
+                    style_id="services", style_fallback="primary",
                     ui=ui,
                     label_key="btn_services",
                 )
@@ -332,7 +333,7 @@ def main_menu(
                 _ikb(
                     _t(ui, "btn_wallet"),
                     callback_data="wallet:home",
-                    style=_style(ui, "wallet", fallback="primary"),
+                    style_id="wallet", style_fallback="primary",
                     ui=ui,
                     label_key="btn_wallet",
                 )
@@ -539,23 +540,53 @@ def _back_label(ui: dict | None = None) -> str:
 _STYLE_AUTO = object()
 
 
+def _reply_style_id(action: str | None, text: str | None) -> tuple[str | None, str | None]:
+    """Catalog style id (and fallback) a reply button takes its color from."""
+    from app.services.button_styles import CATALOG_IDS
+
+    a = (action or "").strip()
+    if a in CATALOG_IDS:
+        return a, None
+    t = (text or "").strip()
+    if t in {"انصراف", "لغو", "cancel"} or (
+        t and "انصراف" in t and "بازگشت" not in t
+    ):
+        return "cancel", "danger"
+    return None, None
+
+
 def _reply_btn_style(
     action: str | None,
     text: str | None = None,
     ui: dict | None = None,
 ) -> str | None:
     """Map reply-keyboard actions to Bot API button styles (settings-aware)."""
-    from app.services.button_styles import CATALOG_IDS, style_or_none
+    from app.services.button_styles import style_or_none
 
-    a = (action or "").strip()
-    if a in CATALOG_IDS:
-        return style_or_none(ui, a)
-    t = (text or "").strip()
-    if t in {"انصراف", "لغو", "cancel"} or (
-        t and "انصراف" in t and "بازگشت" not in t
-    ):
-        return style_or_none(ui, "cancel", fallback="danger")
-    return None
+    style_id, fallback = _reply_style_id(action, text)
+    if style_id is None:
+        return None
+    return style_or_none(ui, style_id, fallback=fallback)
+
+
+def _label_source_key(
+    ui: dict | None, text: str, *, label_key: str | None, action: str | None
+) -> str | None:
+    """btn_* setting the button text comes from; None when the text is fixed in code.
+
+    An action alone only counts when the shown text really starts with that
+    setting's label (a queue badge may follow it), so a button that shares an
+    action but carries its own wording is never offered as editable.
+    """
+    if label_key:
+        return label_key
+    from app.services.rich_text import btn_setting_key_for_action
+
+    key = btn_setting_key_for_action(action)
+    if not key or key not in DEFAULT_SETTINGS:
+        return None
+    label = (_t(ui, key) or "").strip()
+    return key if label and (text or "").strip().startswith(label) else None
 
 
 def _kb(
@@ -567,8 +598,10 @@ def _kb(
     label_key: str | None = None,
     icon_custom_emoji_id: str | None = None,
 ) -> KeyboardButton:
+    style_id: str | None = None
     if style is _STYLE_AUTO:
         st = _reply_btn_style(action, text, ui=ui)
+        style_id = _reply_style_id(action, text)[0]
     else:
         st = style if style else None
     icon = icon_custom_emoji_id
@@ -581,7 +614,14 @@ def _kb(
         kwargs["style"] = str(st)
     if icon:
         kwargs["icon_custom_emoji_id"] = str(icon)
-    return KeyboardButton(**kwargs)
+    button = KeyboardButton(**kwargs)
+    if is_recording():
+        note_button_source(
+            button,
+            label_key=_label_source_key(ui, text, label_key=label_key, action=action),
+            style_id=style_id,
+        )
+    return button
 
 
 def _ikb(
@@ -594,6 +634,43 @@ def _ikb(
     label_key: str | None = None,
     action: str | None = None,
     icon_custom_emoji_id: str | None = None,
+    style_id: str | None = None,
+    style_fallback: str | None = None,
+    **extra,
+) -> InlineKeyboardButton:
+    """Inline button; pass ``style_id`` (not a resolved ``style``) so the color stays editable."""
+    if style_id is not None:
+        style = _style(ui, style_id, fallback=style_fallback)
+    button = _build_inline_button(
+        text,
+        callback_data=callback_data,
+        url=url,
+        style=style,
+        ui=ui,
+        label_key=label_key,
+        action=action,
+        icon_custom_emoji_id=icon_custom_emoji_id,
+        **extra,
+    )
+    if is_recording():
+        note_button_source(
+            button,
+            label_key=_label_source_key(ui, text, label_key=label_key, action=action),
+            style_id=style_id,
+        )
+    return button
+
+
+def _build_inline_button(
+    text: str,
+    *,
+    callback_data: str | None,
+    url: str | None,
+    style: str | None,
+    ui: dict | None,
+    label_key: str | None,
+    action: str | None,
+    icon_custom_emoji_id: str | None,
     **extra,
 ) -> InlineKeyboardButton:
     kwargs: dict = {"text": text, **extra}
@@ -629,7 +706,7 @@ def back_button(ui: dict | None, callback_data: str) -> InlineKeyboardButton:
     return _ikb(
         _label_or(ui, "btn_back", "⬅️ بازگشت"),
         callback_data=callback_data,
-        style=_style(ui, "back"),
+        style_id="back",
         ui=ui,
         label_key="btn_back",
     )
@@ -683,7 +760,7 @@ def plan_button_style_picker_keyboard(
             _ikb(
                 _t(ui, "btn_back") or "⬅️ بازگشت",
                 callback_data=back_callback,
-                style=_style(ui, "back"),
+                style_id="back",
                 ui=ui,
                 label_key="btn_back",
             )
@@ -720,7 +797,7 @@ def item_button_style_picker_keyboard(
             _ikb(
                 _t(ui, "btn_back") or "⬅️ بازگشت",
                 callback_data=back_callback,
-                style=_style(ui, "back"),
+                style_id="back",
                 ui=ui,
                 label_key="btn_back",
             )
@@ -904,7 +981,7 @@ def force_join_inline_keyboard(
             _ikb(
                 _t(ui, "btn_force_join_check"),
                 callback_data="forcejoin:check",
-                style=_style(ui, "force_join_check", fallback="primary"),
+                style_id="force_join_check", style_fallback="primary",
                 ui=ui,
                 label_key="btn_force_join_check",
             )
@@ -970,7 +1047,7 @@ def shop_kind_keyboard(
                 _ikb(
                     _label_or(ui, "btn_shop_kind_trial", "تست"),
                     callback_data="shop:kind:trial",
-                    style=_style(ui, "shop_kind_trial", fallback="primary"),
+                    style_id="shop_kind_trial", style_fallback="primary",
                     ui=ui,
                     label_key="btn_shop_kind_trial",
                 )
@@ -1005,7 +1082,7 @@ def shop_kind_keyboard(
                 _ikb(
                     _label_or(ui, "btn_shop_kind_fixed", "ثابت"),
                     callback_data="shop:kind:fixed",
-                    style=_style(ui, "shop_kind_fixed", fallback="primary"),
+                    style_id="shop_kind_fixed", style_fallback="primary",
                     ui=ui,
                     label_key="btn_shop_kind_fixed",
                 )
@@ -1032,7 +1109,7 @@ def shop_kind_keyboard(
                 _ikb(
                     label,
                     callback_data="shop:kind:wholesale",
-                    style=_style(ui, "shop_kind_wholesale", fallback="primary"),
+                    style_id="shop_kind_wholesale", style_fallback="primary",
                     ui=ui,
                     label_key="btn_wholesale",
                 )
@@ -1051,7 +1128,7 @@ def shop_kind_keyboard(
                     callback_data="menu:home",
                     ui=ui,
                     label_key="btn_back",
-                    style=_style(ui, "back"),
+                    style_id="back",
                 )
             ]
         )
@@ -1103,7 +1180,7 @@ def admin_plan_kind_keyboard(
             _ikb(
                 _label_or(ui, "btn_shop_kind_fixed", "ثابت"),
                 callback_data="adm:plans:kind:users:fixed",
-                style=_style(ui, "shop_kind_fixed", fallback="primary"),
+                style_id="shop_kind_fixed", style_fallback="primary",
                 ui=ui,
                 label_key="btn_shop_kind_fixed",
             )
@@ -1112,7 +1189,7 @@ def admin_plan_kind_keyboard(
             _ikb(
                 _label_or(ui, "btn_shop_kind_custom", "دلخواه"),
                 callback_data="adm:plans:kind:users:custom",
-                style=_style(ui, "shop_kind_custom", fallback="primary"),
+                style_id="shop_kind_custom", style_fallback="primary",
                 ui=ui,
                 label_key="btn_shop_kind_custom",
             )
@@ -1121,7 +1198,7 @@ def admin_plan_kind_keyboard(
             _ikb(
                 _label_or(ui, "btn_shop_kind_trial", "تست"),
                 callback_data="adm:plans:kind:users:trial",
-                style=_style(ui, "shop_kind_trial", fallback="primary"),
+                style_id="shop_kind_trial", style_fallback="primary",
                 ui=ui,
                 label_key="btn_shop_kind_trial",
             )
@@ -1130,7 +1207,7 @@ def admin_plan_kind_keyboard(
             _ikb(
                 _label_or(ui, "btn_wholesale", "فروش عمده"),
                 callback_data="adm:plans:kind:users:wholesale",
-                style=_style(ui, "shop_kind_wholesale", fallback="primary"),
+                style_id="shop_kind_wholesale", style_fallback="primary",
                 ui=ui,
                 label_key="btn_wholesale",
             )
@@ -1235,7 +1312,7 @@ def wholesale_plans_keyboard(
                 _ikb(
                     _t(ui, "btn_back"),
                     callback_data=back_callback,
-                    style=_style(ui, "back"),
+                    style_id="back",
                     ui=ui,
                     label_key="btn_back",
                 )
@@ -1275,7 +1352,7 @@ def wholesale_qty_keyboard(
             _ikb(
                 _t(ui, "btn_back"),
                 callback_data="shop:kind:wholesale",
-                style=_style(ui, "back"),
+                style_id="back",
                 ui=ui,
                 label_key="btn_back",
             )
@@ -1344,7 +1421,7 @@ def custom_confirm_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
                 _ikb(
                     buy_label,
                     callback_data="shop:custom:buy",
-                    style=_style(ui, "buy_continue", fallback="primary"),
+                    style_id="buy_continue", style_fallback="primary",
                     ui=ui,
                     label_key="btn_buy_continue",
                 )
@@ -1365,7 +1442,7 @@ def plan_actions(plan_id: int, ui: dict | None = None) -> InlineKeyboardMarkup:
                 _ikb(
                     buy_label,
                     callback_data=f"shop:buy:{plan_id}",
-                    style=_style(ui, "buy_continue", fallback="primary"),
+                    style_id="buy_continue", style_fallback="primary",
                     ui=ui,
                     label_key="btn_buy_continue",
                 )
@@ -1409,7 +1486,7 @@ def _pay_method_button(
     return _ikb(
         _t(ui, f"btn_pay_{method}"),
         callback_data=f"pay:{method}:{order_id}",
-        style=_style(ui, f"pay_{method}", fallback=style_fallback),
+        style_id=f"pay_{method}", style_fallback=style_fallback,
         ui=ui,
         label_key=f"btn_pay_{method}",
     )
@@ -1431,7 +1508,7 @@ def pay_methods(order_id: int, ui: dict | None = None) -> InlineKeyboardMarkup:
             _ikb(
                 _t(ui, "btn_cancel"),
                 callback_data="menu:home",
-                style=_style(ui, "cancel", fallback="danger"),
+                style_id="cancel", style_fallback="danger",
                 ui=ui,
                 label_key="btn_cancel",
             ),

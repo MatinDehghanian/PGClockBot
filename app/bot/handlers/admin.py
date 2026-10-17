@@ -156,7 +156,7 @@ async def _answer_tickets_nav(
 
 
 def _admin_ticket_actions_markup(ticket_id: int, ui: dict | None = None) -> InlineKeyboardMarkup:
-    from app.bot.keyboards import _ikb, _style
+    from app.bot.keyboards import _ikb
     from app.bot.nav_inline import with_inline_back
 
     rows = [
@@ -165,13 +165,13 @@ def _admin_ticket_actions_markup(ticket_id: int, ui: dict | None = None) -> Inli
                 "💬 پاسخ",
                 callback_data=f"adm:ticket:reply:{ticket_id}",
                 ui=ui,
-                style=_style(ui, "confirm", fallback="success"),
+                style_id="confirm", style_fallback="success",
             ),
             _ikb(
                 "🗃 بستن",
                 callback_data=f"adm:ticket:close:{ticket_id}",
                 ui=ui,
-                style=_style(ui, "reject", fallback="danger"),
+                style_id="reject", style_fallback="danger",
             ),
         ]
     ]
