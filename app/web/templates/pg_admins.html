@@ -296,7 +296,7 @@
         <input name="web_password" type="password" autocomplete="new-password" dir="ltr"
           placeholder="{% if st.get('password_ready') %}خالی = استفاده از رمز ذخیره‌شده{% else %}رمز الزامی است{% endif %}"
           {% if not st.get('password_ready') %}required{% endif %} />
-        <small class="muted">همان رمز برای وب و پاسارگارد — اگر رمز ذخیره‌شده دارید می‌توانید خالی بگذارید (کلید API به‌تنهایی کافی نیست)</small>
+        <small class="muted">رمز وب و پاسارگارد یکی است. اگر رمز ذخیره‌شده دارید، خالی بگذارید (کلید API به‌تنهایی کافی نیست).</small>
       </label>
       <label class="form-field">یادداشت
         <input name="note" placeholder="تبدیل از ادمین فرعی" />
@@ -379,13 +379,13 @@
         <div>
           <label class="form-field">نام کاربری
             <input name="username" required autocomplete="off" placeholder="admin_name" dir="ltr" minlength="3" maxlength="128" pattern="[a-zA-Z0-9\-_@.]+" title="۳ تا ۱۲۸ کاراکتر؛ فقط حروف انگلیسی، عدد و - _ @ ." />
-            <small class="muted">۳ تا ۱۲۸ کاراکتر؛ فقط a-z 0-9 و - _ @ . — بدون دو نماد پشت‌سرهم (قوانین پاسارگارد). همین نام برای ورود وب هم استفاده می‌شود</small>
+            <small class="muted">۳ تا ۱۲۸ کاراکتر از a-z، 0-9 و - _ @ . بدون دو نماد پشت‌سرهم. همین نام برای ورود به وب هم استفاده می‌شود.</small>
           </label>
         </div>
         <div>
           <label class="form-field">رمز عبور
             <input name="password" type="password" required autocomplete="new-password" dir="ltr" placeholder="رمز قوی" minlength="12" />
-            <small class="muted">حداقل ۱۲ کاراکتر، دو رقم، دو حرف بزرگ، دو حرف کوچک و یک کاراکتر خاص — طبق قوانین پاسارگارد؛ برای پاسارگارد و وب یکی است</small>
+            <small class="muted">حداقل ۱۲ کاراکتر شامل دو رقم، دو حرف بزرگ، دو حرف کوچک و یک نماد. برای پاسارگارد و وب یکی است.</small>
           </label>
         </div>
         <div>

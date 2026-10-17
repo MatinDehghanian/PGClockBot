@@ -613,7 +613,7 @@ class ConnectionUiCopyTests(unittest.TestCase):
         html = Path("app/web/templates/_settings_bot.html").read_text(encoding="utf-8")
         self.assertIn('name="PG_API_KEY"', html)
         self.assertIn("ادمین متصل", html)
-        self.assertIn("لزوماً owner پاسارگارد نیست", html)
+        self.assertIn("لازم نیست مالک پاسارگارد باشد", html)
         self.assertIn('name="clear_pg_api_key"', html)
 
 

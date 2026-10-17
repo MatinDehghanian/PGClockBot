@@ -56,7 +56,7 @@
 </div>
 <div data-gift-kind="discount" {% if kind != 'discount' %}hidden{% endif %}>
   {{ switch('first_purchase_only', 'فقط خرید اول', checked=c and c.first_purchase_only) }}
-  <p class="muted">خرید جدید برای کاربران بدون خرید موفق در همین فروشگاه؛ تست رایگان و سفارش لغوشده، خرید موفق محسوب نمی‌شوند.</p>
+  <p class="muted">فقط برای کاربرانی که در این فروشگاه هنوز خرید موفقی ندارند. تست رایگان و سفارش لغوشده حساب نمی‌شود.</p>
   <fieldset class="form-field">
     <legend>قابل استفاده برای</legend>
     <div class="checks">
