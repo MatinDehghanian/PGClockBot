@@ -343,9 +343,10 @@ def _input_states(actor: Actor) -> type[StatesGroup]:
 
 async def _ask(
     callback: CallbackQuery, state: FSMContext, actor: Actor, *, prompt: str, fsm_state: State, gid: str | None,
-    extra: InlineKeyboardMarkup | None = None,
+    extra: InlineKeyboardMarkup | None = None, back: str = "g",
 ) -> None:
-    await state.update_data(**{_STATE_KEY: {"audience": actor.audience, "guide_id": gid}})
+    """``back`` is the screen the prompt was opened from: the guide card, its files or its links."""
+    await state.update_data(**{_STATE_KEY: {"audience": actor.audience, "guide_id": gid, "back": back}})
     await ask_text(
         callback, state, prompt=prompt, cancel_code=_CANCEL_CODES[actor.audience], fsm_state=fsm_state,
         extra_inline=extra, edit=True,
@@ -365,9 +366,9 @@ async def _start_input(callback: CallbackQuery, state: FSMContext, actor: Actor,
     elif view == "ma" and gid:
         done = InlineKeyboardMarkup(inline_keyboard=[[_button(BTN_DONE, actor.data("f", gid))]])
         prompt = ASK_MEDIA.format(max=MAX_MEDIA_PER_GUIDE, done=BTN_DONE)
-        await _ask(callback, state, actor, prompt=prompt, fsm_state=states.media, gid=gid, extra=done)
+        await _ask(callback, state, actor, prompt=prompt, fsm_state=states.media, gid=gid, extra=done, back="m")
     elif view == "La" and gid:
-        await _ask(callback, state, actor, prompt=ASK_LINK_URL, fsm_state=states.link_url, gid=gid)
+        await _ask(callback, state, actor, prompt=ASK_LINK_URL, fsm_state=states.link_url, gid=gid, back="L")
     else:
         return False
     return True
@@ -380,7 +381,7 @@ async def handle_callback(callback: CallbackQuery, session: AsyncSession, state:
         if view == "f":
             await state.set_state(None)
             await callback.answer()
-            await _view_card(callback, session, actor, args)
+            await _view_media(callback, session, actor, args)
             return
         if await _start_input(callback, state, actor, view, args):
             await callback.answer()
@@ -521,11 +522,13 @@ async def handle_message(message: Message, session: AsyncSession, state: FSMCont
 
 async def _view_after_cancel(session: AsyncSession, state: FSMContext, actor: Actor) -> tuple[str, InlineKeyboardMarkup]:
     """Back to the guide being edited, or to the list when it is new or gone; nothing is saved."""
-    gid = (await _target(state)).get("guide_id")
+    target = await _target(state)
+    gid = target.get("guide_id")
     await state.set_state(None)
     if gid:
+        views = {"m": media_view, "L": links_view}
         try:
-            return card_view(actor, await _guide(session, actor, gid))
+            return views.get(target.get("back"), card_view)(actor, await _guide(session, actor, gid))
         except GuideMediaError:
             pass
     return list_view(actor, await get_connection_guides(session, reseller_id=actor.reseller_id))

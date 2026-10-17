@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot import keyboards as kb
 from app.bot.auth import can_platform_pg_action, can_platform_pg_page
 from app.bot.auth import is_platform_admin as _is_admin
+from app.bot.nav_input import form_origin
 from app.bot.tg_utils import parse_bot_int, safe_edit_text
 from app.db.models import BotUser
 from app.services.formatting import node_status_fa
@@ -612,6 +613,7 @@ async def pg_node_create_start(
             state,
             prompt="نام نود:",
             cancel_code="adm_pg_n",
+            return_to="adm:pg:nodes",
             fsm_state=PgNodeStates.create_name,
             edit=False,
         )
@@ -662,6 +664,7 @@ async def pg_node_create_name(
         state,
         prompt="آدرس نود (IP یا دامنه):",
         cancel_code="adm_pg_n",
+        return_to=await form_origin(state),
         fsm_state=PgNodeStates.create_address,
         edit=False,
     )
@@ -712,6 +715,7 @@ async def pg_node_create_address(
         state,
         prompt="پورت (عدد — یا «-» برای رد کردن):",
         cancel_code="adm_pg_n",
+        return_to=await form_origin(state),
         fsm_state=PgNodeStates.create_port,
         edit=False,
     )
@@ -820,6 +824,7 @@ async def pg_node_create_conn(
             state,
             prompt="شناسه هسته یا «-»:",
             cancel_code="adm_pg_n",
+            return_to=await form_origin(state),
             fsm_state=PgNodeStates.create_core,
             edit=False,
         )
@@ -872,6 +877,7 @@ async def pg_node_create_core(
         state,
         prompt="API Key (یا «-» برای رد):",
         cancel_code="adm_pg_n",
+        return_to=await form_origin(state),
         fsm_state=PgNodeStates.create_api_key,
         edit=False,
     )
@@ -920,6 +926,7 @@ async def pg_node_create_api_key(
         state,
         prompt="Server CA (گواهی — چندخطی مجاز؛ یا «-» برای رد):",
         cancel_code="adm_pg_n",
+        return_to=await form_origin(state),
         fsm_state=PgNodeStates.create_server_ca,
         edit=False,
     )

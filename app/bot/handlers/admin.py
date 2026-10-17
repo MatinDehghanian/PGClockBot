@@ -30,6 +30,7 @@ from app.services.pasarguard import get_pg
 from app.services.tickets import get_ticket, reply_ticket
 from app.services.updates import local_version
 from app.services.users import get_all_settings, get_setting, on, set_setting
+from app.bot.nav_input import form_origin
 from app.bot.tg_utils import parse_bot_float, parse_bot_int, safe_edit_text
 from app.services import bot_feedback_texts as feedback
 
@@ -1046,6 +1047,7 @@ async def adm_plan_edit_ask(
         state,
         prompt=prompts[field],
         cancel_code="adm_pln",
+        return_to=f"adm:plan:view:{pid_raw}",
         fsm_state=AdminStates.plan_edit_field,
         edit=True,
     )
@@ -1126,6 +1128,7 @@ async def adm_plan_add(callback: CallbackQuery, state: FSMContext, db_user: BotU
         state,
         prompt=feedback.ENTER_PLAN_NAME,
         cancel_code="adm_pln",
+        return_to="adm:plans:kind:users:fixed",
         fsm_state=AdminStates.add_plan_name,
         edit=True,
     )
@@ -1157,6 +1160,7 @@ async def plan_name(
         state,
         prompt=feedback.ENTER_PRICE_TOMAN,
         cancel_code="adm_pln",
+        return_to=await form_origin(state),
         fsm_state=AdminStates.add_plan_price,
         edit=False,
     )
@@ -1193,6 +1197,7 @@ async def plan_price(
         state,
         prompt="مدت اعتبار به روز را بفرستید:\n<code>0</code> یا خالی = نامحدود",
         cancel_code="adm_pln",
+        return_to=await form_origin(state),
         fsm_state=AdminStates.add_plan_days,
         edit=False,
     )
@@ -1230,6 +1235,7 @@ async def plan_days(
         state,
         prompt=feedback.ENTER_VOLUME_GB,
         cancel_code="adm_pln",
+        return_to=await form_origin(state),
         fsm_state=AdminStates.add_plan_gb,
         edit=False,
     )
@@ -2328,6 +2334,7 @@ async def adm_users_search_start(callback: CallbackQuery, state: FSMContext, db_
         state,
         prompt="آیدی عددی تلگرام کاربر را بفرستید:",
         cancel_code="adm_usr",
+        return_to="adm:users",
         fsm_state=AdminStates.user_search,
         edit=True,
     )
@@ -2467,6 +2474,7 @@ async def adm_users_message_start(
             f"✉️ متن پیام برای <b>{html.escape(user.full_name or user.username or str(user.telegram_id))}</b> را بفرستید:"
         ),
         cancel_code="adm_usr",
+        return_to=f"adm:users:view:{user.id}",
         fsm_state=AdminStates.user_message,
         edit=True,
     )
@@ -2676,6 +2684,7 @@ async def _adm_users_wallet_adjust_ask(
         state,
         prompt=prompt,
         cancel_code="adm_usr",
+        return_to=f"adm:users:view:{user_id}",
         fsm_state=AdminStates.user_wallet_credit,
         edit=True,
     )
@@ -3095,6 +3104,7 @@ async def adm_users_service_adjust(
                 state,
                 prompt=f"تعداد روز تغییر را وارد کنید (±{MAX_EXTEND_DAYS}، منفی = کاهش):",
                 cancel_code="adm_usr",
+                return_to=f"adm:users:svcadj:{user_id}:{service_id}",
                 fsm_state=AdminStates.svc_adjust_days_input,
                 edit=False,
             )
@@ -3116,6 +3126,7 @@ async def adm_users_service_adjust(
                 state,
                 prompt=f"مقدار گیگ تغییر را وارد کنید (±{MAX_EXTEND_GB}، منفی = کاهش):",
                 cancel_code="adm_usr",
+                return_to=f"adm:users:svcadj:{user_id}:{service_id}",
                 fsm_state=AdminStates.svc_adjust_gb_input,
                 edit=False,
             )
@@ -3338,6 +3349,7 @@ async def adm_users_block(
                 "(حداقل ۳ کاراکتر — برای کاربر ارسال می‌شود):"
             ),
             cancel_code="adm_usr",
+            return_to=f"adm:users:view:{user_id}",
             fsm_state=AdminStates.block_user_reason,
             edit=False,
         )
@@ -3351,7 +3363,6 @@ async def adm_users_block_reason(
         await state.clear()
         return
     if kb.is_cancel_text(message.text):
-        await state.clear()
         from app.bot.nav_input import try_legacy_cancel
 
         if await try_legacy_cancel(message, state, session, db_user):
@@ -3455,6 +3466,7 @@ async def adm_users_delete_ask_reason(
                 "(حداقل ۳ کاراکتر — برای خود کاربر ارسال می‌شود):\n\nبرای لغو: انصراف"
             ),
             cancel_code="adm_usr",
+            return_to=f"adm:users:view:{user_id}",
             fsm_state=AdminStates.delete_user_reason,
             edit=False,
         )
@@ -3468,7 +3480,6 @@ async def adm_users_delete_reason(
         await state.clear()
         return
     if kb.is_cancel_text(message.text):
-        await state.clear()
         from app.bot.nav_input import try_legacy_cancel
 
         if await try_legacy_cancel(message, state, session, db_user):
@@ -3566,6 +3577,7 @@ async def adm_users_unreseller_ask(
                 "(برای خود کاربر ارسال می‌شود):\n\nبرای لغو: انصراف"
             ),
             cancel_code="adm_usr",
+            return_to=f"adm:users:view:{user_id}",
             fsm_state=AdminStates.revoke_reseller_reason,
             edit=False,
         )
@@ -3579,7 +3591,6 @@ async def adm_users_unreseller_reason(
         await state.clear()
         return
     if kb.is_cancel_text(message.text):
-        await state.clear()
         from app.bot.nav_input import try_legacy_cancel
 
         if await try_legacy_cancel(message, state, session, db_user):
@@ -4265,6 +4276,7 @@ async def adm_resellers_add(callback: CallbackQuery, state: FSMContext, db_user:
             "• عدد دوم: ۱ = اجازه تأیید رسید، ۰ یا خالی = بدون تأیید"
         ),
         cancel_code="adm_home",
+        return_to="adm:resellers",
         fsm_state=AdminStates.make_reseller,
         edit=True,
     )
@@ -4613,6 +4625,7 @@ async def adm_ticket_reply_start(
         state,
         prompt="پاسخ را بنویسید:",
         cancel_code="adm_tkt",
+        return_to=f"adm:ticket:{tid}",
         fsm_state=AdminStates.ticket_reply,
         edit=False,
     )

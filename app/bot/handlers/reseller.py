@@ -525,6 +525,7 @@ async def res_user_message_start(
             f"✉️ متن پیام برای <b>{html.escape(user.full_name or user.username or str(user.telegram_id))}</b>:"
         ),
         cancel_code="rs_msg",
+        return_to=f"res:user:{uid}",
         fsm_state=ResellerStates.user_message,
         edit=True,
     )

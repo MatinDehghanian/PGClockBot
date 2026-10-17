@@ -1528,6 +1528,7 @@ async def staff_edit_rate_start(
         state,
         prompt=f"نرخ فعلی: <code>{cur}</code>\nعدد جدید (تومان به‌ازای ۱ امتیاز) را بفرستید:",
         cancel_code="loy_stf",
+        return_to="loyadm:settings",
         fsm_state=LoyaltyManageStates.edit_wallet_rate,
         edit=True,
     )

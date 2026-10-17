@@ -57,7 +57,8 @@ async def _prompt(callback: CallbackQuery, session: AsyncSession, access: Monito
     text = monitor_text(ui, key)
     if command.action == "account":
         text += "\nثبت یا تغییر کاربر تست، تست‌ها را متوقف و کانفیگ‌ها را از فهرست کاربران مخفی می‌کند."
-    await ask_text(callback, state, prompt=text, cancel_code=CANCEL_CODE, fsm_state=fsm, edit=True)
+    back = MONITOR_HOME_CALLBACK if command.action == "account" else f"cma:item:{command.identifier}"
+    await ask_text(callback, state, prompt=text, cancel_code=CANCEL_CODE, fsm_state=fsm, edit=True, return_to=back)
 
 
 async def _config_picker(message: Message, session: AsyncSession, access: MonitorAccess, *, after_id: int) -> None:

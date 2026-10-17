@@ -313,6 +313,7 @@ async def backup_restore_ask(callback: CallbackQuery, db_user: BotUser, state: F
         state,
         prompt=prompt,
         cancel_code="adm_bak",
+        return_to=f"adm:backup:item:{backup_id}",
         fsm_state=BackupStates.confirm_restore,
         edit=False,
     )
@@ -383,6 +384,7 @@ async def backup_upload_ask(callback: CallbackQuery, db_user: BotUser, state: FS
         state,
         prompt="فایل ZIP بکاپ را در همین گفتگو بفرستید.",
         cancel_code="adm_bak",
+        return_to="adm:backup",
         fsm_state=BackupStates.waiting_upload,
         edit=True,
     )

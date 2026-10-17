@@ -10,6 +10,7 @@ from aiogram.types import TelegramObject
 
 from app.bot.edit_mode import EditModeMiddleware
 from app.bot.reply_keyboard_state import ReplyKeyboardStateMiddleware
+from app.bot.screen_replay import install_replay_guard, set_dispatcher
 from app.bot.middlewares import (
     DbSessionMiddleware,
     ErrorLogMiddleware,
@@ -86,9 +87,8 @@ class _RequireBotOwnerPrincipal(BaseMiddleware):
 
 def create_bot(token: str | None = None) -> Bot:
     settings = get_settings()
-    return Bot(
-        token=(token or settings.bot_token).strip(),
-        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    return install_replay_guard(
+        Bot(token=(token or settings.bot_token).strip(), default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     )
 
 
@@ -194,6 +194,7 @@ def create_dispatcher() -> Dispatcher:
 
     for router in bot_routers():
         dp.include_router(router)
+    set_dispatcher(dp)
     from app.bot.handlers import (
         admin,
         admin_backup,
