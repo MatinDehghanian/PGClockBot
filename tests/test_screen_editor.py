@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import tempfile
+from datetime import datetime, timezone
 import time
 import unittest
 from pathlib import Path
@@ -11,15 +12,16 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.base import StorageKey
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.types import CallbackQuery, InlineKeyboardMarkup, User
+from aiogram.types import CallbackQuery, Chat, InlineKeyboardMarkup, Message, MessageEntity, Update, User
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from app.bot import keyboards as kb
 from app.bot import menu_nav as nav
 from app.bot.edit_mode import EDIT_ROW_TEXT, EditModeMiddleware, editing_as
 from app.bot.handlers import screen_editor as ui_module
 from app.bot.screen_registry import SCREENS, ScreenContext, screen_buttons
-from app.db.models import ResellerSetting, Setting
+from app.db.models import BotUser, ResellerSetting, Setting
 from app.services.screen_editor import (
     SCREEN_EDITOR_SETTING,
     EditModeStore,
@@ -28,6 +30,7 @@ from app.services.screen_editor import (
     edit_mode_store,
     validate_button_label,
 )
+from app.services.rich_text import button_icon_custom_emoji_id
 from app.services.users import DEFAULT_SETTINGS, clear_settings_cache
 from tests.test_bot_ui_keyboard_snapshots import default_ui, sample_reseller_profile
 
@@ -204,10 +207,19 @@ def _callback(data: str) -> MagicMock:
     return callback
 
 
-def _message(text: str) -> MagicMock:
+PREMIUM_EMOJI_ID = "5368324170671202286"
+
+
+def _premium_entities(text: str) -> list[MessageEntity]:
+    """The leading emoji of ``text`` sent as a Telegram Premium custom emoji."""
+    return [MessageEntity(type="custom_emoji", offset=0, length=len(text.split(" ", 1)[0].encode("utf-16-le")) // 2,
+                          custom_emoji_id=PREMIUM_EMOJI_ID)]
+
+
+def _message(text: str, *, premium: bool = False) -> MagicMock:
     message = MagicMock()
     message.text = text
-    message.entities = None
+    message.entities = _premium_entities(text) if premium else None
     message.answer = AsyncMock()
     return message
 
@@ -332,15 +344,31 @@ class EditorFlowTests(unittest.IsolatedAsyncioTestCase):
             await ui_module.owner_label_text(message, self.state, session, MagicMock(id=OWNER.user_id))
         self.assertEqual(await self._platform("btn_wallet_topup"), "💳 شارژ")
         self.assertIsNone(await self.state.get_state())
+        # The same menu's edit panel comes back with the new text and a way back to the menu.
+        self.assertTrue(message.answer.await_args.args[0].startswith(ui_module.TEXT_LABEL_SAVED))
         markup = message.answer.await_args.kwargs["reply_markup"]
-        self.assertEqual(markup.inline_keyboard[0][0].callback_data, "nv:w:home")
+        self.assertIn("💳 شارژ", [b.text.split(" ", 1)[1] for row in markup.inline_keyboard for b in row])
+        self.assertEqual(markup.inline_keyboard[-1][0].callback_data, "nv:w:home")
+
+    async def test_tapping_a_menu_button_leaves_the_editor_and_lets_the_menu_open(self) -> None:
+        await self._start_editing()
+        await self._owner(f"ed:a:t:c.wallet:{self._index('c.wallet', 'btn_wallet_topup')}")
+        for tapped in ("⬅️ بازگشت", "👥 کاربران", "🏠 منوی اصلی"):
+            with self.subTest(tapped=tapped):
+                await self.state.set_state(ui_module.EditorStates.owner_label)
+                async with self.Session() as session:
+                    with self.assertRaises(ui_module.SkipHandler):
+                        await ui_module.owner_label_text(_message(tapped), self.state, session, MagicMock(id=OWNER.user_id))
+                self.assertIsNone(await self.state.get_state())
+        self.assertIsNone(await self._platform("btn_wallet_topup"))
 
     async def test_label_that_repeats_another_button_is_refused(self) -> None:
         await self._start_editing()
         index = self._index("c.wallet", "btn_wallet_topup")
         await self._owner(f"ed:a:t:c.wallet:{index}")
         other = screen_buttons("c.wallet", ScreenContext(ui=dict(DEFAULT_SETTINGS)))[index + 1].text
-        message = _message(other)
+        # Typed with a premium emoji, so it is a new name rather than a tap on that button.
+        message = _message(other, premium=True)
         async with self.Session() as session:
             await ui_module.owner_label_text(message, self.state, session, MagicMock(id=OWNER.user_id))
         self.assertIsNone(await self._platform("btn_wallet_topup"))
@@ -390,6 +418,119 @@ class EditorFlowTests(unittest.IsolatedAsyncioTestCase):
         for data in ("ed:x:h", "ed:a:o:no.such", "ed:a:b:c.wallet:one", "ed:a:c:c.wallet:0", "other", None):
             with self.subTest(data=data):
                 self.assertIsNone(ui_module.parse_request(data))
+
+
+
+class EditorInputRoutingTests(unittest.IsolatedAsyncioTestCase):
+    """A new button name goes through the bot's real router order and reaches the editor."""
+
+    async def asyncSetUp(self) -> None:
+        from app.db import Base
+        import app.db.models  # noqa: F401  (registers every table on Base)
+        from aiogram import Bot, Dispatcher
+
+        import app.bot as bot_package
+
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self.engine = create_async_engine(f"sqlite+aiosqlite:///{Path(self._tmpdir.name) / 'routing.db'}")
+        async with self.engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        self.Session = async_sessionmaker(self.engine, expire_on_commit=False)
+        async with self.Session() as session:
+            session.add(BotUser(id=OWNER.user_id, telegram_id=OWNER.user_id, referral_code="own", role="admin"))
+            session.add(BotUser(id=SHOP_OWNER.user_id, telegram_id=SHOP_OWNER.user_id, referral_code="shp", role="reseller"))
+            await session.commit()
+        self.on_shop_bot = False
+        clear_settings_cache()
+        self.routers = bot_package.bot_routers()
+        for router in self.routers:
+            router._parent_router = None  # module routers attach once; another test may have attached them
+        self.dp = Dispatcher(storage=MemoryStorage())
+        for router in self.routers:
+            self.dp.include_router(router)
+
+        async def inject(handler, event, data):
+            async with self.Session() as session:
+                # A real admin, so the menu navigation knows every admin label and would match them.
+                user_id = SHOP_OWNER.user_id if self.on_shop_bot else OWNER.user_id
+                db_user = await session.get(BotUser, user_id)
+                data.update(session=session, db_user=db_user, is_reseller_bot=self.on_shop_bot,
+                            reseller_owner_id=SHOP_A if self.on_shop_bot else None)
+                return await handler(event, data)
+
+        self.dp.update.outer_middleware(inject)
+        for gate in (bot_package._RequireBotOwnerPrincipal, bot_package._BlockPlatformAdminOnResellerBot):
+            patcher = patch.object(gate, "__call__", lambda _self, handler, event, data: handler(event, data))
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        answer = patch.object(Message, "answer", AsyncMock())
+        self.answer = answer.start()
+        self.addCleanup(answer.stop)
+        self.bot = Bot("123456:TEST")
+        edit_mode_store.activate(OWNER)
+        edit_mode_store.activate(SHOP_OWNER)
+        shop_scope = patch.object(ui_module, "shop_settings_shop_id", AsyncMock(return_value=SHOP_A))
+        shop_scope.start()
+        self.addCleanup(shop_scope.stop)
+
+    async def asyncTearDown(self) -> None:
+        for router in self.routers:
+            router._parent_router = None
+        edit_mode_store.deactivate(OWNER)
+        edit_mode_store.deactivate(SHOP_OWNER)
+        clear_settings_cache()
+        await self.engine.dispose()
+        self._tmpdir.cleanup()
+
+    async def _type_new_name(
+        self, screen_id: str, label_key: str, text: str, *, premium: bool = False, nav_level: str = nav.NAV_ADMIN
+    ) -> None:
+        context = ScreenContext(ui=dict(DEFAULT_SETTINGS), profile=sample_reseller_profile())
+        index = next(i for i, b in enumerate(screen_buttons(screen_id, context)) if b.label_key == label_key)
+        user_id = SHOP_OWNER.user_id if self.on_shop_bot else OWNER.user_id
+        state = FSMContext(storage=self.dp.storage, key=StorageKey(bot_id=self.bot.id, chat_id=user_id, user_id=user_id))
+        await state.set_data({})
+        # The admin is inside that menu, where the menu navigation knows its labels.
+        await nav.set_nav_level(state, nav_level)
+        await state.set_state(ui_module.EditorStates.shop_label if self.on_shop_bot else ui_module.EditorStates.owner_label)
+        await state.update_data(ed_screen=screen_id, ed_title=False, ed_index=index, ed_key=label_key)
+        user = User(id=user_id, is_bot=False, first_name="editor")
+        message = Message(
+            message_id=1, date=datetime.now(timezone.utc), chat=Chat(id=user_id, type="private"), from_user=user,
+            text=text, entities=_premium_entities(text) if premium else None,
+        ).as_(self.bot)
+        await self.dp.feed_update(self.bot, Update(update_id=1, message=message))
+
+    async def _stored(self, key: str) -> str | None:
+        async with self.Session() as session:
+            return await session.scalar(select(Setting.value).where(Setting.key == key))
+
+    async def test_a_new_name_with_the_letters_of_a_menu_label_is_saved(self) -> None:
+        cases = [
+            ("a.people", "btn_adm_users", "👍 کاربران", nav.NAV_ADMIN_PEOPLE),
+            ("a.people", "btn_back", "🔙 بازگشت", nav.NAV_ADMIN_PEOPLE),
+            ("c.main", "btn_restart", "♻️ شروع مجدد", nav.NAV_MAIN),
+        ]
+        for screen_id, label_key, text, level in cases:
+            with self.subTest(text=text):
+                await self._type_new_name(screen_id, label_key, text, nav_level=level)
+                self.assertEqual(await self._stored(label_key), text)
+
+    async def test_a_shop_owner_on_the_shop_bot_saves_a_back_button_name(self) -> None:
+        self.on_shop_bot = True
+        await self._type_new_name("r.settings", "btn_back", "🔙 بازگشت", nav_level=nav.NAV_RESELLER_SETTINGS)
+        async with self.Session() as session:
+            stored = await session.scalar(select(ResellerSetting.value).where(
+                ResellerSetting.reseller_user_id == SHOP_A, ResellerSetting.key == "btn_back"))
+        self.assertEqual(stored, "🔙 بازگشت")
+        self.assertIsNone(await self._stored("btn_back"))
+
+    async def test_a_premium_emoji_name_is_saved_with_its_emoji(self) -> None:
+        await self._type_new_name("a.people", "btn_adm_users", "👥 کاربران", premium=True, nav_level=nav.NAV_ADMIN_PEOPLE)
+        stored = await self._stored("btn_adm_users")
+        ui = {"btn_adm_users": stored}
+        self.assertEqual(button_icon_custom_emoji_id(stored), PREMIUM_EMOJI_ID)
+        self.assertEqual(kb._t(ui, "btn_adm_users"), "کاربران")
 
 
 class EntryPointTests(unittest.IsolatedAsyncioTestCase):
