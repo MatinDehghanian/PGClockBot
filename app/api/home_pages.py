@@ -10,6 +10,8 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.authz import authz_from_staff, can_shop
+from app.services.dashboard_trend import empty_trend, own_account_summary, sales_trend
 from app.services.host_gauges import gauges_json, local_host_gauges
 from app.services.home_overview import build_home_overview, reseller_shop_summary
 from app.services.shop_scope import empty_shop_stats, is_platform_admin, shop_owner_id
@@ -101,7 +103,6 @@ async def _safe_periods(session: AsyncSession, *, reseller_id: int | None):
 async def _safe_trend(*, reseller_id: int | None):
     """Seven-day sales trend on its own session; a failure shows an empty chart, never an error page."""
     from app.db.session import SessionLocal
-    from app.services.dashboard_trend import empty_trend, sales_trend
 
     try:
         async with SessionLocal() as session:
@@ -109,6 +110,14 @@ async def _safe_trend(*, reseller_id: int | None):
     except Exception:
         logger.exception("sales trend failed reseller_id=%s", reseller_id)
         return empty_trend(7)
+
+
+def kpi_links(staff: dict | None) -> dict[str, bool]:
+    """Which KPI cards may link to their page: only staff who can open that page get a link."""
+    if not staff:
+        return {"payments": False, "tickets": False}
+    authz = authz_from_staff(staff)
+    return {"payments": can_shop(authz, "payments"), "tickets": can_shop(authz, "tickets")}
 
 
 async def _safe_action_center(session: AsyncSession, *, reseller_id: int | None, expire_days: int = 3):
@@ -222,8 +231,6 @@ async def _staff_wallet_card(session: AsyncSession, staff: dict) -> dict | None:
     user = await session.get(BotUser, int(uid))
     if user is None:
         return None
-    from app.services.dashboard_trend import own_account_summary
-
     summary = await own_account_summary(session, int(uid))
     bal = int(summary["wallet"] or 0)
     return {
@@ -332,6 +339,7 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
             return result
         template, ctx = result
         ctx = dict(ctx)
+        ctx["kpi_links"] = kpi_links(ctx.get("staff"))
         # Body fragment must never re-trigger defer (no nested fetch loop).
         ctx["widgets_deferred"] = False
         if as_body_fragment:
@@ -376,6 +384,7 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 return result
             template, ctx = result
             ctx = dict(ctx)
+            ctx["kpi_links"] = kpi_links(staff)
             ctx["widgets_deferred"] = True
             ctx["widgets_body_url"] = "/home/body"
             # Intentionally not dashboard_degraded — shell is planned, not failed.
@@ -395,6 +404,7 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
             return result
         template, ctx = result
         ctx = dict(ctx)
+        ctx["kpi_links"] = kpi_links(staff)
         ctx["widgets_deferred"] = False
         return render(request, template, _flash_from_query(request, ctx))
 
@@ -588,10 +598,9 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 expire_days = int(ui.get("action_center_expire_days") or 3)
             except (TypeError, ValueError):
                 expire_days = 3
-            funnel, periods, action_center = await _parallel_home_ops(
-                reseller_id=None,
-                funnel_enabled=funnel_enabled,
-                expire_days=expire_days,
+            (funnel, periods, action_center), trend = await asyncio.gather(
+                _parallel_home_ops(reseller_id=None, funnel_enabled=funnel_enabled, expire_days=expire_days),
+                _safe_trend(reseller_id=None),
             )
             try:
                 from app.services.inbox_dismissals import filter_action_center_for_staff
@@ -601,7 +610,6 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 )
             except Exception:
                 logger.exception("home action_center dismiss filter failed")
-            trend = await _safe_trend(reseller_id=None)
             pg_limits = None
             wallet_card = None
             try:
@@ -770,10 +778,9 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
             expire_days = int(ui.get("action_center_expire_days") or 3)
         except (TypeError, ValueError):
             expire_days = 3
-        funnel, periods, action_center = await _parallel_home_ops(
-            reseller_id=int(rid),
-            funnel_enabled=funnel_enabled,
-            expire_days=expire_days,
+        (funnel, periods, action_center), trend = await asyncio.gather(
+            _parallel_home_ops(reseller_id=int(rid), funnel_enabled=funnel_enabled, expire_days=expire_days),
+            _safe_trend(reseller_id=int(rid)),
         )
         try:
             from app.services.inbox_dismissals import filter_action_center_for_staff
@@ -783,7 +790,6 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
             )
         except Exception:
             logger.exception("reseller home action_center dismiss filter failed")
-        trend = await _safe_trend(reseller_id=int(rid))
         return (
             "reseller_home.html",
             {

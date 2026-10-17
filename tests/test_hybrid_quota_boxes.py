@@ -72,7 +72,7 @@ class SurfaceContractTests(unittest.TestCase):
         ops = (ROOT / "app/web/templates/_home_ops.html").read_text(encoding="utf-8")
         widgets = (ROOT / "app/web/templates/_home_widgets.html").read_text(encoding="utf-8")
         self.assertIn("wallet_card", ops)
-        self.assertIn("کیف پول شخصی", widgets)
+        self.assertIn("کیف پول همین حساب", widgets)
         self.assertIn("pg_overview_limit_board", home)
         self.assertNotIn("pg_quota_exhausted_banners", home)
 

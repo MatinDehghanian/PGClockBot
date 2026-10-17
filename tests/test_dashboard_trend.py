@@ -124,6 +124,31 @@ class AccountSummaryTests(unittest.IsolatedAsyncioTestCase):
         await engine.dispose()
         self.assertEqual(summary, {"wallet": 1200, "services": 2, "nearest_expiry_days": 9})
 
+    async def test_expired_or_blocked_services_are_not_counted_as_active(self):
+        engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        Session = async_sessionmaker(engine, expire_on_commit=False)
+        now = datetime(2026, 10, 17, tzinfo=timezone.utc)
+        async with Session() as session:
+            session.add(BotUser(id=1, telegram_id=1, referral_code="a", role="admin"))
+            await session.flush()
+            session.add_all([
+                UserService(bot_user_id=1, pg_user_id=1, pg_username="past", quota_expire_at=now - timedelta(days=3)),
+                UserService(bot_user_id=1, pg_user_id=2, pg_username="exp", quota_status="expired",
+                            quota_expire_at=now + timedelta(days=4)),
+                UserService(bot_user_id=1, pg_user_id=3, pg_username="off", quota_status="disabled"),
+                UserService(bot_user_id=1, pg_user_id=4, pg_username="lim", quota_status="limited"),
+                UserService(bot_user_id=1, pg_user_id=5, pg_username="ok", quota_status="active",
+                            quota_expire_at=now + timedelta(days=12)),
+                UserService(bot_user_id=1, pg_user_id=6, pg_username="forever"),
+            ])
+            await session.commit()
+            summary = await own_account_summary(session, 1, now=now)
+        await engine.dispose()
+        self.assertEqual(summary["services"], 2)
+        self.assertEqual(summary["nearest_expiry_days"], 12)
+
 
 class TrendRouteTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
@@ -168,6 +193,15 @@ class TrendRouteTests(unittest.IsolatedAsyncioTestCase):
         response = await self.client.get("/home/sales-trend?days=7")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["total"], 900)
+
+    async def test_week_figures_are_always_fresh_and_the_month_view_is_cached(self):
+        self.assertEqual((await self.client.get("/home/sales-trend?days=7")).json()["total"], 900)
+        month = (await self.client.get("/home/sales-trend?days=30")).json()["total"]
+        async with self.Session() as session:
+            session.add(order(1, 50, datetime.now(timezone.utc), shop=SHOP))
+            await session.commit()
+        self.assertEqual((await self.client.get("/home/sales-trend?days=7")).json()["total"], 950)
+        self.assertEqual((await self.client.get("/home/sales-trend?days=30")).json()["total"], month)
 
     async def test_unsupported_ranges_and_staff_without_a_shop_are_refused(self):
         self.assertEqual((await self.client.get("/home/sales-trend?days=3")).status_code, 400)

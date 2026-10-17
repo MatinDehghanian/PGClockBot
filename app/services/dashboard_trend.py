@@ -1,7 +1,9 @@
 """Daily sales trend and the signed-in staff's own account summary for the dashboard.
 
-The trend is one aggregate query (conditional sums per Tehran day), cached for a short
-time per shop so refreshes do not repeat it.
+The trend is one aggregate query (conditional sums per Tehran day). The 30-day range is
+cached for a short time per shop so switching the chart back and forth does not repeat it;
+the 7-day range is computed with the rest of the dashboard so its figures always match the
+«فروش دوره‌ای» card on the same page.
 """
 
 from __future__ import annotations
@@ -11,7 +13,7 @@ from datetime import datetime, timedelta, timezone
 from typing import TypedDict
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import case, func, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, Order, UserService
@@ -20,8 +22,11 @@ from app.services.service_scope import shop_services_clause
 
 TEHRAN = ZoneInfo("Asia/Tehran")
 ALLOWED_DAYS = (7, 30)
+CACHED_DAYS = frozenset({30})
 CACHE_SECONDS = 60.0
 CACHE_MAX_ENTRIES = 64
+# Panel statuses of a service that cannot be used right now.
+INACTIVE_QUOTA_STATUSES = ("expired", "disabled", "limited")
 # Python weekday() is Monday=0.
 WEEKDAYS_FA = ("دوشنبه", "سه‌شنبه", "چهارشنبه", "پنجشنبه", "جمعه", "شنبه", "یکشنبه")
 
@@ -88,8 +93,9 @@ async def sales_trend(
     if days not in ALLOWED_DAYS:
         raise ValueError("بازهٔ نمودار معتبر نیست")
     key = (int(reseller_id) if reseller_id else None, days)
+    use_cache = now is None and days in CACHED_DAYS
     cached = _cache.get(key)
-    if now is None and cached is not None and time.monotonic() - cached[0] < CACHE_SECONDS:
+    if use_cache and cached is not None and time.monotonic() - cached[0] < CACHE_SECONDS:
         return cached[1]
 
     starts = _day_starts(days * 2, now=now)
@@ -124,7 +130,7 @@ async def sales_trend(
         "today": today, "yesterday": yesterday, "today_change_pct": change_percent(today, yesterday),
         "has_data": total > 0,
     }
-    if now is None:
+    if use_cache:
         if len(_cache) >= CACHE_MAX_ENTRIES:
             _cache.clear()
         _cache[key] = (time.monotonic(), result)
@@ -136,17 +142,23 @@ def clear_trend_cache() -> None:
 
 
 async def own_account_summary(session: AsyncSession, bot_user_id: int, *, now: datetime | None = None) -> dict[str, int | None]:
-    """Wallet, platform services and nearest expiry of one account, for the dashboard «حساب من» card."""
+    """Wallet, active platform services and nearest expiry of one account, for the «حساب من» card.
+
+    A service counts as active when it is not cancelled, has not passed its expiry date
+    (no date means no expiry) and the panel did not report it expired, disabled or limited.
+    """
     moment = now or datetime.now(timezone.utc)
     wallet = await session.scalar(select(BotUser.wallet_balance).where(BotUser.id == int(bot_user_id)))
     row = (
         await session.execute(
-            select(func.count(), func.min(case((UserService.quota_expire_at >= moment, UserService.quota_expire_at))))
+            select(func.count(), func.min(UserService.quota_expire_at))
             .select_from(UserService)
             .where(
                 UserService.bot_user_id == int(bot_user_id),
                 UserService.is_cancelled.is_(False),
                 shop_services_clause(None),
+                or_(UserService.quota_expire_at.is_(None), UserService.quota_expire_at >= moment),
+                or_(UserService.quota_status.is_(None), UserService.quota_status.not_in(INACTIVE_QUOTA_STATUSES)),
             )
         )
     ).one()

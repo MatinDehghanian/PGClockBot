@@ -1,13 +1,14 @@
 {# Dashboard building blocks shared by the owner and shop home: KPI strip, status tiles, account card. #}
 
-{% macro delta(pct, suffix) -%}
-{%- if pct is none -%}<span class="kpi-d flat">{{ suffix }}</span>
+{% macro delta(pct, suffix, none_text) -%}
+{%- if pct is none -%}<span class="kpi-d flat">{{ none_text }}</span>
 {%- elif pct > 0 -%}<span class="kpi-d up">▲ {{ pct | num }}٪ {{ suffix }}</span>
 {%- elif pct < 0 -%}<span class="kpi-d down">▼ {{ (0 - pct) | num }}٪ {{ suffix }}</span>
 {%- else -%}<span class="kpi-d flat">بدون تغییر {{ suffix }}</span>{%- endif -%}
 {%- endmacro %}
 
-{% macro kpi_strip(periods, ac, trend) -%}
+{# links: {payments, tickets} — a card links to its page only for staff who may open it. #}
+{% macro kpi_strip(periods, ac, trend, links) -%}
 {% set day = (periods or {}).day or {} %}
 {% set week = (periods or {}).week or {} %}
 {% set sales = trend or {} %}
@@ -15,24 +16,25 @@
   <div class="kpi">
     <small>فروش امروز</small>
     <strong><span dir="ltr">{{ (sales.today if sales.today is defined else day.revenue or 0) | money }}</span> <i>تومان</i></strong>
-    {{ delta(sales.today_change_pct, 'نسبت به دیروز') if sales.today_change_pct is defined else '' }}
+    {{ delta(sales.today_change_pct, 'نسبت به دیروز', 'دیروز فروشی نبود') if sales.today_change_pct is defined else '' }}
   </div>
   <div class="kpi">
     <small>کاربران جدید</small>
     <strong>{{ (day.new_users or 0) | num }}</strong>
-    <span class="kpi-d flat">۷ روز اخیر: {{ (week.new_users or 0) | num }}</span>
+    <span class="kpi-d flat">7 روز اخیر: {{ (week.new_users or 0) | num }}</span>
   </div>
-  <a class="kpi kpi-link{% if (ac or {}).pending %} is-warn{% endif %}" href="/finance?tab=payments">
-    <small>رسید منتظر تأیید</small>
-    <strong>{{ ((ac or {}).pending or 0) | num }}</strong>
-    <span class="kpi-d flat">تأیید یا رد پرداخت‌ها</span>
-  </a>
-  <a class="kpi kpi-link{% if (ac or {}).tickets %} is-warn{% endif %}" href="/tickets">
-    <small>تیکت باز</small>
-    <strong>{{ ((ac or {}).tickets or 0) | num }}</strong>
-    <span class="kpi-d flat">پشتیبانی کاربران</span>
-  </a>
+  {{ kpi_count('رسید منتظر تأیید', (ac or {}).pending, 'تأیید یا رد پرداخت‌ها', '/finance?tab=payments' if (links or {}).payments else none) }}
+  {{ kpi_count('تیکت باز', (ac or {}).tickets, 'پشتیبانی کاربران', '/tickets' if (links or {}).tickets else none) }}
 </div>
+{%- endmacro %}
+
+{% macro kpi_count(label, count, hint, href) -%}
+{% set cls = 'kpi' ~ (' kpi-link' if href else '') ~ (' is-warn' if count else '') %}
+{% if href %}<a class="{{ cls }}" href="{{ href }}">{% else %}<div class="{{ cls }}">{% endif %}
+    <small>{{ label }}</small>
+    <strong>{{ (count or 0) | num }}</strong>
+    {% if href %}<span class="kpi-d flat">{{ hint }}</span>{% endif %}
+{% if href %}</a>{% else %}</div>{% endif %}
 {%- endmacro %}
 
 {# tiles: list of {name, detail, state (ok|warn|err|neutral), icon, href}. A tile with note=true is the
@@ -63,7 +65,7 @@
 <section class="card home-account-card" aria-label="حساب من">
   {{ card_title('account', 'حساب من') }}
   <p class="home-account-balance"><strong><span dir="ltr">{{ me.balance | money }}</span></strong> <i>تومان</i></p>
-  <p class="muted">کیف پول شخصی</p>
+  <p class="muted">کیف پول همین حساب</p>
   <div class="home-account-facts">
     <div><small>سرویس فعال</small><b>{{ (me.services or 0) | num }}</b></div>
     <div><small>نزدیک‌ترین انقضا</small><b>{% if me.nearest_expiry_days is none %}—{% else %}{{ me.nearest_expiry_days | num }} روز{% endif %}</b></div>

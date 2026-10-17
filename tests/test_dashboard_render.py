@@ -45,6 +45,37 @@ class DashboardRenderTests(unittest.TestCase):
         for expected in ("4,820", "37", "182", "12", "رسید منتظر تأیید", "تیکت باز"):
             self.assertIn(expected, html)
 
+    def test_receipt_and_ticket_cards_link_only_for_staff_who_can_open_those_pages(self) -> None:
+        closed = render(kpi_links={"payments": False, "tickets": False})
+        self.assertNotIn('href="/finance?tab=payments"', closed)
+        self.assertNotIn('href="/tickets"', closed)
+        self.assertIn("رسید منتظر تأیید", closed)
+        mixed = render(kpi_links={"payments": False, "tickets": True})
+        self.assertNotIn('href="/finance?tab=payments"', mixed)
+        self.assertIn('href="/tickets"', mixed)
+        self.assertNotIn('href="/tickets"', render())
+
+    def test_kpi_links_follow_the_staff_permissions(self) -> None:
+        from app.api.home_pages import kpi_links
+
+        self.assertEqual(kpi_links({"role": "admin", "permissions": []}), {"payments": True, "tickets": True})
+        shop_staff = {"role": "reseller_staff", "bot_user_id": 9, "reseller_id": 5, "permissions": ["tickets"]}
+        self.assertEqual(kpi_links(shop_staff), {"payments": False, "tickets": True})
+        self.assertEqual(kpi_links(None), {"payments": False, "tickets": False})
+
+    def test_today_sales_without_a_sale_yesterday_says_so(self) -> None:
+        trend = empty_trend(7)
+        trend.update(today=4820, today_change_pct=None, has_data=True)
+        html = render(trend=trend)
+        self.assertIn("دیروز فروشی نبود", html)
+        self.assertNotIn('<span class="kpi-d flat">نسبت به دیروز</span>', html)
+
+    def test_an_empty_work_queue_says_it_is_empty(self) -> None:
+        html = render()
+        self.assertIn("صف کار خالی است", html)
+        stale = dict(ACTION, has_items=True, entries=[])
+        self.assertIn("صف کار خالی است", render(action_center=stale))
+
     def test_update_notice_is_a_single_warning_tile_only_when_an_update_exists(self) -> None:
         self.assertNotIn("نسخهٔ جدید", render())
         html = render(update={"update_available": True, "remote_version": "0.4.12"})

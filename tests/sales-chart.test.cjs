@@ -9,10 +9,23 @@ assert.strictEqual(chart.compactToman(900), '900');
 assert.strictEqual(chart.compactToman(0), '0');
 assert.strictEqual(chart.fullToman(27420000), '27,420,000');
 
-const scale = chart.niceScale(5800000);
-assert.ok(scale.max >= 5800000 * 1.2, 'headroom above the peak');
-assert.strictEqual(scale.max, scale.step * 3);
+assert.strictEqual(chart.compactToman(1500), '1.5 هزار');
+
+// The scale covers the peak with headroom but leaves no more than about half of the plot empty.
+for (const peak of [900, 1500, 5800000, 6100000, 8500000, 10000000, 27420000, 999999999]) {
+  const scale = chart.niceScale(peak);
+  assert.ok(scale.max >= peak * 1.1, `headroom above ${peak}`);
+  assert.ok(peak / scale.max >= 0.55, `${peak} fills the plot (max ${scale.max})`);
+  assert.strictEqual(scale.max, scale.step * 4);
+}
+assert.strictEqual(chart.niceScale(6100000).max, 8000000);
 assert.ok(chart.niceScale(0).step > 0, 'empty data still has a scale');
+
+// Oldest day at the right edge, today at the left edge, evenly spaced.
+assert.strictEqual(chart.dayX(0, 7, 600), 600);
+assert.strictEqual(chart.dayX(6, 7, 600), 0);
+assert.strictEqual(chart.dayX(3, 7, 600), 300);
+assert.strictEqual(chart.dayX(0, 1, 600), 300);
 
 // A monotone curve never goes above the highest or below the lowest control value.
 const points = [[0, 100], [50, 20], [100, 20], [150, 90], [200, 10]];
