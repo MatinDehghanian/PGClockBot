@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Awaitable, Callable, Dict
 
-from aiogram import BaseMiddleware, Bot, Dispatcher
+from aiogram import BaseMiddleware, Bot, Dispatcher, Router
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -91,16 +91,9 @@ def create_bot(token: str | None = None) -> Bot:
     )
 
 
-def create_dispatcher() -> Dispatcher:
-    dp = Dispatcher(storage=MemoryStorage())
-    dp.update.middleware(ErrorLogMiddleware())
-    dp.update.middleware(RateLimitMiddleware())
-    dp.update.middleware(DbSessionMiddleware())
-    dp.update.middleware(UserMiddleware())
-    dp.update.middleware(ForceJoinMiddleware())
-    dp.update.middleware(TermsEntryMiddleware())
-    dp.update.middleware(EditModeMiddleware())
-
+def bot_routers() -> list[Router]:
+    """Every bot router in the order the dispatcher tries them; the first matching handler wins."""
+    # Imported here, as before, so importing ``app.bot`` does not load every handler module.
     from app.bot.handlers import (
         admin,
         admin_backup,
@@ -135,49 +128,79 @@ def create_dispatcher() -> Dispatcher:
         ticket_actions,
         wallet,
     )
-
-    dp.include_router(start.router)
-    dp.include_router(terms.router)
-    dp.include_router(connection_status.router)
-    dp.include_router(connection_status_admin.router)
-    # Reply-keyboard nav early so menu labels win over FSM amount parsers
-    dp.include_router(reply_nav.router)
-    dp.include_router(nav_hubs.router)
-    dp.include_router(nav_marketing.router)
-    dp.include_router(marketing_tools.router)
-    dp.include_router(screen_editor.owner_router)
-    dp.include_router(screen_editor.shop_router)
     from app.bot import nav_input as nav_input_mod
     from app.bot import staff_cancel as _staff_cancel  # noqa: F401 — cancel registry
-
-    dp.include_router(nav_input_mod.router)
-    dp.include_router(connection_status_admin_input.router)
-    dp.include_router(purchase_contact.router)
-    dp.include_router(loyalty.router)
-    dp.include_router(shop.router)
-    dp.include_router(wallet.router)
-    dp.include_router(service_import.router)
-    dp.include_router(services.router)
     from app.bot.handlers import guides
 
-    dp.include_router(guides.router)
-    dp.include_router(support.router)
-    dp.include_router(ticket_actions.router)
-    dp.include_router(payments.router)
-    dp.include_router(reseller.router)
-    dp.include_router(reseller_reps.router)
-    dp.include_router(reseller_plans.router)
-    dp.include_router(plan_catalog_manage.router)
-    dp.include_router(reseller_settings.router)
-    dp.include_router(admin_settings.router)
-    dp.include_router(button_colors.owner_router)
-    dp.include_router(button_colors.shop_router)
-    dp.include_router(admin_backup.router)
-    dp.include_router(admin_pg_users.router)
-    dp.include_router(admin_pg_nodes.router)
-    dp.include_router(admin_plans.router)
-    dp.include_router(admin.router)
-    dp.include_router(stale_menu.router)
+    return [
+        # The menu editor's text input comes first: a typed button name such as «👍 کاربران» or
+        # «🏡 منوی اصلی» must be saved, not read as that menu's label by the navigation below.
+        # A tap on a visible menu button is passed on (see screen_editor._is_menu_tap).
+        screen_editor.owner_router,
+        screen_editor.shop_router,
+        start.router,
+        terms.router,
+        connection_status.router,
+        connection_status_admin.router,
+        # Reply-keyboard nav early so menu labels win over FSM amount parsers
+        reply_nav.router,
+        nav_hubs.router,
+        nav_marketing.router,
+        marketing_tools.router,
+        nav_input_mod.router,
+        connection_status_admin_input.router,
+        purchase_contact.router,
+        loyalty.router,
+        shop.router,
+        wallet.router,
+        service_import.router,
+        services.router,
+        guides.router,
+        support.router,
+        ticket_actions.router,
+        payments.router,
+        reseller.router,
+        reseller_reps.router,
+        reseller_plans.router,
+        plan_catalog_manage.router,
+        reseller_settings.router,
+        admin_settings.router,
+        button_colors.owner_router,
+        button_colors.shop_router,
+        admin_backup.router,
+        admin_pg_users.router,
+        admin_pg_nodes.router,
+        admin_plans.router,
+        admin.router,
+        stale_menu.router,
+    ]
+
+
+def create_dispatcher() -> Dispatcher:
+    dp = Dispatcher(storage=MemoryStorage())
+    dp.update.middleware(ErrorLogMiddleware())
+    dp.update.middleware(RateLimitMiddleware())
+    dp.update.middleware(DbSessionMiddleware())
+    dp.update.middleware(UserMiddleware())
+    dp.update.middleware(ForceJoinMiddleware())
+    dp.update.middleware(TermsEntryMiddleware())
+    dp.update.middleware(EditModeMiddleware())
+
+    for router in bot_routers():
+        dp.include_router(router)
+    from app.bot.handlers import (
+        admin,
+        admin_backup,
+        admin_plans,
+        admin_pg_nodes,
+        admin_pg_users,
+        admin_settings,
+        button_colors,
+        connection_status_admin,
+        connection_status_admin_input,
+        screen_editor,
+    )
+
 
     block = _BlockPlatformAdminOnResellerBot()
     owner_gate = _RequireBotOwnerPrincipal()

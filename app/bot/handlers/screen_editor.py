@@ -17,6 +17,7 @@ import logging
 from dataclasses import dataclass
 
 from aiogram import F, Router
+from aiogram.dispatcher.event.bases import SkipHandler
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
@@ -39,7 +40,7 @@ from app.services.button_color_editor import (
     shared_button_count,
 )
 from app.services.resellers import get_reseller_profile
-from app.services.rich_text import pack_setting_from_message
+from app.services.rich_text import first_custom_emoji_id, is_button_label_key, pack_setting_from_message
 from app.services.screen_editor import (
     EDIT_MODE_MINUTES,
     LABEL_MAX_LENGTH,
@@ -53,7 +54,7 @@ from app.services.screen_editor import (
     validate_button_label,
 )
 from app.services.screen_titles import TITLE_MAX_LENGTH, has_title, screen_title
-from app.services.users import get_all_settings
+from app.services.users import DEFAULT_SETTINGS, get_all_settings
 
 logger = logging.getLogger(__name__)
 
@@ -367,14 +368,40 @@ async def _handle(
         await callback.answer(str(exc), show_alert=True)
 
 
+def _visible_button_labels(ui: dict[str, str]) -> set[str]:
+    """Texts a menu button can send when tapped, with this bot's settings."""
+    keys = {key for key in (*DEFAULT_SETTINGS, *ui) if is_button_label_key(key)}
+    labels = {kb._t(ui, key).strip() for key in keys}
+    labels |= {kb.BTN_BACK, kb.BTN_RESTART, kb._home_label(ui).strip(), kb._back_label(ui).strip()}
+    labels.discard("")
+    return labels
+
+
+async def _is_menu_tap(message: Message, session: AsyncSession, actor: EditorActor) -> bool:
+    """A tap on a menu button sends exactly that button's text and never a premium emoji.
+
+    A typed new name differs from every visible label (another emoji, a premium emoji or other
+    words), so it is saved even when its letters match a menu label, e.g. «👍 کاربران».
+    """
+    text = (message.text or "").strip()
+    if not text or first_custom_emoji_id(message.entities):
+        return False
+    ui = await get_all_settings(session, reseller_id=actor.settings_scope)
+    return text in _visible_button_labels(ui)
+
+
 async def _save_label_message(message: Message, state: FSMContext, session: AsyncSession, actor: EditorActor) -> None:
     data = await state.get_data()
     screen_id, index, key = data.get("ed_screen"), data.get("ed_index"), data.get("ed_key")
     raw = message.text or ""
     if kb.is_cancel_text(raw.strip()) or not screen_id:
         await state.set_state(None)
-        await message.answer(feedback.CANCELLED, reply_markup=_after_label_markup(actor, screen_id))
+        await _answer_with_panel(message, session, actor, screen_id, feedback.CANCELLED)
         return
+    if await _is_menu_tap(message, session, actor):
+        # The person left the editor by tapping a menu button: stop waiting and let navigation run.
+        await state.set_state(None)
+        raise SkipHandler()
     if data.get("ed_title"):
         await _save_title_message(message, state, session, actor, screen_id, raw)
         return
@@ -395,7 +422,7 @@ async def _save_label_message(message: Message, state: FSMContext, session: Asyn
         await message.answer(str(exc))
         return
     await state.set_state(None)
-    await message.answer(TEXT_LABEL_SAVED, reply_markup=_after_label_markup(actor, screen_id))
+    await _answer_with_panel(message, session, actor, screen_id, TEXT_LABEL_SAVED)
 
 
 async def _save_title_message(
@@ -411,7 +438,24 @@ async def _save_title_message(
         await message.answer(str(exc))
         return
     await state.set_state(None)
-    await message.answer(TEXT_TITLE_SAVED, reply_markup=_after_label_markup(actor, screen_id))
+    await _answer_with_panel(message, session, actor, screen_id, TEXT_TITLE_SAVED)
+
+
+async def _answer_with_panel(
+    message: Message, session: AsyncSession, actor: EditorActor, screen_id: str | None, notice: str
+) -> None:
+    """Confirm, then show the edit panel of the same menu with its new texts."""
+    try:
+        if not screen_id or not edit_mode_store.is_active(actor):
+            raise ValueError(TEXT_EDIT_MODE_EXPIRED)
+        screen = await _load_screen(session, actor, screen_id)
+    except ValueError:
+        await message.answer(notice, reply_markup=_after_label_markup(actor, screen_id))
+        return
+    text, markup = panel_view(
+        actor, screen.spec, screen.buttons, screen.ui, minutes_left=edit_mode_store.minutes_left(actor)
+    )
+    await message.answer(f"{notice}\n\n{text}", reply_markup=markup)
 
 
 def _after_label_markup(actor: EditorActor, screen_id: str | None) -> InlineKeyboardMarkup | None:

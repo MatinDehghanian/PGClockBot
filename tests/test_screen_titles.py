@@ -207,7 +207,8 @@ class TitleEditorFlowTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(edit_mode_store.minutes_left(OWNER), 30)
         self.assertIsNone(await self.state.get_state())
         markup = message.answer.await_args.kwargs["reply_markup"]
-        self.assertEqual(markup.inline_keyboard[0][0].callback_data, "nv:adm:ops")
+        self.assertIn("🚀 کارهای امروز", markup.inline_keyboard[0][0].text)
+        self.assertEqual(markup.inline_keyboard[-1][0].callback_data, "nv:adm:ops")
 
     async def test_unsafe_title_is_refused_and_input_stays_open(self) -> None:
         await self._start_editing()
