@@ -23,15 +23,21 @@ from app.services.resellers import (
 from app.api.guide_media_pages import SHOP_BASE, guides_media_view
 from app.services.connection_guides import prune_guide_media, serialize_submitted_guides
 from app.services.secret_box import reveal_bot_token
+from app.services.settings_button_labels import PLATFORM_ONLY_BTN_KEYS
 from app.services.settings_tab_groups import group_settings_tabs, tabs_with_message_variables
+from app.services.rich_text import merge_rich_settings_on_save, prepare_settings_values_for_web
+from app.services.screen_titles import SCREEN_TEXT_TAB, platform_only_screen_text_keys, validate_screen_text_settings
 from app.services.users import (
     IMAGE_KEYS,
+    RESETTABLE_SETTINGS_TABS,
     SECRET_KEYS,
     TAB_SETTING_GROUPS,
     TOGGLE_KEYS,
     SETTING_GROUPS,
+    default_values_for_keys,
     get_all_settings,
     keys_for_tab,
+    set_settings_bulk,
     should_keep_secret_value,
 )
 
@@ -177,10 +183,8 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
             tab = "welcome"
 
         values = await get_all_settings(session, reseller_id=rid)
-        if tab in {"terms", "limits"}:
-            from app.services.rich_text import prepare_settings_values_for_web
-
-            values = prepare_settings_values_for_web(values)
+        # Texts edited in the bot may be packed with premium emoji; fields show their plain text.
+        values = prepare_settings_values_for_web(values)
         if tab == "guides":
             from app.services.connection_guides import (
                 default_connection_guides,
@@ -206,11 +210,14 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
             for name, fields in list(groups.items()):
                 groups[name] = [f for f in fields if f[0] != "show_reseller_apply"]
         if tab == "buttons":
-            # Shop bots don't need platform-admin / apply / miniapp button labels
-            from app.services.settings_button_labels import PLATFORM_ONLY_BTN_KEYS
-
-            for name, fields in list(groups.items()):
-                groups[name] = [f for f in fields if f[0] not in PLATFORM_ONLY_BTN_KEYS]
+            # Shop bots don't need platform-admin / apply button labels
+            groups = {
+                name: kept for name, fields in groups.items() if (kept := [f for f in fields if f[0] not in PLATFORM_ONLY_BTN_KEYS])
+            }
+        if tab == SCREEN_TEXT_TAB:
+            # A shop edits its customer and reseller menus only.
+            hidden = platform_only_screen_text_keys()
+            groups = {name: kept for name, fields in groups.items() if (kept := [f for f in fields if f[0] not in hidden])}
 
         profile = await _load_profile(session, rid)
         ctx: dict = {
@@ -225,6 +232,7 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
             "saved_msg": request.query_params.get("msg") or "",
             "shop_mode": True,
             "settings_base": "/shop-settings",
+            "reset_tabs": RESETTABLE_SETTINGS_TABS,
             "profile": profile,
         }
         # Single flash above page title (base.html)
@@ -400,7 +408,7 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         from app.services.service_import_config import PLATFORM_ONLY_KEYS
 
         # Subscription paths and extra panel admins describe the one panel: Owner only.
-        known = keys_for_tab(tab) - PLATFORM_ONLY_KEYS
+        known = keys_for_tab(tab) - PLATFORM_ONLY_KEYS - PLATFORM_ONLY_BTN_KEYS
         if tab == "menu":
             known = known | {"menu_order"}
             known.discard("show_reseller_apply")
@@ -409,6 +417,12 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
             from app.services.button_styles import allowed_style_setting_keys
 
             known = known & allowed_style_setting_keys(for_reseller=True)
+        known -= platform_only_screen_text_keys()
+        if form.get("reset_defaults") and tab in RESETTABLE_SETTINGS_TABS:
+            await set_settings_bulk(session, default_values_for_keys(known), reseller_id=rid)
+            return _redirect_after_save(
+                request, f"/shop-settings?tab={tab}", msg="متن‌ها و رنگ‌های این بخش به پیش‌فرض برگشت."
+            )
 
         payload: dict[str, str] = {}
         for key in TOGGLE_KEYS:
@@ -500,13 +514,14 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         for k in list(payload.keys()):
             if str(k).startswith("btn_style_") and k not in allowed_btn:
                 payload.pop(k, None)
-        from app.services.users import set_settings_bulk
-
-        if tab in {"terms", "buttons"}:
-            from app.services.rich_text import merge_rich_settings_on_save
-
-            existing = await get_all_settings(session, reseller_id=rid)
-            payload = merge_rich_settings_on_save(existing, payload)
+        if tab == SCREEN_TEXT_TAB:
+            try:
+                validate_screen_text_settings(payload)
+            except ValueError as exc:
+                return RedirectResponse(f"/shop-settings?tab={tab}&err=" + quote(str(exc)), status_code=303)
+        # Unchanged text keeps the premium emoji it was saved with in the bot.
+        existing = await get_all_settings(session, reseller_id=rid)
+        payload = merge_rich_settings_on_save(existing, payload)
         await set_settings_bulk(session, payload, reseller_id=rid)
         if "connection_guides" in payload:
             await prune_guide_media(session, reseller_id=rid)

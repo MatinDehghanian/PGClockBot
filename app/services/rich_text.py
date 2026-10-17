@@ -379,10 +379,18 @@ def pack_setting_from_message(key: str, message: Any) -> str:
     return (text or "").strip()
 
 
+# Menu titles and captions edited in the bot may carry premium emoji too (see screen_titles).
+SCREEN_TEXT_KEY_PREFIXES = ("screen_title_", "screen_caption_")
+
+
+def _is_web_rich_key(key: str) -> bool:
+    return is_button_label_key(key) or str(key or "").startswith(SCREEN_TEXT_KEY_PREFIXES)
+
+
 def _iter_rich_web_keys(values: dict) -> list[str]:
     keys = set(MESSAGE_RICH_KEYS)
     for k in values:
-        if is_button_label_key(k):
+        if _is_web_rich_key(k):
             keys.add(k)
     return sorted(keys)
 
@@ -400,7 +408,7 @@ def merge_rich_settings_on_save(existing: dict, payload: dict) -> dict:
     """Keep packed entities when web save did not change visible text."""
     keys = set(MESSAGE_RICH_KEYS)
     for k in list(payload.keys()) + list(existing.keys()):
-        if is_button_label_key(k):
+        if _is_web_rich_key(k):
             keys.add(k)
     for key in keys:
         if key not in payload:

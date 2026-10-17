@@ -87,6 +87,7 @@ from app.services.users import (
     SETTINGS_TABS,
     PANEL_SETTINGS_KEYS,
     PANEL_SETTINGS_TABS,
+    RESETTABLE_SETTINGS_TABS,
     TAB_SETTING_GROUPS,
     get_all_settings,
     set_setting,
@@ -4401,10 +4402,10 @@ def create_api_app(lifespan=None) -> FastAPI:
         values = await get_all_settings(session)
         tab_groups = TAB_SETTING_GROUPS.get(tab, [])
         groups = {name: SETTING_GROUPS[name] for name in tab_groups if name in SETTING_GROUPS}
-        if tab in {"terms", "limits"}:
-            from app.services.rich_text import prepare_settings_values_for_web
+        # Texts edited in the bot may be packed with premium emoji; fields show their plain text.
+        from app.services.rich_text import prepare_settings_values_for_web
 
-            values = prepare_settings_values_for_web(values)
+        values = prepare_settings_values_for_web(values)
 
         if tab == "guides":
             from app.services.connection_guides import (
@@ -4437,6 +4438,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             "tab": tab,
             "is_panel_settings": tab in PANEL_SETTINGS_KEYS,
             "panel_tab_label": dict(PANEL_SETTINGS_TABS).get(tab),
+            "reset_tabs": RESETTABLE_SETTINGS_TABS,
             "saved": request.query_params.get("saved") == "1",
             "saved_msg": request.query_params.get("msg") or "",
         }
@@ -4645,7 +4647,15 @@ def create_api_app(lifespan=None) -> FastAPI:
 
         from starlette.datastructures import UploadFile
 
-        from app.services.users import IMAGE_KEYS, SECRET_KEYS, TOGGLE_KEYS, keys_for_tab, should_keep_secret_value
+        from app.services.screen_titles import SCREEN_TEXT_TAB, validate_screen_text_settings
+        from app.services.users import (
+            IMAGE_KEYS,
+            SECRET_KEYS,
+            TOGGLE_KEYS,
+            default_values_for_keys,
+            keys_for_tab,
+            should_keep_secret_value,
+        )
 
         tab = (request.query_params.get("tab") or "welcome").strip()
         form = await request.form()
@@ -5098,6 +5108,12 @@ def create_api_app(lifespan=None) -> FastAPI:
         known = keys_for_tab(tab)
         if tab == "menu":
             known = known | {"menu_order"}
+        if form.get("reset_defaults") and tab in RESETTABLE_SETTINGS_TABS:
+            await set_settings_bulk(session, default_values_for_keys(known))
+            return RedirectResponse(
+                f"/settings?tab={tab}&saved=1&msg=" + quote("متن‌ها و رنگ‌های این بخش به پیش‌فرض برگشت."),
+                status_code=303,
+            )
 
         payload: dict[str, str] = {}
         for key in TOGGLE_KEYS:
@@ -5172,9 +5188,15 @@ def create_api_app(lifespan=None) -> FastAPI:
                 if content:
                     dest.write_bytes(content)
                     payload[key] = f"uploads/{dest_name}"
-        if tab in {"terms", "buttons"} and payload:
+        if tab == SCREEN_TEXT_TAB:
+            try:
+                validate_screen_text_settings(payload)
+            except ValueError as exc:
+                return RedirectResponse(f"/settings?tab={tab}&err=" + quote(str(exc)), status_code=303)
+        if payload:
             from app.services.rich_text import merge_rich_settings_on_save
 
+            # Unchanged text keeps the premium emoji it was saved with in the bot.
             existing = await get_all_settings(session)
             payload = merge_rich_settings_on_save(existing, payload)
         if payload:
