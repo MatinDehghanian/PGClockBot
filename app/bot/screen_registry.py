@@ -22,7 +22,7 @@ from aiogram.types import InlineKeyboardMarkup, ReplyKeyboardMarkup
 from app.bot import nav_inline as hubs
 from app.bot import reply_keyboards as rk
 from app.bot.button_sources import recording_button_sources
-from app.services.button_styles import CATALOG_IDS, STYLE_ALIASES, resolve_style_id, setting_key
+from app.services.button_styles import CATALOG_IDS, setting_key
 
 Markup = InlineKeyboardMarkup | ReplyKeyboardMarkup
 
@@ -191,10 +191,3 @@ def screen_buttons(screen_id: str, ctx: ScreenContext) -> list[ScreenButton]:
                 )
             )
     return buttons
-
-
-def style_ids_sharing_setting(style_id: str) -> tuple[str, ...]:
-    """Every catalog id whose color is stored in the same setting as *style_id*."""
-    target = resolve_style_id(style_id)
-    sharing = {target} | {alias for alias, canonical in STYLE_ALIASES.items() if canonical == target}
-    return tuple(sorted(sharing))

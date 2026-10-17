@@ -17,8 +17,8 @@ from app.bot.screen_registry import (
     ScreenButton,
     ScreenContext,
     screen_buttons,
-    style_ids_sharing_setting,
 )
+from app.services.button_styles import style_ids_sharing_setting
 from app.services.rich_text import is_button_label_key
 from app.services.users import DEFAULT_SETTINGS
 from tests.bot_ui_snapshots import dump_markup

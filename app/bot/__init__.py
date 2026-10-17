@@ -106,6 +106,7 @@ def create_dispatcher() -> Dispatcher:
         admin_pg_nodes,
         admin_pg_users,
         admin_settings,
+        button_colors,
         connection_status_admin,
         connection_status_admin_input,
         connection_status,
@@ -164,6 +165,8 @@ def create_dispatcher() -> Dispatcher:
     dp.include_router(plan_catalog_manage.router)
     dp.include_router(reseller_settings.router)
     dp.include_router(admin_settings.router)
+    dp.include_router(button_colors.owner_router)
+    dp.include_router(button_colors.shop_router)
     dp.include_router(admin_backup.router)
     dp.include_router(admin_pg_users.router)
     dp.include_router(admin_pg_nodes.router)
@@ -177,6 +180,7 @@ def create_dispatcher() -> Dispatcher:
         admin.router,
         admin_backup.router,
         admin_settings.router,
+        button_colors.owner_router,
         admin_plans.router,
         connection_status_admin.router,
         connection_status_admin_input.router,
