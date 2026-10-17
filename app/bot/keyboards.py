@@ -17,6 +17,7 @@ from app.services.support_contacts import (
 )
 from app.services.users import DEFAULT_SETTINGS, on
 from app.services.connection_status_texts import CONNECTION_STATUS_MENU_KEY
+from app.services import bot_feedback_texts as feedback
 
 # Default order for user menu items (drag-and-drop in web panel edits menu_order)
 # guide/faq removed from keyboard — keep texts available via /help if needed.
@@ -1038,7 +1039,7 @@ def shop_kind_keyboard(
             ]
         )
     if not rows:
-        rows = [[InlineKeyboardButton(text="پلنی نیست", callback_data="menu:home")]]
+        rows = [[InlineKeyboardButton(text=feedback.NO_PLANS, callback_data="menu:home")]]
     else:
         rows = chunk_buttons([row[0] for row in rows], cols=2)
         # Same as wallet/support/loyalty hubs — back to welcome (menu:home).
@@ -1187,7 +1188,7 @@ def plans_keyboard(
         rows = [
             [
                 _ikb(
-                    "پلنی نیست",
+                    feedback.NO_PLANS,
                     callback_data=back_callback,
                     style=kind_style,
                 )
@@ -1222,7 +1223,7 @@ def wholesale_plans_keyboard(
         rows = [
             [
                 _ikb(
-                    "پلنی نیست",
+                    feedback.NO_PLANS,
                     callback_data=back_callback,
                     style=kind_style,
                 )
@@ -1666,7 +1667,7 @@ def admin_resellers_plans_overview_keyboard(
         rows.append(
             [
                 _ikb(
-                    "پلنی نیست",
+                    feedback.NO_PLANS,
                     callback_data="adm:plans:noop",
                     style=fixed_style,
                 )
@@ -1784,7 +1785,7 @@ def admin_plans_list_keyboard(
         rows.append(
             [
                 _ikb(
-                    "پلنی نیست",
+                    feedback.NO_PLANS,
                     callback_data="adm:plans:noop",
                     style=kind_style,
                 )
@@ -1843,7 +1844,7 @@ def admin_reseller_plans_list_keyboard(
         rows.append(
             [
                 _ikb(
-                    "پلنی نیست",
+                    feedback.NO_PLANS,
                     callback_data="adm:plans:noop",
                     style=kind_style,
                 )

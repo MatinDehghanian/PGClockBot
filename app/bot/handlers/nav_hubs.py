@@ -134,7 +134,7 @@ async def nv_wallet_home(
                     f"<b>{format_toman(bal, get_settings().currency)}</b>",
                 ),
                 "",
-                "یک گزینه را از دکمه‌های زیر انتخاب کنید.",
+                feedback.PICK_OPTION_BELOW,
             ]
         ),
     )
@@ -416,7 +416,7 @@ async def nv_res_close(
     )
     if not owner_id or not profile:
         await safe_edit_inline(
-            callback.message, "دسترسی نماینده یافت نشد.", reply_markup=None
+            callback.message, feedback.RESELLER_ACCESS_NOT_FOUND, reply_markup=None
         )
         await clear_nav_panel(state)
         return
@@ -808,7 +808,7 @@ async def nv_res_ra(
     if action in {kb.REPLY_ACTION_RES_PREVIEW, "res_preview"}:
         if not is_reseller_bot:
             await callback.message.answer(
-                "پیش‌نمایش فقط روی ربات فروشگاه شما فعال است."
+                feedback.PREVIEW_ONLY_ON_SHOP_BOT
             )
             return
         await open_user_preview(

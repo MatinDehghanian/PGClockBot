@@ -200,7 +200,7 @@ async def _parent_roles(session: AsyncSession, staff: dict) -> list[dict]:
 async def rrep_cancel(callback: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
     try:
-        await callback.answer("لغو شد")
+        await callback.answer(feedback.CANCELLED_SHORT)
     except Exception:
         pass
     if callback.message:

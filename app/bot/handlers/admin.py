@@ -849,7 +849,7 @@ async def order_reject_cb(callback: CallbackQuery, session: AsyncSession, db_use
     else:
         order.status = OrderStatus.REJECTED.value
         await session.commit()
-    await callback.answer("رد شد", show_alert=True)
+    await callback.answer(feedback.REJECTED, show_alert=True)
     if callback.message:
         try:
             await callback.message.edit_text(
@@ -882,7 +882,7 @@ async def adm_cancellations(callback: CallbackQuery, session: AsyncSession, db_u
     if not rows:
         markup = with_inline_back(None, ui, "nv:adm:home")
         if callback.message:
-            await callback.message.edit_text("درخواست لغو معلقی نیست.", reply_markup=markup)
+            await callback.message.edit_text(feedback.NO_PENDING_CANCELLATION, reply_markup=markup)
         return
     lines = ["📝 <b>درخواست‌های لغو</b>\n"]
     kb_rows: list[list[InlineKeyboardButton]] = []
@@ -971,7 +971,7 @@ async def adm_payments(callback: CallbackQuery, session: AsyncSession, db_user: 
     back = with_inline_back(None, ui, "nv:adm:ops")
     if not payments:
         if callback.message:
-            await callback.message.edit_text("رسید معلقی نیست.", reply_markup=back)
+            await callback.message.edit_text(feedback.NO_PENDING_RECEIPT, reply_markup=back)
         return
     for p in payments:
         caption = f"پرداخت #{p.id} — {format_toman(p.amount, get_settings().currency)}"
@@ -1078,7 +1078,7 @@ async def adm_plan_edit_save(
     try:
         if field == "name":
             if not text:
-                await message.answer("نام خالی نیست.")
+                await message.answer(feedback.NAME_REQUIRED)
                 return
             plan.name = text[:128]
         elif field == "price":
@@ -1105,7 +1105,7 @@ async def adm_plan_edit_save(
         return
     await session.commit()
     await state.set_state(None)
-    await message.answer("ذخیره شد ✅", reply_markup=await _plans_flow_reply_kb(session, db_user, state))
+    await message.answer(feedback.SAVED_CHECK, reply_markup=await _plans_flow_reply_kb(session, db_user, state))
     await message.answer(
         await _plan_detail_text_for(session, plan),
         reply_markup=await _plan_detail_markup(session, plan),
@@ -1124,7 +1124,7 @@ async def adm_plan_add(callback: CallbackQuery, state: FSMContext, db_user: BotU
     await ask_text(
         callback,
         state,
-        prompt="نام پلن را بفرستید:",
+        prompt=feedback.ENTER_PLAN_NAME,
         cancel_code="adm_pln",
         fsm_state=AdminStates.add_plan_name,
         edit=True,
@@ -1155,7 +1155,7 @@ async def plan_name(
     await ask_text(
         message,
         state,
-        prompt="قیمت به تومان را بفرستید:",
+        prompt=feedback.ENTER_PRICE_TOMAN,
         cancel_code="adm_pln",
         fsm_state=AdminStates.add_plan_price,
         edit=False,
@@ -1183,7 +1183,7 @@ async def plan_price(
     try:
         price = max(0, parse_bot_int(message.text))
     except ValueError:
-        await message.answer("یک عدد معتبر بفرستید.")
+        await message.answer(feedback.ENTER_ONE_VALID_NUMBER)
         return
     await state.update_data(price=price)
     from app.bot.nav_input import ask_text
@@ -1220,7 +1220,7 @@ async def plan_days(
     try:
         days = 0 if not raw else max(0, parse_bot_int(raw))
     except ValueError:
-        await message.answer("یک عدد معتبر بفرستید.")
+        await message.answer(feedback.ENTER_ONE_VALID_NUMBER)
         return
     await state.update_data(days=days)
     from app.bot.nav_input import ask_text
@@ -1228,7 +1228,7 @@ async def plan_days(
     await ask_text(
         message,
         state,
-        prompt="حجم به گیگ را بفرستید:\n<code>0</code> = نامحدود",
+        prompt=feedback.ENTER_VOLUME_GB,
         cancel_code="adm_pln",
         fsm_state=AdminStates.add_plan_gb,
         edit=False,
@@ -1256,7 +1256,7 @@ async def plan_gb(
     try:
         gb = parse_bot_float(message.text)
     except ValueError:
-        await message.answer("یک عدد معتبر بفرستید.")
+        await message.answer(feedback.ENTER_ONE_VALID_NUMBER)
         return
     await state.update_data(gb=None if gb <= 0 else gb)
     await state.set_state(AdminStates.add_plan_link)
@@ -1350,7 +1350,7 @@ async def adm_plan_new_tpl(callback: CallbackQuery, state: FSMContext, db_user: 
         await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
     if await state.get_state() != AdminStates.add_plan_link.state:
-        await callback.answer("ابتدا ساخت پلن را شروع کنید", show_alert=True)
+        await callback.answer(feedback.START_PLAN_CREATION_FIRST, show_alert=True)
         return
     await callback.answer()
     await state.update_data(new_plan=1)
@@ -1363,7 +1363,7 @@ async def adm_plan_new_grp(callback: CallbackQuery, state: FSMContext, db_user: 
         await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
     if await state.get_state() != AdminStates.add_plan_link.state:
-        await callback.answer("ابتدا ساخت پلن را شروع کنید", show_alert=True)
+        await callback.answer(feedback.START_PLAN_CREATION_FIRST, show_alert=True)
         return
     await callback.answer()
     await state.update_data(new_plan=1, selected_groups=[])
@@ -1559,7 +1559,7 @@ async def adm_plan_grp_done(
     data = await state.get_data()
     selected = [int(x) for x in (data.get("selected_groups") or [])]
     if not selected:
-        await callback.answer("حداقل یک گروه انتخاب کنید", show_alert=True)
+        await callback.answer(feedback.PICK_AT_LEAST_ONE_GROUP, show_alert=True)
         return
     group_csv = ",".join(str(x) for x in selected)
     creating = bool(data.get("new_plan") or plan_id == 0)
@@ -1720,7 +1720,7 @@ async def adm_plan_new_color(
     await state.set_state(AdminStates.add_plan_category)
     staff = await _platform_catalog_staff(session, db_user)
     if not staff:
-        await callback.answer("دسترسی مالک سیستم لازم است", show_alert=True)
+        await callback.answer(feedback.SYSTEM_OWNER_REQUIRED, show_alert=True)
         return
     await callback.answer()
     await _show_plan_category_picker(
@@ -1754,7 +1754,7 @@ async def adm_plan_new_category(
         return
     staff = await _platform_catalog_staff(session, db_user)
     if not staff:
-        await callback.answer("دسترسی مالک سیستم لازم است", show_alert=True)
+        await callback.answer(feedback.SYSTEM_OWNER_REQUIRED, show_alert=True)
         return
     from app.services.plan_categories import resolve_category_for_plan_write
     from app.services.shop_scope import ShopScopeError
@@ -1805,7 +1805,7 @@ async def adm_plan_cat_pick(
         return
     staff = await _platform_catalog_staff(session, db_user)
     if not staff:
-        await callback.answer("دسترسی مالک سیستم لازم است", show_alert=True)
+        await callback.answer(feedback.SYSTEM_OWNER_REQUIRED, show_alert=True)
         return
     pid = int(callback.data.rsplit(":", 1)[-1])
     plan = await session.get(Plan, pid)
@@ -1831,7 +1831,7 @@ async def adm_plan_set_cat(
         return
     staff = await _platform_catalog_staff(session, db_user)
     if not staff:
-        await callback.answer("دسترسی مالک سیستم لازم است", show_alert=True)
+        await callback.answer(feedback.SYSTEM_OWNER_REQUIRED, show_alert=True)
         return
     parts = callback.data.split(":")
     # adm:plan:setcat:{pid}:{cid}
@@ -1907,7 +1907,7 @@ async def adm_plan_set_color(callback: CallbackQuery, session: AsyncSession, db_
         return
     plan.button_style = parse_plan_button_style_callback(parts[4])
     await session.commit()
-    await callback.answer("رنگ ذخیره شد")
+    await callback.answer(feedback.COLOR_SAVED)
     if callback.message:
         await safe_edit_text(
             callback.message,
@@ -1928,7 +1928,7 @@ async def adm_plan_clear_link(callback: CallbackQuery, session: AsyncSession, db
     plan.pg_template_id = None
     plan.pg_group_ids = None
     await session.commit()
-    await callback.answer("اتصال حذف شد")
+    await callback.answer(feedback.CONNECTION_DELETED)
     if callback.message:
         await callback.message.edit_text(
             await _plan_detail_text(plan),
@@ -1947,7 +1947,7 @@ async def plan_toggle(callback: CallbackQuery, session: AsyncSession, db_user: B
         return
     plan.is_active = not plan.is_active
     await session.commit()
-    await callback.answer("بروز شد")
+    await callback.answer(feedback.UPDATED)
     # Prefer detail view if we came from there; otherwise list
     if callback.message and callback.message.reply_markup:
         # re-render detail when possible
@@ -2036,7 +2036,7 @@ async def adm_custom_toggle(callback: CallbackQuery, session: AsyncSession, db_u
         return
     cur = await get_setting(session, "custom_plan_enabled")
     await set_setting(session, "custom_plan_enabled", "0" if on(cur) else "1")
-    await callback.answer("بروز شد")
+    await callback.answer(feedback.UPDATED)
     text, markup = await _custom_link_summary(session)
     if callback.message:
         await callback.message.edit_text(text, reply_markup=markup)
@@ -2049,7 +2049,7 @@ async def adm_custom_clear(callback: CallbackQuery, session: AsyncSession, db_us
         return
     await set_setting(session, "custom_plan_template_id", "")
     await set_setting(session, "custom_plan_group_ids", "")
-    await callback.answer("اتصال حذف شد")
+    await callback.answer(feedback.CONNECTION_DELETED)
     text, markup = await _custom_link_summary(session)
     if callback.message:
         await callback.message.edit_text(text, reply_markup=markup)
@@ -2193,7 +2193,7 @@ async def adm_custom_grp_done(callback: CallbackQuery, session: AsyncSession, st
     data = await state.get_data()
     selected = [int(x) for x in (data.get("custom_selected_groups") or [])]
     if not selected:
-        await callback.answer("حداقل یک گروه انتخاب کنید", show_alert=True)
+        await callback.answer(feedback.PICK_AT_LEAST_ONE_GROUP, show_alert=True)
         return
     await set_setting(session, "custom_plan_group_ids", ",".join(str(x) for x in selected))
     await set_setting(session, "custom_plan_template_id", "")
@@ -2511,7 +2511,7 @@ async def adm_users_message_send(
             actor=str(db_user.telegram_id or db_user.id),
         )
         await session.commit()
-        await message.answer("پیام ارسال شد ✅", reply_markup=await _staff_reply(session, db_user, kb.admin_users_reply_keyboard()))
+        await message.answer(feedback.MESSAGE_SENT, reply_markup=await _staff_reply(session, db_user, kb.admin_users_reply_keyboard()))
     except ValueError as e:
         await message.answer(user_safe_error(e), reply_markup=await _staff_reply(session, db_user, kb.admin_users_reply_keyboard()))
     except Exception as e:
@@ -2921,7 +2921,7 @@ async def adm_users_service_renew(
     except Exception as e:
         await callback.answer(user_safe_error(e, limit=160), show_alert=True)
         return
-    await callback.answer("تمدید شد")
+    await callback.answer(feedback.RENEWED)
     if callback.message:
         await safe_edit_text(
             callback.message,
@@ -3197,7 +3197,7 @@ async def adm_svc_adjust_days_entered(
     try:
         days = parse_bot_int(message.text)
     except ValueError:
-        await message.answer("عدد معتبر بفرستید")
+        await message.answer(feedback.ENTER_VALID_NUMBER_SHORT)
         return
     if abs(days) > MAX_EXTEND_DAYS:
         await message.answer(
@@ -3256,7 +3256,7 @@ async def adm_svc_adjust_gb_entered(
     try:
         gb = parse_bot_float(message.text)
     except ValueError:
-        await message.answer("عدد معتبر بفرستید")
+        await message.answer(feedback.ENTER_VALID_NUMBER_SHORT)
         return
     if abs(gb) > MAX_EXTEND_GB:
         await message.answer(
@@ -3887,7 +3887,7 @@ async def adm_resellers_capacity_adjust(
 
     profile = await get_reseller_profile(session, user_id)
     if not profile or not (profile.pg_admin_username or "").strip():
-        await callback.answer("ادمین پاسارگارد تنظیم نشده", show_alert=True)
+        await callback.answer(feedback.PG_ADMIN_NOT_SET, show_alert=True)
         return
 
     data = await state.get_data()
@@ -4045,7 +4045,7 @@ async def adm_reseller_cap_days_entered(
     try:
         days = parse_bot_int(message.text)
     except ValueError:
-        await message.answer("عدد معتبر بفرستید")
+        await message.answer(feedback.ENTER_VALID_NUMBER_SHORT)
         return
     if abs(days) > MAX_ADJUST_DAYS:
         await message.answer(f"روز باید بین ±{MAX_ADJUST_DAYS} باشد")
@@ -4113,7 +4113,7 @@ async def adm_reseller_cap_gb_entered(
     try:
         gb = parse_bot_int(message.text)
     except ValueError:
-        await message.answer("عدد معتبر بفرستید")
+        await message.answer(feedback.ENTER_VALID_NUMBER_SHORT)
         return
     if abs(gb) > MAX_ADJUST_GB:
         await message.answer(f"گیگ باید بین ±{MAX_ADJUST_GB} باشد")
@@ -4436,7 +4436,7 @@ async def adm_resapp_no(callback: CallbackQuery, session: AsyncSession, db_user:
             )
         except Exception:
             pass
-    await callback.answer("رد شد", show_alert=True)
+    await callback.answer(feedback.REJECTED, show_alert=True)
     if callback.message:
         await callback.message.edit_text(
             f"❌ درخواست #{app.id} رد شد.",
@@ -4602,7 +4602,7 @@ async def adm_ticket_reply_start(
     from app.db.models import TicketStatus
 
     if ticket.status == TicketStatus.CLOSED.value:
-        await callback.answer("تیکت بسته است", show_alert=True)
+        await callback.answer(feedback.TICKET_CLOSED, show_alert=True)
         return
     await callback.answer()
     await state.update_data(ticket_id=ticket.id)
@@ -4639,10 +4639,10 @@ async def adm_ticket_close(
     from app.services.tickets import close_ticket
 
     if ticket.status == TicketStatus.CLOSED.value:
-        await callback.answer("قبلاً بسته شده", show_alert=True)
+        await callback.answer(feedback.ALREADY_CLOSED, show_alert=True)
     else:
         await close_ticket(session, ticket)
-        await callback.answer("تیکت بسته شد ✅", show_alert=True)
+        await callback.answer(feedback.TICKET_CLOSED_DONE, show_alert=True)
     await state.set_state(None)
     if callback.message:
         await _present_admin_tickets_list(callback.message, session, edit=True)
@@ -4703,7 +4703,7 @@ async def adm_ticket_reply(
         message,
         session,
         db_user,
-        "ارسال شد ✅",
+        feedback.SENT,
         state,
         clear_state=False,
     )

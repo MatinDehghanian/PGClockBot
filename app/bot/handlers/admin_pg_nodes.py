@@ -41,7 +41,7 @@ async def _require_nodes(db_user: BotUser, callback=None, message=None, *, actio
         if callback is not None:
             await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         elif message is not None:
-            await message.answer("ادمین نیستید.")
+            await message.answer(feedback.NOT_ADMIN_REPLY)
         return False
     if not await can_platform_pg_page(db_user, "pg_nodes"):
         if callback is not None:
@@ -53,7 +53,7 @@ async def _require_nodes(db_user: BotUser, callback=None, message=None, *, actio
         if callback is not None:
             await callback.answer(feedback.ACTION_NOT_ALLOWED, show_alert=True)
         elif message is not None:
-            await message.answer("اجازه این عمل را ندارید.")
+            await message.answer(feedback.ACTION_NOT_ALLOWED_REPLY)
         return False
     return True
 

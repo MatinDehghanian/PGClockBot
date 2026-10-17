@@ -17,6 +17,7 @@ from app.bot.middlewares import (
     UserMiddleware,
 )
 from app.config import get_settings
+from app.services import bot_feedback_texts as feedback
 
 
 class _BlockPlatformAdminOnResellerBot(BaseMiddleware):
@@ -67,7 +68,7 @@ class _RequireBotOwnerPrincipal(BaseMiddleware):
                 callable(answer) and hasattr(event, "data")
             ):
                 try:
-                    await event.answer("دسترسی مالک سیستم لازم است", show_alert=True)
+                    await event.answer(feedback.SYSTEM_OWNER_REQUIRED, show_alert=True)
                 except Exception:
                     pass
                 return None

@@ -398,7 +398,7 @@ async def reopen_loyalty_staff(
         message,
         session,
         db_user,
-        format_message("⭐ باشگاه مشتریان", "لغو شد — به هاب مدیریت برگشتید."),
+        format_message("⭐ باشگاه مشتریان", feedback.CANCELLED_BACK_TO_HUB),
         can_tiers=can_tiers,
         is_reseller_bot=is_reseller_bot,
         reseller_owner_id=reseller_owner_id,

@@ -878,7 +878,7 @@ async def pcm_cat_edit_save(
     await state.set_state(None)
     cats = await list_categories(session, staff, active_only=False)
     await message.answer(
-        "ذخیره شد ✅",
+        feedback.SAVED_CHECK,
         reply_markup=await _lasting_reply_kb(
             session, db_user, state,
             is_reseller_bot=is_reseller_bot,
@@ -995,7 +995,7 @@ async def pcm_addon_name(
         return
     name = (message.text or "").strip()
     if not name:
-        await message.answer("نام خالی نیست.")
+        await message.answer(feedback.NAME_REQUIRED)
         return
     await state.update_data(_pcm_addon_name=name[:128])
     await state.set_state(PlanCatalogStates.addon_kind)
@@ -1093,7 +1093,7 @@ async def pcm_addon_amount(
     await ask_text(
         message,
         state,
-        prompt="قیمت به تومان را بفرستید:",
+        prompt=feedback.ENTER_PRICE_TOMAN,
         cancel_code="pcm_hub",
         fsm_state=PlanCatalogStates.addon_price,
         edit=False,
@@ -1369,7 +1369,7 @@ async def pcm_addon_edit_save(
     try:
         if field == "name":
             if not text:
-                await message.answer("نام خالی نیست.")
+                await message.answer(feedback.NAME_REQUIRED)
                 return
             await state.update_data(
                 _pcm_edit_addon_name=text[:128],
@@ -1432,7 +1432,7 @@ async def pcm_addon_edit_save(
     await state.set_state(None)
     packs = await list_packs(session, staff, active_only=False)
     await message.answer(
-        "ذخیره شد ✅",
+        feedback.SAVED_CHECK,
         reply_markup=await _lasting_reply_kb(
                 session, db_user, state,
                 is_reseller_bot=is_reseller_bot,

@@ -367,7 +367,7 @@ HubPanel = tuple[str, InlineKeyboardMarkup | None]
 
 
 async def _hub_panel(session: AsyncSession, profile) -> HubPanel:
-    bot_line = f"@{profile.bot_username}" if profile.bot_username else "توکن ثبت نشده"
+    bot_line = f"@{profile.bot_username}" if profile.bot_username else feedback.BOT_TOKEN_NOT_SET
     text = (
         "⚙️ <b>تنظیمات سریع فروشگاه</b>\n\n"
         f"ربات: <code>{bot_line}</code>\n"
@@ -853,7 +853,7 @@ async def settings_edit_ask(
         cur = format_force_join_for_edit(cur)
     await callback.answer()
     await state.update_data(edit_key=key, reseller_id=profile.user_id)
-    hint = "متن جدید را بفرستید.\nبرای انصراف: انصراف"
+    hint = feedback.ENTER_NEW_TEXT
     if key == "force_join_channel":
         hint = "هر خط یک کانال (@channel یا آیدی).\nعضویت همه الزامی ذخیره می‌شود.\nبرای انصراف: انصراف"
     else:
@@ -901,7 +901,7 @@ async def settings_edit_save(message: Message, state: FSMContext, session: Async
 
     text = pack_setting_from_message(key, message)
     await set_setting(session, key, text, reseller_id=profile.user_id)
-    await _close_input_to_hub(message, state, session, profile, note="✅ ذخیره شد.")
+    await _close_input_to_hub(message, state, session, profile, note=feedback.SAVED_WITH_ICON)
 
 
 @router.callback_query(F.data == "res:st:sup:add")

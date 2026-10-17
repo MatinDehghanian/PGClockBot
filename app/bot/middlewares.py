@@ -23,6 +23,7 @@ from app.services.users import (
     reset_shop_reseller_id,
     set_shop_reseller_id,
 )
+from app.services import bot_feedback_texts as feedback
 
 logger = logging.getLogger("pgclock.bot")
 
@@ -732,7 +733,7 @@ class ForceJoinMiddleware(BaseMiddleware):
             )
             if cq is not None:
                 alert = (
-                    "عضویت تأیید نشد — ربات باید ادمین کانال باشد"
+                    feedback.JOIN_NOT_CONFIRMED
                     if unverified and not missing
                     else "هنوز عضو کانال‌ها نشده‌اید"
                 )

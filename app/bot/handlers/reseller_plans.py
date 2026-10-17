@@ -317,7 +317,7 @@ async def res_plan_add(callback: CallbackQuery, state: FSMContext, session: Asyn
     await ask_text(
         callback,
         state,
-        prompt="نام پلن را بفرستید:",
+        prompt=feedback.ENTER_PLAN_NAME,
         cancel_code="rs_pln",
         fsm_state=ResellerPlanStates.name,
         edit=True,
@@ -363,7 +363,7 @@ async def res_plan_name(
     await ask_text(
         message,
         state,
-        prompt="قیمت به تومان را بفرستید:",
+        prompt=feedback.ENTER_PRICE_TOMAN,
         cancel_code="rs_pln",
         fsm_state=ResellerPlanStates.price,
         edit=False,
@@ -400,7 +400,7 @@ async def res_plan_price(
     try:
         price = int((message.text or "").replace(",", "").replace("٬", ""))
     except ValueError:
-        await message.answer("یک عدد معتبر بفرستید.")
+        await message.answer(feedback.ENTER_ONE_VALID_NUMBER)
         return
     await state.update_data(price=price)
     from app.bot.nav_input import ask_text
@@ -445,7 +445,7 @@ async def res_plan_days(
     try:
         days = max(1, int(message.text or "30"))
     except ValueError:
-        await message.answer("یک عدد معتبر بفرستید.")
+        await message.answer(feedback.ENTER_ONE_VALID_NUMBER)
         return
     await state.update_data(days=days)
     from app.bot.nav_input import ask_text
@@ -453,7 +453,7 @@ async def res_plan_days(
     await ask_text(
         message,
         state,
-        prompt="حجم به گیگ را بفرستید:\n<code>0</code> = نامحدود",
+        prompt=feedback.ENTER_VOLUME_GB,
         cancel_code="rs_pln",
         fsm_state=ResellerPlanStates.gb,
         edit=False,
@@ -487,7 +487,7 @@ async def res_plan_gb(message: Message, state: FSMContext, session: AsyncSession
     try:
         gb_val = float(raw)
     except ValueError:
-        await message.answer("عدد معتبر بفرستید")
+        await message.answer(feedback.ENTER_VALID_NUMBER_SHORT)
         return
     gb = None if gb_val <= 0 else gb_val
     await state.update_data(gb=gb)
@@ -635,7 +635,7 @@ async def res_plan_pick_groups(callback: CallbackQuery, state: FSMContext, sessi
     data = await state.get_data()
     groups = data.get("groups") or []
     if not groups:
-        await callback.answer("گروهی نیست", show_alert=True)
+        await callback.answer(feedback.NO_GROUPS, show_alert=True)
         return
     await callback.answer()
     # Multi-select via toggling; start with empty then save
@@ -733,7 +733,7 @@ async def res_plan_pick_tpl(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     templates = data.get("templates") or []
     if not templates:
-        await callback.answer("تمپلیتی نیست", show_alert=True)
+        await callback.answer(feedback.NO_TEMPLATES, show_alert=True)
         return
     await callback.answer()
     rows = []
@@ -746,7 +746,7 @@ async def res_plan_pick_tpl(callback: CallbackQuery, state: FSMContext):
     rows.append([InlineKeyboardButton(text="⬅️ انصراف", callback_data="res:plans")])
     if callback.message:
         await callback.message.edit_text(
-            "تمپلیت را انتخاب کنید:",
+            feedback.PICK_TEMPLATE,
             reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
         )
 
