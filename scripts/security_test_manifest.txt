@@ -203,3 +203,4 @@ tests/test_shop_isolation_audit_fixes.py
 tests/test_dashboard_trend.py
 tests/test_guide_media.py
 tests/test_guide_editor.py
+tests/test_wireguard_delivery_followup.py

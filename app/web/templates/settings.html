@@ -36,6 +36,8 @@
   {% elif tab == 'colors' %}
     {% set settings_action = '/settings?tab=colors' %}
     {% include "_settings_colors.html" %}
+    {% set reset_action = '/settings?tab=colors' %}
+    {% include "_settings_reset_defaults.html" %}
   {% elif tab == 'notifications' %}
     {% include "_settings_notifications.html" %}
   {% elif tab == 'daily_report' %}
@@ -164,6 +166,8 @@
         <button class="btn" type="submit">ذخیره تنظیمات</button>
       </div>
     </form>
+    {% set reset_action = '/settings?tab=' ~ tab %}
+    {% include "_settings_reset_defaults.html" %}
   {% endif %}
 
   </div>

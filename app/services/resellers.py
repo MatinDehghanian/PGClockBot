@@ -51,6 +51,7 @@ RESELLER_SETTINGS_TABS: list[tuple[str, str]] = [
     ("appearance", "هویت ربات"),
     ("messages", "متن پیام‌ها"),
     ("buttons", "متن دکمه‌ها"),
+    ("screens", "تیتر و توضیح منوها"),
     ("colors", "رنگبندی دکمه‌ها"),
     ("menu", "منوی بات"),
     ("links", "لینک‌های سریع"),

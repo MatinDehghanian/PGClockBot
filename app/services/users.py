@@ -15,9 +15,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.db.models import BotUser, Order, Role, Setting, UserService
 from app.services.button_styles import default_settings as button_style_defaults
-from app.services.screen_titles import screen_text_defaults
+from app.services.screen_titles import SCREEN_TEXT_TAB, screen_text_defaults, screen_text_setting_groups
+from app.services.settings_button_labels import appearance_button_subs, shop_button_subs
 from app.services.button_styles import setting_group_fields as button_style_setting_fields
 from app.services.connection_status_texts import MONITOR_TEXT_DEFAULTS, readable_monitor_texts
+from app.services.retired_text_defaults import refresh_retired_defaults
 from app.services.user_purge import purge_user_references
 
 logger = logging.getLogger("pgclock.users")
@@ -871,7 +873,7 @@ DEFAULT_SETTINGS = {
     "btn_menu_home": "🏠 منوی اصلی",
     "btn_adm_hub_ops": "🗓 عملیات روزانه",
     "btn_adm_hub_people": "👤 افراد",
-    "btn_adm_hub_product": "📦 محصول و PG",
+    "btn_adm_hub_product": "📦 محصول و پاسارگارد",
     "btn_adm_hub_marketing": "🎯 بازاریابی",
     "btn_adm_hub_system": "🛠 سیستم",
     "btn_adm_edit_mode": "✏️ حالت ویرایش منوها",
@@ -887,8 +889,8 @@ DEFAULT_SETTINGS = {
     "btn_adm_users_search": "🔎 جستجو با آیدی تلگرام",
     "btn_adm_users_web": "🌐 مدیریت کامل در وب‌پنل",
     "btn_adm_res_list": "📋 لیست نمایندگان",
-    "btn_adm_res_apps": "📋 درخواست‌های منتظر",
-    "btn_adm_res_add": "➕ افزودن دستی",
+    "btn_adm_res_apps": "📋 درخواست‌های در انتظار",
+    "btn_adm_res_add": "➕ افزودن نماینده",
     "btn_adm_st_shop": "فروشگاه",
     "btn_adm_st_menu": "ظاهر و دکمه‌ها",
     "btn_adm_st_pay": "پرداخت",
@@ -909,7 +911,7 @@ DEFAULT_SETTINGS = {
     "btn_adm_plans_aud_users": "📦 پلن‌های کاربران",
     "btn_adm_plans_aud_resellers": "🤝 پلن‌های نمایندگان",
     "btn_adm_plans_categories": "🏷 برچسب دسته",
-    "btn_adm_plans_addons": "⏱ بسته حجم/زمان",
+    "btn_adm_plans_addons": "⏱ بسته حجم و زمان",
     "btn_adm_plans_add": "➕ افزودن پلن",
     "btn_adm_plans_kind_res_fixed": "اشتراک ثابت",
     "btn_adm_plans_kind_res_payg": "اشتراک PAYG",
@@ -929,6 +931,7 @@ DEFAULT_SETTINGS = {
     "btn_res_st_bot": "ربات",
     "btn_res_st_panel": "🌐 وب‌پنل",
     "btn_svc_refresh": "♻️ رفرش وضعیت",
+    "btn_svc_wireguard": "🔐 فایل WireGuard",
     "btn_svc_auto": "⚙️ تنظیمات خودکار",
     "btn_svc_cancel": "📝 درخواست لغو سرویس",
     "btn_svc_delete": "🗑 حذف سرویس",
@@ -958,7 +961,7 @@ DEFAULT_SETTINGS = {
     "btn_res_settings": "⚙️ تنظیمات فروشگاه",
     "btn_res_billing": "💰 کیف پول PAYG",
     "btn_adm_dash": "📊 داشبورد",
-    "btn_adm_reports": "📈 گزارشات",
+    "btn_adm_reports": "📈 گزارش‌ها",
     "btn_adm_orders": "🛒 سفارش‌ها",
     "btn_adm_payments": "🧾 رسیدها",
     "btn_adm_tickets": "🎫 تیکت‌ها",
@@ -1109,6 +1112,7 @@ SETTINGS_TABS: list[tuple[str, str]] = [
     ("appearance", "هویت ربات"),
     ("messages", "متن پیام‌ها"),
     ("buttons", "متن دکمه‌ها"),
+    (SCREEN_TEXT_TAB, "تیتر و توضیح منوها"),
     ("colors", "رنگبندی دکمه‌ها"),
     ("menu", "منوی بات"),
     ("links", "لینک‌های سریع"),
@@ -1147,6 +1151,8 @@ PANEL_SETTINGS_TABS: list[tuple[str, str]] = [
 ]
 PANEL_SETTINGS_KEYS = {t[0] for t in PANEL_SETTINGS_TABS}
 ALL_SETTINGS_TABS: list[tuple[str, str]] = [*SETTINGS_TABS, *PANEL_SETTINGS_TABS]
+
+BUTTON_LABELS_GROUP = "متن دکمه‌های منو"
 
 SETTING_GROUPS = {
     "خوش‌آمد و هویت": [
@@ -1253,7 +1259,7 @@ SETTING_GROUPS = {
     "متن دعوت دوستان": [
         ("referral_text", "متن دعوت دوستان", "textarea", "متغیرها: {code} {link} — فهرست: /message-variables"),
     ],
-    "متن دکمه‌های منو": [
+    BUTTON_LABELS_GROUP: [
         ("btn_shop", "دکمه خرید", "text", ""),
         ("btn_services", "دکمه سرویس‌ها", "text", ""),
         ("btn_wallet", "دکمه کیف پول", "text", ""),
@@ -1299,12 +1305,12 @@ SETTING_GROUPS = {
         ("btn_menu_home", "دکمه منوی اصلی (کیبورد)", "text", "خروج از پیش‌نمایش / خانه"),
         ("btn_adm_hub_ops", "گروه عملیات روزانه (ادمین)", "text", "هاب پنل ادمین"),
         ("btn_adm_hub_people", "گروه افراد (ادمین)", "text", "هاب پنل ادمین"),
-        ("btn_adm_hub_product", "گروه محصول و PG (ادمین)", "text", "هاب پنل ادمین"),
+        ("btn_adm_hub_product", "گروه محصول و پاسارگارد (ادمین)", "text", "هاب پنل ادمین"),
         ("btn_adm_hub_marketing", "گروه بازاریابی (ادمین)", "text", "هاب پنل ادمین"),
         ("btn_adm_hub_system", "گروه سیستم (ادمین)", "text", "هاب پنل ادمین"),
         ("btn_adm_edit_mode", "دکمه حالت ویرایش منوها", "text", "هاب پنل ادمین"),
         ("btn_adm_dash", "دکمه داشبورد (ادمین)", "text", "هاب عملیات"),
-        ("btn_adm_reports", "دکمه گزارشات (ادمین)", "text", "هاب عملیات"),
+        ("btn_adm_reports", "دکمه گزارش‌ها (ادمین)", "text", "هاب عملیات"),
         ("btn_adm_orders", "دکمه سفارش‌ها (ادمین)", "text", "هاب عملیات"),
         ("btn_adm_payments", "دکمه رسیدها (ادمین)", "text", "هاب عملیات"),
         ("btn_adm_tickets", "دکمه تیکت‌ها (ادمین)", "text", "هاب عملیات"),
@@ -1747,13 +1753,33 @@ SETTING_GROUPS = {
         ),
     ],
 }
+SETTING_GROUPS.update(screen_text_setting_groups())
+
+
+def _remaining_button_label_groups(groups: dict[str, list]) -> dict[str, list[tuple[str, str, str, str]]]:
+    """Every bot button label the «متن دکمه‌ها» tab does not list yet, in the bot's own categories."""
+    seen = {field[0] for field in groups[BUTTON_LABELS_GROUP]}
+    extra: dict[str, list[tuple[str, str, str, str]]] = {}
+    for _sub_id, title, fields in (*shop_button_subs(include_platform=True), *appearance_button_subs()):
+        rest = [(key, label, "text", "") for key, label, *_ in fields if key not in seen]
+        seen.update(field[0] for field in rest)
+        if rest:
+            extra.setdefault(title, []).extend(rest)
+    if set(extra) & set(groups):
+        raise RuntimeError("button label group name clashes with a settings group")
+    return extra
+
+
+BUTTON_LABEL_GROUPS_MORE = _remaining_button_label_groups(SETTING_GROUPS)
+SETTING_GROUPS.update(BUTTON_LABEL_GROUPS_MORE)
 
 # Map tab id → which SETTING_GROUPS cards to show (menu/notifications/update/naming special)
 TAB_SETTING_GROUPS: dict[str, list[str]] = {
     "menu": [],
     "welcome": ["خوش‌آمد و هویت"],
     "messages": ["متن پیام‌ها"],
-    "buttons": ["متن دکمه‌های منو"],
+    "buttons": [BUTTON_LABELS_GROUP, *BUTTON_LABEL_GROUPS_MORE],
+    SCREEN_TEXT_TAB: list(screen_text_setting_groups()),
     "colors": ["رنگ دکمه‌ها"],
     "qr": ["QR اشتراک"],
     "payment": [
@@ -1839,6 +1865,19 @@ def keys_for_tab(tab: str) -> set[str]:
     return keys
 
 
+# Tabs whose texts and colors the web panel can put back to the shipped defaults in one step.
+RESETTABLE_SETTINGS_TABS = frozenset({"buttons", "colors", SCREEN_TEXT_TAB})
+
+
+def default_values_for_keys(keys: set[str]) -> dict[str, str]:
+    """Shipped defaults for ``keys``; switches and images keep their current value."""
+    return {
+        key: str(DEFAULT_SETTINGS.get(key, ""))
+        for key in keys
+        if key not in TOGGLE_KEYS and key not in IMAGE_KEYS
+    }
+
+
 _defaults_ready = False
 
 
@@ -1895,7 +1934,7 @@ async def get_all_settings(
         data["menu_order"] = ",".join(order)
         from app.services.payment_destinations import enrich_payment_settings
 
-        data = enrich_payment_settings(readable_monitor_texts(data))
+        data = enrich_payment_settings(refresh_retired_defaults(readable_monitor_texts(data), DEFAULT_SETTINGS))
         _SETTINGS_CACHE[cache_key] = (now, dict(data))
         return data
     result = await session.execute(select(Setting))
@@ -1903,7 +1942,7 @@ async def get_all_settings(
     data.update({r.key: r.value for r in rows})
     from app.services.payment_destinations import enrich_payment_settings
 
-    data = enrich_payment_settings(readable_monitor_texts(data))
+    data = enrich_payment_settings(refresh_retired_defaults(readable_monitor_texts(data), DEFAULT_SETTINGS))
     _SETTINGS_CACHE[cache_key] = (now, dict(data))
     return data
 

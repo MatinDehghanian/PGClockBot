@@ -110,15 +110,16 @@ BTN_ADMIN_SYS: list[Field] = [
     ("btn_adm_st_find", "تنظیمات: جستجو", "text"),
 ]
 
+# btn_miniapp is not offered: the Mini App opens from Telegram's menu button, and that label only
+# keeps old reply keyboards working (reply_keyboards maps it), so editing it would change nothing visible.
 BTN_STORE_EXTRA: list[Field] = [
     ("btn_buy_continue", "ادامه خرید", "text"),
-    ("btn_miniapp", "مینی‌اپ", "text"),
 ]
 
 BTN_ADMIN_HUBS: list[Field] = [
     ("btn_adm_hub_ops", "گروه عملیات روزانه", "text"),
     ("btn_adm_hub_people", "گروه افراد", "text"),
-    ("btn_adm_hub_product", "گروه محصول و PG", "text"),
+    ("btn_adm_hub_product", "گروه محصول و پاسارگارد", "text"),
     ("btn_adm_hub_marketing", "گروه بازاریابی", "text"),
     ("btn_adm_hub_system", "گروه سیستم", "text"),
     ("btn_adm_edit_mode", "حالت ویرایش منوها", "text"),
@@ -126,7 +127,7 @@ BTN_ADMIN_HUBS: list[Field] = [
 
 BTN_ADMIN_HUB_ITEMS: list[Field] = [
     ("btn_adm_dash", "داشبورد", "text"),
-    ("btn_adm_reports", "گزارشات", "text"),
+    ("btn_adm_reports", "گزارش‌ها", "text"),
     ("btn_adm_resellers", "نمایندگان", "text"),
     ("btn_adm_loyalty", "باشگاه (ادمین)", "text"),
     ("btn_adm_backup", "بکاپ / ریستور", "text"),
@@ -181,7 +182,7 @@ BTN_ADMIN_PLANS_SUB: list[Field] = [
     ("btn_adm_plans_aud_resellers", "پلن‌های نمایندگان", "text"),
     ("btn_adm_plans_add", "افزودن پلن", "text"),
     ("btn_adm_plans_categories", "برچسب دسته", "text"),
-    ("btn_adm_plans_addons", "بسته حجم/زمان", "text"),
+    ("btn_adm_plans_addons", "بسته حجم و زمان", "text"),
     ("btn_adm_plans_view", "مشاهده پلن‌ها", "text"),
 ]
 
@@ -192,6 +193,7 @@ BTN_ADMIN_MARKETING_SUB: list[Field] = [
 
 BTN_SERVICE_MORE: list[Field] = [
     ("btn_svc_refresh", "رفرش وضعیت", "text"),
+    ("btn_svc_wireguard", "فایل WireGuard", "text"),
     ("btn_svc_auto", "تنظیمات خودکار", "text"),
     ("btn_svc_cancel", "درخواست لغو سرویس", "text"),
     ("btn_svc_delete", "حذف سرویس", "text"),

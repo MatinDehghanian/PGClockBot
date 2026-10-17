@@ -16,6 +16,7 @@ from collections.abc import Sequence
 from aiogram.types import MessageEntity
 
 from app.services.rich_text import (
+    SCREEN_TEXT_KEY_PREFIXES,
     custom_emoji_html,
     first_custom_emoji_id,
     pack_rich_text,
@@ -40,12 +41,12 @@ SCREEN_TITLE_DEFAULTS: dict[str, str] = {
     "a.home": "🛠 پنل ادمین",
     "a.ops": "🗓 عملیات روزانه",
     "a.people": "👤 افراد",
-    "a.product": "📦 محصول و PG",
+    "a.product": "📦 محصول و پاسارگارد",
     "a.marketing": "🎯 بازاریابی",
     "a.system": "🛠 سیستم",
     "a.pg": "🖥 عملیات پاسارگارد",
     "a.loyalty": "⭐ باشگاه مشتریان",
-    "a.users": "👥 کاربران بات",
+    "a.users": "👥 کاربران ربات",
     "a.resellers": "🤝 نمایندگان",
     "a.settings": "⚙️ تنظیمات سریع",
     "a.backup": "💾 بکاپ / ریستور",
@@ -60,7 +61,9 @@ SCREEN_TITLE_DEFAULTS: dict[str, str] = {
 
 _PICK_SECTION = "یک بخش را از دکمه‌های زیر انتخاب کنید."
 _PICK_OPTION = "یک گزینه را از دکمه‌های زیر انتخاب کنید."
+_PLAN_LIST_CAPTION = "برای دیدن فهرست، «📋 مشاهده پلن‌ها» را بزنید. افزودن پلن و مدیریت کاتالوگ از دکمه‌های زیر است."
 _WEB_ONLY_SETTINGS = "ظاهر، رنگ، گزارش روزانه → وب‌پنل."
+_ADMIN_WEB_ONLY_SETTINGS = "ظاهر، رنگ دکمه‌ها و گزارش روزانه را از وب‌پنل تنظیم کنید."
 
 # One caption per menu, wherever the menu is opened from. Menus whose caption differed between
 # two entry points use the more complete wording.
@@ -68,28 +71,27 @@ SCREEN_CAPTION_DEFAULTS: dict[str, str] = {
     "c.wallet": _PICK_OPTION,
     "c.loyalty": "",
     "c.services": "یکی را انتخاب کنید:",
-    "a.home": "یک گروه را از دکمه‌های زیر انتخاب کنید.",
+    "a.home": "یک بخش را انتخاب کنید.",
     "a.ops": "داشبورد، سفارش‌ها، رسیدها و تیکت‌ها.",
-    "a.people": "کاربران و نمایندگان.",
-    "a.product": "پلن‌ها و عملیات پاسارگارد.",
+    "a.people": "مدیریت کاربران ربات و نمایندگان.",
+    "a.product": "پلن‌های فروش و عملیات پاسارگارد.",
     "a.marketing": "باشگاه مشتریان، پیام گروهی، کد هدیه و کمپین‌ها.",
-    "a.system": "تنظیمات، بکاپ و پیش‌نمایش.",
+    "a.system": "تنظیمات، بکاپ و پیش‌نمایش منوی کاربر.",
     "a.pg": _PICK_SECTION,
     "a.loyalty": _PICK_SECTION,
     "a.users": _PICK_OPTION,
     "a.resellers": _PICK_SECTION,
-    "a.settings": f"یک بخش را از دکمه‌های زیر انتخاب کنید.\n{_WEB_ONLY_SETTINGS}",
+    "a.settings": f"{_PICK_SECTION}\n{_ADMIN_WEB_ONLY_SETTINGS}",
     "a.backup": (
-        "بکاپ کامل = دیتابیس کل پلتفرم (همه فروشگاه‌ها) + آپلودها + یوزر وب.\n"
-        "پیش‌فرض بدون .env است (مثل زمان‌بندی).\n"
-        "بکاپ با .env فقط بعد از تأیید امنیتی جداگانه — توکن/اسرار داخل فایل می‌رود.\n"
-        "حتی بدون .env، فایل ورود وب‌پنل در بکاپ هست.\n"
-        "قبل از ریستور، بکاپ ایمنی خودکار (با .env) ساخته می‌شود."
+        "بکاپ کامل شامل دیتابیس همه فروشگاه‌ها، فایل‌های آپلودشده و حساب ورود وب‌پنل است.\n"
+        "بکاپ پیش‌فرض بدون .env ساخته می‌شود (این فایل توکن‌ها و رمزها را دارد)؛ مثل بکاپ زمان‌بندی‌شده.\n"
+        "بکاپ همراه .env فقط پس از تأیید امنیتی جداگانه ساخته می‌شود.\n"
+        "پیش از هر ریستور، یک بکاپ ایمنی کامل (همراه .env) خودکار ساخته می‌شود."
     ),
-    "a.broadcast": "مخاطب را از دکمه‌های زیر انتخاب کنید:",
-    "a.plans": "مخاطب یا ابزار کاتالوگ را از دکمه‌های زیر انتخاب کنید.",
-    "a.plans.users": "فهرست پلن‌ها را با «مشاهده پلن‌ها» ببینید؛ افزودن/کاتالوگ از دکمه‌های زیر.",
-    "a.plans.resellers": "فهرست پلن‌ها را با «مشاهده پلن‌ها» ببینید؛ افزودن/کاتالوگ از دکمه‌های زیر.",
+    "a.broadcast": "مخاطبان پیام را انتخاب کنید:",
+    "a.plans": "پلن‌های کاربران، پلن‌های نمایندگان یا یکی از ابزارهای کاتالوگ را انتخاب کنید.",
+    "a.plans.users": _PLAN_LIST_CAPTION,
+    "a.plans.resellers": _PLAN_LIST_CAPTION,
     "r.home": _PICK_SECTION,
     "r.settings": (
         "بخش را از دکمه‌های زیر انتخاب کنید.\n"
@@ -217,3 +219,73 @@ def stored_text(cleaned: str, raw: str, entities: Sequence[MessageEntity] | None
     if first_custom_emoji_id(entities) and cleaned == (raw or "").strip():
         return pack_rich_text(raw, entities)
     return cleaned
+
+
+# ── Web panel: the «تیتر و توضیح منوها» settings tab ─────────────────────────
+
+SCREEN_TEXT_TAB = "screens"
+EDITOR_SWITCH_GROUP = "حالت ویرایش منوها در ربات"
+_AUDIENCE_GROUPS = (
+    ("c.", "تیتر و توضیح منوهای مشتری"),
+    ("a.", "تیتر و توضیح منوهای ادمین"),
+    ("r.", "تیتر و توضیح منوهای نماینده"),
+)
+_TITLE_HINT = "یک خط، حداکثر 64 کاراکتر، بدون < و > و &. خالی = تیتر پیش‌فرض."
+_CAPTION_HINT = "زیر تیتر نمایش داده می‌شود. خالی = متن پیش‌فرض؛ فقط «-» = نمایش نده."
+
+
+def is_screen_text_key(key: str) -> bool:
+    return str(key or "").startswith(SCREEN_TEXT_KEY_PREFIXES)
+
+
+def screen_text_setting_groups() -> dict[str, list[tuple[str, str, str, str]]]:
+    """Settings groups for the web tab: the editor switch, then each audience's menus."""
+    groups: dict[str, list[tuple[str, str, str, str]]] = {
+        EDITOR_SWITCH_GROUP: [
+            (
+                "screen_editor_enabled",
+                "قابلیت ویرایش منوها",
+                "toggle",
+                "وقتی روشن است، ادمین (و صاحب هر فروشگاه در ربات خودش) از «✏️ حالت ویرایش منوها» متن، رنگ، تیتر و توضیح منوها را همان‌جا عوض می‌کند.",
+            )
+        ]
+    }
+    for prefix, group_name in _AUDIENCE_GROUPS:
+        fields: list[tuple[str, str, str, str]] = []
+        for screen_id, default_title in SCREEN_TITLE_DEFAULTS.items():
+            if not screen_id.startswith(prefix):
+                continue
+            fields.append((title_setting_key(screen_id), f"{default_title} — تیتر", "text", _TITLE_HINT))
+            if screen_id in SCREEN_CAPTION_DEFAULTS:
+                fields.append((caption_setting_key(screen_id), f"{default_title} — توضیح", "textarea", _CAPTION_HINT))
+        groups[group_name] = fields
+    return groups
+
+
+def platform_only_screen_text_keys() -> frozenset[str]:
+    """What a shop may not change: admin menus and the editor switch."""
+    keys = {"screen_editor_enabled"}
+    for screen_id in SCREEN_TITLE_DEFAULTS:
+        if screen_id.startswith("a."):
+            keys.add(title_setting_key(screen_id))
+            if screen_id in SCREEN_CAPTION_DEFAULTS:
+                keys.add(caption_setting_key(screen_id))
+    return frozenset(keys)
+
+
+def validate_screen_text_settings(payload: dict[str, str]) -> None:
+    """Check titles and captions saved from the web panel; raise ValueError naming the menu."""
+    captions = {caption_setting_key(sid): sid for sid in SCREEN_CAPTION_DEFAULTS}
+    titles = {title_setting_key(sid): sid for sid in SCREEN_TITLE_DEFAULTS}
+    for key, value in payload.items():
+        plain = unpack_rich_text(value)[0].strip()
+        if not plain:
+            continue
+        try:
+            if key in titles:
+                validate_screen_title(plain)
+            elif key in captions and plain != CAPTION_HIDDEN:
+                validate_screen_caption(plain)
+        except ValueError as exc:
+            menu = SCREEN_TITLE_DEFAULTS[titles.get(key) or captions[key]]
+            raise ValueError(f"{menu}: {exc}") from exc

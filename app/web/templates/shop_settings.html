@@ -126,6 +126,8 @@
   {% elif tab == 'colors' %}
     {% set settings_action = '/shop-settings?tab=colors' %}
     {% include "_settings_colors.html" %}
+    {% set reset_action = '/shop-settings?tab=colors' %}
+    {% include "_settings_reset_defaults.html" %}
 
   {% else %}
     {% if tab == 'forcejoin' %}
@@ -157,6 +159,8 @@
         <button class="btn" type="submit">ذخیره تنظیمات</button>
       </div>
     </form>
+    {% set reset_action = '/shop-settings?tab=' ~ tab %}
+    {% include "_settings_reset_defaults.html" %}
   {% endif %}
 
   </div>
