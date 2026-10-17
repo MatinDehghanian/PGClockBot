@@ -209,27 +209,11 @@ async def _plans_flow_reply_kb(
     return await _staff_reply(session, db_user, classic)
 
 async def _render_plans_list(callback: CallbackQuery, session: AsyncSession) -> None:
-    ui = await get_all_settings(session)
-    result = await session.execute(select(Plan).order_by(Plan.sort_order, Plan.id))
-    plans = list(result.scalars().all())
-    fixed = [p for p in plans if not p.is_trial]
-    if not fixed:
-        text = "📦 <b>پلن ثابت</b>\n\nهنوز پلن ثابتی ثبت نشده است."
-    else:
-        from app.bot.handlers.admin import _plan_line
+    from app.bot.handlers.admin_plans import users_fixed_list_view  # admin_plans imports this module
 
-        cards = "\n\n".join(_plan_line(p) for p in fixed[:20])
-        text = f"📦 <b>پلن‌های ثابت</b>\n\n{cards}" + kb.list_overflow_line(len(fixed))
     if callback.message:
-        await callback.message.edit_text(
-            text,
-            reply_markup=kb.admin_plans_list_keyboard(
-                plans,
-                ui,
-                back_callback="adm:plans:aud:users",
-                kind="fixed",
-            ),
-        )
+        text, markup = await users_fixed_list_view(session)
+        await callback.message.edit_text(text, reply_markup=markup)
 
 async def _custom_link_summary(session: AsyncSession) -> tuple[str, InlineKeyboardMarkup]:
     ui = await get_all_settings(session)

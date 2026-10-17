@@ -30,6 +30,7 @@ from app.services.resellers import (
     reseller_plan_mode_of,
 )
 from app.bot import menu_nav as nav
+from app.bot.list_pages import page_line, page_number, page_of, pager_row
 from app.bot.nav_input import form_origin
 from app.bot.tg_utils import parse_bot_float, parse_bot_int, safe_edit_text
 from app.services.users import get_all_settings, get_setting, on, set_setting
@@ -41,6 +42,8 @@ router = Router(name="admin_plans")
 # Kind hub (reply keyboard step) — not the same-kind screen
 BACK_USERS_KIND = "adm:plans:aud:users"
 BACK_RESELLERS_KIND = "adm:plans:aud:resellers"
+USER_PLANS_PAGE_SIZE = 10
+RESELLER_PLANS_PAGE_SIZE = 10
 # Audience hub («مشاهده پلن‌ها» / افزودن / کاتالوگ)
 BACK_USERS_HUB = "nv:adm:plans:aud:users"
 BACK_RESELLERS_HUB = "nv:adm:plans:aud:resellers"
@@ -340,28 +343,33 @@ async def send_add_plan_type_picker(
         reply_markup=kb.admin_plans_add_type_keyboard(audience, ui),
     )
 
-async def send_users_fixed_list(message: Message, session: AsyncSession) -> None:
-    from app.bot.handlers.admin import _plan_line
-    from app.bot.nav_inline import present_inline_only
+async def users_fixed_list_view(session: AsyncSession, page_index: int = 0) -> tuple[str, InlineKeyboardMarkup]:
+    """One page of the platform's fixed plans: cards in the text, a button per plan."""
+    from app.bot.handlers.admin import _plan_line  # admin imports this module
 
     ui = await get_all_settings(session)
-    result = await session.execute(select(Plan).order_by(Plan.sort_order, Plan.id))
-    plans = list(result.scalars().all())
-    fixed = [p for p in plans if not p.is_trial]
-    if not fixed:
-        body = "هنوز پلن ثابتی ثبت نشده است."
+    result = await session.execute(select(Plan).where(Plan.is_trial.is_(False)).order_by(Plan.sort_order, Plan.id))
+    page = page_of(list(result.scalars().all()), page_index, USER_PLANS_PAGE_SIZE)
+    if not page.total:
+        text = "📦 <b>پلن ثابت</b>\n\nهنوز پلن ثابتی ثبت نشده است."
     else:
-        body = "\n\n".join(_plan_line(p) for p in fixed[:20])
-    await present_inline_only(
-        message,
-        text=f"📦 <b>پلن‌های ثابت</b>\n\n{body}" + kb.list_overflow_line(len(fixed)),
-        inline=kb.admin_plans_list_keyboard(
-            plans,
-            ui,
-            back_callback=BACK_USERS_KIND,
-            kind="fixed",
-        ),
+        cards = "\n\n".join(_plan_line(p) for p in page.items)
+        text = f"📦 <b>پلن‌های ثابت</b>\n\n{cards}" + page_line(page)
+    markup = kb.admin_plans_list_keyboard(
+        page.items,
+        ui,
+        back_callback=BACK_USERS_KIND,
+        kind="fixed",
+        pager=pager_row(page, "adm:plans:kind:users:fixed"),
     )
+    return text, markup
+
+
+async def send_users_fixed_list(message: Message, session: AsyncSession, page_index: int = 0) -> None:
+    from app.bot.nav_inline import present_inline_only
+
+    text, markup = await users_fixed_list_view(session, page_index)
+    await present_inline_only(message, text=text, inline=markup)
 
 async def _build_custom_screen(session: AsyncSession) -> tuple[str, InlineKeyboardMarkup]:
     ui = await get_all_settings(session)
@@ -487,77 +495,59 @@ async def send_users_wholesale(message: Message, session: AsyncSession) -> None:
     text, markup = await _build_wholesale_screen(session)
     await present_inline_only(message, text=text, inline=markup)
 
-async def send_reseller_plans_list(
-    message: Message,
-    session: AsyncSession,
-    kind: str,
-) -> None:
-    from app.bot.nav_inline import present_inline_only
+async def reseller_plans_list_view(
+    session: AsyncSession, kind: str, page_index: int = 0
+) -> tuple[str, InlineKeyboardMarkup]:
+    """One page of the platform's reseller plans of ``kind``."""
     from app.services.pg_admin_subscription import is_subscription_plan
 
     all_plans = await list_reseller_plans(session)
     if kind in {"addon_volume", "addon_users"}:
         plans = [p for p in all_plans if str(getattr(p, "plan_kind", "")) == kind]
         label = "بسته حجم" if kind == "addon_volume" else "بسته کاربر"
-        if not plans:
-            body = "هنوز بسته‌ای در این دسته نیست."
-        else:
-            cards = [
-                format_reseller_plan_apply_detail(p, currency=get_settings().currency)
-                for p in plans[:10]
-            ]
-            body = "\n\n".join(cards)
-        await present_inline_only(
-            message,
-            text=(
-                f"🎁 <b>پلن‌های نماینده — {label}</b>\n"
-                "بدون گروه/نقش/نام‌گذاری سرویس.\n\n"
-                f"{body}" + kb.list_overflow_line(len(plans))
-            ),
-            inline=kb.admin_reseller_plans_list_keyboard(
-                plans,
-                await get_all_settings(session),
-                mode=kind,
-                back_callback=BACK_RESELLERS_KIND,
-                add_callback=f"adm:plans:add:resellers:{kind}",
-            ),
-        )
-        return
-
-    plans = [
-        p
-        for p in all_plans
-        if reseller_plan_mode_of(p) == kind and is_subscription_plan(p)
-    ]
-    label = "PAYG" if kind == "payg" else "ثابت"
-    if not plans:
-        body = "هنوز پلنی در این دسته نیست."
+        heading = f"🎁 <b>پلن‌های نماینده — {label}</b>\nبدون گروه/نقش/نام‌گذاری سرویس."
+        empty = "هنوز بسته‌ای در این دسته نیست."
+        add_callback = f"adm:plans:add:resellers:{kind}"
     else:
-        cards = [
-            format_reseller_plan_apply_detail(p, currency=get_settings().currency)
-            for p in plans[:10]
-        ]
-        body = "\n\n".join(cards)
-    await present_inline_only(
-        message,
-        text=f"🤝 <b>پلن‌های نماینده — {label}</b>\n\n{body}" + kb.list_overflow_line(len(plans)),
-        inline=kb.admin_reseller_plans_list_keyboard(
-            plans,
-            await get_all_settings(session),
-            mode=kind,
-            back_callback=BACK_RESELLERS_KIND,
-            add_callback=f"adm:resplan:add:{kind}",
-        ),
+        plans = [p for p in all_plans if reseller_plan_mode_of(p) == kind and is_subscription_plan(p)]
+        label = "PAYG" if kind == "payg" else "ثابت"
+        heading = f"🤝 <b>پلن‌های نماینده — {label}</b>"
+        empty = "هنوز پلنی در این دسته نیست."
+        add_callback = f"adm:resplan:add:{kind}"
+    page = page_of(plans, page_index, RESELLER_PLANS_PAGE_SIZE)
+    currency = get_settings().currency
+    body = "\n\n".join(format_reseller_plan_apply_detail(p, currency=currency) for p in page.items) or empty
+    markup = kb.admin_reseller_plans_list_keyboard(
+        page.items,
+        await get_all_settings(session),
+        mode=kind,
+        back_callback=BACK_RESELLERS_KIND,
+        add_callback=add_callback,
+        pager=pager_row(page, f"adm:plans:kind:resellers:{kind}"),
     )
+    return f"{heading}\n\n{body}" + page_line(page), markup
+
+
+async def send_reseller_plans_list(
+    message: Message,
+    session: AsyncSession,
+    kind: str,
+    page_index: int = 0,
+) -> None:
+    from app.bot.nav_inline import present_inline_only
+
+    text, markup = await reseller_plans_list_view(session, kind, page_index)
+    await present_inline_only(message, text=text, inline=markup)
 
 async def open_kind_screen(
     message: Message,
     session: AsyncSession,
     audience: str,
     kind: str,
+    page_index: int = 0,
 ) -> None:
     if audience == "users" and kind == "fixed":
-        await send_users_fixed_list(message, session)
+        await send_users_fixed_list(message, session, page_index)
     elif audience == "users" and kind == "custom":
         await send_users_custom(message, session)
     elif audience == "users" and kind == "trial":
@@ -565,7 +555,7 @@ async def open_kind_screen(
     elif audience == "users" and kind == "wholesale":
         await send_users_wholesale(message, session)
     elif audience == "resellers" and kind in {"fixed", "payg", "addon_volume", "addon_users"}:
-        await send_reseller_plans_list(message, session, kind)
+        await send_reseller_plans_list(message, session, kind, page_index)
     else:
         await message.answer("نوع پلن نامعتبر است.")
 
@@ -651,44 +641,11 @@ async def _rerender_plans_screen(
         text, markup = await _build_wholesale_screen(session)
         await callback.message.edit_text(text, reply_markup=markup)
     elif aud == "users" and kind == "fixed":
-        from app.bot.handlers.admin import _render_plans_list
-
-        await _render_plans_list(callback, session)
+        text, markup = await users_fixed_list_view(session)
+        await callback.message.edit_text(text, reply_markup=markup)
     elif aud == "resellers" and kind in {"fixed", "payg", "addon_volume", "addon_users"}:
-        from app.services.pg_admin_subscription import is_subscription_plan
-
-        all_plans = await list_reseller_plans(session)
-        if kind in {"addon_volume", "addon_users"}:
-            plans = [p for p in all_plans if str(getattr(p, "plan_kind", "")) == kind]
-            label = "بسته حجم" if kind == "addon_volume" else "بسته کاربر"
-            add_cb = f"adm:plans:add:resellers:{kind}"
-        else:
-            plans = [
-                p
-                for p in all_plans
-                if reseller_plan_mode_of(p) == kind and is_subscription_plan(p)
-            ]
-            label = "PAYG" if kind == "payg" else "ثابت"
-            add_cb = f"adm:resplan:add:{kind}"
-        body = (
-            "هنوز پلنی در این دسته نیست."
-            if not plans
-            else "\n\n".join(
-                format_reseller_plan_apply_detail(p, currency=get_settings().currency)
-                for p in plans[:10]
-            )
-        )
-        title_prefix = "🎁" if kind in {"addon_volume", "addon_users"} else "🤝"
-        await callback.message.edit_text(
-            f"{title_prefix} <b>پلن‌های نماینده — {label}</b>\n\n{body}" + kb.list_overflow_line(len(plans)),
-            reply_markup=kb.admin_reseller_plans_list_keyboard(
-                plans,
-                await get_all_settings(session),
-                mode=kind,
-                back_callback=BACK_RESELLERS_KIND,
-                add_callback=add_cb,
-            ),
-        )
+        text, markup = await reseller_plans_list_view(session, kind)
+        await callback.message.edit_text(text, reply_markup=markup)
 
 @router.callback_query(F.data == "adm:plans:noop")
 @require_bot_owner_handler
@@ -790,7 +747,7 @@ async def plans_kind_cb(
     await callback.answer()
     if callback.message:
         await callback.message.edit_text("⏳")
-        await open_kind_screen(callback.message, session, aud, kind)
+        await open_kind_screen(callback.message, session, aud, kind, page_number(callback.data))
         try:
             await callback.message.delete()
         except Exception:

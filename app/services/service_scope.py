@@ -7,7 +7,7 @@ customer-facing service view re-checks this where the service is read or changed
 
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -67,4 +67,27 @@ async def list_customer_services(
     )
     if limit:
         query = query.limit(limit)
+    return list(await session.scalars(query))
+
+
+SERVICE_SEARCH_MAX_LENGTH = 64
+
+
+async def search_customer_services(
+    session: AsyncSession, user_id: int, shop_id: int | None, text: str, *, limit: int
+) -> list[UserService]:
+    """The customer's services in ``shop_id`` whose name contains ``text`` (any letter case)."""
+    needle = (text or "").strip().lower()
+    if not needle or len(needle) > SERVICE_SEARCH_MAX_LENGTH:
+        raise ValueError("بخشی از نام سرویس را بفرستید (حداکثر ۶۴ حرف).")
+    query = (
+        select(UserService)
+        .where(
+            UserService.bot_user_id == int(user_id),
+            shop_services_clause(shop_id),
+            func.lower(UserService.pg_username).contains(needle, autoescape=True),
+        )
+        .order_by(UserService.id.desc())
+        .limit(limit)
+    )
     return list(await session.scalars(query))

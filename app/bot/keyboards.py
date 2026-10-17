@@ -8,6 +8,7 @@ from aiogram.types import (
 )
 
 from app.bot.button_sources import is_recording, note_button_source
+from app.bot.list_pages import page_of, pager_row
 from app.services.catalog_pricing import sale_price
 from app.config import get_settings
 from app.db.models import Plan, Role
@@ -894,12 +895,16 @@ from app.bot.reply_keyboards import (  # noqa: E402
     persistent_reply_keyboard,
 )
 
+RESELLER_PLANS_PAGE_SIZE = 10
+
+
 def reseller_plans_list_keyboard(
-    plans: list, ui: dict | None = None
+    plans: list, ui: dict | None = None, *, page_index: int = 0
 ) -> InlineKeyboardMarkup:
-    """Dynamic plan rows inherit shop fixed-kind color (per-plan override supported)."""
+    """One page of shop plan rows; they inherit the fixed-kind color (per-plan override supported)."""
+    page = page_of(plans, page_index, RESELLER_PLANS_PAGE_SIZE)
     rows: list[list[InlineKeyboardButton]] = []
-    for p in plans[:20]:
+    for p in page.items:
         flag = "✅" if getattr(p, "is_active", True) else "⏸"
         name = (getattr(p, "name", "") or "")[:22]
         price = getattr(p, "price", 0) or 0
@@ -924,6 +929,8 @@ def reseller_plans_list_keyboard(
                 )
             ]
         )
+    if pager := pager_row(page, "res:plans"):
+        rows.append(pager)
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -1837,8 +1844,9 @@ def admin_plans_list_keyboard(
     back_callback: str = "adm:plans:aud:users",
     add_callback: str = "adm:plan:add",
     kind: str = "fixed",
+    pager: list[InlineKeyboardButton] | None = None,
 ) -> InlineKeyboardMarkup:
-    """User fixed-plan rows — per-plan color + inline add/back."""
+    """User fixed-plan rows — per-plan color + inline add/back; ``pager`` pages a long list."""
     from app.services.button_styles import plan_kind_style_id
 
     kind_style = _style(
@@ -1868,6 +1876,8 @@ def admin_plans_list_keyboard(
                 )
             ]
         )
+    if pager:
+        rows.append(pager)
     rows.append(_add_plan_row(ui, add_callback))
     if back_callback:
         rows.append(
@@ -1885,8 +1895,9 @@ def admin_reseller_plans_list_keyboard(
     mode: str,
     back_callback: str = "adm:plans:aud:resellers",
     add_callback: str = "adm:resplan:add:fixed",
+    pager: list[InlineKeyboardButton] | None = None,
 ) -> InlineKeyboardMarkup:
-    """Platform reseller subscription / addon packs — per-plan color."""
+    """Platform reseller subscription / addon packs — per-plan color; ``pager`` pages a long list."""
     mode_key = (mode or "fixed").strip().lower()
     kind_style = _style(
         ui,
@@ -1927,6 +1938,8 @@ def admin_reseller_plans_list_keyboard(
                 )
             ]
         )
+    if pager:
+        rows.append(pager)
     rows.append(_add_plan_row(ui, add_callback))
     if back_callback:
         rows.append(

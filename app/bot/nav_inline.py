@@ -17,6 +17,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from app.bot.edit_mode import editable_screen
 from app.bot.keyboards import _ikb, _t
+from app.bot.list_pages import Page, page_of, pager_row
 from app.bot.reseller_hub_groups import (
     RESELLER_GROUPS,
     RESELLER_HOME_CALLBACK,
@@ -26,6 +27,8 @@ from app.bot.reseller_hub_groups import (
 )
 
 logger = logging.getLogger(__name__)
+
+SEARCH_SERVICES_TEXT = "🔍 جستجوی سرویس"
 
 # FSM keys for the single live nav panel (edit instead of spam).
 NAV_PANEL_CHAT_KEY = "_nav_panel_chat_id"
@@ -1417,6 +1420,15 @@ def service_card_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+SERVICES_PAGE_SIZE = 10
+SERVICES_LIST_CALLBACK = "svc:list"
+SERVICES_SEARCH_CALLBACK = "svc:find"
+
+
+def services_page(services: list, page_index: int = 0) -> Page:
+    return page_of(services, page_index, SERVICES_PAGE_SIZE)
+
+
 @editable_screen("c.services")
 def services_list_keyboard(
     services: list,
@@ -1424,15 +1436,22 @@ def services_list_keyboard(
     *,
     reseller_capacity_label: str | None = None,
     allow_import: bool = False,
+    page_index: int = 0,
 ) -> InlineKeyboardMarkup:
-    """Paginated-ready service list with back-to-home (inline nav)."""
+    """One page of the customer's services; a long list gets «قبلی/بعدی» and a search."""
     from app.bot.keyboards import services_keyboard
     from app.bot.service_import_ui import add_existing_row
 
+    page = services_page(services, page_index)
     base = services_keyboard(
-        services, ui, reseller_capacity_label=reseller_capacity_label
+        page.items, ui, reseller_capacity_label=reseller_capacity_label
     )
     rows = list(base.inline_keyboard)
+    if page.is_split:
+        rows.append(pager_row(page, SERVICES_LIST_CALLBACK))
+        rows.append(
+            [InlineKeyboardButton(text=SEARCH_SERVICES_TEXT, callback_data=SERVICES_SEARCH_CALLBACK)]
+        )
     if allow_import:
         rows.append(add_existing_row(ui))
     rows.append(

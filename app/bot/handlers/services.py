@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.catalog_pricing import displayed_quote, price_html, quote_product, sale_price
 from app.bot import keyboards as kb
+from app.bot.list_pages import page_line, page_number
 from app.bot.tg_utils import safe_edit_text
 from app.config import get_settings
 from app.db.models import BotUser, UserService
@@ -286,7 +287,7 @@ async def _reseller_capacity_list_label(
     return reseller_my_service_list_label(profile)
 
 
-@router.callback_query(F.data == "svc:list")
+@router.callback_query((F.data == "svc:list") | F.data.startswith("svc:list:p:"))
 async def svc_list(
     callback: CallbackQuery,
     session: AsyncSession,
@@ -322,15 +323,20 @@ async def svc_list(
             )
         return
     if callback.message:
-        from app.bot.nav_inline import services_list_keyboard
+        from app.bot.nav_inline import services_list_keyboard, services_page
 
+        page_index = page_number(callback.data)
         markup = services_list_keyboard(
-            services, ui, reseller_capacity_label=reseller_label, allow_import=allow_import
+            services,
+            ui,
+            reseller_capacity_label=reseller_label,
+            allow_import=allow_import,
+            page_index=page_index,
         )
         await safe_edit_text(
             callback.message,
             with_caption(screen_heading(ui, "c.services"), screen_caption(ui, "c.services"))
-            + kb.list_overflow_line(len(services)),
+            + page_line(services_page(services, page_index)),
             reply_markup=markup,
         )
 
