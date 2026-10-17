@@ -1,0 +1,3219 @@
+{
+  "inline.admin.backup_files": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "adm:backup:item:backup-2026-01-01",
+          "text": "📦 backup-2026-01-01 · 1.2 MB"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "inline.admin.home": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "menu:home",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "inline.admin.item_style_picker": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "adm:st:sup:color:set:main:inherit",
+          "text": "ارث از پیش‌فرض"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:st:sup:color:set:main:default",
+          "text": "سفید"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:st:sup:color:set:main:primary",
+          "style": "primary",
+          "text": "آبی"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:st:sup:color:set:main:success",
+          "style": "success",
+          "text": "سبز"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:st:sup:color:set:main:danger",
+          "style": "danger",
+          "text": "قرمز"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:st:sup",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "inline.admin.main_menu": {
+    "inline_keyboard": [],
+    "kind": "inline"
+  },
+  "inline.admin.plan_actions": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "shop:buy:3",
+          "style": "primary",
+          "text": "🟢✅ ادامه خرید"
+        }
+      ],
+      [
+        {
+          "callback_data": "shop:list",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "inline.admin.plan_kind_resellers": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "adm:plans:kind:resellers:fixed",
+          "style": "primary",
+          "text": "اشتراک ثابت"
+        },
+        {
+          "callback_data": "adm:plans:kind:resellers:payg",
+          "style": "primary",
+          "text": "اشتراک PAYG"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:plans:kind:resellers:addon_volume",
+          "style": "primary",
+          "text": "بسته حجم"
+        },
+        {
+          "callback_data": "adm:plans:kind:resellers:addon_users",
+          "style": "primary",
+          "text": "بسته کاربر"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:plans",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "inline.admin.plan_kind_users": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "adm:plans:kind:users:fixed",
+          "style": "primary",
+          "text": "ثابت"
+        },
+        {
+          "callback_data": "adm:plans:kind:users:custom",
+          "style": "primary",
+          "text": "دلخواه"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:plans:kind:users:trial",
+          "style": "primary",
+          "text": "تست"
+        },
+        {
+          "callback_data": "adm:plans:kind:users:wholesale",
+          "style": "primary",
+          "text": "📦 فروش عمده"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:plans",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "inline.admin.plan_style_picker": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "adm:plan:style:3:inherit",
+          "text": "ارث از دسته"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:plan:style:3:default",
+          "text": "سفید"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:plan:style:3:primary",
+          "style": "primary",
+          "text": "آبی"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:plan:style:3:success",
+          "style": "success",
+          "text": "سبز"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:plan:style:3:danger",
+          "style": "danger",
+          "text": "قرمز"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:plan:3",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "inline.admin.plans_add_users": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "adm:plans:add:users:fixed",
+          "text": "ثابت"
+        },
+        {
+          "callback_data": "adm:plans:add:users:custom",
+          "text": "دلخواه"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:plans:add:users:trial",
+          "text": "تست"
+        },
+        {
+          "callback_data": "adm:plans:add:users:wholesale",
+          "text": "📦 فروش عمده"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:plans:aud:users",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "inline.admin.plans_list": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "adm:plan:view:3",
+          "style": "primary",
+          "text": "✅ #3 پلن 3 ⚠️"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:plan:view:4",
+          "style": "success",
+          "text": "✅ #4 پلن 4 ⚠️"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:plan:add",
+          "style": "primary",
+          "text": "➕ افزودن پلن"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:plans:aud:users",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "inline.admin.reseller_actions": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "adm:resellers:svcs:6",
+          "text": "📦 سرویس‌های پاسارگارد"
+        },
+        {
+          "callback_data": "adm:resellers:capadj:6",
+          "text": "⏱ تغییر ظرفیت"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:resellers:tag:6",
+          "text": "🏷 تگ: 🟢 مطمئن"
+        },
+        {
+          "callback_data": "adm:users:svcs:6",
+          "text": "🛒 سرویس‌های فروشگاه"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:users:unres:6",
+          "text": "🤝 حذف نمایندگی"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:resellers:list:0",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "inline.admin.reseller_capacity_adjust": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "adm:resellers:capadj:6:days:-",
+          "text": "➖"
+        },
+        {
+          "callback_data": "adm:resellers:capadj:6:days:input",
+          "text": "10 روز"
+        },
+        {
+          "callback_data": "adm:resellers:capadj:6:days:+",
+          "text": "➕"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:resellers:capadj:6:gb:-",
+          "text": "➖"
+        },
+        {
+          "callback_data": "adm:resellers:capadj:6:gb:input",
+          "text": "5 گیگ"
+        },
+        {
+          "callback_data": "adm:resellers:capadj:6:gb:+",
+          "text": "➕"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:resellers:capadj:6:confirm",
+          "text": "✅ اعمال تغییر"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:resellers:view:6",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "inline.admin.reseller_risk_tag": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "adm:resellers:tagset:6:green",
+          "text": "✓ 🟢 مطمئن"
+        },
+        {
+          "callback_data": "adm:resellers:tagset:6:yellow",
+          "text": "🟡 مشکوک"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:resellers:tagset:6:orange",
+          "text": "🟠 ریسک"
+        },
+        {
+          "callback_data": "adm:resellers:tagset:6:red",
+          "text": "🔴 ریسک بالا"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:resellers:view:6",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "inline.admin.resellers_plans_overview": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "adm:plans:noop",
+          "style": "primary",
+          "text": "پلنی نیست"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:plans",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "inline.admin.user_actions": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "adm:users:wcredit:5",
+          "text": "➕ افزایش کیف"
+        },
+        {
+          "callback_data": "adm:users:wdebit:5",
+          "text": "➖ کاهش کیف"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:users:renew:5",
+          "text": "🔄 تمدید سریع"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:users:svcs:5",
+          "text": "📦 سرویس‌ها"
+        },
+        {
+          "callback_data": "adm:users:tag:5",
+          "text": "🏷 تگ: 🟢 مطمئن"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:users:msg:5",
+          "text": "✉️ پیام"
+        },
+        {
+          "callback_data": "adm:users:block:5",
+          "text": "🚫 مسدود کردن"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:users:delask:5",
+          "text": "🗑 حذف کامل کاربر"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:users:list:0",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "inline.admin.user_actions_blocked_confirm_delete": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "adm:users:wcredit:5",
+          "text": "➕ افزایش کیف"
+        },
+        {
+          "callback_data": "adm:users:wdebit:5",
+          "text": "➖ کاهش کیف"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:users:svcs:5",
+          "text": "📦 سرویس‌ها"
+        },
+        {
+          "callback_data": "adm:users:tag:5",
+          "text": "🏷 تگ: 🟢 مطمئن"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:users:msg:5",
+          "text": "✉️ پیام"
+        },
+        {
+          "callback_data": "adm:users:block:5",
+          "text": "🔓 رفع مسدودی"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:users:del:5",
+          "style": "danger",
+          "text": "⚠️ ادامه — نوشتن علت حذف"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:users:view:5",
+          "style": "danger",
+          "text": "⬅️ انصراف"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:users:list:0",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "inline.admin.user_risk_tag": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "adm:users:tagset:5:green",
+          "text": "✓ 🟢 مطمئن"
+        },
+        {
+          "callback_data": "adm:users:tagset:5:yellow",
+          "text": "🟡 مشکوک"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:users:tagset:5:orange",
+          "text": "🟠 ریسک"
+        },
+        {
+          "callback_data": "adm:users:tagset:5:red",
+          "text": "🔴 ریسک بالا"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:users:view:5",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "inline.admin.user_service_actions": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "adm:users:svclink:5:7",
+          "text": "🔗 لینک سرویس"
+        },
+        {
+          "callback_data": "adm:users:svcrenew:5:7",
+          "text": "🔄 تمدید با پلن فعلی"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:users:svcadj:5:7",
+          "text": "⏱ تغییر مانده"
+        },
+        {
+          "callback_data": "adm:users:svcdelask:5:7",
+          "text": "🗑 حذف سرویس"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:users:svcs:5",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "inline.admin.user_service_adjust": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "adm:users:svcadj:5:7:days:-",
+          "text": "➖"
+        },
+        {
+          "callback_data": "adm:users:svcadj:5:7:days:input",
+          "text": "10 روز"
+        },
+        {
+          "callback_data": "adm:users:svcadj:5:7:days:+",
+          "text": "➕"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:users:svcadj:5:7:gb:-",
+          "text": "➖"
+        },
+        {
+          "callback_data": "adm:users:svcadj:5:7:gb:input",
+          "text": "5 گیگ"
+        },
+        {
+          "callback_data": "adm:users:svcadj:5:7:gb:+",
+          "text": "➕"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:users:svcadj:5:7:confirm",
+          "text": "✅ اعمال تغییر"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:users:svc:5:7",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "inline.admin.user_service_delete_confirm": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "adm:users:svcdel:5:7",
+          "text": "🗑 بله، حذف شود"
+        },
+        {
+          "callback_data": "adm:users:svc:5:7",
+          "text": "انصراف"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "inline.admin.user_services": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "adm:users:svc:5:7",
+          "text": "سرویس #7"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:users:svc:5:8",
+          "text": "سرویس #8"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:users:view:5",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "inline.admin.users_plans_overview": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "adm:plan:view:3",
+          "style": "primary",
+          "text": "✅ پلن 3 ⚠️"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:plan:view:4",
+          "style": "success",
+          "text": "✅ پلن 4 ⚠️"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:plans:kind:users:trial",
+          "style": "primary",
+          "text": "⏸ تست"
+        },
+        {
+          "callback_data": "adm:plans:kind:users:custom",
+          "style": "primary",
+          "text": "⏸ دلخواه"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:plans:kind:users:wholesale",
+          "style": "primary",
+          "text": "⏸ 📦 فروش عمده"
+        }
+      ],
+      [
+        {
+          "callback_data": "adm:plans",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "inline.custom_confirm": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "shop:custom:buy",
+          "style": "primary",
+          "text": "🟢✅ ادامه خرید"
+        }
+      ],
+      [
+        {
+          "callback_data": "shop:custom:gb:next",
+          "text": "✏️ تغییر روز"
+        }
+      ],
+      [
+        {
+          "callback_data": "shop:custom",
+          "text": "✏️ تغییر حجم"
+        }
+      ],
+      [
+        {
+          "callback_data": "shop:list",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "inline.custom_days": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "shop:custom:days:-",
+          "text": "➖"
+        },
+        {
+          "callback_data": "shop:custom:noop",
+          "text": "30 روز"
+        },
+        {
+          "callback_data": "shop:custom:days:+",
+          "text": "➕"
+        }
+      ],
+      [
+        {
+          "callback_data": "shop:custom:days:input",
+          "text": "✏️ ورود دستی روز"
+        }
+      ],
+      [
+        {
+          "callback_data": "shop:custom:confirm",
+          "text": "✅ مشاهده قیمت و تأیید"
+        }
+      ],
+      [
+        {
+          "callback_data": "shop:custom",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "inline.custom_gb": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "shop:custom:gb:-",
+          "text": "➖"
+        },
+        {
+          "callback_data": "shop:custom:noop",
+          "text": "20 گیگ"
+        },
+        {
+          "callback_data": "shop:custom:gb:+",
+          "text": "➕"
+        }
+      ],
+      [
+        {
+          "callback_data": "shop:custom:gb:input",
+          "text": "✏️ ورود دستی حجم"
+        }
+      ],
+      [
+        {
+          "callback_data": "shop:custom:gb:next",
+          "text": "ادامه ← روزها"
+        }
+      ],
+      [
+        {
+          "callback_data": "shop:list",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "inline.force_join": {
+    "inline_keyboard": [
+      [
+        {
+          "text": "عضویت در کانال · @channel_one",
+          "url": "https://t.me/channel_one"
+        }
+      ],
+      [
+        {
+          "text": "عضویت در کانال · @channel_two",
+          "url": "https://t.me/channel_two"
+        }
+      ],
+      [
+        {
+          "callback_data": "forcejoin:check",
+          "style": "primary",
+          "text": "✅ عضو شدم"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "inline.main_menu.admin": {
+    "inline_keyboard": [],
+    "kind": "inline"
+  },
+  "inline.main_menu.user": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "shop:list",
+          "style": "primary",
+          "text": "🟢🛒 خرید سرویس"
+        },
+        {
+          "callback_data": "svc:list",
+          "style": "primary",
+          "text": "🔵📦 سرویس‌های من"
+        }
+      ],
+      [
+        {
+          "callback_data": "wallet:home",
+          "style": "primary",
+          "text": "🟡👛 کیف پول"
+        },
+        {
+          "callback_data": "support:home",
+          "text": "🟣🎧 پشتیبانی"
+        }
+      ],
+      [
+        {
+          "callback_data": "loy:home",
+          "text": "⭐ باشگاه مشتریان"
+        },
+        {
+          "callback_data": "resapply:home",
+          "text": "🤝 درخواست نمایندگی"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "inline.order_review": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "ordrev:ok:42",
+          "style": "success",
+          "text": "🟢✅ تأیید سفارش"
+        },
+        {
+          "callback_data": "ordrev:no:42",
+          "style": "danger",
+          "text": "🔴❌ رد"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "inline.pay_methods": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "pay:wallet:42",
+          "style": "success",
+          "text": "🟢👛 پرداخت از کیف پول"
+        }
+      ],
+      [
+        {
+          "callback_data": "pay:card:42",
+          "style": "primary",
+          "text": "🔵💳 کارت به کارت"
+        },
+        {
+          "callback_data": "pay:discount:42",
+          "text": "🏷 کد تخفیف"
+        }
+      ],
+      [
+        {
+          "callback_data": "pay:back:42",
+          "text": "⬅️ بازگشت"
+        },
+        {
+          "callback_data": "menu:home",
+          "style": "danger",
+          "text": "❌ انصراف"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "inline.payment_resend": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "payrev:send:55",
+          "style": "success",
+          "text": "📤 ارسال مجدد پیام"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "inline.payment_resume": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "payrev:go:55",
+          "style": "success",
+          "text": "♻️ ادامه تحویل"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "inline.payment_review": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "payrev:ok:55",
+          "style": "success",
+          "text": "🟢✅ تأیید"
+        },
+        {
+          "callback_data": "payrev:no:55",
+          "style": "danger",
+          "text": "🔴❌ رد"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "inline.plans": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "shop:plan:3",
+          "style": "primary",
+          "text": "پلن 3 — 150٬000 ت"
+        },
+        {
+          "callback_data": "shop:plan:4",
+          "style": "success",
+          "text": "پلن 4 — 150٬000 ت"
+        }
+      ],
+      [
+        {
+          "callback_data": "shop:list",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "inline.plans_long_list": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "shop:plan:1",
+          "style": "primary",
+          "text": "پلن 1 — 150٬000 ت"
+        },
+        {
+          "callback_data": "shop:plan:2",
+          "style": "primary",
+          "text": "پلن 2 — 150٬000 ت"
+        }
+      ],
+      [
+        {
+          "callback_data": "shop:plan:3",
+          "style": "primary",
+          "text": "پلن 3 — 150٬000 ت"
+        },
+        {
+          "callback_data": "shop:plan:4",
+          "style": "primary",
+          "text": "پلن 4 — 150٬000 ت"
+        }
+      ],
+      [
+        {
+          "callback_data": "shop:plan:5",
+          "style": "primary",
+          "text": "پلن 5 — 150٬000 ت"
+        },
+        {
+          "callback_data": "shop:plan:6",
+          "style": "primary",
+          "text": "پلن 6 — 150٬000 ت"
+        }
+      ],
+      [
+        {
+          "callback_data": "shop:plan:7",
+          "style": "primary",
+          "text": "پلن 7 — 150٬000 ت"
+        },
+        {
+          "callback_data": "shop:plan:8",
+          "style": "primary",
+          "text": "پلن 8 — 150٬000 ت"
+        }
+      ],
+      [
+        {
+          "callback_data": "shop:plan:9",
+          "style": "primary",
+          "text": "پلن 9 — 150٬000 ت"
+        },
+        {
+          "callback_data": "shop:plan:10",
+          "style": "primary",
+          "text": "پلن 10 — 150٬000 ت"
+        }
+      ],
+      [
+        {
+          "callback_data": "shop:plan:11",
+          "style": "primary",
+          "text": "پلن 11 — 150٬000 ت"
+        },
+        {
+          "callback_data": "shop:plan:12",
+          "style": "primary",
+          "text": "پلن 12 — 150٬000 ت"
+        }
+      ],
+      [
+        {
+          "callback_data": "shop:plan:13",
+          "style": "primary",
+          "text": "پلن 13 — 150٬000 ت"
+        },
+        {
+          "callback_data": "shop:plan:14",
+          "style": "primary",
+          "text": "پلن 14 — 150٬000 ت"
+        }
+      ],
+      [
+        {
+          "callback_data": "shop:plan:15",
+          "style": "primary",
+          "text": "پلن 15 — 150٬000 ت"
+        },
+        {
+          "callback_data": "shop:plan:16",
+          "style": "primary",
+          "text": "پلن 16 — 150٬000 ت"
+        }
+      ],
+      [
+        {
+          "callback_data": "shop:plan:17",
+          "style": "primary",
+          "text": "پلن 17 — 150٬000 ت"
+        },
+        {
+          "callback_data": "shop:plan:18",
+          "style": "primary",
+          "text": "پلن 18 — 150٬000 ت"
+        }
+      ],
+      [
+        {
+          "callback_data": "shop:plan:19",
+          "style": "primary",
+          "text": "پلن 19 — 150٬000 ت"
+        },
+        {
+          "callback_data": "shop:plan:20",
+          "style": "primary",
+          "text": "پلن 20 — 150٬000 ت"
+        }
+      ],
+      [
+        {
+          "callback_data": "shop:plan:21",
+          "style": "primary",
+          "text": "پلن 21 — 150٬000 ت"
+        },
+        {
+          "callback_data": "shop:plan:22",
+          "style": "primary",
+          "text": "پلن 22 — 150٬000 ت"
+        }
+      ],
+      [
+        {
+          "callback_data": "shop:plan:23",
+          "style": "primary",
+          "text": "پلن 23 — 150٬000 ت"
+        },
+        {
+          "callback_data": "shop:plan:24",
+          "style": "primary",
+          "text": "پلن 24 — 150٬000 ت"
+        }
+      ],
+      [
+        {
+          "callback_data": "shop:plan:25",
+          "style": "primary",
+          "text": "پلن 25 — 150٬000 ت"
+        },
+        {
+          "callback_data": "shop:plan:26",
+          "style": "primary",
+          "text": "پلن 26 — 150٬000 ت"
+        }
+      ],
+      [
+        {
+          "callback_data": "shop:plan:27",
+          "style": "primary",
+          "text": "پلن 27 — 150٬000 ت"
+        },
+        {
+          "callback_data": "shop:plan:28",
+          "style": "primary",
+          "text": "پلن 28 — 150٬000 ت"
+        }
+      ],
+      [
+        {
+          "callback_data": "shop:plan:29",
+          "style": "primary",
+          "text": "پلن 29 — 150٬000 ت"
+        },
+        {
+          "callback_data": "shop:plan:30",
+          "style": "primary",
+          "text": "پلن 30 — 150٬000 ت"
+        }
+      ],
+      [
+        {
+          "callback_data": "shop:plan:31",
+          "style": "primary",
+          "text": "پلن 31 — 150٬000 ت"
+        },
+        {
+          "callback_data": "shop:plan:32",
+          "style": "primary",
+          "text": "پلن 32 — 150٬000 ت"
+        }
+      ],
+      [
+        {
+          "callback_data": "shop:plan:33",
+          "style": "primary",
+          "text": "پلن 33 — 150٬000 ت"
+        },
+        {
+          "callback_data": "shop:plan:34",
+          "style": "primary",
+          "text": "پلن 34 — 150٬000 ت"
+        }
+      ],
+      [
+        {
+          "callback_data": "shop:plan:35",
+          "style": "primary",
+          "text": "پلن 35 — 150٬000 ت"
+        },
+        {
+          "callback_data": "shop:plan:36",
+          "style": "primary",
+          "text": "پلن 36 — 150٬000 ت"
+        }
+      ],
+      [
+        {
+          "callback_data": "shop:plan:37",
+          "style": "primary",
+          "text": "پلن 37 — 150٬000 ت"
+        },
+        {
+          "callback_data": "shop:plan:38",
+          "style": "primary",
+          "text": "پلن 38 — 150٬000 ت"
+        }
+      ],
+      [
+        {
+          "callback_data": "shop:plan:39",
+          "style": "primary",
+          "text": "پلن 39 — 150٬000 ت"
+        },
+        {
+          "callback_data": "shop:plan:40",
+          "style": "primary",
+          "text": "پلن 40 — 150٬000 ت"
+        }
+      ],
+      [
+        {
+          "callback_data": "shop:plan:41",
+          "style": "primary",
+          "text": "پلن 41 — 150٬000 ت"
+        },
+        {
+          "callback_data": "shop:plan:42",
+          "style": "primary",
+          "text": "پلن 42 — 150٬000 ت"
+        }
+      ],
+      [
+        {
+          "callback_data": "shop:plan:43",
+          "style": "primary",
+          "text": "پلن 43 — 150٬000 ت"
+        },
+        {
+          "callback_data": "shop:plan:44",
+          "style": "primary",
+          "text": "پلن 44 — 150٬000 ت"
+        }
+      ],
+      [
+        {
+          "callback_data": "shop:plan:45",
+          "style": "primary",
+          "text": "پلن 45 — 150٬000 ت"
+        },
+        {
+          "callback_data": "shop:plan:46",
+          "style": "primary",
+          "text": "پلن 46 — 150٬000 ت"
+        }
+      ],
+      [
+        {
+          "callback_data": "shop:plan:47",
+          "style": "primary",
+          "text": "پلن 47 — 150٬000 ت"
+        },
+        {
+          "callback_data": "shop:plan:48",
+          "style": "primary",
+          "text": "پلن 48 — 150٬000 ت"
+        }
+      ],
+      [
+        {
+          "callback_data": "shop:plan:49",
+          "style": "primary",
+          "text": "پلن 49 — 150٬000 ت"
+        },
+        {
+          "callback_data": "shop:plan:50",
+          "style": "primary",
+          "text": "پلن 50 — 150٬000 ت"
+        }
+      ],
+      [
+        {
+          "callback_data": "shop:plan:51",
+          "style": "primary",
+          "text": "پلن 51 — 150٬000 ت"
+        },
+        {
+          "callback_data": "shop:plan:52",
+          "style": "primary",
+          "text": "پلن 52 — 150٬000 ت"
+        }
+      ],
+      [
+        {
+          "callback_data": "shop:plan:53",
+          "style": "primary",
+          "text": "پلن 53 — 150٬000 ت"
+        },
+        {
+          "callback_data": "shop:plan:54",
+          "style": "primary",
+          "text": "پلن 54 — 150٬000 ت"
+        }
+      ],
+      [
+        {
+          "callback_data": "shop:plan:55",
+          "style": "primary",
+          "text": "پلن 55 — 150٬000 ت"
+        },
+        {
+          "callback_data": "shop:plan:56",
+          "style": "primary",
+          "text": "پلن 56 — 150٬000 ت"
+        }
+      ],
+      [
+        {
+          "callback_data": "shop:plan:57",
+          "style": "primary",
+          "text": "پلن 57 — 150٬000 ت"
+        },
+        {
+          "callback_data": "shop:plan:58",
+          "style": "primary",
+          "text": "پلن 58 — 150٬000 ت"
+        }
+      ],
+      [
+        {
+          "callback_data": "shop:plan:59",
+          "style": "primary",
+          "text": "پلن 59 — 150٬000 ت"
+        },
+        {
+          "callback_data": "shop:plan:60",
+          "style": "primary",
+          "text": "پلن 60 — 150٬000 ت"
+        }
+      ],
+      [
+        {
+          "callback_data": "shop:list",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "inline.reseller_app_review": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "adm:resapp:ok:6",
+          "style": "success",
+          "text": "🟢✅ تأیید"
+        },
+        {
+          "callback_data": "adm:resapp:no:6",
+          "style": "danger",
+          "text": "🔴❌ رد"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "inline.reseller_app_review_no_approve": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "adm:resapp:no:6",
+          "style": "danger",
+          "text": "🔴❌ رد"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "inline.service_actions": {
+    "inline_keyboard": [],
+    "kind": "inline"
+  },
+  "inline.services": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "svc:view:7",
+          "text": "🔹 user_7"
+        },
+        {
+          "callback_data": "svc:view:8",
+          "text": "🔹 user_8"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "inline.services_long_list": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "svc:view:1",
+          "text": "🔹 user_1"
+        },
+        {
+          "callback_data": "svc:view:2",
+          "text": "🔹 user_2"
+        }
+      ],
+      [
+        {
+          "callback_data": "svc:view:3",
+          "text": "🔹 user_3"
+        },
+        {
+          "callback_data": "svc:view:4",
+          "text": "🔹 user_4"
+        }
+      ],
+      [
+        {
+          "callback_data": "svc:view:5",
+          "text": "🔹 user_5"
+        },
+        {
+          "callback_data": "svc:view:6",
+          "text": "🔹 user_6"
+        }
+      ],
+      [
+        {
+          "callback_data": "svc:view:7",
+          "text": "🔹 user_7"
+        },
+        {
+          "callback_data": "svc:view:8",
+          "text": "🔹 user_8"
+        }
+      ],
+      [
+        {
+          "callback_data": "svc:view:9",
+          "text": "🔹 user_9"
+        },
+        {
+          "callback_data": "svc:view:10",
+          "text": "🔹 user_10"
+        }
+      ],
+      [
+        {
+          "callback_data": "svc:view:11",
+          "text": "🔹 user_11"
+        },
+        {
+          "callback_data": "svc:view:12",
+          "text": "🔹 user_12"
+        }
+      ],
+      [
+        {
+          "callback_data": "svc:view:13",
+          "text": "🔹 user_13"
+        },
+        {
+          "callback_data": "svc:view:14",
+          "text": "🔹 user_14"
+        }
+      ],
+      [
+        {
+          "callback_data": "svc:view:15",
+          "text": "🔹 user_15"
+        },
+        {
+          "callback_data": "svc:view:16",
+          "text": "🔹 user_16"
+        }
+      ],
+      [
+        {
+          "callback_data": "svc:view:17",
+          "text": "🔹 user_17"
+        },
+        {
+          "callback_data": "svc:view:18",
+          "text": "🔹 user_18"
+        }
+      ],
+      [
+        {
+          "callback_data": "svc:view:19",
+          "text": "🔹 user_19"
+        },
+        {
+          "callback_data": "svc:view:20",
+          "text": "🔹 user_20"
+        }
+      ],
+      [
+        {
+          "callback_data": "svc:view:21",
+          "text": "🔹 user_21"
+        },
+        {
+          "callback_data": "svc:view:22",
+          "text": "🔹 user_22"
+        }
+      ],
+      [
+        {
+          "callback_data": "svc:view:23",
+          "text": "🔹 user_23"
+        },
+        {
+          "callback_data": "svc:view:24",
+          "text": "🔹 user_24"
+        }
+      ],
+      [
+        {
+          "callback_data": "svc:view:25",
+          "text": "🔹 user_25"
+        },
+        {
+          "callback_data": "svc:view:26",
+          "text": "🔹 user_26"
+        }
+      ],
+      [
+        {
+          "callback_data": "svc:view:27",
+          "text": "🔹 user_27"
+        },
+        {
+          "callback_data": "svc:view:28",
+          "text": "🔹 user_28"
+        }
+      ],
+      [
+        {
+          "callback_data": "svc:view:29",
+          "text": "🔹 user_29"
+        },
+        {
+          "callback_data": "svc:view:30",
+          "text": "🔹 user_30"
+        }
+      ],
+      [
+        {
+          "callback_data": "svc:view:31",
+          "text": "🔹 user_31"
+        },
+        {
+          "callback_data": "svc:view:32",
+          "text": "🔹 user_32"
+        }
+      ],
+      [
+        {
+          "callback_data": "svc:view:33",
+          "text": "🔹 user_33"
+        },
+        {
+          "callback_data": "svc:view:34",
+          "text": "🔹 user_34"
+        }
+      ],
+      [
+        {
+          "callback_data": "svc:view:35",
+          "text": "🔹 user_35"
+        },
+        {
+          "callback_data": "svc:view:36",
+          "text": "🔹 user_36"
+        }
+      ],
+      [
+        {
+          "callback_data": "svc:view:37",
+          "text": "🔹 user_37"
+        },
+        {
+          "callback_data": "svc:view:38",
+          "text": "🔹 user_38"
+        }
+      ],
+      [
+        {
+          "callback_data": "svc:view:39",
+          "text": "🔹 user_39"
+        },
+        {
+          "callback_data": "svc:view:40",
+          "text": "🔹 user_40"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "inline.shop_kind": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "shop:kind:trial",
+          "style": "primary",
+          "text": "تست"
+        },
+        {
+          "callback_data": "shop:kind:fixed",
+          "style": "primary",
+          "text": "ثابت"
+        }
+      ],
+      [
+        {
+          "callback_data": "shop:kind:custom",
+          "style": "primary",
+          "text": "دلخواه"
+        },
+        {
+          "callback_data": "shop:kind:wholesale",
+          "style": "primary",
+          "text": "📦 فروش عمده"
+        }
+      ],
+      [
+        {
+          "callback_data": "menu:home",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "inline.support_contacts": {
+    "inline_keyboard": [
+      [
+        {
+          "style": "primary",
+          "text": "💬 پشتیبانی",
+          "url": "https://t.me/support"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "inline.terms": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "terms:ok:entry",
+          "style": "primary",
+          "text": "قوانین را می‌پذیرم"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "inline.wholesale_confirm": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "shop:wholesale:buy",
+          "style": "primary",
+          "text": "✅ تأیید و پرداخت"
+        }
+      ],
+      [
+        {
+          "callback_data": "shop:wholesale:qty",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "inline.wholesale_plans": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "shop:wholesale:plan:3",
+          "style": "primary",
+          "text": "پلن 3 — 150٬000 ت"
+        },
+        {
+          "callback_data": "shop:wholesale:plan:4",
+          "style": "success",
+          "text": "پلن 4 — 150٬000 ت"
+        }
+      ],
+      [
+        {
+          "callback_data": "shop:list",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "inline.wholesale_qty": {
+    "inline_keyboard": [
+      [
+        {
+          "callback_data": "shop:wholesale:qty:-",
+          "style": "primary",
+          "text": "➖"
+        },
+        {
+          "callback_data": "shop:wholesale:noop",
+          "style": "primary",
+          "text": "5 عدد"
+        },
+        {
+          "callback_data": "shop:wholesale:qty:+",
+          "style": "primary",
+          "text": "➕"
+        }
+      ],
+      [
+        {
+          "callback_data": "shop:wholesale:qty:input",
+          "style": "primary",
+          "text": "✏️ ورود دستی تعداد"
+        }
+      ],
+      [
+        {
+          "callback_data": "shop:wholesale:confirm",
+          "style": "primary",
+          "text": "ادامه ← تأیید"
+        }
+      ],
+      [
+        {
+          "callback_data": "shop:kind:wholesale",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "reply.admin.backup": {
+    "input_field_placeholder": "بکاپ / ریستور…",
+    "is_persistent": false,
+    "keyboard": [
+      [
+        {
+          "style": "primary",
+          "text": "🆕 ساخت بکاپ"
+        },
+        {
+          "style": "danger",
+          "text": "🆕 بکاپ + .env"
+        }
+      ],
+      [
+        {
+          "text": "📤 آپلود فایل بکاپ"
+        },
+        {
+          "text": "🔄 تازه‌سازی لیست"
+        }
+      ],
+      [
+        {
+          "text": "⬅️ بازگشت"
+        },
+        {
+          "text": "🏠 منوی اصلی"
+        }
+      ]
+    ],
+    "kind": "reply",
+    "one_time_keyboard": false,
+    "resize_keyboard": true
+  },
+  "reply.admin.broadcast": {
+    "input_field_placeholder": "مخاطب پیام گروهی…",
+    "is_persistent": false,
+    "keyboard": [
+      [
+        {
+          "text": "📢 همه"
+        },
+        {
+          "text": "👥 کاربران عادی"
+        }
+      ],
+      [
+        {
+          "text": "🤝 فقط نمایندگان"
+        },
+        {
+          "text": "🛠 ادمین‌ها"
+        }
+      ],
+      [
+        {
+          "text": "⬅️ بازگشت"
+        },
+        {
+          "text": "🏠 منوی اصلی"
+        }
+      ]
+    ],
+    "kind": "reply",
+    "one_time_keyboard": false,
+    "resize_keyboard": true
+  },
+  "reply.admin.hub": {
+    "input_field_placeholder": "پنل ادمین…",
+    "is_persistent": false,
+    "keyboard": [
+      [
+        {
+          "style": "success",
+          "text": "🗓 عملیات روزانه"
+        },
+        {
+          "style": "success",
+          "text": "👤 افراد"
+        }
+      ],
+      [
+        {
+          "style": "success",
+          "text": "📦 محصول و PG"
+        },
+        {
+          "style": "success",
+          "text": "🎯 بازاریابی"
+        }
+      ],
+      [
+        {
+          "text": "🛠 سیستم"
+        },
+        {
+          "text": "📡 وضعیت اتصال"
+        }
+      ],
+      [
+        {
+          "text": "⬅️ بازگشت"
+        },
+        {
+          "text": "🏠 منوی اصلی"
+        }
+      ]
+    ],
+    "kind": "reply",
+    "one_time_keyboard": false,
+    "resize_keyboard": true
+  },
+  "reply.admin.loyalty": {
+    "input_field_placeholder": "مدیریت باشگاه مشتریان…",
+    "is_persistent": false,
+    "keyboard": [
+      [
+        {
+          "style": "success",
+          "text": "📊 نمای کلی"
+        },
+        {
+          "text": "📐 قوانین امتیاز"
+        }
+      ],
+      [
+        {
+          "text": "🎁 جوایز"
+        },
+        {
+          "text": "🏅 سطوح"
+        }
+      ],
+      [
+        {
+          "text": "⚙️ تنظیمات باشگاه"
+        },
+        {
+          "text": "📝 متن دعوت"
+        }
+      ],
+      [
+        {
+          "text": "⬅️ بازگشت"
+        },
+        {
+          "text": "🏠 منوی اصلی"
+        }
+      ]
+    ],
+    "kind": "reply",
+    "one_time_keyboard": false,
+    "resize_keyboard": true
+  },
+  "reply.admin.loyalty_without_tiers": {
+    "input_field_placeholder": "مدیریت باشگاه مشتریان…",
+    "is_persistent": false,
+    "keyboard": [
+      [
+        {
+          "style": "success",
+          "text": "📊 نمای کلی"
+        },
+        {
+          "text": "📐 قوانین امتیاز"
+        }
+      ],
+      [
+        {
+          "text": "🎁 جوایز"
+        },
+        {
+          "text": "⚙️ تنظیمات باشگاه"
+        }
+      ],
+      [
+        {
+          "text": "📝 متن دعوت"
+        }
+      ],
+      [
+        {
+          "text": "⬅️ بازگشت"
+        },
+        {
+          "text": "🏠 منوی اصلی"
+        }
+      ]
+    ],
+    "kind": "reply",
+    "one_time_keyboard": false,
+    "resize_keyboard": true
+  },
+  "reply.admin.marketing": {
+    "input_field_placeholder": "بازاریابی…",
+    "is_persistent": false,
+    "keyboard": [
+      [
+        {
+          "style": "success",
+          "text": "⭐ باشگاه مشتریان"
+        },
+        {
+          "text": "📢 پیام گروهی"
+        }
+      ],
+      [
+        {
+          "text": "⬅️ بازگشت"
+        },
+        {
+          "text": "🏠 منوی اصلی"
+        }
+      ]
+    ],
+    "kind": "reply",
+    "one_time_keyboard": false,
+    "resize_keyboard": true
+  },
+  "reply.admin.ops": {
+    "input_field_placeholder": "عملیات روزانه…",
+    "is_persistent": false,
+    "keyboard": [
+      [
+        {
+          "style": "success",
+          "text": "📊 داشبورد"
+        },
+        {
+          "style": "success",
+          "text": "📈 گزارشات"
+        }
+      ],
+      [
+        {
+          "style": "success",
+          "text": "🛒 سفارش‌ها"
+        },
+        {
+          "style": "success",
+          "text": "🧾 رسیدها"
+        }
+      ],
+      [
+        {
+          "style": "success",
+          "text": "🎫 تیکت‌ها"
+        }
+      ],
+      [
+        {
+          "text": "⬅️ بازگشت"
+        },
+        {
+          "text": "🏠 منوی اصلی"
+        }
+      ]
+    ],
+    "kind": "reply",
+    "one_time_keyboard": false,
+    "resize_keyboard": true
+  },
+  "reply.admin.people": {
+    "input_field_placeholder": "افراد…",
+    "is_persistent": false,
+    "keyboard": [
+      [
+        {
+          "style": "success",
+          "text": "👥 کاربران"
+        },
+        {
+          "style": "success",
+          "text": "🤝 نمایندگان"
+        }
+      ],
+      [
+        {
+          "text": "⬅️ بازگشت"
+        },
+        {
+          "text": "🏠 منوی اصلی"
+        }
+      ]
+    ],
+    "kind": "reply",
+    "one_time_keyboard": false,
+    "resize_keyboard": true
+  },
+  "reply.admin.people_without_representatives": {
+    "input_field_placeholder": "افراد…",
+    "is_persistent": false,
+    "keyboard": [
+      [
+        {
+          "style": "success",
+          "text": "👥 کاربران"
+        }
+      ],
+      [
+        {
+          "text": "⬅️ بازگشت"
+        },
+        {
+          "text": "🏠 منوی اصلی"
+        }
+      ]
+    ],
+    "kind": "reply",
+    "one_time_keyboard": false,
+    "resize_keyboard": true
+  },
+  "reply.admin.pg": {
+    "input_field_placeholder": "پاسارگارد — یک گزینه را انتخاب کنید…",
+    "is_persistent": false,
+    "keyboard": [
+      [
+        {
+          "style": "success",
+          "text": "🏠 نمای کلی"
+        },
+        {
+          "text": "👥 کاربران"
+        }
+      ],
+      [
+        {
+          "style": "primary",
+          "text": "➕ ساخت کاربر"
+        },
+        {
+          "text": "🔎 جستجوی یوزر"
+        }
+      ],
+      [
+        {
+          "text": "🕸 نودها"
+        },
+        {
+          "style": "primary",
+          "text": "📁 ساخت گروه"
+        }
+      ],
+      [
+        {
+          "style": "primary",
+          "text": "📋 ساخت تمپلیت"
+        }
+      ],
+      [
+        {
+          "text": "⬅️ بازگشت"
+        },
+        {
+          "text": "🏠 منوی اصلی"
+        }
+      ]
+    ],
+    "kind": "reply",
+    "one_time_keyboard": false,
+    "resize_keyboard": true
+  },
+  "reply.admin.pg_read_only": {
+    "input_field_placeholder": "پاسارگارد — یک گزینه را انتخاب کنید…",
+    "is_persistent": false,
+    "keyboard": [
+      [
+        {
+          "style": "success",
+          "text": "🏠 نمای کلی"
+        },
+        {
+          "text": "👥 کاربران"
+        }
+      ],
+      [
+        {
+          "text": "🔎 جستجوی یوزر"
+        },
+        {
+          "text": "🕸 نودها"
+        }
+      ],
+      [
+        {
+          "style": "primary",
+          "text": "📁 ساخت گروه"
+        },
+        {
+          "style": "primary",
+          "text": "📋 ساخت تمپلیت"
+        }
+      ],
+      [
+        {
+          "text": "⬅️ بازگشت"
+        },
+        {
+          "text": "🏠 منوی اصلی"
+        }
+      ]
+    ],
+    "kind": "reply",
+    "one_time_keyboard": false,
+    "resize_keyboard": true
+  },
+  "reply.admin.plans_add_resellers": {
+    "input_field_placeholder": "نوع پلن را انتخاب کنید…",
+    "is_persistent": false,
+    "keyboard": [
+      [
+        {
+          "style": "primary",
+          "text": "اشتراک ثابت"
+        },
+        {
+          "style": "primary",
+          "text": "اشتراک PAYG"
+        }
+      ],
+      [
+        {
+          "style": "primary",
+          "text": "بسته حجم"
+        },
+        {
+          "style": "primary",
+          "text": "بسته کاربر"
+        }
+      ],
+      [
+        {
+          "text": "⬅️ بازگشت"
+        },
+        {
+          "text": "🏠 منوی اصلی"
+        }
+      ]
+    ],
+    "kind": "reply",
+    "one_time_keyboard": false,
+    "resize_keyboard": true
+  },
+  "reply.admin.plans_add_users": {
+    "input_field_placeholder": "نوع پلن را انتخاب کنید…",
+    "is_persistent": false,
+    "keyboard": [
+      [
+        {
+          "style": "primary",
+          "text": "ثابت"
+        },
+        {
+          "style": "primary",
+          "text": "دلخواه"
+        }
+      ],
+      [
+        {
+          "style": "primary",
+          "text": "تست"
+        },
+        {
+          "style": "primary",
+          "text": "📦 فروش عمده"
+        }
+      ],
+      [
+        {
+          "text": "⬅️ بازگشت"
+        },
+        {
+          "text": "🏠 منوی اصلی"
+        }
+      ]
+    ],
+    "kind": "reply",
+    "one_time_keyboard": false,
+    "resize_keyboard": true
+  },
+  "reply.admin.plans_audience": {
+    "input_field_placeholder": "مخاطب پلن را انتخاب کنید…",
+    "is_persistent": false,
+    "keyboard": [
+      [
+        {
+          "style": "primary",
+          "text": "📦 پلن‌های کاربران"
+        },
+        {
+          "style": "primary",
+          "text": "🤝 پلن‌های نمایندگان"
+        }
+      ],
+      [
+        {
+          "text": "🏷 برچسب دسته"
+        },
+        {
+          "style": "primary",
+          "text": "⏱ بسته حجم/زمان"
+        }
+      ],
+      [
+        {
+          "text": "⬅️ بازگشت"
+        },
+        {
+          "text": "🏠 منوی اصلی"
+        }
+      ]
+    ],
+    "kind": "reply",
+    "one_time_keyboard": false,
+    "resize_keyboard": true
+  },
+  "reply.admin.plans_kind_resellers": {
+    "input_field_placeholder": "پلن را از پیام انتخاب کنید یا افزودن…",
+    "is_persistent": false,
+    "keyboard": [
+      [
+        {
+          "style": "primary",
+          "text": "➕ افزودن پلن"
+        },
+        {
+          "text": "🏷 برچسب دسته"
+        }
+      ],
+      [
+        {
+          "style": "primary",
+          "text": "⏱ بسته حجم/زمان"
+        }
+      ],
+      [
+        {
+          "text": "⬅️ بازگشت"
+        },
+        {
+          "text": "🏠 منوی اصلی"
+        }
+      ]
+    ],
+    "kind": "reply",
+    "one_time_keyboard": false,
+    "resize_keyboard": true
+  },
+  "reply.admin.plans_kind_users": {
+    "input_field_placeholder": "پلن را از پیام انتخاب کنید یا افزودن…",
+    "is_persistent": false,
+    "keyboard": [
+      [
+        {
+          "style": "primary",
+          "text": "➕ افزودن پلن"
+        },
+        {
+          "text": "🏷 برچسب دسته"
+        }
+      ],
+      [
+        {
+          "style": "primary",
+          "text": "⏱ بسته حجم/زمان"
+        }
+      ],
+      [
+        {
+          "text": "⬅️ بازگشت"
+        },
+        {
+          "text": "🏠 منوی اصلی"
+        }
+      ]
+    ],
+    "kind": "reply",
+    "one_time_keyboard": false,
+    "resize_keyboard": true
+  },
+  "reply.admin.product": {
+    "input_field_placeholder": "محصول و PG…",
+    "is_persistent": false,
+    "keyboard": [
+      [
+        {
+          "style": "success",
+          "text": "📦 پلن‌ها"
+        },
+        {
+          "style": "success",
+          "text": "🖥 پاسارگارد"
+        }
+      ],
+      [
+        {
+          "text": "⬅️ بازگشت"
+        },
+        {
+          "text": "🏠 منوی اصلی"
+        }
+      ]
+    ],
+    "kind": "reply",
+    "one_time_keyboard": false,
+    "resize_keyboard": true
+  },
+  "reply.admin.resellers": {
+    "input_field_placeholder": "نمایندگان…",
+    "is_persistent": false,
+    "keyboard": [
+      [
+        {
+          "text": "📋 لیست نمایندگان"
+        },
+        {
+          "text": "📋 درخواست‌های منتظر"
+        }
+      ],
+      [
+        {
+          "style": "primary",
+          "text": "➕ افزودن دستی"
+        }
+      ],
+      [
+        {
+          "text": "⬅️ بازگشت"
+        },
+        {
+          "text": "🏠 منوی اصلی"
+        }
+      ]
+    ],
+    "kind": "reply",
+    "one_time_keyboard": false,
+    "resize_keyboard": true
+  },
+  "reply.admin.settings": {
+    "input_field_placeholder": "تنظیمات…",
+    "is_persistent": false,
+    "keyboard": [
+      [
+        {
+          "text": "فروشگاه"
+        },
+        {
+          "text": "ظاهر و دکمه‌ها"
+        }
+      ],
+      [
+        {
+          "text": "پرداخت"
+        },
+        {
+          "text": "پشتیبان‌ها"
+        }
+      ],
+      [
+        {
+          "text": "دسترسی"
+        },
+        {
+          "text": "محدودیت"
+        }
+      ],
+      [
+        {
+          "text": "آموزش اتصال"
+        },
+        {
+          "text": "اعلان‌ها"
+        }
+      ],
+      [
+        {
+          "style": "primary",
+          "text": "🌐 وب‌پنل"
+        }
+      ],
+      [
+        {
+          "text": "⬅️ بازگشت"
+        },
+        {
+          "text": "🏠 منوی اصلی"
+        }
+      ]
+    ],
+    "kind": "reply",
+    "one_time_keyboard": false,
+    "resize_keyboard": true
+  },
+  "reply.admin.system": {
+    "input_field_placeholder": "سیستم…",
+    "is_persistent": false,
+    "keyboard": [
+      [
+        {
+          "text": "⚙️ تنظیمات"
+        },
+        {
+          "text": "💾 بکاپ / ریستور"
+        }
+      ],
+      [
+        {
+          "text": "👁 پیش‌نمایش منوی کاربر"
+        }
+      ],
+      [
+        {
+          "text": "⬅️ بازگشت"
+        },
+        {
+          "text": "🏠 منوی اصلی"
+        }
+      ]
+    ],
+    "kind": "reply",
+    "one_time_keyboard": false,
+    "resize_keyboard": true
+  },
+  "reply.admin.users": {
+    "input_field_placeholder": "کاربران بات…",
+    "is_persistent": false,
+    "keyboard": [
+      [
+        {
+          "text": "📋 لیست کاربران"
+        },
+        {
+          "text": "🔎 جستجو با آیدی تلگرام"
+        }
+      ],
+      [
+        {
+          "text": "🌐 مدیریت کامل در وب‌پنل"
+        }
+      ],
+      [
+        {
+          "text": "⬅️ بازگشت"
+        },
+        {
+          "text": "🏠 منوی اصلی"
+        }
+      ]
+    ],
+    "kind": "reply",
+    "one_time_keyboard": false,
+    "resize_keyboard": true
+  },
+  "reply.cancel": {
+    "input_field_placeholder": "مقدار را بفرستید یا انصراف بزنید…",
+    "is_persistent": false,
+    "keyboard": [
+      [
+        {
+          "style": "danger",
+          "text": "انصراف"
+        }
+      ]
+    ],
+    "kind": "reply",
+    "one_time_keyboard": false,
+    "resize_keyboard": true
+  },
+  "reply.loyalty": {
+    "input_field_placeholder": "باشگاه مشتریان — یک گزینه را انتخاب کنید…",
+    "is_persistent": false,
+    "keyboard": [
+      [
+        {
+          "style": "primary",
+          "text": "👥 دعوت دوستان"
+        },
+        {
+          "text": "⭐ امتیاز من"
+        }
+      ],
+      [
+        {
+          "text": "🎁 جوایز"
+        },
+        {
+          "text": "📜 تاریخچه"
+        }
+      ],
+      [
+        {
+          "text": "⬅️ بازگشت"
+        },
+        {
+          "text": "🏠 منوی اصلی"
+        }
+      ]
+    ],
+    "kind": "reply",
+    "one_time_keyboard": false,
+    "resize_keyboard": true
+  },
+  "reply.main.admin": {
+    "input_field_placeholder": "از منوی پایین انتخاب کنید…",
+    "is_persistent": false,
+    "keyboard": [
+      [
+        {
+          "style": "primary",
+          "text": "🟢🛒 خرید سرویس"
+        },
+        {
+          "style": "primary",
+          "text": "🔵📦 سرویس‌های من"
+        }
+      ],
+      [
+        {
+          "style": "primary",
+          "text": "🟡👛 کیف پول"
+        },
+        {
+          "style": "primary",
+          "text": "🟣🎧 پشتیبانی"
+        }
+      ],
+      [
+        {
+          "style": "success",
+          "text": "⭐ باشگاه مشتریان"
+        },
+        {
+          "text": "🛠 پنل ادمین"
+        }
+      ],
+      [
+        {
+          "text": "🔄 شروع مجدد"
+        }
+      ]
+    ],
+    "kind": "reply",
+    "one_time_keyboard": false,
+    "resize_keyboard": true
+  },
+  "reply.main.admin_preview": {
+    "input_field_placeholder": "از منوی پایین انتخاب کنید…",
+    "is_persistent": false,
+    "keyboard": [
+      [
+        {
+          "style": "primary",
+          "text": "🟢🛒 خرید سرویس"
+        },
+        {
+          "style": "primary",
+          "text": "🔵📦 سرویس‌های من"
+        }
+      ],
+      [
+        {
+          "style": "primary",
+          "text": "🟡👛 کیف پول"
+        },
+        {
+          "style": "primary",
+          "text": "🟣🎧 پشتیبانی"
+        }
+      ],
+      [
+        {
+          "style": "success",
+          "text": "⭐ باشگاه مشتریان"
+        },
+        {
+          "text": "🤝 درخواست نمایندگی"
+        }
+      ],
+      [
+        {
+          "text": "🛠 بازگشت به پنل ادمین"
+        }
+      ]
+    ],
+    "kind": "reply",
+    "one_time_keyboard": false,
+    "resize_keyboard": true
+  },
+  "reply.main.reseller": {
+    "input_field_placeholder": "از منوی پایین انتخاب کنید…",
+    "is_persistent": false,
+    "keyboard": [
+      [
+        {
+          "style": "primary",
+          "text": "🟢🛒 خرید سرویس"
+        },
+        {
+          "style": "primary",
+          "text": "🔵📦 سرویس‌های من"
+        }
+      ],
+      [
+        {
+          "style": "primary",
+          "text": "🟡👛 کیف پول"
+        },
+        {
+          "style": "primary",
+          "text": "🟣🎧 پشتیبانی"
+        }
+      ],
+      [
+        {
+          "style": "success",
+          "text": "⭐ باشگاه مشتریان"
+        },
+        {
+          "text": "🤝 پنل نماینده"
+        }
+      ],
+      [
+        {
+          "text": "🔄 شروع مجدد"
+        }
+      ]
+    ],
+    "kind": "reply",
+    "one_time_keyboard": false,
+    "resize_keyboard": true
+  },
+  "reply.main.shop_owner_on_main_bot": {
+    "input_field_placeholder": "از منوی پایین انتخاب کنید…",
+    "is_persistent": false,
+    "keyboard": [
+      [
+        {
+          "style": "primary",
+          "text": "🟢🛒 خرید سرویس"
+        },
+        {
+          "style": "primary",
+          "text": "🔵📦 سرویس‌های من"
+        }
+      ],
+      [
+        {
+          "style": "primary",
+          "text": "🟡👛 کیف پول"
+        },
+        {
+          "style": "primary",
+          "text": "🟣🎧 پشتیبانی"
+        }
+      ],
+      [
+        {
+          "style": "success",
+          "text": "⭐ باشگاه مشتریان"
+        },
+        {
+          "text": "🤝 درخواست نمایندگی"
+        }
+      ],
+      [
+        {
+          "text": "🤝 پنل نماینده"
+        }
+      ],
+      [
+        {
+          "text": "🔄 شروع مجدد"
+        }
+      ]
+    ],
+    "kind": "reply",
+    "one_time_keyboard": false,
+    "resize_keyboard": true
+  },
+  "reply.main.user_new": {
+    "input_field_placeholder": "از منوی پایین انتخاب کنید…",
+    "is_persistent": false,
+    "keyboard": [
+      [
+        {
+          "style": "primary",
+          "text": "🟢🛒 خرید سرویس"
+        },
+        {
+          "style": "primary",
+          "text": "🟡👛 کیف پول"
+        }
+      ],
+      [
+        {
+          "style": "primary",
+          "text": "🟣🎧 پشتیبانی"
+        },
+        {
+          "style": "success",
+          "text": "⭐ باشگاه مشتریان"
+        }
+      ],
+      [
+        {
+          "text": "🤝 درخواست نمایندگی"
+        }
+      ],
+      [
+        {
+          "text": "🔄 شروع مجدد"
+        }
+      ]
+    ],
+    "kind": "reply",
+    "one_time_keyboard": false,
+    "resize_keyboard": true
+  },
+  "reply.main.user_with_services": {
+    "input_field_placeholder": "از منوی پایین انتخاب کنید…",
+    "is_persistent": false,
+    "keyboard": [
+      [
+        {
+          "style": "primary",
+          "text": "🟢🛒 خرید سرویس"
+        },
+        {
+          "style": "primary",
+          "text": "🔵📦 سرویس‌های من"
+        }
+      ],
+      [
+        {
+          "style": "primary",
+          "text": "🟡👛 کیف پول"
+        },
+        {
+          "style": "primary",
+          "text": "🟣🎧 پشتیبانی"
+        }
+      ],
+      [
+        {
+          "style": "success",
+          "text": "⭐ باشگاه مشتریان"
+        },
+        {
+          "text": "🤝 درخواست نمایندگی"
+        }
+      ],
+      [
+        {
+          "text": "🔄 شروع مجدد"
+        }
+      ]
+    ],
+    "kind": "reply",
+    "one_time_keyboard": false,
+    "resize_keyboard": true
+  },
+  "reply.main.user_with_status": {
+    "input_field_placeholder": "از منوی پایین انتخاب کنید…",
+    "is_persistent": false,
+    "keyboard": [
+      [
+        {
+          "style": "primary",
+          "text": "🟢🛒 خرید سرویس"
+        },
+        {
+          "style": "primary",
+          "text": "🔵📦 سرویس‌های من"
+        }
+      ],
+      [
+        {
+          "text": "📡 وضعیت سرورها"
+        },
+        {
+          "style": "primary",
+          "text": "🟡👛 کیف پول"
+        }
+      ],
+      [
+        {
+          "style": "primary",
+          "text": "🟣🎧 پشتیبانی"
+        },
+        {
+          "style": "success",
+          "text": "⭐ باشگاه مشتریان"
+        }
+      ],
+      [
+        {
+          "text": "🤝 درخواست نمایندگی"
+        }
+      ],
+      [
+        {
+          "text": "🔄 شروع مجدد"
+        }
+      ]
+    ],
+    "kind": "reply",
+    "one_time_keyboard": false,
+    "resize_keyboard": true
+  },
+  "reply.pay": {
+    "input_field_placeholder": "روش پرداخت را انتخاب کنید…",
+    "is_persistent": false,
+    "keyboard": [
+      [
+        {
+          "style": "success",
+          "text": "🟢👛 پرداخت از کیف پول"
+        },
+        {
+          "style": "primary",
+          "text": "🔵💳 کارت به کارت"
+        }
+      ],
+      [
+        {
+          "text": "🏷 کد تخفیف"
+        }
+      ],
+      [
+        {
+          "text": "⬅️ بازگشت"
+        },
+        {
+          "text": "🏠 منوی اصلی"
+        }
+      ]
+    ],
+    "kind": "reply",
+    "one_time_keyboard": false,
+    "resize_keyboard": true
+  },
+  "reply.persistent": {
+    "input_field_placeholder": "از منوی پایین انتخاب کنید…",
+    "is_persistent": false,
+    "keyboard": [
+      [
+        {
+          "text": "🏠 منوی اصلی"
+        }
+      ]
+    ],
+    "kind": "reply",
+    "one_time_keyboard": false,
+    "resize_keyboard": true
+  },
+  "reply.reseller.hub": {
+    "input_field_placeholder": "از منوی پایین انتخاب کنید…",
+    "is_persistent": false,
+    "keyboard": [
+      [
+        {
+          "text": "🤝 پنل نماینده"
+        },
+        {
+          "text": "👁 پیش‌نمایش منوی کاربر"
+        }
+      ],
+      [
+        {
+          "text": "🔄 شروع مجدد"
+        }
+      ]
+    ],
+    "kind": "reply",
+    "one_time_keyboard": false,
+    "resize_keyboard": true
+  },
+  "reply.reseller.plans": {
+    "input_field_placeholder": "پلن‌های فروشگاه…",
+    "is_persistent": false,
+    "keyboard": [
+      [
+        {
+          "style": "primary",
+          "text": "➕ پلن جدید"
+        },
+        {
+          "text": "🏷 برچسب دسته"
+        }
+      ],
+      [
+        {
+          "style": "primary",
+          "text": "⏱ بسته حجم/زمان"
+        }
+      ],
+      [
+        {
+          "text": "⬅️ بازگشت"
+        },
+        {
+          "text": "🏠 منوی اصلی"
+        }
+      ]
+    ],
+    "kind": "reply",
+    "one_time_keyboard": false,
+    "resize_keyboard": true
+  },
+  "reply.reseller.settings": {
+    "input_field_placeholder": "تنظیمات فروشگاه نماینده…",
+    "is_persistent": false,
+    "keyboard": [
+      [
+        {
+          "text": "فروشگاه"
+        },
+        {
+          "text": "منو"
+        }
+      ],
+      [
+        {
+          "text": "پرداخت"
+        },
+        {
+          "text": "پشتیبان‌ها"
+        }
+      ],
+      [
+        {
+          "text": "دسترسی"
+        },
+        {
+          "text": "محدودیت"
+        }
+      ],
+      [
+        {
+          "text": "آموزش اتصال"
+        },
+        {
+          "text": "اعلان‌ها"
+        }
+      ],
+      [
+        {
+          "text": "ربات"
+        },
+        {
+          "style": "primary",
+          "text": "🌐 وب‌پنل"
+        }
+      ],
+      [
+        {
+          "text": "⬅️ بازگشت"
+        },
+        {
+          "text": "🏠 منوی اصلی"
+        }
+      ]
+    ],
+    "kind": "reply",
+    "one_time_keyboard": false,
+    "resize_keyboard": true
+  },
+  "reply.reseller_apply": {
+    "input_field_placeholder": "درخواست نمایندگی — نوع پلن را از زیر پیام انتخاب کنید…",
+    "is_persistent": false,
+    "keyboard": [
+      [
+        {
+          "text": "⬅️ بازگشت"
+        },
+        {
+          "text": "🏠 منوی اصلی"
+        }
+      ]
+    ],
+    "kind": "reply",
+    "one_time_keyboard": false,
+    "resize_keyboard": true
+  },
+  "reply.review": {
+    "input_field_placeholder": "تأیید یا رد…",
+    "is_persistent": false,
+    "keyboard": [
+      [
+        {
+          "style": "success",
+          "text": "🟢✅ تأیید"
+        },
+        {
+          "style": "danger",
+          "text": "🔴❌ رد"
+        }
+      ],
+      [
+        {
+          "text": "⬅️ بازگشت"
+        },
+        {
+          "text": "🏠 منوی اصلی"
+        }
+      ]
+    ],
+    "kind": "reply",
+    "one_time_keyboard": false,
+    "resize_keyboard": true
+  },
+  "reply.service_actions": {
+    "input_field_placeholder": "عملیات سرویس…",
+    "is_persistent": false,
+    "keyboard": [
+      [
+        {
+          "text": "🔗 لینک و QR"
+        },
+        {
+          "text": "📘 آموزش اتصال"
+        }
+      ],
+      [
+        {
+          "text": "📝 درخواست لغو سرویس"
+        },
+        {
+          "style": "primary",
+          "text": "🔄 تمدید"
+        }
+      ],
+      [
+        {
+          "style": "primary",
+          "text": "➕ حجم / زمان"
+        },
+        {
+          "text": "⚙️ تنظیمات خودکار"
+        }
+      ],
+      [
+        {
+          "text": "♻️ رفرش وضعیت"
+        },
+        {
+          "style": "danger",
+          "text": "🗑 حذف سرویس"
+        }
+      ],
+      [
+        {
+          "text": "⬅️ بازگشت"
+        },
+        {
+          "text": "🏠 منوی اصلی"
+        }
+      ]
+    ],
+    "kind": "reply",
+    "one_time_keyboard": false,
+    "resize_keyboard": true
+  },
+  "reply.shop": {
+    "input_field_placeholder": "فروشگاه — نوع پلن را از زیر پیام انتخاب کنید…",
+    "is_persistent": false,
+    "keyboard": [
+      [
+        {
+          "text": "⬅️ بازگشت"
+        },
+        {
+          "text": "🏠 منوی اصلی"
+        }
+      ]
+    ],
+    "kind": "reply",
+    "one_time_keyboard": false,
+    "resize_keyboard": true
+  },
+  "reply.submenu_chrome": {
+    "input_field_placeholder": "از کیبورد پایین بازگردید…",
+    "is_persistent": false,
+    "keyboard": [
+      [
+        {
+          "text": "⬅️ بازگشت"
+        },
+        {
+          "text": "🏠 منوی اصلی"
+        }
+      ]
+    ],
+    "kind": "reply",
+    "one_time_keyboard": false,
+    "resize_keyboard": true
+  },
+  "reply.support": {
+    "input_field_placeholder": "پشتیبانی — یک گزینه را انتخاب کنید…",
+    "is_persistent": false,
+    "keyboard": [
+      [
+        {
+          "style": "primary",
+          "text": "🟣✉️ تیکت جدید"
+        },
+        {
+          "text": "📋 تیکت‌های من"
+        }
+      ],
+      [
+        {
+          "text": "⬅️ بازگشت"
+        },
+        {
+          "text": "🏠 منوی اصلی"
+        }
+      ]
+    ],
+    "kind": "reply",
+    "one_time_keyboard": false,
+    "resize_keyboard": true
+  },
+  "reply.topup_pay": {
+    "input_field_placeholder": "روش شارژ را انتخاب کنید…",
+    "is_persistent": false,
+    "keyboard": [
+      [
+        {
+          "style": "primary",
+          "text": "🔵💳 کارت به کارت"
+        }
+      ],
+      [
+        {
+          "text": "⬅️ بازگشت"
+        },
+        {
+          "text": "🏠 منوی اصلی"
+        }
+      ]
+    ],
+    "kind": "reply",
+    "one_time_keyboard": false,
+    "resize_keyboard": true
+  },
+  "reply.wallet": {
+    "input_field_placeholder": "کیف پول — یک گزینه را انتخاب کنید…",
+    "is_persistent": false,
+    "keyboard": [
+      [
+        {
+          "style": "primary",
+          "text": "🟢➕ شارژ کیف پول"
+        },
+        {
+          "text": "🟡📜 تراکنش‌ها"
+        }
+      ],
+      [
+        {
+          "text": "⬅️ بازگشت"
+        },
+        {
+          "text": "🏠 منوی اصلی"
+        }
+      ]
+    ],
+    "kind": "reply",
+    "one_time_keyboard": false,
+    "resize_keyboard": true
+  }
+}
