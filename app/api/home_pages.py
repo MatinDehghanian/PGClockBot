@@ -98,6 +98,19 @@ async def _safe_periods(session: AsyncSession, *, reseller_id: int | None):
         return empty_period_stats()
 
 
+async def _safe_trend(*, reseller_id: int | None):
+    """Seven-day sales trend on its own session; a failure shows an empty chart, never an error page."""
+    from app.db.session import SessionLocal
+    from app.services.dashboard_trend import empty_trend, sales_trend
+
+    try:
+        async with SessionLocal() as session:
+            return await sales_trend(session, reseller_id=reseller_id, days=7)
+    except Exception:
+        logger.exception("sales trend failed reseller_id=%s", reseller_id)
+        return empty_trend(7)
+
+
 async def _safe_action_center(session: AsyncSession, *, reseller_id: int | None, expire_days: int = 3):
     from app.services.db_safe import rollback_quiet
     from app.services.ux20 import build_action_center
@@ -209,8 +222,17 @@ async def _staff_wallet_card(session: AsyncSession, staff: dict) -> dict | None:
     user = await session.get(BotUser, int(uid))
     if user is None:
         return None
-    bal = int(user.wallet_balance or 0)
-    return {"balance": bal, "balance_fa": format_toman(bal)}
+    from app.services.dashboard_trend import own_account_summary
+
+    summary = await own_account_summary(session, int(uid))
+    bal = int(summary["wallet"] or 0)
+    return {
+        "balance": bal,
+        "balance_fa": format_toman(bal),
+        "user_id": int(uid),
+        "services": summary["services"],
+        "nearest_expiry_days": summary["nearest_expiry_days"],
+    }
 
 
 async def _reseller_shop_stats(session: AsyncSession, rid: int) -> dict[str, int]:
@@ -579,8 +601,14 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 )
             except Exception:
                 logger.exception("home action_center dismiss filter failed")
+            trend = await _safe_trend(reseller_id=None)
             pg_limits = None
             wallet_card = None
+            try:
+                wallet_card = await _staff_wallet_card(session, staff)
+            except Exception:
+                logger.exception("owner home account card failed")
+                await rollback_quiet(session)
             if staff.get("pg_is_owner") is False:
                 from app.services.pg_overview import build_reseller_pg_overview
 
@@ -596,12 +624,6 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                     logger.exception("hybrid owner home pg limits failed")
                     await rollback_quiet(session)
                     pg_limits = None
-                try:
-                    wallet_card = await _staff_wallet_card(session, staff)
-                except Exception:
-                    logger.exception("hybrid owner home wallet failed")
-                    await rollback_quiet(session)
-                    wallet_card = None
             return (
                 "home.html",
                 {
@@ -615,6 +637,7 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                     "dashboard_degraded": False,
                     "pg_limits": pg_limits,
                     "wallet_card": wallet_card,
+                    "trend": trend,
                     "show_pg_nodes": show_pg_nodes,
                 },
             )
@@ -760,11 +783,13 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
             )
         except Exception:
             logger.exception("reseller home action_center dismiss filter failed")
+        trend = await _safe_trend(reseller_id=int(rid))
         return (
             "reseller_home.html",
             {
                 "staff": staff,
                 "stats": stats,
+                "trend": trend,
                 "pg_limits": pg_limits,
                 "bot_setup_needed": bot_setup_needed,
                 "bot": bot,

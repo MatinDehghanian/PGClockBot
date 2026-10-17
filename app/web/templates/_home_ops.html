@@ -3,6 +3,7 @@
             portal_bot_show (bool, default true), portal_pg_show (bool, default true)
 #}
 {% from "macros.html" import action_center_icon, inbox_dismiss_btn, card_title %}
+{% from "_home_widgets.html" import account_card %}
 {% set ac = action_center or {} %}
 {% set periods = periods or {} %}
 {% set day = periods.day or {} %}
@@ -46,6 +47,8 @@
 </div>
 {% endif %}
 
+<div class="home-main-grid">
+{% include "_home_sales_chart.html" %}
 <section class="card home-action-card" aria-label="صف کار">
   {{ card_title('queue', 'صف کار') }}
   {% if ac.has_items %}
@@ -70,10 +73,13 @@
   <p class="muted home-action-empty">الان کاری در صف نیست.</p>
   {% endif %}
 </section>
+</div>
 
+<div class="home-bottom-grid{% if wallet_card is defined and wallet_card %} has-account{% endif %}">
+{% if wallet_card is defined and wallet_card %}{{ account_card(wallet_card) }}{% endif %}
 <section class="card home-periods-card" aria-label="فروش دوره‌ای">
   <header class="home-periods-head">
-    {{ card_title('sales', 'فروش') }}
+    {{ card_title('sales', 'فروش دوره‌ای') }}
     <p class="muted">امروز · ۷ روز · ۳۰ روز</p>
   </header>
   <div class="home-period-grid">
@@ -106,3 +112,4 @@
     </article>
   </div>
 </section>
+</div>

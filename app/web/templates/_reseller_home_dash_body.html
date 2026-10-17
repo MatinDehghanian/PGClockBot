@@ -39,49 +39,17 @@
 </div>
 {% endif %}
 
-<div class="card home-conn-card">
-  {{ card_title('connection', 'وضعیت اتصال') }}
-  <div class="home-conn-row">
-    <a class="home-conn {% if bot.unchecked %}is-neutral{% elif bot.ok %}is-ok{% else %}is-err{% endif %}" href="/shop-settings?tab=bot">
-      <svg class="home-conn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4.5 6.5v5.2c0 4.7 3.2 8 7.5 9.3 4.3-1.3 7.5-4.6 7.5-9.3V6.5L12 3z"/><path d="M9 12l2 2 4-4"/></svg>
-      <span class="home-conn-text">
-        <span class="home-conn-k">ربات</span>
-        <span class="home-conn-cap muted">
-          {% if bot.unchecked %}بررسی نشده
-          {% elif bot.ok and bot.username %}<span dir="ltr">@{{ bot.username }}</span>
-          {% elif bot.error %}{{ bot.error }}
-          {% else %}—{% endif %}
-        </span>
-      </span>
-      {% if bot.unchecked %}
-      <span class="badge neutral home-conn-badge">—</span>
-      {% elif bot.ok %}
-      <span class="badge ok home-conn-badge">متصل</span>
-      {% else %}
-      <span class="badge danger home-conn-badge">قطع</span>
-      {% endif %}
-    </a>
-    <a class="home-conn {% if (pg_health and pg_health.unchecked) %}is-neutral{% elif (pg_health and pg_health.ok) %}is-ok{% else %}is-err{% endif %}" href="/pg">
-      <svg class="home-conn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4.5 6.5v5.2c0 4.7 3.2 8 7.5 9.3 4.3-1.3 7.5-4.6 7.5-9.3V6.5L12 3z"/><path d="M9 12l2 2 4-4"/></svg>
-      <span class="home-conn-text">
-        <span class="home-conn-k">پاسارگارد</span>
-        <span class="home-conn-cap muted">
-          {% if pg_health and pg_health.unchecked %}بررسی نشده
-          {% elif pg_health and pg_health.ok %}{% if pg_health.version %}v{{ pg_health.version }}{% else %}آنلاین{% endif %}
-          {% elif pg_health and pg_health.error %}{{ pg_health.error }}
-          {% else %}—{% endif %}
-        </span>
-      </span>
-      {% if pg_health and pg_health.unchecked %}
-      <span class="badge neutral home-conn-badge">—</span>
-      {% elif pg_health and pg_health.ok %}
-      <span class="badge ok home-conn-badge">متصل</span>
-      {% else %}
-      <span class="badge danger home-conn-badge">قطع</span>
-      {% endif %}
-    </a>
-  </div>
-</div>
+{% from "_home_widgets.html" import kpi_strip, status_tiles %}
+{{ kpi_strip(periods, action_center, trend if trend is defined else none) }}
+
+{% set tiles = [] %}
+{% set bot_state = 'neutral' if bot.unchecked else ('ok' if bot.ok else 'err') %}
+{% set bot_detail = 'بررسی نشده' if bot.unchecked else (('@' ~ bot.username) if (bot.ok and bot.username) else ('آنلاین' if bot.ok else (bot.error or 'قطع'))) %}
+{% set _ = tiles.append({'name': 'ربات تلگرام', 'detail': bot_detail, 'state': bot_state, 'icon': 'bot', 'href': '/shop-settings?tab=bot'}) %}
+{% set pg_state = 'neutral' if (pg_health and pg_health.unchecked) else ('ok' if (pg_health and pg_health.ok) else 'err') %}
+{% set pg_detail = 'بررسی نشده' if (pg_health and pg_health.unchecked) else (('نسخه ' ~ pg_health.version) if (pg_health and pg_health.ok and pg_health.version) else ('آنلاین' if (pg_health and pg_health.ok) else ((pg_health.error if pg_health else none) or 'قطع'))) %}
+{% set _ = tiles.append({'name': 'پاسارگارد', 'detail': pg_detail, 'state': pg_state, 'icon': 'pg', 'href': '/pg'}) %}
+{{ status_tiles(tiles) }}
 
 {% set portal_bot_show = ('dashboard' in (staff.get('permissions') or []) or staff.role == 'reseller') %}
 {% set portal_pg_show = ('pg_overview' in (staff.get('pg_permissions') or []) or staff.role == 'reseller' or staff.get('pg_admin_username')) %}
