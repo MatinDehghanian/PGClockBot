@@ -16,6 +16,7 @@ from collections.abc import Sequence
 from aiogram.types import MessageEntity
 
 from app.services.rich_text import (
+    SCREEN_TEXT_KEY_PREFIXES,
     custom_emoji_html,
     first_custom_emoji_id,
     pack_rich_text,
@@ -217,3 +218,73 @@ def stored_text(cleaned: str, raw: str, entities: Sequence[MessageEntity] | None
     if first_custom_emoji_id(entities) and cleaned == (raw or "").strip():
         return pack_rich_text(raw, entities)
     return cleaned
+
+
+# ── Web panel: the «تیتر و توضیح منوها» settings tab ─────────────────────────
+
+SCREEN_TEXT_TAB = "screens"
+EDITOR_SWITCH_GROUP = "حالت ویرایش منوها در ربات"
+_AUDIENCE_GROUPS = (
+    ("c.", "تیتر و توضیح منوهای مشتری"),
+    ("a.", "تیتر و توضیح منوهای ادمین"),
+    ("r.", "تیتر و توضیح منوهای نماینده"),
+)
+_TITLE_HINT = "یک خط، حداکثر 64 کاراکتر، بدون < و > و &. خالی = تیتر پیش‌فرض."
+_CAPTION_HINT = "زیر تیتر نمایش داده می‌شود. خالی = متن پیش‌فرض؛ فقط «-» = نمایش نده."
+
+
+def is_screen_text_key(key: str) -> bool:
+    return str(key or "").startswith(SCREEN_TEXT_KEY_PREFIXES)
+
+
+def screen_text_setting_groups() -> dict[str, list[tuple[str, str, str, str]]]:
+    """Settings groups for the web tab: the editor switch, then each audience's menus."""
+    groups: dict[str, list[tuple[str, str, str, str]]] = {
+        EDITOR_SWITCH_GROUP: [
+            (
+                "screen_editor_enabled",
+                "قابلیت ویرایش منوها",
+                "toggle",
+                "وقتی روشن است، ادمین (و صاحب هر فروشگاه در ربات خودش) از «✏️ حالت ویرایش منوها» متن، رنگ، تیتر و توضیح منوها را همان‌جا عوض می‌کند.",
+            )
+        ]
+    }
+    for prefix, group_name in _AUDIENCE_GROUPS:
+        fields: list[tuple[str, str, str, str]] = []
+        for screen_id, default_title in SCREEN_TITLE_DEFAULTS.items():
+            if not screen_id.startswith(prefix):
+                continue
+            fields.append((title_setting_key(screen_id), f"{default_title} — تیتر", "text", _TITLE_HINT))
+            if screen_id in SCREEN_CAPTION_DEFAULTS:
+                fields.append((caption_setting_key(screen_id), f"{default_title} — توضیح", "textarea", _CAPTION_HINT))
+        groups[group_name] = fields
+    return groups
+
+
+def platform_only_screen_text_keys() -> frozenset[str]:
+    """What a shop may not change: admin menus and the editor switch."""
+    keys = {"screen_editor_enabled"}
+    for screen_id in SCREEN_TITLE_DEFAULTS:
+        if screen_id.startswith("a."):
+            keys.add(title_setting_key(screen_id))
+            if screen_id in SCREEN_CAPTION_DEFAULTS:
+                keys.add(caption_setting_key(screen_id))
+    return frozenset(keys)
+
+
+def validate_screen_text_settings(payload: dict[str, str]) -> None:
+    """Check titles and captions saved from the web panel; raise ValueError naming the menu."""
+    captions = {caption_setting_key(sid): sid for sid in SCREEN_CAPTION_DEFAULTS}
+    titles = {title_setting_key(sid): sid for sid in SCREEN_TITLE_DEFAULTS}
+    for key, value in payload.items():
+        plain = unpack_rich_text(value)[0].strip()
+        if not plain:
+            continue
+        try:
+            if key in titles:
+                validate_screen_title(plain)
+            elif key in captions and plain != CAPTION_HIDDEN:
+                validate_screen_caption(plain)
+        except ValueError as exc:
+            menu = SCREEN_TITLE_DEFAULTS[titles.get(key) or captions[key]]
+            raise ValueError(f"{menu}: {exc}") from exc
