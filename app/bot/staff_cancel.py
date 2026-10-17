@@ -7,6 +7,7 @@ from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser
+from app.services import bot_feedback_texts as feedback
 
 
 async def reopen_admin_plans(
@@ -31,7 +32,7 @@ async def reopen_admin_users(
     from app.bot.handlers.admin import _answer_users_nav
 
     await _answer_users_nav(
-        message, session, db_user, "لغو شد.", state, clear_state=True
+        message, session, db_user, feedback.CANCELLED, state, clear_state=True
     )
 
 
@@ -45,7 +46,7 @@ async def reopen_admin_tickets(
     from app.bot.handlers.admin import _answer_tickets_nav
 
     await _answer_tickets_nav(
-        message, session, db_user, "لغو شد.", state, clear_state=True
+        message, session, db_user, feedback.CANCELLED, state, clear_state=True
     )
 
 
@@ -63,7 +64,7 @@ async def reopen_admin_home(
         message,
         session,
         db_user,
-        text="لغو شد.",
+        text=feedback.CANCELLED,
         classic=None,
         state=state,
         reopen_panel=open_admin_home,
@@ -87,7 +88,7 @@ async def reopen_admin_broadcast(
         message,
         session,
         db_user,
-        text="لغو شد.",
+        text=feedback.CANCELLED,
         classic=None,
         state=state,
         reopen_panel=open_admin_broadcast_hub,
@@ -118,7 +119,7 @@ async def reopen_admin_settings(
         message,
         session,
         db_user,
-        text="لغو شد.",
+        text=feedback.CANCELLED,
         classic=kb.admin_settings_reply_keyboard(),
         state=state,
         reopen_panel=_panel,
@@ -147,7 +148,7 @@ async def reopen_admin_backup(
         message,
         session,
         db_user,
-        text="لغو شد.",
+        text=feedback.CANCELLED,
         classic=await _lasting_kb(session, db_user, kb.admin_system_reply_keyboard()),
         state=state,
         reopen_panel=_panel,
@@ -190,7 +191,7 @@ async def reopen_pg_users(
         message,
         session,
         db_user,
-        text="لغو شد.",
+        text=feedback.CANCELLED,
         classic=classic,
         state=state,
         reopen_panel=_panel,
@@ -219,7 +220,7 @@ async def reopen_pg_nodes(
         message,
         session,
         db_user,
-        text="لغو شد.",
+        text=feedback.CANCELLED,
         classic=await _lasting_kb(session, db_user, kb.admin_product_reply_keyboard()),
         state=state,
         reopen_panel=_panel,
@@ -259,7 +260,7 @@ async def reopen_plan_catalog(
         message,
         session,
         db_user,
-        text="لغو شد.",
+        text=feedback.CANCELLED,
         state=state,
         reopen_panel=_panel,
         clear_state=False,
@@ -297,7 +298,7 @@ async def reopen_reseller_plans(
         message,
         session,
         db_user,
-        text="لغو شد.",
+        text=feedback.CANCELLED,
         classic=kb.reseller_plans_reply_keyboard(),
         state=state,
         reopen_panel=_panel,
@@ -337,7 +338,7 @@ async def reopen_reseller_settings(
         message,
         session,
         db_user,
-        text="لغو شد.",
+        text=feedback.CANCELLED,
         classic=await _lasting_kb(
             session,
             db_user,
@@ -363,7 +364,7 @@ async def reopen_reseller_user_msg(
     from app.bot.nav_inline import present_nav_panel
 
     await state.clear()
-    await present_nav_panel(message, text="لغو شد.", inline=None, state=state)
+    await present_nav_panel(message, text=feedback.CANCELLED, inline=None, state=state)
 
 
 async def reopen_loyalty_staff(
@@ -390,7 +391,7 @@ async def reopen_loyalty_staff(
     if scope_info is None:
         from app.bot.nav_inline import present_nav_panel
 
-        await present_nav_panel(message, text="لغو شد.", inline=None, state=state)
+        await present_nav_panel(message, text=feedback.CANCELLED, inline=None, state=state)
         return
     scope, can_tiers = scope_info
     await _staff_loyalty_answer(
@@ -425,7 +426,7 @@ async def reopen_reseller_cap_adjust(
             message,
             session,
             db_user,
-            text="لغو شد.",
+            text=feedback.CANCELLED,
             is_reseller_bot=False,
             reseller_owner_id=None,
         )

@@ -18,6 +18,7 @@ from app.db.models import BotUser
 from app.services.formatting import node_status_fa
 from app.services.redact import user_safe_error
 from app.services.pasarguard import get_pg
+from app.services import bot_feedback_texts as feedback
 
 
 async def _lasting_kb(session, db_user, classic):
@@ -38,7 +39,7 @@ async def _require_nodes(db_user: BotUser, callback=None, message=None, *, actio
     """
     if not _is_admin(db_user):
         if callback is not None:
-            await callback.answer("ادمین نیستید", show_alert=True)
+            await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         elif message is not None:
             await message.answer("ادمین نیستید.")
         return False
@@ -50,7 +51,7 @@ async def _require_nodes(db_user: BotUser, callback=None, message=None, *, actio
         return False
     if action and not await can_platform_pg_action(db_user, "nodes", action):
         if callback is not None:
-            await callback.answer("اجازه این عمل را ندارید", show_alert=True)
+            await callback.answer(feedback.ACTION_NOT_ALLOWED, show_alert=True)
         elif message is not None:
             await message.answer("اجازه این عمل را ندارید.")
         return False
@@ -272,7 +273,7 @@ async def pg_node_detail(
     nid = int((n or {}).get("id") or 0)
     await callback.answer()
     if not isinstance(n, dict) or nid <= 0:
-        await callback.answer("یافت نشد", show_alert=True)
+        await callback.answer(feedback.NOT_FOUND, show_alert=True)
         return
     if callback.message:
         await safe_edit_text(
@@ -793,7 +794,7 @@ async def pg_node_create_conn(
         return
     conn = callback.data.rsplit(":", 1)[-1]
     if conn not in {"grpc", "rest"}:
-        await callback.answer("نامعتبر", show_alert=True)
+        await callback.answer(feedback.INVALID, show_alert=True)
         return
     data = (await state.get_data()).get("node_create") or {}
     if not data.get("name") or not data.get("address"):

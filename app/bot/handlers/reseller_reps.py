@@ -30,6 +30,7 @@ from app.services.representative_unification import (
     RepresentativeUnifyError,
     assert_staff_can_manage_representatives,
 )
+from app.services import bot_feedback_texts as feedback
 
 router = Router(name="reseller_reps")
 
@@ -226,7 +227,7 @@ async def rrep_role(
     except RepresentativeUnifyError:
         await state.clear()
         try:
-            await callback.answer("دسترسی ندارید", show_alert=True)
+            await callback.answer(feedback.NO_ACCESS, show_alert=True)
         except Exception:
             pass
         return

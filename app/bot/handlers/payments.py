@@ -12,6 +12,7 @@ from app.services.formatting import format_message
 from app.services.orders import approve_payment, reject_payment, stars_amount_for_toman
 from app.services.resellers import reseller_can_review_payment
 from app.services.users import get_all_settings, get_setting
+from app.services import bot_feedback_texts as feedback
 
 router = Router(name="payments")
 
@@ -255,10 +256,10 @@ async def _payrev_load(
     payment_id = int(callback.data.split(":")[-1])
     payment = await session.get(Payment, payment_id)
     if not payment:
-        await callback.answer("یافت نشد", show_alert=True)
+        await callback.answer(feedback.NOT_FOUND, show_alert=True)
         return None
     if not await reseller_can_review_payment(session, db_user, payment):
-        await callback.answer("دسترسی ندارید", show_alert=True)
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return None
     if callback.message and callback.data.split(":")[1] in {"ok", "no"}:
         from app.services.payment_review_messages import remember_review_message

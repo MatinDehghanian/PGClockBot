@@ -7,6 +7,7 @@ from typing import Any
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import InlineKeyboardMarkup, Message, ReplyKeyboardMarkup
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.services import bot_feedback_texts as feedback
 
 logger = logging.getLogger("pgclock.bot")
 
@@ -192,7 +193,7 @@ async def clear_fsm_with_reply(
     message: Message,
     state,
     *,
-    note: str = "لغو شد.",
+    note: str = feedback.CANCELLED,
     session: AsyncSession | None = None,
     db_user=None,
     is_reseller_bot: bool = False,

@@ -33,6 +33,7 @@ from app.services.backup import (
     save_uploaded_backup,
 )
 from app.services.updates import local_version
+from app.services import bot_feedback_texts as feedback
 
 
 async def _lasting_kb(session, db_user, classic):
@@ -109,7 +110,7 @@ def _hub_text(backups: list[dict]) -> str:
 @require_bot_owner_handler
 async def backup_hub(callback: CallbackQuery, db_user: BotUser, state: FSMContext):
     if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+        await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
     await state.clear()
     await callback.answer()
@@ -146,7 +147,7 @@ def _env_confirm_keyboard() -> InlineKeyboardMarkup:
 async def backup_create_env_ask(callback: CallbackQuery, db_user: BotUser):
     """Phase 2: with-.env path requires an explicit second confirm."""
     if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+        await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
     await callback.answer()
     text = (
@@ -165,7 +166,7 @@ async def backup_create_env_ask(callback: CallbackQuery, db_user: BotUser):
 @require_bot_owner_handler
 async def backup_create(callback: CallbackQuery, db_user: BotUser):
     if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+        await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
     data = callback.data or ""
     # Phase 2 defaults: plain create / :noenv → without .env.
@@ -217,12 +218,12 @@ async def backup_create(callback: CallbackQuery, db_user: BotUser):
 @require_bot_owner_handler
 async def backup_item(callback: CallbackQuery, db_user: BotUser):
     if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+        await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
     backup_id = callback.data.split(":", 3)[-1]
     path = get_backup_path(backup_id)
     if not path:
-        await callback.answer("یافت نشد", show_alert=True)
+        await callback.answer(feedback.NOT_FOUND, show_alert=True)
         return
     await callback.answer()
     backups = {b["id"]: b for b in await asyncio.to_thread(list_backups)}
@@ -244,12 +245,12 @@ async def backup_item(callback: CallbackQuery, db_user: BotUser):
 @require_bot_owner_handler
 async def backup_download(callback: CallbackQuery, db_user: BotUser):
     if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+        await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
     backup_id = callback.data.split(":", 3)[-1]
     path = get_backup_path(backup_id)
     if not path:
-        await callback.answer("یافت نشد", show_alert=True)
+        await callback.answer(feedback.NOT_FOUND, show_alert=True)
         return
     await callback.answer("ارسال فایل…")
     if callback.message:
@@ -268,11 +269,11 @@ async def backup_download(callback: CallbackQuery, db_user: BotUser):
 @require_bot_owner_handler
 async def backup_delete(callback: CallbackQuery, db_user: BotUser):
     if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+        await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
     backup_id = callback.data.split(":", 3)[-1]
     ok = await asyncio.to_thread(delete_backup, backup_id)
-    await callback.answer("حذف شد" if ok else "ناموفق", show_alert=not ok)
+    await callback.answer(feedback.DELETED if ok else "ناموفق", show_alert=not ok)
     backups = await asyncio.to_thread(list_backups)
     if callback.message:
         await safe_edit_text(
@@ -286,7 +287,7 @@ async def backup_delete(callback: CallbackQuery, db_user: BotUser):
 @require_bot_owner_handler
 async def backup_restore_ask(callback: CallbackQuery, db_user: BotUser, state: FSMContext):
     if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+        await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
     # adm:backup:restore:{id}:{0|1}
     parts = callback.data.split(":")
@@ -294,7 +295,7 @@ async def backup_restore_ask(callback: CallbackQuery, db_user: BotUser, state: F
     restore_env = parts[4] == "1" if len(parts) > 4 else True
     path = get_backup_path(backup_id)
     if not path:
-        await callback.answer("یافت نشد", show_alert=True)
+        await callback.answer(feedback.NOT_FOUND, show_alert=True)
         return
     await callback.answer()
     await state.update_data(backup_id=backup_id, restore_env=restore_env)
@@ -330,7 +331,7 @@ async def backup_restore_confirm(message: Message, session, db_user: BotUser, st
         if await try_legacy_cancel(message, state, session, db_user):
             return
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=await _lasting_kb(session, db_user, kb.admin_system_reply_keyboard()))
+        await message.answer(feedback.CANCELLED, reply_markup=await _lasting_kb(session, db_user, kb.admin_system_reply_keyboard()))
         return
     if text != "RESTORE":
         await message.answer(
@@ -372,7 +373,7 @@ async def backup_restore_confirm(message: Message, session, db_user: BotUser, st
 @require_bot_owner_handler
 async def backup_upload_ask(callback: CallbackQuery, db_user: BotUser, state: FSMContext):
     if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+        await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
     await callback.answer()
     from app.bot.nav_input import ask_text
@@ -450,6 +451,6 @@ async def backup_upload_cancel(message: Message, session, db_user: BotUser, stat
         if await try_legacy_cancel(message, state, session, db_user):
             return
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=await _lasting_kb(session, db_user, kb.admin_system_reply_keyboard()))
+        await message.answer(feedback.CANCELLED, reply_markup=await _lasting_kb(session, db_user, kb.admin_system_reply_keyboard()))
         return
     await message.answer("یک فایل ZIP بفرستید یا انصراف.")

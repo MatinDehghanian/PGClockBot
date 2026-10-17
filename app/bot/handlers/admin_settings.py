@@ -41,6 +41,7 @@ from app.services.settings_button_labels import (
     appearance_button_subs,
     shop_button_subs,
 )
+from app.services import bot_feedback_texts as feedback
 
 
 def _hub_markup(ui: dict[str, str]) -> InlineKeyboardMarkup:
@@ -92,7 +93,7 @@ async def _ensure_settings_actor(
         and await bot_admin_settings_in_flow(event, {"state": state})
     ):
         if not _is_admin(db_user):
-            text = "ادمین نیستید"
+            text = feedback.NOT_ADMIN
             if callback is not None:
                 await callback.answer(text, show_alert=True)
             elif message is not None:
@@ -898,7 +899,7 @@ async def settings_section(
     state: FSMContext | None = None,
 ):
     if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+        await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
     sec_id = callback.data.split(":")[-1]
     await callback.answer()
@@ -914,7 +915,7 @@ async def settings_sub(
     state: FSMContext | None = None,
 ):
     if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+        await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
     # adm:st:sub:{sec}:{sub}
     parts = callback.data.split(":")
@@ -935,7 +936,7 @@ async def settings_toggle(
     state: FSMContext | None = None,
 ):
     if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+        await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
     key = callback.data.split(":", 3)[-1]
     if not _is_toggleable_setting_key(key):
@@ -949,7 +950,7 @@ async def settings_toggle(
         if trial:
             trial.is_active = new_val == "1"
             await session.commit()
-    await callback.answer("ذخیره شد")
+    await callback.answer(feedback.SAVED)
     await _rerender_after_key(callback, session, key)
 
 
@@ -1011,7 +1012,7 @@ async def settings_search_ask(
     callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser
 ):
     if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+        await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
     await callback.answer()
     from app.bot.nav_input import ask_text
@@ -1057,7 +1058,7 @@ async def settings_edit_ask(
     callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser
 ):
     if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+        await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
     key = callback.data.split(":", 3)[-1]
     if key not in FIELDS:
@@ -1106,7 +1107,7 @@ async def settings_edit_save(
 ):
     if not _is_admin(db_user):
         await state.clear()
-        await message.answer("ادمین نیستید")
+        await message.answer(feedback.NOT_ADMIN)
         return
     data = await state.get_data()
     key = data.get("edit_key")
@@ -1168,11 +1169,11 @@ async def menu_layout_toggle(
     state: FSMContext | None = None,
 ):
     if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+        await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
     cur = await get_setting(session, "menu_layout") or "compact"
     await set_setting(session, "menu_layout", "compact" if cur == "classic" else "classic")
-    await callback.answer("ذخیره شد")
+    await callback.answer(feedback.SAVED)
     await _render_sub(callback, session, "menu", "layout")
 
 
@@ -1187,7 +1188,7 @@ async def menu_reorder(
     state: FSMContext | None = None,
 ):
     if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+        await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
     parts = callback.data.split(":")
     direction, idx = parts[3], int(parts[4])
@@ -1229,7 +1230,7 @@ async def support_add_start(
 ):
     _ = session
     if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+        await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
     await callback.answer()
     await state.update_data(support_edit_id=None)
@@ -1256,7 +1257,7 @@ async def support_title_msg(
     _ = session
     if not _is_admin(db_user):
         await state.clear()
-        await message.answer("ادمین نیستید")
+        await message.answer(feedback.NOT_ADMIN)
         return
     text = (message.text or "").strip()
     if kb.is_cancel_text(text):
@@ -1286,7 +1287,7 @@ async def support_telegram_msg(
 ):
     if not _is_admin(db_user):
         await state.clear()
-        await message.answer("ادمین نیستید")
+        await message.answer(feedback.NOT_ADMIN)
         return
     text = (message.text or "").strip()
     if kb.is_cancel_text(text):
@@ -1323,12 +1324,12 @@ async def support_view(
     state: FSMContext | None = None,
 ):
     if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+        await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
     cid = callback.data.split(":")[-1]
     c = next((x for x in await get_support_contacts(session) if x["id"] == cid), None)
     if not c:
-        await callback.answer("یافت نشد", show_alert=True)
+        await callback.answer(feedback.NOT_FOUND, show_alert=True)
         return
     await callback.answer()
     url = support_chat_url(c["telegram"]) or "—"
@@ -1363,12 +1364,12 @@ async def support_toggle(
     state: FSMContext | None = None,
 ):
     if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+        await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
     cid = callback.data.split(":")[-1]
     c = next((x for x in await get_support_contacts(session) if x["id"] == cid), None)
     if not c:
-        await callback.answer("یافت نشد", show_alert=True)
+        await callback.answer(feedback.NOT_FOUND, show_alert=True)
         return
     await upsert_support_contact(
         session,
@@ -1378,7 +1379,7 @@ async def support_toggle(
         sort=int(c.get("sort") or 0),
         enabled=not c.get("enabled", True),
     )
-    await callback.answer("ذخیره شد")
+    await callback.answer(feedback.SAVED)
     c2 = next((x for x in await get_support_contacts(session) if x["id"] == cid), None)
     if not c2 or not callback.message:
         return
@@ -1411,12 +1412,12 @@ async def support_color_picker(
     state: FSMContext | None = None,
 ):
     if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+        await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
     cid = callback.data.split(":")[-1]
     c = next((x for x in await get_support_contacts(session) if x["id"] == cid), None)
     if not c:
-        await callback.answer("یافت نشد", show_alert=True)
+        await callback.answer(feedback.NOT_FOUND, show_alert=True)
         return
     await callback.answer()
     ui = await get_all_settings(session)
@@ -1442,19 +1443,19 @@ async def support_color_set(
     state: FSMContext | None = None,
 ):
     if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+        await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
     from app.services.button_styles import parse_item_button_style_callback
 
     parts = callback.data.split(":")
     if len(parts) < 7:
-        await callback.answer("نامعتبر", show_alert=True)
+        await callback.answer(feedback.INVALID, show_alert=True)
         return
     cid = parts[5]
     style = parse_item_button_style_callback(parts[6])
     c = next((x for x in await get_support_contacts(session) if x["id"] == cid), None)
     if not c:
-        await callback.answer("یافت نشد", show_alert=True)
+        await callback.answer(feedback.NOT_FOUND, show_alert=True)
         return
     await upsert_support_contact(
         session,
@@ -1465,7 +1466,7 @@ async def support_color_set(
         enabled=bool(c.get("enabled", True)),
         button_style=style,
     )
-    await callback.answer("ذخیره شد")
+    await callback.answer(feedback.SAVED)
     c2 = next((x for x in await get_support_contacts(session) if x["id"] == cid), None)
     if not c2 or not callback.message:
         return
@@ -1497,12 +1498,12 @@ async def support_edit_start(
     callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser
 ):
     if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+        await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
     cid = callback.data.split(":")[-1]
     c = next((x for x in await get_support_contacts(session) if x["id"] == cid), None)
     if not c:
-        await callback.answer("یافت نشد", show_alert=True)
+        await callback.answer(feedback.NOT_FOUND, show_alert=True)
         return
     await callback.answer()
     await state.update_data(support_edit_id=cid)
@@ -1527,10 +1528,10 @@ async def support_delete(
     state: FSMContext | None = None,
 ):
     if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+        await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
     await delete_support_contact(session, callback.data.split(":")[-1])
-    await callback.answer("حذف شد")
+    await callback.answer(feedback.DELETED)
     await _render_supports(callback, session)
 
 
@@ -1560,7 +1561,7 @@ async def _ensure_trial(session: AsyncSession) -> Plan:
 @router.callback_query(F.data == "adm:st:trial:name")
 async def trial_ask_name(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
     if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+        await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
     await callback.answer()
     from app.bot.nav_input import ask_text
@@ -1582,7 +1583,7 @@ async def trial_save_name(
 ):
     if not _is_admin(db_user):
         await state.clear()
-        await message.answer("ادمین نیستید")
+        await message.answer(feedback.NOT_ADMIN)
         return
     text = (message.text or "").strip()
     if kb.is_cancel_text(text):
@@ -1603,7 +1604,7 @@ async def trial_save_name(
 @router.callback_query(F.data == "adm:st:trial:days")
 async def trial_ask_days(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
     if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+        await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
     await callback.answer()
     from app.bot.nav_input import ask_text
@@ -1625,7 +1626,7 @@ async def trial_save_days(
 ):
     if not _is_admin(db_user):
         await state.clear()
-        await message.answer("ادمین نیستید")
+        await message.answer(feedback.NOT_ADMIN)
         return
     text = (message.text or "").strip()
     if kb.is_cancel_text(text):
@@ -1651,7 +1652,7 @@ async def trial_save_days(
 @router.callback_query(F.data == "adm:st:trial:gb")
 async def trial_ask_gb(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
     if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+        await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
     await callback.answer()
     from app.bot.nav_input import ask_text
@@ -1673,7 +1674,7 @@ async def trial_save_gb(
 ):
     if not _is_admin(db_user):
         await state.clear()
-        await message.answer("ادمین نیستید")
+        await message.answer(feedback.NOT_ADMIN)
         return
     text = (message.text or "").strip()
     if kb.is_cancel_text(text):
@@ -1703,7 +1704,7 @@ async def trial_pick_tpl(
     state: FSMContext | None = None,
 ):
     if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+        await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
     await callback.answer()
     try:
@@ -1740,14 +1741,14 @@ async def trial_set_tpl(
     state: FSMContext | None = None,
 ):
     if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+        await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
     tid = int(callback.data.split(":")[-1])
     trial = await _ensure_trial(session)
     trial.pg_template_id = tid
     trial.pg_group_ids = None
     await session.commit()
-    await callback.answer("ذخیره شد")
+    await callback.answer(feedback.SAVED)
     await _render_trial(callback, session)
 
 
@@ -1757,7 +1758,7 @@ async def trial_pick_grp(
     callback: CallbackQuery, state: FSMContext, session: AsyncSession, db_user: BotUser
 ):
     if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+        await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
     trial = await _ensure_trial(session)
     selected: list[int] = []
@@ -1812,7 +1813,7 @@ async def _show_trial_groups(callback: CallbackQuery, state: FSMContext) -> None
 @router.callback_query(F.data.startswith("adm:st:trial:toggrp:"))
 async def trial_tog_grp(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
     if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+        await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
     gid = int(callback.data.split(":")[-1])
     selected = [int(x) for x in ((await state.get_data()).get("trial_groups") or [])]
@@ -1831,7 +1832,7 @@ async def trial_grp_done(
     callback: CallbackQuery, session: AsyncSession, state: FSMContext, db_user: BotUser
 ):
     if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+        await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
     selected = [int(x) for x in ((await state.get_data()).get("trial_groups") or [])]
     if not selected:
@@ -1842,5 +1843,5 @@ async def trial_grp_done(
     trial.pg_template_id = None
     await session.commit()
     await state.update_data(trial_groups=[])
-    await callback.answer("ذخیره شد")
+    await callback.answer(feedback.SAVED)
     await _render_trial(callback, session)

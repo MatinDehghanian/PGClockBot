@@ -1,0 +1,14 @@
+{
+  "ACTION_NOT_ALLOWED": "اجازه این عمل را ندارید",
+  "CANCELLED": "لغو شد.",
+  "DELETED": "حذف شد",
+  "ENTER_VALID_NUMBER": "عدد معتبر بفرستید.",
+  "INVALID": "نامعتبر",
+  "NOT_ADMIN": "ادمین نیستید",
+  "NOT_FOUND": "یافت نشد",
+  "NOT_RESELLER": "نماینده نیستید",
+  "NO_ACCESS": "دسترسی ندارید",
+  "NO_ACCESS_REPLY": "دسترسی ندارید.",
+  "RESELLERS_ONLY": "فقط نمایندگان",
+  "SAVED": "ذخیره شد"
+}

@@ -35,6 +35,7 @@ from app.services.service_import import (
     is_external_service,
 )
 from app.services.users import get_all_settings
+from app.services import bot_feedback_texts as feedback
 
 router = Router(name="service_import")
 
@@ -100,7 +101,7 @@ async def svc_import_link(
             is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id,
         ):
             await state.set_state(None)
-            await message.answer("لغو شد.")
+            await message.answer(feedback.CANCELLED)
         return
     raw_link = (message.text or "").strip()
     if not raw_link:

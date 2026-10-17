@@ -16,6 +16,7 @@ from app.db.models import BotUser, Ticket, TicketStatus
 from app.services.reseller_access import load_reseller_actor
 from app.services.resellers import has_bot_perm
 from app.services.tickets import close_ticket, get_ticket, reply_ticket
+from app.services import bot_feedback_texts as feedback
 
 router = Router(name="ticket_actions")
 
@@ -82,11 +83,11 @@ async def tkt_reply_start(
     try:
         ticket_id = int((callback.data or "").rsplit(":", 1)[-1])
     except ValueError:
-        await callback.answer("نامعتبر", show_alert=True)
+        await callback.answer(feedback.INVALID, show_alert=True)
         return
     ticket = await get_ticket(session, ticket_id)
     if not ticket:
-        await callback.answer("یافت نشد", show_alert=True)
+        await callback.answer(feedback.NOT_FOUND, show_alert=True)
         return
     role = await _actor_role(
         session,
@@ -96,7 +97,7 @@ async def tkt_reply_start(
         reseller_owner_id=reseller_owner_id,
     )
     if not role:
-        await callback.answer("دسترسی ندارید", show_alert=True)
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     if ticket.status == TicketStatus.CLOSED.value:
         await callback.answer("تیکت بسته است", show_alert=True)
@@ -221,7 +222,7 @@ async def tkt_reply_body(
             session,
             db_user,
             state,
-            text="لغو شد.",
+            text=feedback.CANCELLED,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
         )
@@ -269,7 +270,7 @@ async def tkt_reply_body(
                 message,
                 session,
                 db_user,
-                text="دسترسی ندارید.",
+                text=feedback.NO_ACCESS_REPLY,
                 state=state,
                 is_reseller_bot=is_reseller_bot,
                 reseller_owner_id=reseller_owner_id,
@@ -280,7 +281,7 @@ async def tkt_reply_body(
             message,
             session,
             db_user,
-            text="دسترسی ندارید.",
+            text=feedback.NO_ACCESS_REPLY,
             state=state,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
@@ -333,11 +334,11 @@ async def tkt_close(
     try:
         ticket_id = int((callback.data or "").rsplit(":", 1)[-1])
     except ValueError:
-        await callback.answer("نامعتبر", show_alert=True)
+        await callback.answer(feedback.INVALID, show_alert=True)
         return
     ticket = await get_ticket(session, ticket_id)
     if not ticket:
-        await callback.answer("یافت نشد", show_alert=True)
+        await callback.answer(feedback.NOT_FOUND, show_alert=True)
         return
     role = await _actor_role(
         session,
@@ -347,7 +348,7 @@ async def tkt_close(
         reseller_owner_id=reseller_owner_id,
     )
     if not role:
-        await callback.answer("دسترسی ندارید", show_alert=True)
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     if ticket.status == TicketStatus.CLOSED.value:
         await callback.answer("قبلاً بسته شده", show_alert=True)
@@ -375,7 +376,7 @@ def _register_ticket_cancel_codes() -> None:
             session,
             db_user,
             state,
-            text="لغو شد.",
+            text=feedback.CANCELLED,
             is_reseller_bot=kw.get("is_reseller_bot", False),
             reseller_owner_id=kw.get("reseller_owner_id"),
         )

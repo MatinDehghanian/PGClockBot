@@ -36,6 +36,7 @@ from app.services.principal_pg_authz import (
     is_level1_principal_staff,
     principal_pg_authz_ready,
 )
+from app.services import bot_feedback_texts as feedback
 
 BotPgUserAction = Literal[
     "list",
@@ -122,19 +123,19 @@ _CLIENT_OWNER_KEYS = (
 )
 
 _USER_MESSAGES = {
-    "unauthenticated": "ادمین نیستید",
-    "shop_bot_isolated": "ادمین نیستید",
-    "identity_tamper": "اجازه این عمل را ندارید",
-    "inactive_or_missing_principal": "ادمین نیستید",
-    "missing_principal": "ادمین نیستید",
-    "pg_permission_denied": "اجازه این عمل را ندارید",
+    "unauthenticated": feedback.NOT_ADMIN,
+    "shop_bot_isolated": feedback.NOT_ADMIN,
+    "identity_tamper": feedback.ACTION_NOT_ALLOWED,
+    "inactive_or_missing_principal": feedback.NOT_ADMIN,
+    "missing_principal": feedback.NOT_ADMIN,
+    "pg_permission_denied": feedback.ACTION_NOT_ALLOWED,
     "pg_capabilities_unavailable": "به کاربران پاسارگارد دسترسی ندارید",
-    "resource_out_of_scope": "اجازه این عمل را ندارید",
-    "resource_not_found": "اجازه این عمل را ندارید",
+    "resource_out_of_scope": feedback.ACTION_NOT_ALLOWED,
+    "resource_not_found": feedback.ACTION_NOT_ALLOWED,
     "pg_outage": "به کاربران پاسارگارد دسترسی ندارید",
-    "local_safety_denied": "اجازه این عمل را ندارید",
-    "invalid_resource": "اجازه این عمل را ندارید",
-    "missing_scope": "اجازه این عمل را ندارید",
+    "local_safety_denied": feedback.ACTION_NOT_ALLOWED,
+    "invalid_resource": feedback.ACTION_NOT_ALLOWED,
+    "missing_scope": feedback.ACTION_NOT_ALLOWED,
 }
 
 
@@ -156,7 +157,7 @@ def _deny(reason: str, *, resolution: BotPrincipalResolution | None = None) -> B
     return BotPgUserGate(
         allowed=False,
         reason=reason,
-        user_message=_USER_MESSAGES.get(reason, "اجازه این عمل را ندارید"),
+        user_message=_USER_MESSAGES.get(reason, feedback.ACTION_NOT_ALLOWED),
         resolution=resolution,
     )
 
