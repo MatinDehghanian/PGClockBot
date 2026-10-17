@@ -254,7 +254,7 @@
       <span class="payg-meta-value num-ratio">{{ (profile.billing_watermark_bytes or 0) | bytes }}</span>
     </li>
   </ul>
-  <p class="muted payg-help">مصرف ترافیک از همان کیف پول فروشگاهی نماینده کسر می‌شود. شارژ دستی زیر نیز به همان کیف پول واریز می‌شود. ستون «مانده» = مانده کیف پول بعد از هر تراکنش.</p>
+  <p class="muted payg-help">مصرف ترافیک از کیف پول فروشگاه نماینده کم می‌شود و شارژ دستی هم به همان کیف پول می‌رود. ستون «مانده» موجودی بعد از هر تراکنش است.</p>
   <form method="post" action="/resellers/{{ user.id }}/billing-topup" class="form-stack">
     <input type="hidden" name="nonce" value="{{ topup_nonce }}" />
     <div class="form-row">
@@ -325,7 +325,7 @@
 <section class="edit-section">
   <header class="edit-section-head">
     <h3>حذف نمایندگی</h3>
-    <p class="muted">پروفایل نماینده و ادمین پاسارگارد متصل حذف می‌شود. علت برای کاربر در ربات/تلگرام ارسال می‌شود و نقشش به «کاربر» برمی‌گردد.</p>
+    <p class="muted">پروفایل نماینده و ادمین پاسارگارد او حذف می‌شود و نقشش به «کاربر» برمی‌گردد. علت برای او در تلگرام فرستاده می‌شود.</p>
   </header>
   <form method="post" action="/resellers/{{ user.id }}/delete" class="form-stack"
         data-confirm="نمایندگی و ادمین پاسارگارد متصل حذف شوند؟ علت برای کاربر ارسال می‌شود."
@@ -343,7 +343,7 @@
 <section class="edit-section">
   <header class="edit-section-head">
     <h3>حذف کامل کاربر</h3>
-    <p class="muted">کاربر بات، نمایندگی، ادمین پاسارگارد متصل و تمام سفارش‌ها/سرویس‌ها/پرداخت‌ها/تیکت‌ها حذف می‌شوند. برگشت‌ناپذیر است. اگر دوباره به ربات پیام بدهد، حساب جدید (خالی) برای همان تلگرام ساخته می‌شود.</p>
+    <p class="muted">حساب، نمایندگی، ادمین پاسارگارد و همهٔ سفارش‌ها، سرویس‌ها، پرداخت‌ها و تیکت‌های او حذف می‌شود و برگشت ندارد. اگر دوباره به ربات پیام بدهد، حساب خالی جدیدی ساخته می‌شود.</p>
   </header>
   {% if (user.wallet_balance or 0) > 0 %}
   <div class="flash warn">موجودی کیف پول: <span dir="ltr">{{ user.wallet_balance | money }}</span> تومان — با حذف کامل از بین می‌رود.</div>

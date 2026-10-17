@@ -18,7 +18,7 @@
       <h2 id="test-user-title">کاربر تست</h2>
       <span class="badge {{ 'ok' if page.settings.has_account else 'neutral' }}">{{ 'تنظیم شده' if page.settings.has_account else 'تنظیم نشده' }}</span>
     </div>
-    <p class="muted">یک کاربر فعال و جدا در پاسارگارد انتخاب کنید که به سرویس هیچ مشتری وصل نباشد. لازم نیست حساب پنل مالک باشد؛ فقط ربات باید به این کاربر دسترسی داشته باشد.</p>
+    <p class="muted">یک کاربر فعال در پاسارگارد انتخاب کنید که مال هیچ مشتری نباشد. لازم نیست حساب مالک باشد؛ فقط ربات باید به آن دسترسی داشته باشد.</p>
     <form method="post" action="/connection-status/account" class="form-stack"
           data-confirm="ثبت کاربر تست، تست‌های فعلی را متوقف و کانفیگ‌ها را از فهرست کاربران مخفی می‌کند. ادامه می‌دهید؟" data-confirm-title="ثبت کاربر تست" data-confirm-label="ثبت">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -36,7 +36,7 @@
       <h2 id="test-runtime-title">تست خودکار</h2>
       <span class="badge {{ 'ok' if page.settings.enabled else 'neutral' }}">{{ 'روشن' if page.settings.enabled else 'خاموش' }}</span>
     </div>
-    <p class="muted">بعد از ثبت کاربر تست و انتخاب کانفیگ‌های اشتراک، تست‌ها را روشن کنید. بررسی تقریباً هر یک دقیقه انجام می‌شود و «تازه‌سازی» فقط نتیجهٔ ذخیره‌شده را نشان می‌دهد.</p>
+    <p class="muted">بعد از ثبت کاربر تست و انتخاب کانفیگ‌ها، تست‌ها را روشن کنید. بررسی تقریباً هر دقیقه انجام می‌شود و «تازه‌سازی» فقط آخرین نتیجه را نشان می‌دهد.</p>
     {% if not binary_configured %}
     <div class="flash warn" role="status">
       <div class="flash-copy">
@@ -59,7 +59,7 @@
   <div class="connection-card-head">
     <h2 id="host-picker-title">انتخاب کانفیگ‌های اشتراک</h2>
   </div>
-  <p class="muted">نام و ترتیب کانفیگ‌ها همان خروجی اشتراک کاربر تست است. هر کانفیگ تازه ابتدا فقط برای ادمین نمایش داده می‌شود. سقف هر دور ۱۲ کانفیگ است.</p>
+  <p class="muted">نام و ترتیب کانفیگ‌ها مثل اشتراک کاربر تست است. کانفیگ تازه اول فقط برای ادمین دیده می‌شود. در هر دور حداکثر ۱۲ کانفیگ تست می‌شود.</p>
   {% if host_error %}<div class="flash warn" role="alert"><div class="flash-copy">{{ host_error }}</div></div>{% endif %}
   {% if page.settings.has_account %}
   <div class="actions"><a class="btn btn-ghost" href="/connection-status?hosts=1#host-picker">دریافت کانفیگ‌ها از اشتراک</a></div>
@@ -134,7 +134,7 @@
   {% if target.config_key %}<div class="actions"><form method="post" action="/connection-status/configs/{{ target.config_key }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <button class="btn btn-ghost" type="submit">فعال‌سازی دوبارهٔ کانفیگ</button>
-  </form></div>{% else %}<small class="muted">این انتخاب از فهرست قدیمی هاست‌هاست؛ کانفیگ را دوباره از اشتراک انتخاب کنید. نام نمایشی قبلی برای مراجعه نگه داشته شده است.</small>{% endif %}
+  </form></div>{% else %}<small class="muted">این مورد از فهرست قدیمی هاست‌ها مانده است؛ کانفیگ را دوباره از اشتراک انتخاب کنید. نام نمایشی قبلی حفظ شده است.</small>{% endif %}
   {% endif %}
 </section>
 {% else %}<div class="card"><p class="muted">هنوز کانفیگی برای تست انتخاب نشده است. از بخش «انتخاب کانفیگ‌های اشتراک» شروع کنید.</p></div>{% endfor %}
