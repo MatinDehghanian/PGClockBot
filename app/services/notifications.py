@@ -888,7 +888,7 @@ async def _pending_order_detail_lines(
     extras.append(kv_line("💎", "پلن", plan_name))
     if plan is not None:
         if plan.data_limit_gb is not None:
-            extras.append(kv_line("📶", "حجم پلن", f"{plan.data_limit_gb} گیگ"))
+            extras.append(kv_line("📶", "حجم پلن", f"{plan.data_limit_gb} گیگابایت"))
         from app.services.formatting import format_plan_duration_days
 
         extras.append(

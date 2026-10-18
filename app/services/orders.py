@@ -647,7 +647,7 @@ async def create_custom_order(
     gb = float(data_limit_gb)
     days = int(duration_days)
     if gb < min_gb or gb > max_gb:
-        raise ValueError(f"حجم باید بین {min_gb} تا {max_gb} گیگ باشد")
+        raise ValueError(f"حجم باید بین {min_gb} تا {max_gb} گیگابایت باشد")
     if days < min_days or days > max_days:
         raise ValueError(f"مدت باید بین {min_days} تا {max_days} روز باشد")
 
@@ -697,7 +697,7 @@ async def create_custom_order(
 
     plan = Plan(
         name="پلن دلخواه",
-        description=f"سفارشی {gb:g} گیگ / {days} روز",
+        description=f"سفارشی {gb:g} گیگابایت / {days} روز",
         price=amount,
         duration_days=days,
         data_limit_gb=gb,

@@ -531,8 +531,8 @@ async def custom_start(callback: CallbackQuery, session: AsyncSession, state: FS
     await state.update_data(custom_gb=gb, custom_days=data.get("custom_days"), custom_gate_ok=True)
     text = format_message(
         "✨ پلن دلخواه — حجم",
-        f"حجم سرویس را انتخاب کنید ({min_gb} تا {max_gb} گیگ):\n"
-        f"فعلی: <b>{gb}</b> گیگ",
+        f"حجم سرویس را انتخاب کنید ({min_gb} تا {max_gb} گیگابایت):\n"
+        f"فعلی: <b>{gb}</b> گیگابایت",
     )
     if callback.message:
         await safe_edit_text(callback.message, text, reply_markup=kb.custom_gb_keyboard(gb, ui))
@@ -554,8 +554,8 @@ async def custom_gb_step(callback: CallbackQuery, session: AsyncSession, state: 
     await callback.answer()
     text = format_message(
         "✨ پلن دلخواه — حجم",
-        f"حجم سرویس را انتخاب کنید ({min_gb} تا {max_gb} گیگ):\n"
-        f"فعلی: <b>{gb}</b> گیگ",
+        f"حجم سرویس را انتخاب کنید ({min_gb} تا {max_gb} گیگابایت):\n"
+        f"فعلی: <b>{gb}</b> گیگابایت",
     )
     if callback.message:
         await safe_edit_text(callback.message, text, reply_markup=kb.custom_gb_keyboard(gb, ui))
@@ -573,7 +573,7 @@ async def custom_gb_ask(callback: CallbackQuery, session: AsyncSession, state: F
     await ask_text(
         callback,
         state,
-        prompt=f"حجم به گیگ را وارد کنید ({min_gb} تا {max_gb}):",
+        prompt=f"حجم را به گیگابایت بفرستید؛ بین {min_gb} تا {max_gb}.",
         cancel_code="c_gb",
         fsm_state=ShopStates.custom_gb_input,
         edit=True,
@@ -629,7 +629,7 @@ async def custom_gb_entered(
         state,
         text=format_message(
             "✨ پلن دلخواه — حجم",
-            f"حجم انتخاب‌شده: <b>{gb}</b> گیگ",
+            f"حجم انتخاب‌شده: <b>{gb}</b> گیگابایت",
         ),
         inline=kb.custom_gb_keyboard(gb, ui),
     )
@@ -649,7 +649,7 @@ async def custom_days_start(callback: CallbackQuery, session: AsyncSession, stat
     await state.update_data(custom_gb=gb, custom_days=days)
     text = format_message(
         "✨ پلن دلخواه — مدت",
-        f"حجم: <b>{gb}</b> گیگ\n"
+        f"حجم: <b>{gb}</b> گیگابایت\n"
         f"مدت را انتخاب کنید ({min_days} تا {max_days} روز):\n"
         f"فعلی: <b>{days}</b> روز",
     )
@@ -674,7 +674,7 @@ async def custom_days_step(callback: CallbackQuery, session: AsyncSession, state
     await callback.answer()
     text = format_message(
         "✨ پلن دلخواه — مدت",
-        f"حجم: <b>{gb}</b> گیگ\n"
+        f"حجم: <b>{gb}</b> گیگابایت\n"
         f"مدت را انتخاب کنید ({min_days} تا {max_days} روز):\n"
         f"فعلی: <b>{days}</b> روز",
     )
@@ -752,7 +752,7 @@ async def custom_days_entered(
         state,
         text=format_message(
             "✨ پلن دلخواه — مدت",
-            f"حجم: <b>{gb}</b> گیگ\nمدت انتخاب‌شده: <b>{days}</b> روز",
+            f"حجم: <b>{gb}</b> گیگابایت\nمدت انتخاب‌شده: <b>{days}</b> روز",
         ),
         inline=kb.custom_days_keyboard(days, ui),
     )
@@ -776,10 +776,10 @@ async def custom_confirm(callback: CallbackQuery, session: AsyncSession, state: 
 
     body = info_block(
         [
-            kv_line("📦", "حجم", f"<b>{gb}</b> گیگ"),
+            kv_line("📦", "حجم", f"<b>{gb}</b> گیگابایت"),
             kv_line("⏱", "مدت", f"<b>{days}</b> روز"),
             kv_line("💰", "قیمت", price_html(quote, get_settings().currency)),
-            f"<i>({price_gb:,} ت/گیگ + {price_day:,} ت/روز)</i>".replace(",", "٬"),
+            f"<i>({price_gb:,} ت/گیگابایت + {price_day:,} ت/روز)</i>".replace(",", "٬"),
         ]
     )
     if callback.message:
@@ -883,7 +883,7 @@ async def custom_buy(callback: CallbackQuery, session: AsyncSession, db_user: Bo
 
     text = format_message(
         f"🧾 سفارش #{order.id}",
-        f"پلن دلخواه — <b>{gb:g}</b> گیگ / <b>{days}</b> روز\n"
+        f"پلن دلخواه — <b>{gb:g}</b> گیگابایت / <b>{days}</b> روز\n"
         f"{kv_line('💰', 'مبلغ قابل پرداخت', f'<b>{format_toman(order.amount, get_settings().currency)}</b>')}",
     )
     if callback.message:
@@ -1145,7 +1145,7 @@ async def wholesale_confirm(callback: CallbackQuery, session: AsyncSession, stat
         unit_price=sale_price(plan), quantity=qty, percent=pct
     )
     await callback.answer()
-    limit = f"{plan.data_limit_gb:g} گیگ" if plan.data_limit_gb is not None else "نامحدود"
+    limit = f"{plan.data_limit_gb:g} گیگابایت" if plan.data_limit_gb is not None else "نامحدود"
     disc_block = ""
     if pct:
         disc_block = (
@@ -1245,7 +1245,7 @@ async def shop_plan(callback: CallbackQuery, session: AsyncSession, db_user: Bot
         return
     await callback.answer()
     await _record_shop_funnel(session, db_user, "plan_view", ui=ui, plan_id=plan.id)
-    limit = f"{plan.data_limit_gb:g} گیگ" if plan.data_limit_gb is not None else "نامحدود"
+    limit = f"{plan.data_limit_gb:g} گیگابایت" if plan.data_limit_gb is not None else "نامحدود"
     from app.services.formatting import info_block, kv_line
 
     body = info_block(
@@ -1387,7 +1387,7 @@ async def shop_buy(callback: CallbackQuery, session: AsyncSession, db_user: BotU
         if callback.message:
             await callback.message.answer(
                 format_message(
-                    "🎁 اکانت تست",
+                    "🎁 سرویس تست",
                     "برای دریافت تست، شماره تماس خودتان را از دکمه زیر ارسال کنید."
                     + iran_note
                     + "\n\nشماره خام ذخیره نمی‌شود.",
@@ -1423,7 +1423,7 @@ async def shop_trial_contact(
         await message.answer(
             format_message(
                 "⛔ شماره نامعتبر",
-                "فقط شماره متعلق به همین اکانت تلگرام پذیرفته می‌شود.",
+                "فقط شمارهٔ همین حساب تلگرام پذیرفته می‌شود.",
             )
         )
         return
@@ -1432,7 +1432,7 @@ async def shop_trial_contact(
     plan = await get_catalog_plan(session, plan_id) if plan_id else None
     if not plan or not plan.is_trial:
         await state.clear()
-        await message.answer("پلن تست یافت نشد.", reply_markup=kb.back_home(ui))
+        await message.answer("پلن تست فعلاً در دسترس نیست.", reply_markup=kb.back_home(ui))
         return
     require_iran = on(ui.get("trial_require_iran_phone"))
     try:
@@ -1615,7 +1615,7 @@ async def pay_back(
         return
     order = await session.get(Order, order_id)
     if not is_customer_order_in_current_shop(order, db_user.id):
-        await callback.answer("سفارش نامعتبر", show_alert=True)
+        await callback.answer("این سفارش دیگر در دسترس نیست", show_alert=True)
         return
     await callback.answer()
     if callback.message:
@@ -1696,10 +1696,10 @@ async def apply_loyalty_discount_btn(
     ent = await session.get(LoyaltyDiscountEntitlement, ent_id)
     order = await session.get(Order, order_id)
     if not is_customer_order_in_current_shop(order, db_user.id):
-        await callback.answer("سفارش نامعتبر", show_alert=True)
+        await callback.answer("این سفارش دیگر در دسترس نیست", show_alert=True)
         return
     if not ent or int(ent.user_id) != int(db_user.id):
-        await callback.answer("تخفیف نامعتبر", show_alert=True)
+        await callback.answer("این کد تخفیف معتبر نیست", show_alert=True)
         return
     await state.clear()
     try:
@@ -1830,7 +1830,7 @@ async def pay_wallet_cb(
     order_id = int(callback.data.split(":")[-1])
     order = await session.get(Order, order_id)
     if not is_customer_order_in_current_shop(order, db_user.id):
-        await callback.answer("سفارش نامعتبر", show_alert=True)
+        await callback.answer("این سفارش دیگر در دسترس نیست", show_alert=True)
         return
     try:
         order = await pay_with_wallet(session, order, db_user)
@@ -2012,7 +2012,7 @@ async def pay_card_cb(
     dest_id = parts[3] if len(parts) > 3 else None
     order = await session.get(Order, order_id)
     if not is_customer_order_in_current_shop(order, db_user.id):
-        await callback.answer("سفارش نامعتبر", show_alert=True)
+        await callback.answer("این سفارش دیگر در دسترس نیست", show_alert=True)
         return
     cards = enabled_cards(ui)
     if not cards:
@@ -2033,7 +2033,7 @@ async def pay_card_cb(
     else:
         card = pick_card(cards, f"order:{order_id}") if len(cards) > 1 else cards[0]
     if not card:
-        await callback.answer("کارت نامعتبر", show_alert=True)
+        await callback.answer("این کارت دیگر فعال نیست", show_alert=True)
         return
     if on(ui.get("pay_card_auto_enabled")):
         secret = str(ui.get("card_auto_webhook_secret") or "").strip()
@@ -2112,7 +2112,7 @@ async def pay_gateway_cb(
     dest_id = parts[3] if len(parts) > 3 else None
     order = await session.get(Order, order_id)
     if not is_customer_order_in_current_shop(order, db_user.id):
-        await callback.answer("سفارش نامعتبر", show_alert=True)
+        await callback.answer("این سفارش دیگر در دسترس نیست", show_alert=True)
         return
     gateways = enabled_gateways(ui)
     if not gateways:
@@ -2130,7 +2130,7 @@ async def pay_gateway_cb(
         return
     gw = gateway_by_id(ui, dest_id) if dest_id else gateways[0]
     if not gw:
-        await callback.answer("درگاه نامعتبر", show_alert=True)
+        await callback.answer("این درگاه دیگر فعال نیست", show_alert=True)
         return
     try:
         payment = await start_method_payment(
@@ -2212,7 +2212,7 @@ async def pay_crypto_cb(
     dest_id = parts[3] if len(parts) > 3 else None
     order = await session.get(Order, order_id)
     if not is_customer_order_in_current_shop(order, db_user.id):
-        await callback.answer("سفارش نامعتبر", show_alert=True)
+        await callback.answer("این سفارش دیگر در دسترس نیست", show_alert=True)
         return
     wallets = enabled_crypto_wallets(ui)
     if not wallets:
@@ -2230,7 +2230,7 @@ async def pay_crypto_cb(
         return
     wallet = crypto_by_id(ui, dest_id) if dest_id else wallets[0]
     if not wallet:
-        await callback.answer("آدرس نامعتبر", show_alert=True)
+        await callback.answer("این آدرس دیگر فعال نیست", show_alert=True)
         return
     address = (wallet.get("address") or "").strip()
     try:
@@ -2292,7 +2292,7 @@ async def pay_stars_cb(
     order_id = int(callback.data.split(":")[-1])
     order = await session.get(Order, order_id)
     if not is_customer_order_in_current_shop(order, db_user.id):
-        await callback.answer("سفارش نامعتبر", show_alert=True)
+        await callback.answer("این سفارش دیگر در دسترس نیست", show_alert=True)
         return
     try:
         payment = await start_method_payment(
@@ -2362,7 +2362,7 @@ async def pay_psp_cb(
     order_id = int((callback.data or "").split(":")[-1])
     order = await session.get(Order, order_id)
     if not is_customer_order_in_current_shop(order, db_user.id):
-        await callback.answer("سفارش نامعتبر", show_alert=True)
+        await callback.answer("این سفارش دیگر در دسترس نیست", show_alert=True)
         return
     try:
         payment = await start_method_payment(
@@ -2511,8 +2511,8 @@ def _register_shop_cancel_codes() -> None:
             message,
             text=format_message(
                 "✨ پلن دلخواه — حجم",
-                f"حجم سرویس را انتخاب کنید ({min_gb} تا {max_gb} گیگ):\n"
-                f"فعلی: <b>{gb}</b> گیگ",
+                f"حجم سرویس را انتخاب کنید ({min_gb} تا {max_gb} گیگابایت):\n"
+                f"فعلی: <b>{gb}</b> گیگابایت",
             ),
             inline=kb.custom_gb_keyboard(gb, ui),
         )
@@ -2537,7 +2537,7 @@ def _register_shop_cancel_codes() -> None:
             message,
             text=format_message(
                 "✨ پلن دلخواه — مدت",
-                f"حجم: <b>{gb}</b> گیگ\n"
+                f"حجم: <b>{gb}</b> گیگابایت\n"
                 f"مدت را انتخاب کنید ({min_days} تا {max_days} روز):\n"
                 f"فعلی: <b>{days}</b> روز",
             ),
@@ -2550,11 +2550,11 @@ def _register_shop_cancel_codes() -> None:
         data = await state.get_data()
         oid = data.get(PAY_ORDER_ID) or data.get("order_id")
         if not oid:
-            await message.answer("سفارش یافت نشد.")
+            await message.answer("این سفارش پیدا نشد.")
             return
         order = await session.get(Order, int(oid))
         if not is_customer_order_in_current_shop(order, db_user.id):
-            await message.answer("سفارش یافت نشد.")
+            await message.answer("این سفارش پیدا نشد.")
             return
         summary = (
             f"🛒 سفارش #{order.id}\n"
