@@ -34,10 +34,24 @@ class BbcClientUnitTests(unittest.TestCase):
         self.assertTrue("2000043" in text.replace(",", "").replace("٬", "") or "۲۰۰۰۰۴۳" in text)
 
     def test_wiring_settings_and_routes(self):
+        from app.services.payment_providers.bezanbecard import SETUP_HELP_FA, SETUP_HELP_HTML
+
+        self.assertIn("https://bezanbecard.ir", SETUP_HELP_FA)
+        self.assertIn("طرح دارای API", SETUP_HELP_FA)
+        self.assertIn("اعلان تلگرام", SETUP_HELP_FA)
+        self.assertIn("bezanbecard.ir", SETUP_HELP_HTML)
         users = (ROOT / "app/services/users.py").read_text(encoding="utf-8")
         self.assertIn('"pay_bbc_enabled"', users)
         self.assertIn('"bbc_api_key"', users)
         self.assertIn("بزن به کارت", users)
+        self.assertIn("https://bezanbecard.ir", users)
+        admin = (ROOT / "app/bot/handlers/admin_settings.py").read_text(encoding="utf-8")
+        self.assertIn("_bbc_fields_intro", admin)
+        self.assertIn('sub_id == "bbc"', admin)
+        reseller = (ROOT / "app/bot/handlers/reseller_settings.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("SETUP_HELP_HTML", reseller)
         pages = (ROOT / "app/api/settlement_pages.py").read_text(encoding="utf-8")
         self.assertIn("/payments/settlement/bbc/tenant/{tenant_key}/callback/", pages)
         self.assertIn("/payments/settlement/bbc/tenant/{tenant_key}/return/", pages)

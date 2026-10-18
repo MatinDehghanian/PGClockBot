@@ -621,6 +621,10 @@ async def _sub_panel(session: AsyncSession, sec_id: str, sub_id: str, reseller_i
                     [InlineKeyboardButton(text=f"✏️ {label}: {_preview(cur, limit=28)}", callback_data=f"res:st:edit:{key}")]
                 )
     rows.append([kb.back_button(None, sub_back("res", sec_id, sub_id))])
+    if sub_id == "bbc":
+        from app.services.payment_providers.bezanbecard import SETUP_HELP_HTML
+
+        return f"⚙️ <b>{title}</b>\n\n{SETUP_HELP_HTML}", _kb(rows)
     return f"⚙️ <b>{title}</b>", _kb(rows)
 
 
