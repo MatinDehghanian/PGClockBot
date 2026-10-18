@@ -40,6 +40,7 @@ from app.services.orders import (
 )
 from app.api.guide_media_pages import PLATFORM_BASE as GUIDE_MEDIA_PLATFORM_BASE
 from app.api.guide_media_pages import guides_media_view, register_guide_media_pages
+from app.services.chat_cleanup_config import chat_cleanup_payload
 from app.services.connection_guides import prune_guide_media, serialize_submitted_guides
 from app.services.list_query import filter_by_search, normalize_search_q
 from app.services.payer_notify import notify_payer
@@ -4364,6 +4365,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         # nav_mode classic removed — always inline (Option B)
         payload["nav_mode"] = "inline"
         payload.update(sync_show_flags_for_order(order))
+        payload.update(chat_cleanup_payload(form))
         # miniapp is welcome-inline only — never a DnD / ReplyKeyboard item
         payload["show_miniapp"] = "0"
         if reseller_id is not None:
