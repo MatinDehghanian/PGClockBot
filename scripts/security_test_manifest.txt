@@ -208,3 +208,4 @@ tests/test_settings_back_cancel.py
 tests/test_settings_regroup.py
 tests/test_cancel_one_step.py
 tests/test_reseller_panel_groups.py
+tests/test_long_lists.py

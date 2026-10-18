@@ -465,10 +465,12 @@ async def open_services_list(
                 ui=ui,
             )
         return
-    body = with_caption(screen_heading(ui, "c.services"), screen_caption(ui, "c.services")) + kb.list_overflow_line(
-        len(services)
+    from app.bot.list_pages import page_line
+    from app.bot.nav_inline import services_list_keyboard, services_page
+
+    body = with_caption(screen_heading(ui, "c.services"), screen_caption(ui, "c.services")) + page_line(
+        services_page(services)
     )
-    from app.bot.nav_inline import services_list_keyboard
 
     await present_inline_only(
         message,
@@ -1399,8 +1401,10 @@ async def open_reseller_plans_hub(
     is_reseller_bot: bool,
     reseller_owner_id: int | None,
     push: bool = True,
+    page_index: int = 0,
 ) -> None:
     from app.bot.handlers.reseller_plans import _list_plans
+    from app.bot.list_pages import page_line, page_of
     from app.services.reseller_access import load_reseller_actor
     from app.services.resellers import has_bot_perm
 
@@ -1435,14 +1439,15 @@ async def open_reseller_plans_hub(
 
     ui = await get_all_settings(session, reseller_id=owner_id)
     plans = await _list_plans(session, owner_id)
-    list_body = "هنوز پلنی نساخته‌اید." if not plans else f"تعداد: {len(plans)}"
+    page = page_of(plans, page_index, kb.RESELLER_PLANS_PAGE_SIZE)
+    list_body = "هنوز پلنی نساخته‌اید." if not plans else f"تعداد: {len(plans)}" + page_line(page)
     hub_text = with_caption(screen_heading(ui, "r.plans"), screen_caption(ui, "r.plans"))
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_RESELLER_PLANS, push=push)
     hub = reseller_plans_hub_keyboard(ui)
     hub_rows = [list(r) for r in hub.inline_keyboard[:-1]]
     list_kb = with_inline_back(
-        kb.reseller_plans_list_keyboard(plans, ui), ui, back_callback_for("res_plans")
+        kb.reseller_plans_list_keyboard(plans, ui, page_index=page.index), ui, back_callback_for("res_plans")
     )
     combined = InlineKeyboardMarkup(
         inline_keyboard=hub_rows + [list(r) for r in list_kb.inline_keyboard]

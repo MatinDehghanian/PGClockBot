@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
+from app.bot.list_pages import page_number
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser, Plan, ResellerProfile
 from app.services.plans_catalog import (
@@ -151,7 +152,7 @@ async def _plan_text_for(session: AsyncSession, plan: Plan) -> str:
     return _plan_text(plan, category_name=cat_name)
 
 
-@router.callback_query(F.data == "res:plans")
+@router.callback_query((F.data == "res:plans") | F.data.startswith("res:plans:p:"))
 async def res_plans(callback: CallbackQuery, session: AsyncSession, db_user: BotUser,
     state: FSMContext,
     is_reseller_bot: bool = False,
@@ -168,14 +169,20 @@ async def res_plans(callback: CallbackQuery, session: AsyncSession, db_user: Bot
         return
     await state.clear()
     await callback.answer()
-    plans = await _list_plans(session, owner_id)
-    text = "💎 <b>پلن‌های فروش فروشگاه شما</b>\n"
-    if not plans:
-        text += "هنوز پلنی نساخته‌اید. از کیبورد «پلن جدید» بسازید یا در وب‌پنل کامل‌تر تنظیم کنید."
-    else:
-        text += f"تعداد: {len(plans)}"
     if callback.message:
-        await safe_edit_text(callback.message, text, reply_markup=await _plans_kb(session, plans, reseller_id=owner_id))
+        # The plans screen with its add/catalog buttons, the list page and «بازگشت».
+        from app.bot.handlers.reply_nav import open_reseller_plans_hub  # reply_nav imports this module
+
+        await open_reseller_plans_hub(
+            callback.message,
+            session,
+            db_user,
+            state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+            push=False,
+            page_index=page_number(callback.data),
+        )
 
 
 @router.callback_query(F.data == "res:plan:webhint")
