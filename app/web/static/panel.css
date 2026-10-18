@@ -11826,3 +11826,32 @@ html[data-theme="light"] .sc-tip { box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12); }
 @container home-periods (min-width: 600px) {
   .home-bottom-grid.has-account .home-period-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
+
+/* «بازگردانی همه به پیش‌فرض»: the icon matches the size of the other settings icons. */
+.settings-reset-btn { display: inline-flex; align-items: center; gap: var(--space-1); }
+.settings-reset-btn .ico {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Guide photo/video upload: the profile-photo upload box, at a lower height. */
+.upload-box.upload-box--compact {
+  flex-direction: row;
+  flex-wrap: wrap;
+  min-height: 76px;
+  margin-top: 0;
+  padding: var(--space-1_5) var(--space-2);
+  gap: var(--space-0) var(--space-1);
+}
+.upload-box--compact .upload-box-plus {
+  width: 32px;
+  height: 32px;
+  margin-bottom: 0;
+}
+.upload-box--compact .upload-box-hint { flex-basis: 100%; }

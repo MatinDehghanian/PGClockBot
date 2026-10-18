@@ -5101,6 +5101,13 @@ def create_api_app(lifespan=None) -> FastAPI:
                 status_code=303,
             )
 
+        if tab == "menu" and form.get("reset_defaults"):
+            from app.bot.keyboards import default_menu_layout_settings
+
+            await set_settings_bulk(session, default_menu_layout_settings(for_shop=False))
+            return RedirectResponse(
+                "/settings?tab=menu&saved=1&msg=" + quote("چیدمان منو به پیش‌فرض برگشت."), status_code=303
+            )
         if tab == "menu" or form.get("menu_layout_save"):
             await _save_menu_layout(session, form)
             return RedirectResponse("/settings?tab=menu&saved=1", status_code=303)

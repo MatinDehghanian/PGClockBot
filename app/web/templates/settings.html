@@ -128,6 +128,9 @@
     {% include "_settings_appearance.html" %}
   {% elif tab == 'menu' %}
     {% include "_settings_menu.html" %}
+    {% set reset_action = '/settings?tab=menu' %}
+    {% set reset_confirm = 'ترتیب و چیدمان دکمه‌های منو به حالت اولیهٔ ربات برمی‌گردد. ادامه می‌دهید؟' %}
+    {% include "_settings_reset_defaults.html" %}
   {% elif tab == 'naming' %}
     {% include "_settings_naming.html" %}
     <form method="post" action="/settings?tab=naming" enctype="multipart/form-data" class="settings-form" id="settings-form">

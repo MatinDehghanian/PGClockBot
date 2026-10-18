@@ -50,8 +50,12 @@
         (items ? '<ul class="guides-media-list">' + items + '</ul>' : '<p class="muted">هنوز فایلی اضافه نشده است.</p>') +
         (full
           ? ''
-          : '<label class="guides-media-upload">افزودن عکس یا ویدیو' +
-              '<input type="file" accept="image/jpeg,image/png,image/webp,video/mp4" data-media-upload /></label>') +
+          : '<label class="file-label upload-box upload-box--compact">' +
+              '<input type="file" accept="image/jpeg,image/png,image/webp,video/mp4" data-media-upload />' +
+              '<span class="upload-box-plus" aria-hidden="true">+</span>' +
+              '<span class="upload-box-title">افزودن عکس یا ویدیو</span>' +
+              '<span class="upload-box-hint muted">JPG، PNG، WEBP یا ویدیوی MP4</span>' +
+            '</label>') +
         '<p class="muted">عکس تا 10 مگابایت، ویدیوی MP4 تا 50 مگابایت. برای آموزش تازه، اول تنظیمات را ذخیره کنید.</p>' +
         (status ? '<p class="guides-media-status" role="status">' + esc(status) + '</p>' : '') +
       '</fieldset>'
