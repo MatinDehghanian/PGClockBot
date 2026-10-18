@@ -5,7 +5,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from app.bot.nav_inline import admin_plans_kind_hub_keyboard
+from app.bot.nav_inline import admin_plans_audience_keyboard
 
 
 def _callbacks(markup) -> list[str]:
@@ -21,10 +21,11 @@ def _session_with_plans(plans: list) -> MagicMock:
 
 
 class HubKeyboardTests(unittest.TestCase):
-    def test_hub_offers_view_plans_for_each_audience(self) -> None:
+    def test_each_audience_screen_holds_its_actions_and_backs_up_to_the_plans_hub(self) -> None:
         for audience in ("users", "resellers"):
-            cbs = _callbacks(admin_plans_kind_hub_keyboard(audience, {}))
-            self.assertIn(f"nv:adm:plans:list:{audience}", cbs)
+            cbs = _callbacks(admin_plans_audience_keyboard(audience, {}))
+            self.assertIn("nv:adm:ra:adm_plans_add", cbs)
+            self.assertEqual(cbs[-1], "nv:adm:plans")
 
 
 class PlansListInPlaceTests(unittest.IsolatedAsyncioTestCase):
@@ -43,7 +44,7 @@ class PlansListInPlaceTests(unittest.IsolatedAsyncioTestCase):
         present.assert_awaited_once()
         message.answer.assert_not_awaited()
         cbs = _callbacks(present.await_args.kwargs["inline"])
-        self.assertEqual(cbs[-1], "nv:adm:plans:aud:users")
+        self.assertEqual(cbs[-1], "nv:adm:plans")
 
     async def test_resellers_list_back_returns_to_hub(self) -> None:
         from app.bot.handlers import admin_plans
@@ -59,7 +60,7 @@ class PlansListInPlaceTests(unittest.IsolatedAsyncioTestCase):
         present.assert_awaited_once()
         message.answer.assert_not_awaited()
         cbs = _callbacks(present.await_args.kwargs["inline"])
-        self.assertEqual(cbs[-1], "nv:adm:plans:aud:resellers")
+        self.assertEqual(cbs[-1], "nv:adm:plans")
 
 
 class AudienceHubTests(unittest.IsolatedAsyncioTestCase):
@@ -71,12 +72,12 @@ class AudienceHubTests(unittest.IsolatedAsyncioTestCase):
         users_list = AsyncMock()
         with (
             patch.object(reply_nav, "_deny_unless_owner", new=AsyncMock(return_value=True)),
-            patch.object(reply_nav, "get_all_settings", new=AsyncMock(return_value={})),
+            patch("app.bot.handlers.admin_plans.get_all_settings", new=AsyncMock(return_value={})),
             patch("app.bot.nav_inline.present_nav_panel", new=present),
             patch("app.bot.handlers.admin_plans.send_users_plans_overview", new=users_list),
         ):
             await reply_nav.present_admin_plans_audience(
-                MagicMock(), MagicMock(), user, None, audience="users"
+                MagicMock(), _session_with_plans([]), user, None, audience="users"
             )
         present.assert_awaited_once()
         users_list.assert_not_awaited()

@@ -139,13 +139,13 @@ def _admin_screens() -> list[ScreenSpec]:
         admin(
             "a.plans.users",
             "پلن‌های کاربران",
-            lambda ctx: hubs.admin_plans_kind_hub_keyboard("users", ctx.ui),
+            lambda ctx: hubs.admin_plans_audience_keyboard("users", ctx.ui),
             "nv:adm:plans:aud:users",
         ),
         admin(
             "a.plans.resellers",
             "پلن‌های نمایندگان",
-            lambda ctx: hubs.admin_plans_kind_hub_keyboard("resellers", ctx.ui),
+            lambda ctx: hubs.admin_plans_audience_keyboard("resellers", ctx.ui),
             "nv:adm:plans:aud:resellers",
         ),
     ]

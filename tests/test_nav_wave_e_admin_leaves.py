@@ -221,7 +221,7 @@ class OpenAdminPlansInlineTests(unittest.IsolatedAsyncioTestCase):
 
 
 class PresentPlansAudienceInlineTests(unittest.IsolatedAsyncioTestCase):
-    async def test_audience_presents_kind_hub(self):
+    async def test_audience_presents_its_plans_in_one_panel(self):
         from app.bot.handlers.reply_nav import present_admin_plans_audience
 
         message = AsyncMock()
@@ -242,7 +242,7 @@ class PresentPlansAudienceInlineTests(unittest.IsolatedAsyncioTestCase):
                 AsyncMock(return_value={"nav_mode": "inline"}),
             ),
             patch(
-                "app.bot.handlers.admin_plans.send_users_plans_overview",
+                "app.bot.handlers.admin_plans.present_plans_overview",
                 new_callable=AsyncMock,
             ) as overview,
             patch(
@@ -254,12 +254,8 @@ class PresentPlansAudienceInlineTests(unittest.IsolatedAsyncioTestCase):
                 message, session, db_user, state, audience="users"
             )
 
-        markup = message.answer.await_args.kwargs.get("reply_markup")
-        data = [b.callback_data for row in markup.inline_keyboard for b in row]
-        self.assertIn("nv:adm:ra:adm_plans_add", data)
-        self.assertIn("nv:adm:plans:list:users", data)
-        overview.assert_not_awaited()
-        self.assertEqual(message.answer.await_count, 1)
+        overview.assert_awaited_once()
+        self.assertEqual(overview.await_args.args[3], "users")
         show_nav.assert_not_awaited()
 
 

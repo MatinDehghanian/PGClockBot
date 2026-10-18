@@ -96,6 +96,7 @@ async def open_reseller_group(
             can_add_representative=hub.can_add_representative,
             pending_payments=hub.queue.payments,
             pending_tickets=hub.queue.tickets,
+            pending_deliveries=hub.queue.deliveries,
         ),
         state=state,
     )

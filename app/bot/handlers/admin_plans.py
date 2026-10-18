@@ -43,10 +43,9 @@ router = Router(name="admin_plans")
 BACK_USERS_KIND = "adm:plans:aud:users"
 BACK_RESELLERS_KIND = "adm:plans:aud:resellers"
 USER_PLANS_PAGE_SIZE = 10
+PLANS_OVERVIEW_PAGE_SIZE = 10
 RESELLER_PLANS_PAGE_SIZE = 10
 # Audience hub («مشاهده پلن‌ها» / افزودن / کاتالوگ)
-BACK_USERS_HUB = "nv:adm:plans:aud:users"
-BACK_RESELLERS_HUB = "nv:adm:plans:aud:resellers"
 # Re-open a specific kind list/detail screen
 BACK_USERS_FIXED_LIST = "adm:plans:kind:users:fixed"
 
@@ -93,7 +92,6 @@ async def sync_plans_reply_keyboard(
     from app.bot.nav_inline import (
         admin_plans_add_type_hub_keyboard,
         admin_plans_audience_hub_keyboard,
-        admin_plans_kind_hub_keyboard,
         present_inline_only,
     )
 
@@ -116,9 +114,8 @@ async def sync_plans_reply_keyboard(
         inline = admin_plans_add_type_hub_keyboard(aud, ui)
         body = feedback.PICK_PLAN_TYPE
     elif level == nav.NAV_ADMIN_PLANS_KIND:
-        inline = admin_plans_kind_hub_keyboard(aud, ui)
-        screen_id = "a.plans.users" if aud == "users" else "a.plans.resellers"
-        body = with_caption(screen_heading(ui, screen_id), screen_caption(ui, screen_id))
+        await present_plans_overview(message, session, state, aud)
+        return
     else:
         inline = admin_plans_audience_hub_keyboard(ui)
         body = with_caption(screen_heading(ui, "a.plans"), screen_caption(ui, "a.plans"))
@@ -257,68 +254,95 @@ async def send_kind_hub(
             pass
     await message.answer(text)
 
-async def send_users_plans_overview(
-    message: Message, session: AsyncSession, state: FSMContext | None = None
-) -> None:
-    """User plans list — mirrors web /plans user table, shown by editing the live panel."""
-    from app.bot.nav_inline import present_nav_panel
+def _audience_heading(ui: dict, audience: str) -> str:
+    screen_id = "a.plans.users" if audience == "users" else "a.plans.resellers"
+    return with_caption(screen_heading(ui, screen_id), screen_caption(ui, screen_id))
+
+
+async def users_plans_overview_view(session: AsyncSession, page_index: int = 0) -> tuple[str, InlineKeyboardMarkup]:
+    """User plans in one screen: add / catalog actions, a page of fixed plans, the other kinds."""
+    from app.bot.nav_inline import admin_plans_audience_keyboard
 
     ui = await get_all_settings(session)
     result = await session.execute(select(Plan).order_by(Plan.sort_order, Plan.id))
     plans = list(result.scalars().all())
     fixed = [p for p in plans if not p.is_trial]
+    trial = [p for p in plans if p.is_trial][:1]
+    page = page_of(fixed, page_index, PLANS_OVERVIEW_PAGE_SIZE)
+    plan_rows = kb.admin_users_plans_overview_keyboard(page.items + trial, ui, back_callback=None).inline_keyboard
     text = (
-        "👥 <b>پلن‌های کاربران</b>\n"
-        "━━━━━━━━━━━━\n"
+        f"{_audience_heading(ui, 'users')}\n\n"
         f"پلن‌های ثابت: <b>{len(fixed)}</b>\n"
         "برای ویرایش یا حذف، روی پلن بزنید. برای پلن تازه «افزودن پلن» را بزنید."
+        + page_line(page)
     )
-    await present_nav_panel(
-        message,
-        text=text,
-        inline=kb.admin_users_plans_overview_keyboard(
-            plans, ui, back_callback=BACK_USERS_HUB
-        ),
-        state=state,
+    markup = admin_plans_audience_keyboard(
+        "users", ui, plan_rows=list(plan_rows), pager=pager_row(page, "nv:adm:plans:aud:users")
     )
+    return text, markup
+
+
+async def resellers_plans_overview_view(
+    session: AsyncSession, page_index: int = 0
+) -> tuple[str, InlineKeyboardMarkup]:
+    """Reseller plans in one screen: add / catalog actions and a page of subscriptions and packs."""
+    from app.bot.nav_inline import admin_plans_audience_keyboard
+    from app.services.pg_admin_subscription import is_addon_plan, is_subscription_plan
+
+    ui = await get_all_settings(session)
+    all_plans = await list_reseller_plans(session)
+    by_kind = {
+        "fixed": [p for p in all_plans if reseller_plan_mode_of(p) == "fixed" and is_subscription_plan(p)],
+        "payg": [p for p in all_plans if reseller_plan_mode_of(p) == "payg" and is_subscription_plan(p)],
+        "addon": [p for p in all_plans if is_addon_plan(p)],
+    }
+    # One sequence in display order, so a page may hold the end of one kind and the start of the next.
+    page = page_of([(kind, p) for kind, rows in by_kind.items() for p in rows], page_index, PLANS_OVERVIEW_PAGE_SIZE)
+    shown = {kind: [p for k, p in page.items if k == kind] for kind in by_kind}
+    plan_rows = kb.admin_resellers_plans_overview_keyboard(
+        shown["fixed"], shown["payg"], ui=ui, addon_plans=shown["addon"], back_callback=None
+    ).inline_keyboard
+    text = (
+        f"{_audience_heading(ui, 'resellers')}\n\n"
+        f"اشتراک ثابت: <b>{len(by_kind['fixed'])}</b> · PAYG: <b>{len(by_kind['payg'])}</b>"
+        f" · بسته: <b>{len(by_kind['addon'])}</b>\n"
+        "برای ویرایش، روی پلن بزنید. برای پلن تازه «افزودن پلن» را بزنید."
+        + page_line(page)
+    )
+    markup = admin_plans_audience_keyboard(
+        "resellers", ui, plan_rows=list(plan_rows), pager=pager_row(page, "nv:adm:plans:aud:resellers")
+    )
+    return text, markup
+
+
+async def present_plans_overview(
+    message: Message,
+    session: AsyncSession,
+    state: FSMContext | None,
+    audience: str,
+    page_index: int = 0,
+) -> None:
+    """Show one audience's plans by editing the live panel."""
+    from app.bot.nav_inline import present_nav_panel
+
+    view = users_plans_overview_view if audience == "users" else resellers_plans_overview_view
+    text, markup = await view(session, page_index)
+    if state is not None:
+        await state.update_data(_adm_plans_aud=audience, _adm_plans_kind=None)
+    await present_nav_panel(message, text=text, inline=markup, state=state)
+
+
+async def send_users_plans_overview(
+    message: Message, session: AsyncSession, state: FSMContext | None = None
+) -> None:
+    await present_plans_overview(message, session, state, "users")
+
 
 async def send_resellers_plans_overview(
     message: Message, session: AsyncSession, state: FSMContext | None = None
 ) -> None:
-    """Reseller plans — all rows inline like web /plans, shown by editing the live panel."""
-    from app.bot.nav_inline import present_nav_panel
-    from app.services.pg_admin_subscription import is_addon_plan, is_subscription_plan
+    await present_plans_overview(message, session, state, "resellers")
 
-    all_plans = await list_reseller_plans(session)
-    fixed = [
-        p
-        for p in all_plans
-        if reseller_plan_mode_of(p) == "fixed" and is_subscription_plan(p)
-    ]
-    payg = [
-        p
-        for p in all_plans
-        if reseller_plan_mode_of(p) == "payg" and is_subscription_plan(p)
-    ]
-    addons = [p for p in all_plans if is_addon_plan(p)]
-    text = (
-        "🤝 <b>پلن‌های نمایندگان</b>\n"
-        "━━━━━━━━━━━━\n"
-        f"اشتراک ثابت: <b>{len(fixed)}</b> · PAYG: <b>{len(payg)}</b> · بسته: <b>{len(addons)}</b>\n"
-        "برای ویرایش، روی پلن بزنید. برای پلن تازه «افزودن پلن» را بزنید."
-    )
-    await present_nav_panel(
-        message,
-        text=text,
-        inline=kb.admin_resellers_plans_overview_keyboard(
-            fixed,
-            payg,
-            ui=await get_all_settings(session),
-            addon_plans=addons,
-            back_callback=BACK_RESELLERS_HUB,
-        ),
-        state=state,
-    )
 
 async def send_add_plan_type_picker(
     message: Message,

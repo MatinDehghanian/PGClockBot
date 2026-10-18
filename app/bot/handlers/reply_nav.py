@@ -870,6 +870,7 @@ async def open_reseller_home(
             pending_payments=queue.payments,
             pending_tickets=queue.tickets,
             pending_cancellations=queue.cancellations,
+            pending_deliveries=queue.deliveries,
         ),
         state=state,
     )
@@ -1125,30 +1126,22 @@ async def present_admin_plans_audience(
     *,
     audience: str,
     is_reseller_bot: bool = False,
+    page_index: int = 0,
 ) -> None:
-    """Wave E: plans audience hub — one panel; the list opens in place via «مشاهده پلن‌ها».
+    """One audience's plans with their add / catalog actions, in one panel.
 
     Owner-gated (same Owner Principal gate as ``_OWNER_ONLY_REPLY_ACTIONS``).
     """
-    from app.bot.nav_inline import admin_plans_kind_hub_keyboard, present_nav_panel
+    from app.bot.handlers.admin_plans import present_plans_overview
 
     if not await _deny_unless_owner(
         message, session, db_user, is_reseller_bot=is_reseller_bot
     ):
         return
-    ui = await get_all_settings(session)
-    if state is not None:
-        await state.update_data(_adm_plans_aud=audience, _adm_plans_kind=None)
-    screen_id = "a.plans.users" if audience == "users" else "a.plans.resellers"
-    body = with_caption(screen_heading(ui, screen_id), screen_caption(ui, screen_id))
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_ADMIN_PLANS_KIND, push=True)
-    await present_nav_panel(
-        message,
-        text=body,
-        inline=admin_plans_kind_hub_keyboard(audience, ui),
-        state=state,
-    )
+    await present_plans_overview(message, session, state, audience, page_index)
+
 
 async def open_admin_users_hub(
     message: Message,
@@ -1500,6 +1493,7 @@ async def open_admin_home(
             pending_payments=queue.payments,
             pending_tickets=queue.tickets,
             pending_cancellations=queue.cancellations,
+            pending_deliveries=queue.deliveries,
         ),
         state=state,
     )
@@ -1545,6 +1539,7 @@ async def open_admin_ops_hub(
             ui,
             pending_payments=queue.payments,
             pending_tickets=queue.tickets,
+            pending_deliveries=queue.deliveries,
         ),
         state=state,
     )
