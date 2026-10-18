@@ -357,7 +357,7 @@ async def support_reply(
             message,
             session,
             db_user,
-            text="تیکت نامعتبر",
+            text="این تیکت پیدا نشد",
             state=state,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,

@@ -16,6 +16,7 @@ from app.bot import keyboards  # noqa: F401  (import order: breaks a handler imp
 from app.bot.handlers.services import svc_link, svc_list, svc_view
 from app.db import Base
 from app.db.models import BotUser, Order, OrderStatus, UserService
+from app.services import bot_feedback_texts as feedback
 from app.services.service_scope import customer_may_use_service, list_customer_services
 from app.services.users import reset_shop_reseller_id, set_shop_reseller_id
 
@@ -102,12 +103,12 @@ class CustomerServiceScopeTests(unittest.IsolatedAsyncioTestCase):
         for handler, prefix in ((svc_view, "svc:view"), (svc_link, "svc:link")):
             callback, edit = await self.run_in_shop(SHOP_ID, handler, f"{prefix}:{PLATFORM_SVC}")
             callback.answer.assert_awaited_once()
-            self.assertEqual(callback.answer.await_args.args[0], "یافت نشد", prefix)
+            self.assertEqual(callback.answer.await_args.args[0], feedback.NOT_FOUND, prefix)
             edit.assert_not_awaited()
 
     async def test_the_shop_bot_still_opens_its_own_service(self):
         callback, _edit = await self.run_in_shop(SHOP_ID, svc_view, f"svc:view:{SHOP_SVC}")
-        self.assertNotIn("یافت نشد", [c.args[0] for c in callback.answer.await_args_list if c.args])
+        self.assertNotIn(feedback.NOT_FOUND, [c.args[0] for c in callback.answer.await_args_list if c.args])
 
     async def test_the_shop_services_list_shows_no_platform_service_button(self):
         callback, edit = await self.run_in_shop(SHOP_ID, svc_list, "svc:list")

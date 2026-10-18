@@ -368,7 +368,7 @@ async def svc_reseller_view(
         reseller_owner_id=reseller_owner_id,
     )
     if profile is None:
-        await callback.answer("سرویس نمایندگی یافت نشد", show_alert=True)
+        await callback.answer("سرویس نمایندگی شما پیدا نشد", show_alert=True)
         return
     await callback.answer()
     text = await format_reseller_my_service_card(session, profile)
@@ -1024,7 +1024,7 @@ def _register_services_cancel_codes() -> None:
         data = await state.get_data()
         service_id = int(data.get("cancellation_service_id") or 0)
         if not service_id:
-            await present_inline_only(message, text="سرویس یافت نشد.", inline=None)
+            await present_inline_only(message, text="این سرویس پیدا نشد.", inline=None)
             return
         try:
             status = await cancellation_status(

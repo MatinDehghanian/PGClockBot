@@ -551,7 +551,7 @@ async def wtop_choose_method(
         else:
             card = pick_card(items, f"topup:{db_user.id}:{amount}") if len(items) > 1 else items[0]
         if not card:
-            await callback.answer("کارت نامعتبر", show_alert=True)
+            await callback.answer("این کارت دیگر فعال نیست", show_alert=True)
             return
     elif key == "gateway":
         items = enabled_gateways(ui)
@@ -570,7 +570,7 @@ async def wtop_choose_method(
             return
         gateway = gateway_by_id(ui, dest_id) if dest_id else items[0]
         if not gateway:
-            await callback.answer("درگاه نامعتبر", show_alert=True)
+            await callback.answer("این درگاه دیگر فعال نیست", show_alert=True)
             return
     else:
         items = enabled_crypto_wallets(ui)
@@ -589,7 +589,7 @@ async def wtop_choose_method(
             return
         wallet = crypto_by_id(ui, dest_id) if dest_id else items[0]
         if not wallet:
-            await callback.answer("ولت نامعتبر", show_alert=True)
+            await callback.answer("این کیف پول ارز دیجیتال دیگر فعال نیست", show_alert=True)
             return
 
     payment = await create_wallet_topup(session, db_user.id, amount, method=method)
