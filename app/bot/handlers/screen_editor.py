@@ -114,6 +114,11 @@ class EditorStates(StatesGroup):
     shop_label = State()
 
 
+_EDITOR_STATES = frozenset({EditorStates.owner_label.state, EditorStates.shop_label.state})
+# Views that open a text prompt; every other view leaves it.
+_PROMPT_VIEWS = frozenset({"n", "d", "t"})
+
+
 @dataclass(frozen=True, slots=True)
 class EditRequest:
     audience: str
@@ -325,6 +330,9 @@ async def _screen_views(
     if not edit_mode_store.is_active(actor):
         raise ValueError(TEXT_EDIT_MODE_EXPIRED)
     screen = await _load_screen(session, actor, request.screen_id)
+    if request.view not in _PROMPT_VIEWS and await state.get_state() in _EDITOR_STATES:
+        # Back out of a text prompt: a later message must not be saved as its answer.
+        await state.set_state(None)
     if request.view == "o":
         await callback.answer()
         minutes_left = edit_mode_store.minutes_left(actor)
@@ -456,6 +464,9 @@ async def _save_label_message(message: Message, state: FSMContext, session: Asyn
     raw = message.text or ""
     if kb.is_cancel_text(raw.strip()) or not screen_id:
         await state.set_state(None)
+        if data.get("ed_kind") == "label" and index is not None:
+            await _answer_with_button(message, session, actor, screen_id, int(index))
+            return
         await _answer_with_panel(message, session, actor, screen_id, feedback.CANCELLED)
         return
     if await _is_menu_tap(message, session, actor):
@@ -520,6 +531,22 @@ async def _answer_with_panel(
         actor, screen.spec, screen.buttons, screen.ui, minutes_left=edit_mode_store.minutes_left(actor)
     )
     await message.answer(f"{notice}\n\n{text}", reply_markup=markup)
+
+
+async def _answer_with_button(
+    message: Message, session: AsyncSession, actor: EditorActor, screen_id: str, index: int
+) -> None:
+    """Typed cancel of a label prompt shows the button's screen, like its «بازگشت»."""
+    try:
+        if not edit_mode_store.is_active(actor):
+            raise ValueError(TEXT_EDIT_MODE_EXPIRED)
+        screen = await _load_screen(session, actor, screen_id)
+        button = _button_at(screen, index)
+    except ValueError:
+        await _answer_with_panel(message, session, actor, screen_id, feedback.CANCELLED)
+        return
+    text, markup = button_view(actor, screen.spec, index, button, screen.ui)
+    await message.answer(f"{feedback.CANCELLED}\n\n{text}", reply_markup=markup)
 
 
 def _after_label_markup(actor: EditorActor, screen_id: str | None) -> InlineKeyboardMarkup | None:

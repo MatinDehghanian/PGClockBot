@@ -382,6 +382,28 @@ class EditorFlowTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(await self._platform("btn_wallet_topup"))
         self.assertIsNone(await self.state.get_state())
 
+    async def test_back_from_a_prompt_stops_waiting_for_the_text(self) -> None:
+        await self._start_editing()
+        index = self._index("c.wallet", "btn_wallet_topup")
+        for prompt, back in ((f"ed:a:t:c.wallet:{index}", f"ed:a:b:c.wallet:{index}"), ("ed:a:n:c.wallet", "ed:a:o:c.wallet")):
+            with self.subTest(prompt=prompt):
+                await self._owner(prompt)
+                self.assertEqual(await self.state.get_state(), ui_module.EditorStates.owner_label.state)
+                await self._owner(back)
+                self.assertIsNone(await self.state.get_state())
+
+    async def test_typed_cancel_of_a_name_shows_the_button_like_its_back(self) -> None:
+        await self._start_editing()
+        index = self._index("c.wallet", "btn_wallet_topup")
+        await self._owner(f"ed:a:t:c.wallet:{index}")
+        message = _message("انصراف")
+        async with self.Session() as session:
+            await ui_module.owner_label_text(message, self.state, session, MagicMock(id=OWNER.user_id))
+        typed = message.answer.await_args.kwargs["reply_markup"]
+        tapped = await self._owner(f"ed:a:b:c.wallet:{index}")
+        shown = tapped.message.edit_text.await_args
+        self.assertEqual(typed, shown.kwargs["reply_markup"])
+
     async def test_shop_owner_edits_only_their_own_shop(self) -> None:
         await self._start_editing()
         index = self._index("c.wallet", "btn_wallet_topup")
