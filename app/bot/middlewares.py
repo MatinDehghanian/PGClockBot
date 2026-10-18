@@ -9,6 +9,7 @@ from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove, TelegramO
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.bot.screen_replay import is_replayed
 from app.config import get_settings
 from app.db.models import BotUser
 from app.db.session import SessionLocal
@@ -402,7 +403,7 @@ class RateLimitMiddleware(BaseMiddleware):
         data: Dict[str, Any],
     ) -> Any:
         tg_user = _extract_from_user(event)
-        if tg_user and _rate_limited(int(tg_user.id)):
+        if tg_user and not is_replayed(event) and _rate_limited(int(tg_user.id)):
             if isinstance(event, CallbackQuery):
                 try:
                     await event.answer("لطفاً کمی صبر کنید", show_alert=False)

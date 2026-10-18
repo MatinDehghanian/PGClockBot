@@ -21,10 +21,12 @@ from aiogram.types import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     Message,
+    User,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot.nav_inline import NAV_PANEL_CHAT_KEY, NAV_PANEL_MSG_KEY, panel_is_still_live
+from app.bot.screen_replay import replay_screen
 from app.db.models import BotUser
 from app.services import bot_feedback_texts as feedback
 
@@ -35,6 +37,8 @@ router = Router(name="nav_input")
 PROMPT_MSG_ID = "_nav_input_prompt_msg_id"
 PROMPT_CHAT_ID = "_nav_input_prompt_chat_id"
 CANCEL_CODE_KEY = "_nav_input_cancel_code"
+# Callback data of the screen a prompt was opened from; cancel replays it (one step back).
+RETURN_TO_KEY = "_nav_input_return_to"
 
 CancelReopen = Callable[..., Awaitable[Any]]
 
@@ -91,9 +95,14 @@ async def ask_text(
     fsm_state: State,
     extra_inline: InlineKeyboardMarkup | None = None,
     edit: bool = False,
+    return_to: str | None = None,
     **send_kw: Any,
 ) -> Message | None:
-    """Prompt for free text with an inline cancel button; main ReplyKeyboard untouched."""
+    """Prompt for free text with an inline cancel button; main ReplyKeyboard untouched.
+
+    ``return_to`` is the callback data of the screen the prompt was opened from: cancel, typed
+    or tapped, reopens exactly that screen. Without it the cancel code's reopen runs.
+    """
     if cancel_code not in CANCEL_REGISTRY:
         # Staff codes live in staff_cancel; import lazily for direct handler tests.
         try:
@@ -132,9 +141,19 @@ async def ask_text(
                 PROMPT_MSG_ID: int(msg.message_id),
                 PROMPT_CHAT_ID: int(msg.chat.id),
                 CANCEL_CODE_KEY: cancel_code,
+                RETURN_TO_KEY: return_to,
             }
         )
     return msg
+
+
+async def form_origin(state: FSMContext) -> str | None:
+    """For a later step of a multi-step form: where its first prompt was opened from.
+
+    Cancel anywhere in a form returns to the screen the form started from, not to the form's
+    previous step.
+    """
+    return (await state.get_data()).get(RETURN_TO_KEY)
 
 
 async def finish_text_step(
@@ -150,7 +169,7 @@ async def finish_text_step(
     prompt_id = data.get(PROMPT_MSG_ID)
     chat_id = data.get(PROMPT_CHAT_ID)
     await state.update_data(
-        **{PROMPT_MSG_ID: None, PROMPT_CHAT_ID: None, CANCEL_CODE_KEY: None}
+        **{PROMPT_MSG_ID: None, PROMPT_CHAT_ID: None, CANCEL_CODE_KEY: None, RETURN_TO_KEY: None}
     )
     if prompt_id and chat_id and int(chat_id) == int(message.chat.id):
         try:
@@ -234,6 +253,9 @@ async def try_legacy_cancel(
     entry = CANCEL_REGISTRY.get(str(code)) if code else None
     if entry is None:
         return False
+    if await _replay_return(message, state, data, user=message.from_user, message_id=data.get(PROMPT_MSG_ID)):
+        await delete_user_message(message)
+        return True
     await adopt_prompt_as_panel(message, state)
     try:
         await state.set_state(None)
@@ -261,6 +283,28 @@ def with_cancel_row(
     return _merge_inline(cancel_code, markup)
 
 
+async def _replay_return(
+    event: Message,
+    state: FSMContext,
+    data: dict[str, Any],
+    *,
+    user: User | None,
+    message: Message | None = None,
+    message_id: int | None = None,
+) -> bool:
+    """Cancel by reopening the screen the prompt came from; False when it has none."""
+    target = data.get(RETURN_TO_KEY)
+    if not target or user is None or event.bot is None:
+        return False
+    await state.set_state(None)
+    await state.update_data(
+        **{PROMPT_MSG_ID: None, PROMPT_CHAT_ID: None, CANCEL_CODE_KEY: None, RETURN_TO_KEY: None}
+    )
+    return await replay_screen(
+        event.bot, user=user, chat_id=int(event.chat.id), data=str(target), message=message, message_id=message_id
+    )
+
+
 @router.callback_query(F.data.startswith("nv:cancel:"))
 async def nv_cancel_input(
     callback: CallbackQuery,
@@ -277,6 +321,10 @@ async def nv_cancel_input(
         await callback.answer(feedback.INVALID, show_alert=True)
         return
     await callback.answer()
+    if callback.message and await _replay_return(
+        callback.message, state, await state.get_data(), user=callback.from_user, message=callback.message
+    ):
+        return
     # Clear typed-input FSM; preserve nav stack keys via clear of state only.
     try:
         await state.set_state(None)

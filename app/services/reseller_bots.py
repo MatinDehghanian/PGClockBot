@@ -58,7 +58,10 @@ class ResellerBotManager:
             return False
         async with self._lock:
             await self._stop_locked(reseller_profile_id)
-            bot = Bot(token=token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+            # app.bot imports this module; import here, like chat_menu below, to avoid a cycle.
+            from app.bot.screen_replay import install_replay_guard
+
+            bot = install_replay_guard(Bot(token=token, default=DefaultBotProperties(parse_mode=ParseMode.HTML)))
             registered = False
             try:
                 me = await bot.get_me()

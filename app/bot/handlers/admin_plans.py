@@ -30,6 +30,7 @@ from app.services.resellers import (
     reseller_plan_mode_of,
 )
 from app.bot import menu_nav as nav
+from app.bot.nav_input import form_origin
 from app.bot.tg_utils import parse_bot_float, parse_bot_int, safe_edit_text
 from app.services.users import get_all_settings, get_setting, on, set_setting
 from app.services import bot_feedback_texts as feedback
@@ -589,6 +590,7 @@ async def open_add_kind_action(
             state,
             prompt="➕ <b>پلن ثابت جدید</b>\nنام پلن را بفرستید:",
             cancel_code="adm_pln",
+            return_to=f"adm:plans:aud:{audience}",
             fsm_state=AdminStates.add_plan_name,
             edit=False,
         )
@@ -603,6 +605,7 @@ async def open_add_kind_action(
             state,
             prompt=f"➕ <b>پلن {label}</b>\nنام پلن نمایندگی:",
             cancel_code="adm_pln",
+            return_to=f"adm:plans:aud:{audience}",
             fsm_state=AdminPlansStates.res_plan_name,
             edit=False,
         )
@@ -621,6 +624,7 @@ async def open_add_kind_action(
                 "نام بسته:"
             ),
             cancel_code="adm_pln",
+            return_to=f"adm:plans:aud:{audience}",
             fsm_state=AdminPlansStates.res_plan_name,
             edit=False,
         )
@@ -845,6 +849,7 @@ async def plans_edit_ask(
         state,
         prompt=f"مقدار جدید برای <b>{key}</b>\nفعلی: <code>{html.escape((cur or '')[:200])}</code>",
         cancel_code="adm_pln",
+        return_to=f"adm:plans:kind:users:{kind}",
         fsm_state=AdminPlansStates.edit_value,
         edit=True,
     )
@@ -912,6 +917,7 @@ async def wholesale_add_tier_ask(callback: CallbackQuery, state: FSMContext, db_
         state,
         prompt="حداقل تعداد برای پله جدید:",
         cancel_code="adm_pln",
+        return_to="adm:plans:kind:users:wholesale",
         fsm_state=AdminPlansStates.wholesale_tier_min,
         edit=True,
     )
@@ -945,6 +951,7 @@ async def wholesale_tier_min_entered(
         state,
         prompt="درصد تخفیف (۰–۱۰۰):",
         cancel_code="adm_pln",
+        return_to=await form_origin(state),
         fsm_state=AdminPlansStates.wholesale_tier_pct,
         edit=False,
     )
@@ -1018,6 +1025,7 @@ async def trial_ask_name(callback: CallbackQuery, state: FSMContext, db_user: Bo
         state,
         prompt="نام پلن تست:",
         cancel_code="adm_pln",
+        return_to="adm:plans:kind:users:trial",
         fsm_state=AdminPlansStates.trial_name,
         edit=True,
     )
@@ -1060,6 +1068,7 @@ async def trial_ask_days(callback: CallbackQuery, state: FSMContext, db_user: Bo
         state,
         prompt="مدت به روز:",
         cancel_code="adm_pln",
+        return_to="adm:plans:kind:users:trial",
         fsm_state=AdminPlansStates.trial_days,
         edit=True,
     )
@@ -1107,6 +1116,7 @@ async def trial_ask_gb(callback: CallbackQuery, state: FSMContext, db_user: BotU
         state,
         prompt="حجم را به گیگابایت بفرستید. برای نامحدود <code>0</code> بفرستید:",
         cancel_code="adm_pln",
+        return_to="adm:plans:kind:users:trial",
         fsm_state=AdminPlansStates.trial_gb,
         edit=True,
     )
@@ -1857,6 +1867,7 @@ async def resplan_edit_ask(
         state,
         prompt=prompts[field],
         cancel_code="adm_pln",
+        return_to=f"adm:resplan:view:{pid_raw}",
         fsm_state=AdminPlansStates.res_plan_edit_field,
         edit=True,
     )
@@ -2118,6 +2129,12 @@ async def resplan_edit_save(
     )
     _ = bubble
 
+
+async def _resplan_origin(state: FSMContext) -> str:
+    """The reseller plans list the add form was started from."""
+    mode = (await state.get_data()).get("res_plan_mode") or "fixed"
+    return f"adm:plans:kind:resellers:{mode}"
+
 @router.callback_query(F.data.in_({"adm:resplan:add:fixed", "adm:resplan:add:payg"}))
 @require_bot_owner_handler
 async def resplan_add_start(callback: CallbackQuery, state: FSMContext, db_user: BotUser):
@@ -2137,6 +2154,7 @@ async def resplan_add_start(callback: CallbackQuery, state: FSMContext, db_user:
         state,
         prompt="نام پلن نمایندگی:",
         cancel_code="adm_pln",
+        return_to=await _resplan_origin(state),
         fsm_state=AdminPlansStates.res_plan_name,
         edit=True,
     )
@@ -2164,6 +2182,7 @@ async def resplan_name(message: Message, state: FSMContext, session: AsyncSessio
         state,
         prompt="قیمت ورود (تومان، ۰ = رایگان):",
         cancel_code="adm_pln",
+        return_to=await form_origin(state),
         fsm_state=AdminPlansStates.res_plan_price,
         edit=False,
     )
@@ -2200,6 +2219,7 @@ async def resplan_price(message: Message, state: FSMContext, session: AsyncSessi
             state,
             prompt=ask,
             cancel_code="adm_pln",
+            return_to=await form_origin(state),
             fsm_state=AdminPlansStates.res_plan_addon_amount,
             edit=False,
         )
@@ -2212,6 +2232,7 @@ async def resplan_price(message: Message, state: FSMContext, session: AsyncSessi
             state,
             prompt="نرخ هر گیگ (تومان):",
             cancel_code="adm_pln",
+            return_to=await form_origin(state),
             fsm_state=AdminPlansStates.res_plan_rate_gb,
             edit=False,
         )
@@ -2224,6 +2245,7 @@ async def resplan_price(message: Message, state: FSMContext, session: AsyncSessi
             state,
             prompt="📁 گروه پاسارگارد را انتخاب کنید (حداقل یک گروه الزامی):",
             cancel_code="adm_pln",
+            return_to=await form_origin(state),
             fsm_state=AdminPlansStates.res_plan_link,
             edit=False,
         )
@@ -2310,6 +2332,7 @@ async def resplan_rate_gb(
         state,
         prompt="📁 گروه پاسارگارد را انتخاب کنید (حداقل یک گروه الزامی):",
         cancel_code="adm_pln",
+        return_to=await form_origin(state),
         fsm_state=AdminPlansStates.res_plan_link,
         edit=False,
     )

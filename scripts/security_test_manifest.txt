@@ -206,3 +206,4 @@ tests/test_guide_editor.py
 tests/test_wireguard_delivery_followup.py
 tests/test_settings_back_cancel.py
 tests/test_settings_regroup.py
+tests/test_cancel_one_step.py

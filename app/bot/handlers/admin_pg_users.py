@@ -20,6 +20,7 @@ from app.bot.auth import (
     filtered_pg_reply_keyboard,
 )
 from app.bot.auth import is_platform_admin as _is_admin
+from app.bot.nav_input import form_origin
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser
 from app.services.formatting import format_message, service_card
@@ -586,6 +587,7 @@ async def pg_search_start(
             "(جستجو در لیست فیلتر می‌شود؛ برای انصراف «انصراف» بزنید)"
         ),
         cancel_code="adm_pg_u",
+        return_to="adm:pg:users",
         fsm_state=PgUserStates.search,
         edit=True,
     )
@@ -1078,6 +1080,7 @@ async def pg_create_tpl_chosen(
         state,
         prompt=f"تمپلیت #{tid} انتخاب شد.\nنام کاربری جدید را بفرستید (۳–۳۲ حرف انگلیسی/عدد/_):",
         cancel_code="adm_pg_u",
+        return_to="adm:pg:create",
         fsm_state=PgUserStates.create_username,
         edit=True,
     )
@@ -1248,6 +1251,7 @@ async def pg_create_grpdone(
         state,
         prompt="نام کاربری جدید را بفرستید (۳–۳۲ حرف انگلیسی/عدد/_):",
         cancel_code="adm_pg_u",
+        return_to="adm:pg:create",
         fsm_state=PgUserStates.create_username,
         edit=True,
     )
@@ -1307,6 +1311,7 @@ async def pg_create_username(
             state,
             prompt="حجم به گیگابایت را بفرستید (عدد؛ برای نامحدود ۰ بفرستید):",
             cancel_code="adm_pg_u",
+            return_to=await form_origin(state),
             fsm_state=PgUserStates.create_gb,
             edit=False,
         )
@@ -1435,6 +1440,7 @@ async def pg_create_gb(
         state,
         prompt="مدت به روز را بفرستید (عدد؛ برای بدون انقضا ۰ بفرستید):",
         cancel_code="adm_pg_u",
+        return_to=await form_origin(state),
         fsm_state=PgUserStates.create_days,
         edit=False,
     )
@@ -1539,6 +1545,7 @@ async def pg_create_days(
             state,
             prompt=f"❌ {_err_msg(e)}\nنام کاربری دیگری بفرستید:",
             cancel_code="adm_pg_u",
+            return_to=await form_origin(state),
             fsm_state=PgUserStates.create_username,
             edit=False,
         )
@@ -1622,6 +1629,7 @@ async def pg_edit_name_ask(
         state,
         prompt="نام کاربری جدید را بفرستید:",
         cancel_code="adm_pg_u",
+        return_to=f"adm:pg:u:{uid}:edit",
         fsm_state=PgUserStates.edit_username,
         edit=True,
     )
@@ -1724,6 +1732,7 @@ async def pg_edit_gb_ask(
         state,
         prompt="حجم جدید را به گیگابایت بفرستید. برای نامحدود <code>0</code> بفرستید:",
         cancel_code="adm_pg_u",
+        return_to=f"adm:pg:u:{uid}:edit",
         fsm_state=PgUserStates.edit_gb,
         edit=True,
     )
@@ -1832,6 +1841,7 @@ async def pg_edit_days_ask(
         state,
         prompt="مدت باقی‌مانده از الان به روز (۰ = بدون انقضا):",
         cancel_code="adm_pg_u",
+        return_to=f"adm:pg:u:{uid}:edit",
         fsm_state=PgUserStates.edit_days,
         edit=True,
     )
