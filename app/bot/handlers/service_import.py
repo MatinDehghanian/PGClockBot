@@ -32,7 +32,6 @@ from app.services.service_import import (
     ImportOutcome,
     ServiceImportError,
     import_existing_service,
-    is_external_service,
 )
 from app.services.users import get_all_settings
 from app.services import bot_feedback_texts as feedback
@@ -133,5 +132,5 @@ async def svc_import_link(
     await finish_text_step(
         message, state,
         text=format_message(ADDED_TITLE[result.outcome], service_card(result.info)),
-        inline=service_card_keyboard(int(result.service.id), ui, external=is_external_service(result.service)),
+        inline=service_card_keyboard(int(result.service.id), ui),
     )

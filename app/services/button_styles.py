@@ -90,6 +90,7 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "svc_refresh", "label": "رفرش وضعیت سرویس", "group": "زیرمنوها", "default": ""},
     {"id": "svc_wireguard", "label": "فایل WireGuard سرویس", "group": "زیرمنوها", "default": ""},
     {"id": "svc_auto", "label": "تنظیمات خودکار سرویس", "group": "زیرمنوها", "default": ""},
+    {"id": "svc_more", "label": "بیشتر (کارت سرویس)", "group": "زیرمنوها", "default": ""},
     {"id": "svc_cancel", "label": "درخواست لغو سرویس", "group": "زیرمنوها", "default": ""},
     {"id": "svc_delete", "label": "حذف سرویس", "group": "زیرمنوها", "default": "danger"},
     {"id": "svc_add_existing", "label": "افزودن سرویس قبلی", "group": "زیرمنوها", "default": ""},

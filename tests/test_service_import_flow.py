@@ -196,7 +196,7 @@ class HandlerTests(unittest.IsolatedAsyncioTestCase):
         finish.assert_awaited_once()
         self.assertIn("✅", finish.await_args.kwargs["text"])
         data = [b.callback_data for row in finish.await_args.kwargs["inline"].inline_keyboard for b in row]
-        self.assertIn("svc:view:7", data)
+        self.assertIn("svc:more:7", data)
         message.answer.assert_not_awaited()
 
     async def test_a_shop_bot_passes_its_shop_to_the_checks(self):

@@ -822,7 +822,6 @@ async def _link_subscription(
         ImportOutcome,
         ServiceImportError,
         import_existing_service,
-        is_external_service,
     )
 
     await delete_user_message(message)  # the link is a bearer secret, keep it out of the chat
@@ -852,7 +851,5 @@ async def _link_subscription(
 
     await message.answer(
         format_message("✅ اتصال سرویس", service_card(result.info)),
-        reply_markup=service_card_keyboard(
-            int(result.service.id), ui, external=is_external_service(result.service)
-        ),
+        reply_markup=service_card_keyboard(int(result.service.id), ui),
     )
