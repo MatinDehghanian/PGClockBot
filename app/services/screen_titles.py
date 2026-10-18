@@ -57,6 +57,10 @@ SCREEN_TITLE_DEFAULTS: dict[str, str] = {
     "r.home": "🤝 پنل نماینده",
     "r.settings": "⚙️ تنظیمات سریع فروشگاه",
     "r.plans": "💎 پلن‌های فروش",
+    "r.daily": "📥 کارهای روزانه",
+    "r.customers": "👥 مشتریان",
+    "r.shop": "🏪 فروشگاه من",
+    "r.account": "💼 حساب من",
 }
 
 _PICK_SECTION = "یک بخش را از دکمه‌های زیر انتخاب کنید."
@@ -98,6 +102,10 @@ SCREEN_CAPTION_DEFAULTS: dict[str, str] = {
         f"فقط محدودهٔ همین فروشگاه — بدون تنظیمات پلتفرم.\n{_WEB_ONLY_SETTINGS}"
     ),
     "r.plans": "ساخت و کاتالوگ از دکمه‌های زیر.\nبرچسب دسته و بسته حجم/زمان از کیبورد — مثل وب‌پنل.",
+    "r.daily": "خلاصهٔ فروشگاه، سفارش‌ها، رسیدها و تیکت‌های مشتریان.",
+    "r.customers": "فهرست مشتریان و نمایندگان زیرمجموعه.",
+    "r.shop": "پلن‌های فروش، باشگاه مشتریان و تنظیمات فروشگاه.",
+    "r.account": "کیف پول، تمدید، بسته‌های حجم/کاربر، گزارش و آمار.",
 }
 # The support menu already shows an editable setting under its title.
 CAPTION_SETTING_OVERRIDES: dict[str, str] = {"c.support": "support_text"}

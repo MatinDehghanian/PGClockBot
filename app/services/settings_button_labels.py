@@ -221,6 +221,13 @@ BTN_ADMIN_LOYALTY_SUB: list[Field] = [
     ("btn_adm_loy_ref_text", "متن دعوت", "text"),
 ]
 
+BTN_RESELLER_GROUPS: list[Field] = [
+    ("btn_res_grp_daily", "گروه کارهای روزانه", "text"),
+    ("btn_res_grp_customers", "گروه مشتریان", "text"),
+    ("btn_res_grp_shop", "گروه فروشگاه من", "text"),
+    ("btn_res_grp_account", "گروه حساب من", "text"),
+]
+
 BTN_RESELLER_HUB: list[Field] = [
     ("btn_res_dash", "خانه نماینده", "text"),
     ("btn_res_users", "مشتریان من", "text"),
@@ -340,6 +347,7 @@ def shop_button_subs(*, include_platform: bool) -> list[tuple]:
         ("btn_adm_loy_sub", "دکمه‌های ادمین — باشگاه", BTN_ADMIN_LOYALTY_SUB),
         ("btn_adm_mkt_sub", "دکمه‌های ادمین — کدهای هدیه و کمپین", BTN_ADMIN_MARKETING_SUB),
         ("btn_service_more", "دکمه‌های مدیریت سرویس", BTN_SERVICE_MORE),
+        ("btn_res_groups", "دکمه‌های پنل نماینده — گروه‌ها", BTN_RESELLER_GROUPS),
         ("btn_res_hub", "دکمه‌های پنل نماینده", BTN_RESELLER_HUB),
         ("btn_res_hub_more", "دکمه‌های پنل نماینده — مشتریان و حساب", BTN_RESELLER_HUB_MORE),
         ("btn_res_plans_sub", "دکمه‌های پلن‌های فروش", BTN_RESELLER_PLANS_SUB),

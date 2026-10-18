@@ -116,6 +116,7 @@ def bot_routers() -> list[Router]:
         purchase_contact,
         reply_nav,
         reseller,
+        reseller_hub,
         reseller_plans,
         reseller_reps,
         reseller_settings,
@@ -147,6 +148,7 @@ def bot_routers() -> list[Router]:
         # Reply-keyboard nav early so menu labels win over FSM amount parsers
         reply_nav.router,
         nav_hubs.router,
+        reseller_hub.router,
         nav_marketing.router,
         marketing_tools.router,
         nav_input_mod.router,

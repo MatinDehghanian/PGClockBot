@@ -17,8 +17,9 @@ class DeadEndScreenTests(unittest.IsolatedAsyncioTestCase):
     def test_custom_plan_confirm_can_go_back_to_the_plan_list(self):
         self.assertIn("shop:list", _callbacks(kb.custom_confirm_keyboard({})))
 
-    def test_reseller_info_screens_return_to_home(self):
-        self.assertEqual(_callbacks(reseller._RESELLER_HOME_BACK), ["nv:res:home"])
+    def test_reseller_info_screens_return_to_their_group(self):
+        self.assertEqual(_callbacks(reseller._group_back("res_stats")), ["nv:res:grp:account"])
+        self.assertEqual(_callbacks(reseller._group_back("res_billing")), ["nv:res:grp:account"])
 
     async def test_pg_user_card_error_offers_back_to_users(self):
         target = MagicMock()

@@ -19,6 +19,9 @@ from aiogram.types import (
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.bot.keyboards import REPLY_ACTION_RES_ADD_REP
+from app.bot.reseller_hub_groups import back_callback_for
+from app.bot.screen_replay import replay_screen
 from app.db.models import BotUser
 from app.services.bot_principal_identity import resolve_bot_principal_bridge
 from app.services.principal_child_provisioning import (
@@ -203,7 +206,17 @@ async def rrep_cancel(callback: CallbackQuery, state: FSMContext) -> None:
         await callback.answer(feedback.CANCELLED_SHORT)
     except Exception:
         pass
-    if callback.message:
+    if not callback.message:
+        return
+    # One step back: the customers group the flow was started from.
+    reopened = await replay_screen(
+        callback.bot,
+        user=callback.from_user,
+        chat_id=int(callback.message.chat.id),
+        data=back_callback_for(REPLY_ACTION_RES_ADD_REP),
+        message=callback.message,
+    )
+    if not reopened:
         await callback.message.answer("ساخت نماینده لغو شد.")
 
 

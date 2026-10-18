@@ -33,14 +33,15 @@ from app.services.resellers import (
     reseller_billing_mode_label,
     reseller_plan_mode_of,
 )
+from app.bot.reseller_hub_groups import back_callback_for
 from app.bot.tg_utils import safe_edit_text
 from app.services.users import get_all_settings
 from app.services.redact import user_safe_error
 from app.services import bot_feedback_texts as feedback
 
-_RESELLER_HOME_BACK = InlineKeyboardMarkup(
-    inline_keyboard=[[kb.back_button(None, "nv:res:home")]]
-)
+def _group_back(action: str) -> InlineKeyboardMarkup:
+    """«بازگشت» from a shop panel screen to the group it was opened from."""
+    return InlineKeyboardMarkup(inline_keyboard=[[kb.back_button(None, back_callback_for(action))]])
 
 router = Router(name="reseller")
 
@@ -320,7 +321,7 @@ async def res_dash(
         f"🎫 تیکت باز: {open_tickets}"
     )
     if callback.message:
-        await safe_edit_text(callback.message, text, reply_markup=None)
+        await safe_edit_text(callback.message, text, reply_markup=_group_back("res_dash"))
 
 
 RES_USERS_PAGE = 10
@@ -392,6 +393,7 @@ async def res_users_list(
         nav.append(InlineKeyboardButton(text="بعد ▶️", callback_data=f"res:users:{page + 1}"))
     if nav:
         rows.append(nav)
+    rows.extend(_group_back("res_users").inline_keyboard)
     text = (
         f"👥 <b>مشتریان من</b>\n"
         f"صفحه {page + 1} از {max(1, (total + RES_USERS_PAGE - 1) // RES_USERS_PAGE)}"
@@ -404,7 +406,7 @@ async def res_users_list(
         await safe_edit_text(
             callback.message,
             text,
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows) if rows else None,
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
         )
 
 
@@ -677,6 +679,7 @@ async def res_reports(
             )
         )
     rows.append(period_row)
+    rows.extend(_group_back("res_reports").inline_keyboard)
     if callback.message:
         await safe_edit_text(
             callback.message,
@@ -711,7 +714,7 @@ async def res_stats(
         f"ادمین PG: <code>{profile.pg_admin_username or '—'}</code>"
     )
     if callback.message:
-        await safe_edit_text(callback.message, text, reply_markup=_RESELLER_HOME_BACK)
+        await safe_edit_text(callback.message, text, reply_markup=_group_back("res_stats"))
 
 
 @router.callback_query(F.data == "res:billing")
@@ -770,7 +773,7 @@ async def res_billing(
             )
     if callback.message:
         await safe_edit_text(
-            callback.message, "\n".join(lines), reply_markup=_RESELLER_HOME_BACK
+            callback.message, "\n".join(lines), reply_markup=_group_back("res_billing")
         )
 
 
@@ -804,7 +807,7 @@ async def res_orders(
             await safe_edit_text(
                 callback.message,
                 "سفارشی برای مشتریان شما ثبت نشده.",
-                reply_markup=None,
+                reply_markup=_group_back("res_orders"),
             )
         return
     lines = ["🛒 <b>آخرین سفارش‌های مشتریان</b>\n"]
@@ -817,7 +820,7 @@ async def res_orders(
         await safe_edit_text(
             callback.message,
             "\n".join(lines),
-            reply_markup=None,
+            reply_markup=_group_back("res_orders"),
         )
 
 
@@ -855,7 +858,7 @@ async def present_reseller_tickets_list(
     rows = result.all()
     ui = await get_all_settings(session)
     if not rows:
-        markup = with_inline_back(None, ui, "nv:res:home")
+        markup = with_inline_back(None, ui, back_callback_for("res_tickets"))
         text = "تیکت بازی از مشتریان نیست."
     else:
         lines = ["🎫 <b>تیکت‌های مشتریان</b>\n"]
@@ -878,7 +881,7 @@ async def present_reseller_tickets_list(
         lines.append("\nروی دکمه پاسخ بزنید یا تیکت را ببندید.")
         text = "\n".join(lines)
         markup = with_inline_back(
-            InlineKeyboardMarkup(inline_keyboard=rows_kb), ui, "nv:res:home"
+            InlineKeyboardMarkup(inline_keyboard=rows_kb), ui, back_callback_for("res_tickets")
         )
     if edit:
         await safe_edit_text(message, text, reply_markup=markup)
@@ -946,7 +949,7 @@ async def res_cancellations(
     rows = [(r, u) for r, u in rows if r.status in OPEN_OPERATOR_STATUSES][:20]
     ui = await get_all_settings(session)
     if not rows:
-        markup = with_inline_back(None, ui, "nv:res:home")
+        markup = with_inline_back(None, ui, back_callback_for("res_cancellations"))
         if callback.message:
             await safe_edit_text(
                 callback.message, feedback.NO_PENDING_CANCELLATION, reply_markup=markup
@@ -968,7 +971,7 @@ async def res_cancellations(
         )
     lines.append("\n<i>تأیید/رد در وب‌پنل: /finance?tab=cancellations</i>")
     markup = with_inline_back(
-        InlineKeyboardMarkup(inline_keyboard=kb_rows), ui, "nv:res:home"
+        InlineKeyboardMarkup(inline_keyboard=kb_rows), ui, back_callback_for("res_cancellations")
     )
     if callback.message:
         await safe_edit_text(callback.message, "\n".join(lines), reply_markup=markup)
@@ -1053,7 +1056,7 @@ async def res_payments(
     rows = result.all()
     if not rows:
         if callback.message:
-            await safe_edit_text(callback.message, feedback.NO_PENDING_RECEIPT, reply_markup=None)
+            await safe_edit_text(callback.message, feedback.NO_PENDING_RECEIPT, reply_markup=_group_back("res_payments"))
         return
     for payment, user in rows:
         caption = (
@@ -1077,7 +1080,7 @@ async def res_payments(
         except Exception:
             pass
     if callback.message:
-        await safe_edit_text(callback.message, "رسیدهای باز ارسال شد.", reply_markup=None)
+        await safe_edit_text(callback.message, "رسیدهای باز ارسال شد.", reply_markup=_group_back("res_payments"))
 
 
 def _resapply_list_back_for_plan(plan) -> str:
@@ -1487,7 +1490,7 @@ async def res_renew(
                 callback_data="res:renew:go",
             )
         ],
-        [kb.back_button(None, "nv:res:home")],
+        [kb.back_button(None, back_callback_for("res_renew"))],
     ]
     detail = format_renew_invoice_html(invoice, currency=get_settings().currency)
     exp = invoice.get("expires_at")
@@ -1860,7 +1863,7 @@ async def res_addons(
         await callback.answer("بستهٔ اضافه فعالی تعریف نشده", show_alert=True)
         return
 
-    rows.append([kb.back_button(None, "nv:res:home")])
+    rows.append([kb.back_button(None, back_callback_for("res_addon_packs"))])
     body = (
         "بستهٔ آماده از کاتالوگ، یا خرید واحدی (اگر پلن اجازه دهد).\n"
         "با خرید بستهٔ آماده فقط ظرفیت اضافه می‌شود و تاریخ انقضا عوض نمی‌شود."

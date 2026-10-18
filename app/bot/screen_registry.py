@@ -23,7 +23,9 @@ from app.bot import nav_inline as hubs
 from app.bot import reply_keyboards as rk
 from app.bot.button_sources import recording_button_sources
 from app.bot.edit_mode import without_editor
+from app.bot.reseller_hub_groups import RESELLER_GROUPS
 from app.services.button_styles import CATALOG_IDS, setting_key
+from app.services.screen_titles import SCREEN_TITLE_DEFAULTS
 
 Markup = InlineKeyboardMarkup | ReplyKeyboardMarkup
 
@@ -162,6 +164,15 @@ def _reseller_screens() -> list[ScreenSpec]:
             "r.settings", "تنظیمات فروشگاه", lambda ctx: hubs.reseller_settings_hub_keyboard(ctx.ui), "res:st:hub"
         ),
         reseller("r.plans", "پلن‌های فروش", lambda ctx: hubs.reseller_plans_hub_keyboard(ctx.ui), "res:plans"),
+        *(
+            reseller(
+                group.screen_id,
+                SCREEN_TITLE_DEFAULTS[group.screen_id].split(" ", 1)[-1],
+                lambda ctx, group_id=group.id: hubs.reseller_group_hub_keyboard(group_id, ctx.profile, ctx.ui),
+                group.callback,
+            )
+            for group in RESELLER_GROUPS
+        ),
     ]
 
 

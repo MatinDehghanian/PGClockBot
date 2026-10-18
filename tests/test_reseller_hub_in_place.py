@@ -95,14 +95,14 @@ class SubScreenBackTests(unittest.IsolatedAsyncioTestCase):
             await handler(callback, MagicMock(), SimpleNamespace(id=5))
         return _callbacks(edit.await_args.kwargs["reply_markup"])
 
-    async def test_renew_back_returns_to_hub(self) -> None:
+    async def test_renew_back_returns_to_its_group(self) -> None:
         cbs = await self._run(reseller.res_renew, MagicMock(category_id=None))
-        self.assertEqual(cbs[-1], "nv:res:home")
+        self.assertEqual(cbs[-1], "nv:res:grp:account")
         self.assertNotIn("menu:home", cbs)
 
-    async def test_addons_back_returns_to_hub(self) -> None:
+    async def test_addons_back_returns_to_its_group(self) -> None:
         cbs = await self._run(reseller.res_addons, MagicMock(category_id=None))
-        self.assertEqual(cbs[-1], "nv:res:home")
+        self.assertEqual(cbs[-1], "nv:res:grp:account")
         self.assertNotIn("menu:home", cbs)
 
     async def test_unit_purchase_back_returns_to_packs(self) -> None:

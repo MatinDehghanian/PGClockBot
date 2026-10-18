@@ -109,7 +109,7 @@ class ShopSettingsBackCancelTests(unittest.IsolatedAsyncioTestCase):
         buttons = [b.callback_data or b.url for row in markup.inline_keyboard for b in row]
         self.assertGreater(sum(1 for b in buttons if b and b.startswith("nv:res:ra:")), 3)
         self.assertIn("https://panel.test/shop-settings", buttons)
-        self.assertEqual(buttons[-1], "nv:res:home")
+        self.assertEqual(buttons[-1], "nv:res:grp:shop")
 
     async def test_a_typed_field_cancel_returns_to_its_subsection(self) -> None:
         message = _typed()
