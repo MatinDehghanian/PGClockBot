@@ -418,6 +418,11 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
 
             known = known & allowed_style_setting_keys(for_reseller=True)
         known -= platform_only_screen_text_keys()
+        if tab == "menu" and form.get("reset_defaults"):
+            from app.bot.keyboards import default_menu_layout_settings
+
+            await set_settings_bulk(session, default_menu_layout_settings(for_shop=True), reseller_id=rid)
+            return _redirect_after_save(request, "/shop-settings?tab=menu", msg="چیدمان منو به پیش‌فرض برگشت.")
         if form.get("reset_defaults") and tab in RESETTABLE_SETTINGS_TABS:
             await set_settings_bulk(session, default_values_for_keys(known), reseller_id=rid)
             return _redirect_after_save(
