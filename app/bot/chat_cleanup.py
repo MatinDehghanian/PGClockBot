@@ -80,7 +80,8 @@ def is_cleanup_on() -> bool:
     return _cleanup_on.get()
 
 
-def _chat_key(message: Message) -> ChatKey | None:
+def chat_key(message: Message) -> ChatKey | None:
+    """(bot id, chat id) of a private chat; None for groups and channels."""
     chat = getattr(message, "chat", None)
     bot = getattr(message, "bot", None)
     if getattr(chat, "type", None) != "private" or bot is None:
@@ -95,14 +96,14 @@ def note_throwaway(message: Message | None, *, reply_markup: Any = None) -> None
     """Remember a panel or a menu tap so the next panel can delete it."""
     if message is None or not is_cleanup_on() or isinstance(reply_markup, ReplyKeyboardMarkup):
         return
-    key = _chat_key(message)
+    key = chat_key(message)
     if key is not None and getattr(message, "message_id", None) is not None:
         _log.add(key, int(message.message_id), time.monotonic())
 
 
 def keep_message(message: Message | None) -> None:
     """A panel now shows something the person should keep; never delete it."""
-    key = _chat_key(message) if message is not None else None
+    key = chat_key(message) if message is not None else None
     if key is not None and getattr(message, "message_id", None) is not None:
         _log.forget(key, int(message.message_id))
 
@@ -114,15 +115,15 @@ async def sweep_above(message: Message | None, *, panel_id: int | None = None) -
     """
     if message is None or not is_cleanup_on():
         return
-    key = _chat_key(message)
+    key = chat_key(message)
     if key is None:
         return
     keep = panel_id if panel_id is not None else getattr(message, "message_id", None)
     stale = _log.take_except(key, keep, time.monotonic())
-    await _delete(message.bot, key[1], stale)
+    await delete_messages(message.bot, key[1], stale)
 
 
-async def _delete(bot: Bot, chat_id: int, message_ids: list[int]) -> None:
+async def delete_messages(bot: Bot, chat_id: int, message_ids: list[int]) -> None:
     for start in range(0, len(message_ids), DELETE_BATCH):
         try:
             await bot.delete_messages(chat_id=chat_id, message_ids=message_ids[start : start + DELETE_BATCH])
