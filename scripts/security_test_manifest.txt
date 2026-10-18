@@ -212,3 +212,4 @@ tests/test_long_lists.py
 tests/test_service_card_more.py
 tests/test_admin_tweaks.py
 tests/test_chat_cleanup.py
+tests/test_chat_cleanup_forms.py

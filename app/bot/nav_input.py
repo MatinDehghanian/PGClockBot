@@ -25,7 +25,8 @@ from aiogram.types import (
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.bot.nav_inline import NAV_PANEL_CHAT_KEY, NAV_PANEL_MSG_KEY, panel_is_still_live
+from app.bot.chat_cleanup import note_throwaway, sweep_above
+from app.bot.nav_inline import NAV_PANEL_CHAT_KEY, NAV_PANEL_MSG_KEY, is_bot_panel_message, panel_is_still_live
 from app.bot.screen_replay import replay_screen
 from app.db.models import BotUser
 from app.services import bot_feedback_texts as feedback
@@ -144,7 +145,21 @@ async def ask_text(
                 RETURN_TO_KEY: return_to,
             }
         )
+        await _tidy_after_step(target.message if isinstance(target, CallbackQuery) else target, msg)
     return msg
+
+
+async def _tidy_after_step(trigger: Message | None, shown: Message) -> None:
+    """The prompt or result now on screen stays; the typed reply and earlier panels go.
+
+    A prompt or result sent as a new message is throwaway itself; one edited into an
+    existing message keeps that message's standing.
+    """
+    if trigger is not None and not is_bot_panel_message(trigger):
+        note_throwaway(trigger)
+    if shown is not trigger:
+        note_throwaway(shown)
+    await sweep_above(shown)
 
 
 async def form_origin(state: FSMContext) -> str | None:
@@ -162,9 +177,14 @@ async def finish_text_step(
     *,
     text: str,
     inline: InlineKeyboardMarkup | None = None,
+    keep_input: bool = False,
     **send_kw: Any,
 ) -> Message | None:
-    """Turn the stored prompt into the next panel (edit), or send one new message."""
+    """Turn the stored prompt into the next panel (edit), or send one new message.
+
+    ``keep_input`` leaves the person's typed message in the chat, for text they will
+    want to see again, such as a ticket they wrote.
+    """
     data = await state.get_data()
     prompt_id = data.get(PROMPT_MSG_ID)
     chat_id = data.get(PROMPT_CHAT_ID)
@@ -180,13 +200,18 @@ async def finish_text_step(
                 reply_markup=inline,
                 **send_kw,
             )
+            if not keep_input:
+                note_throwaway(message)
+            await sweep_above(message, panel_id=int(prompt_id))
             return None
         except Exception:
             logger.debug(
                 "finish_text_step edit failed; falling back to answer",
                 exc_info=True,
             )
-    return await message.answer(text, reply_markup=inline, **send_kw)
+    sent = await message.answer(text, reply_markup=inline, **send_kw)
+    await _tidy_after_step(None if keep_input else message, sent)
+    return sent
 
 
 async def remember_prompt(

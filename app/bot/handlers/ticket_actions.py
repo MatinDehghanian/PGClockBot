@@ -323,6 +323,7 @@ async def tkt_reply_body(
         state,
         text=feedback.SENT,
         inline=InlineKeyboardMarkup(inline_keyboard=[[kb.back_button(None, "support:list")]]),
+        keep_input=True,
     )
 
 
