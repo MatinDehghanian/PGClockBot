@@ -300,70 +300,53 @@ def register_settlement_pages(app, *, get_db):
         token: str,
         as_html: bool,
     ):
-        from app.services.payment_settlement import (
-            handle_bbc_callback,
-            notify_after_settlement,
-        )
+        from app.services.bbc_settlement import handle_bbc_link
 
         try:
-            settlement = await handle_bbc_callback(
-                session,
-                settlement_id=int(settlement_id),
-                tenant_key=int(tenant_key),
-                token=str(token or ""),
+            settlement = await handle_bbc_link(
+                session, settlement_id=settlement_id, tenant_key=tenant_key, token=token
             )
         except ValueError:
-            logger.info(
-                "bbc callback rejected tenant=%s settlement=%s",
-                tenant_key,
-                settlement_id,
-            )
+            logger.info("bbc link rejected tenant=%s settlement=%s", tenant_key, settlement_id)
             if as_html:
                 return _html_page(
-                    "ناموفق",
-                    "<h1>تأیید پرداخت ناموفق</h1>"
-                    "<p class='muted'>به ربات برگردید یا چند لحظه دیگر دوباره تلاش کنید.</p>",
+                    "نامعتبر",
+                    "<h1>این لینک پرداخت معتبر نیست</h1>"
+                    "<p class='muted'>به ربات برگردید و وضعیت سفارش را آنجا ببینید.</p>",
                     ok=False,
-                    status_code=400,
+                    status_code=404,
                 )
-            return JSONResponse({"ok": False}, status_code=400)
+            return JSONResponse({"ok": False}, status_code=404)
+        if not as_html:
+            return JSONResponse({"ok": True})
+        title, body, ok = _bbc_return_page(settlement)
+        return _html_page(title, body, ok=ok)
 
-        payment = await session.get(Payment, int(settlement.payment_id))
-        order = None
-        if payment and payment.order_id:
-            order = await session.get(Order, payment.order_id)
-        if payment and settlement.status == SettlementStatus.SETTLED.value:
-            try:
-                await notify_after_settlement(session, payment, order)
-            except Exception:
-                logger.exception(
-                    "bbc notify failed payment=%s", getattr(payment, "id", None)
-                )
-
-        if as_html:
-            if settlement.status == SettlementStatus.SETTLED.value:
-                return _html_page(
-                    "موفق",
-                    "<h1>پرداخت تأیید شد</h1><p>می‌توانید به تلگرام برگردید.</p>",
-                )
-            if settlement.status == SettlementStatus.EXPIRED.value:
-                return _html_page(
-                    "منقضی",
-                    "<h1>مهلت پرداخت تمام شد</h1><p class='muted'>به ربات برگردید.</p>",
-                    ok=False,
-                )
-            return _html_page(
-                "در انتظار",
-                "<h1>هنوز در انتظار واریز</h1>"
-                "<p>پس از واریز مبلغ یکتا، تأیید خودکار انجام می‌شود.</p>"
-                "<p class='muted'>می‌توانید این صفحه را ببندید و به ربات برگردید.</p>",
+    def _bbc_return_page(settlement) -> tuple[str, str, bool]:
+        """What the payer sees after the payment page; never internal ids or reasons."""
+        status = settlement.status
+        error = str(settlement.error_message or "")
+        if status == SettlementStatus.SETTLED.value:
+            return "موفق", "<h1>پرداخت تأیید شد</h1><p>سرویس در تلگرام برای شما فرستاده شد.</p>", True
+        if error.startswith("review:") or status == SettlementStatus.FAILED.value:
+            return (
+                "در حال بررسی",
+                "<h1>پرداخت در حال بررسی است</h1>"
+                "<p>فروشگاه واریز را بررسی می‌کند و نتیجه در ربات به شما اطلاع داده می‌شود.</p>",
+                True,
             )
-        return JSONResponse(
-            {
-                "ok": True,
-                "settlement_id": int(settlement.id),
-                "status": settlement.status,
-            }
+        if status == SettlementStatus.EXPIRED.value:
+            return (
+                "منقضی",
+                "<h1>مهلت پرداخت تمام شد</h1><p class='muted'>به ربات برگردید و دوباره پرداخت را شروع کنید.</p>",
+                False,
+            )
+        return (
+            "در انتظار",
+            "<h1>هنوز واریزی ثبت نشده</h1>"
+            "<p>بعد از واریز دقیقِ مبلغ یکتا، تأیید و تحویل خودکار انجام می‌شود.</p>"
+            "<p class='muted'>می‌توانید این صفحه را ببندید و به ربات برگردید.</p>",
+            True,
         )
 
     @app.api_route(
@@ -376,13 +359,10 @@ def register_settlement_pages(app, *, get_db):
         request: Request,
         session: AsyncSession = Depends(get_db),
     ):
+        # The body is never read: payment truth comes from the API with the shop's key.
         token = (request.query_params.get("t") or "").strip()
         return await _bbc_finish(
-            session,
-            tenant_key=tenant_key,
-            settlement_id=settlement_id,
-            token=token,
-            as_html=False,
+            session, tenant_key=tenant_key, settlement_id=settlement_id, token=token, as_html=False
         )
 
     @app.get("/payments/settlement/bbc/tenant/{tenant_key}/return/{settlement_id}")
@@ -394,9 +374,5 @@ def register_settlement_pages(app, *, get_db):
     ):
         token = (request.query_params.get("t") or "").strip()
         return await _bbc_finish(
-            session,
-            tenant_key=tenant_key,
-            settlement_id=settlement_id,
-            token=token,
-            as_html=True,
+            session, tenant_key=tenant_key, settlement_id=settlement_id, token=token, as_html=True
         )

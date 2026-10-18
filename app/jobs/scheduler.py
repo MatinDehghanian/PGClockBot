@@ -758,12 +758,12 @@ async def run_targeted_campaigns_tick(bot: Bot) -> None:
 
 
 async def run_bbc_settlement_poll() -> None:
-    """Re-verify awaiting BezanBeCard settlements (callback backup)."""
-    from app.services.payment_settlement import poll_open_bbc_settlements
+    """Re-read open «بزن به کارت» orders: the callback's backup and the late-payment check."""
+    from app.services.bbc_settlement import poll_bbc_settlements
 
     async with SessionLocal() as session:
         try:
-            n = await poll_open_bbc_settlements(session, limit=40)
+            n = await poll_bbc_settlements(session)
             if n:
                 logger.info("bbc settlement poll settled=%s", n)
         except Exception:

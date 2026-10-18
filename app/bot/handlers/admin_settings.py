@@ -15,6 +15,7 @@ from app.bot import keyboards as kb
 from app.bot.auth import bot_admin_settings_in_flow, is_platform_admin as _is_admin
 from app.bot.auth import require_bot_owner
 from app.bot.nav_input import delete_user_message, finish_text_step
+from app.bot.secret_fields import SECRET, is_secret, secret_prompt
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser, Plan
 from app.services.connection_status_texts import CONNECTION_STATUS_MENU_KEY
@@ -234,7 +235,7 @@ SECTIONS: dict[str, dict] = {
             ]),
             ("card_auto", "تأیید خودکار کارت به کارت", [
                 ("card_auto_provider", "ارائه‌دهنده", "text"),
-                ("card_auto_webhook_secret", "رمز وب‌هوک", "text"),
+                ("card_auto_webhook_secret", "رمز وب‌هوک", SECRET),
                 ("card_auto_hint_text", "راهنما", "textarea"),
             ]),
             ("gateway", "درگاه لینک", [
@@ -251,7 +252,7 @@ SECTIONS: dict[str, dict] = {
                 *BTN_PAY_PSP,
             ]),
             ("bbc", "بزن به کارت", [
-                ("bbc_api_key", "کلید API (bezanbecard.ir)", "text"),
+                ("bbc_api_key", "کلید API (bezanbecard.ir)", SECRET),
                 ("bbc_pay_text", "راهنمای مشتری", "textarea"),
                 *BTN_PAY_BBC,
             ]),
@@ -1191,10 +1192,15 @@ async def settings_edit_ask(
             hint += "\n<i>ایموجی پریمیوم در متن پیام حفظ می‌شود.</i>"
     from app.bot.nav_input import ask_text
 
+    prompt = (
+        secret_prompt(label, cur)
+        if is_secret(kind)
+        else f"<b>{label}</b>\nفعلی:\n<code>{_preview(cur)}</code>\n\n{hint}"
+    )
     await ask_text(
         callback,
         state,
-        prompt=f"<b>{label}</b>\nفعلی:\n<code>{_preview(cur)}</code>\n\n{hint}",
+        prompt=prompt,
         cancel_code="adm_set",
         fsm_state=SettingsStates.edit_value,
         edit=True,
@@ -1224,7 +1230,10 @@ async def settings_edit_save(
         return
     meta = FIELDS.get(key)
     kind = meta[2] if meta else "text"
-    if kind == "number":
+    if is_secret(kind):
+        await delete_user_message(message)
+        await set_setting(session, key, text)
+    elif kind == "number":
         raw = text.replace(",", "").replace("٬", "")
         try:
             float(raw)

@@ -1116,6 +1116,38 @@ async def notify_auto_approve(
     )
 
 
+async def notify_settlement_review(
+    session: AsyncSession,
+    payment: Payment,
+    *,
+    shop_id: int | None,
+    reason: str,
+) -> int:
+    """Staff of the payment's shop (platform admins for the platform): an automatic
+    payment needs a person. Never approves or rejects anything itself."""
+    # Local import: app.bot imports the handler modules, which import this module.
+    from app.bot import create_bot
+
+    settings = get_settings()
+    user = await session.get(BotUser, payment.user_id) if payment.user_id else None
+    lines = [
+        kv_line("🧾", "پرداخت", f"#{payment.id}"),
+        kv_line("💰", "مبلغ", format_toman(payment.amount, settings.currency)),
+        kv_line("👤", "کاربر", format_user_label(user, telegram_id=getattr(user, "telegram_id", None))),
+    ]
+    if payment.order_id:
+        lines.append(kv_line("🛒", "سفارش", f"#{payment.order_id}"))
+    text = format_message("⚠️ پرداخت «بزن به کارت» نیاز به بررسی دارد", info_block(lines) + f"\n\n{reason}")
+    bot = create_bot()
+    try:
+        # The settlement's shop is passed as the explicit scope, so shop events never reach platform admins.
+        return await _dispatch_dual_notify(
+            bot, session, "notify_pending_approval", text, ticket_reseller_id=shop_id
+        )
+    finally:
+        await bot.session.close()
+
+
 async def notify_wireguard_missing(bot: Bot, session: AsyncSession, detail: str) -> int:
     """Platform admins: a customer who should get WireGuard files got none."""
     text = format_message("⚠️ فایل WireGuard تحویل نشد", detail)

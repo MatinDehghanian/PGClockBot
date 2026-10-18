@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
 from app.bot.nav_input import delete_user_message, finish_text_step
+from app.bot.secret_fields import SECRET, is_secret, secret_prompt, secret_state
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser
 from app.services.connection_status_texts import CONNECTION_STATUS_MENU_KEY
@@ -125,7 +126,7 @@ SECTIONS: dict[str, dict] = {
             ]),
             ("card_auto", "تأیید خودکار کارت به کارت", [
                 ("card_auto_provider", "ارائه‌دهنده", "text"),
-                ("card_auto_webhook_secret", "رمز وب‌هوک", "text"),
+                ("card_auto_webhook_secret", "رمز وب‌هوک", SECRET),
                 ("card_auto_hint_text", "راهنما", "textarea"),
             ]),
             ("gateway", "درگاه لینک", [
@@ -142,7 +143,7 @@ SECTIONS: dict[str, dict] = {
                 *BTN_PAY_PSP,
             ]),
             ("bbc", "بزن به کارت", [
-                ("bbc_api_key", "کلید API (bezanbecard.ir)", "text"),
+                ("bbc_api_key", "کلید API (bezanbecard.ir)", SECRET),
                 ("bbc_pay_text", "راهنمای مشتری", "textarea"),
                 *BTN_PAY_BBC,
             ]),
@@ -617,8 +618,9 @@ async def _sub_panel(session: AsyncSession, sec_id: str, sub_id: str, reseller_i
                 mark = "✅" if on(cur) else "❌"
                 rows.append([InlineKeyboardButton(text=f"{mark} {label}", callback_data=f"res:st:tog:{key}")])
             else:
+                shown = secret_state(cur) if is_secret(kind) else _preview(cur, limit=28)
                 rows.append(
-                    [InlineKeyboardButton(text=f"✏️ {label}: {_preview(cur, limit=28)}", callback_data=f"res:st:edit:{key}")]
+                    [InlineKeyboardButton(text=f"✏️ {label}: {shown}", callback_data=f"res:st:edit:{key}")]
                 )
     rows.append([kb.back_button(None, sub_back("res", sec_id, sub_id))])
     if sub_id == "bbc":
@@ -961,7 +963,11 @@ async def settings_edit_ask(
     await ask_text(
         callback,
         state,
-        prompt=f"<b>{meta[1]}</b>\nفعلی:\n<code>{_preview(cur)}</code>\n\n{hint}",
+        prompt=(
+            secret_prompt(meta[1], cur)
+            if is_secret(meta[2])
+            else f"<b>{meta[1]}</b>\nفعلی:\n<code>{_preview(cur)}</code>\n\n{hint}"
+        ),
         cancel_code="rs_set",
         fsm_state=ResellerSettingsStates.edit_value,
         edit=True,
@@ -984,13 +990,17 @@ async def settings_edit_save(message: Message, state: FSMContext, session: Async
         await _typed_cancel(message, state, session, db_user, profile,
                             is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id)
         return
-    if key == "force_join_channel":
+    meta = FIELDS.get(key)
+    if meta and is_secret(meta[2]):
+        await delete_user_message(message)
+    elif key == "force_join_channel":
         from app.services.users import normalize_force_join_channel_value
 
         text = normalize_force_join_channel_value(text)
-    from app.services.rich_text import pack_setting_from_message
+    if not (meta and is_secret(meta[2])):
+        from app.services.rich_text import pack_setting_from_message
 
-    text = pack_setting_from_message(key, message)
+        text = pack_setting_from_message(key, message)
     await set_setting(session, key, text, reseller_id=profile.user_id)
     await _close_input_to_location(message, state, session, profile, note=feedback.SAVED_WITH_ICON)
 

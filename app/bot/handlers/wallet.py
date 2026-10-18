@@ -8,11 +8,13 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.bot import bbc_checkout_view as bbc_view
 from app.bot import keyboards as kb
 from app.bot.chat_cleanup import keep_message
 from app.bot.tg_utils import safe_edit_text
 from app.config import get_settings
 from app.db.models import BotUser, Order, Payment, PaymentMethod, PaymentStatus
+from app.services.bbc_settlement import reusable_bbc_topup, start_bbc_checkout
 from app.services.redact import user_safe_error
 from app.services.formatting import format_message, format_toman, kv_line
 from app.services.orders import create_wallet_topup
@@ -457,6 +459,43 @@ async def _topup_instructions(
     rows.append([kb.back_button(ui, "wallet:home")])
     return text, InlineKeyboardMarkup(inline_keyboard=rows), send_kw
 
+async def _show_bbc_topup(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    state: FSMContext,
+    db_user: BotUser,
+    ui: dict,
+    *,
+    amount: int,
+    method: str,
+) -> None:
+    """Wallet top-up through «بزن به کارت»; an unused top-up of the same amount is reused."""
+    payment = await reusable_bbc_topup(
+        session, int(db_user.id), amount, shop_id=current_shop_reseller_id()
+    ) or await create_wallet_topup(session, db_user.id, amount, method=method)
+    try:
+        checkout = await start_bbc_checkout(session, payment, description=f"شارژ کیف پول #{payment.id}")
+    except ValueError as exc:
+        await callback.answer(user_safe_error(exc), show_alert=True)
+        return
+    await callback.answer()
+    await state.clear()
+    if callback.message is None:
+        return
+    rows = [*bbc_view.checkout_rows(checkout), [kb.back_button(ui, "wallet:home")]]
+    text = bbc_view.checkout_text(
+        ui,
+        checkout,
+        amount_toman=amount,
+        currency=get_settings().currency,
+        order_id=0,
+        payment_id=int(payment.id),
+    )
+    await safe_edit_text(callback.message, text, reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
+    # The link and the exact amount must stay while the person pays elsewhere.
+    keep_message(callback.message)
+
+
 @router.callback_query(
     # Picker buttons are wtop:card:0:<dest_id> (order_id placeholder 0), matching shop pay:* shape.
     F.data.regexp(r"^wtop:(card|gateway|psp|crypto)(?::\d+(?::\w+)?)?$"),
@@ -534,57 +573,7 @@ async def wtop_choose_method(
         return
 
     if key == "bbc":
-        import json
-
-        from app.services.payment_providers.bezanbecard import format_unique_rial
-        from app.services.payment_settlement import create_bbc_checkout
-
-        payment = await create_wallet_topup(session, db_user.id, amount, method=method)
-        try:
-            settlement = await create_bbc_checkout(
-                session, payment, description=f"شارژ کیف پول #{payment.id}"
-            )
-        except ValueError as e:
-            await callback.answer(user_safe_error(e), show_alert=True)
-            return
-        await callback.answer()
-        amount_txt = format_toman(amount, get_settings().currency)
-        unique_txt = amount_txt
-        try:
-            payload = json.loads(settlement.provider_payload or "{}")
-            unique_rial = int(payload.get("unique_amount_rial") or 0)
-            if unique_rial > 0:
-                unique_txt = format_unique_rial(unique_rial)
-        except (TypeError, ValueError, json.JSONDecodeError):
-            pass
-        try:
-            body = render_message_template(
-                ui.get("bbc_pay_text") or "",
-                domain=DOMAIN_PAYMENT,
-                amount=amount_txt,
-                unique_amount=unique_txt,
-                order_id=0,
-                payment_id=payment.id,
-                shop_title=ui.get("shop_title") or "",
-            )
-        except Exception:
-            body = (
-                f"مبلغ شارژ: {amount_txt}\n"
-                f"مبلغ یکتای واریز: <b>{unique_txt}</b>"
-            )
-        body += f"\n\n(پرداخت #{payment.id})"
-        rows: list[list[InlineKeyboardButton]] = []
-        link = (settlement.checkout_url or "").strip()
-        if link.startswith("http://") or link.startswith("https://"):
-            rows.append([InlineKeyboardButton(text="💳 ورود به بزن به کارت", url=link)])
-        rows.append([kb.back_button(ui, "wallet:home")])
-        await state.clear()
-        if callback.message:
-            await safe_edit_text(
-                callback.message,
-                format_message("💳 بزن به کارت", body),
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
-            )
+        await _show_bbc_topup(callback, session, state, db_user, ui, amount=amount, method=method)
         return
 
     card = gateway = wallet = None
