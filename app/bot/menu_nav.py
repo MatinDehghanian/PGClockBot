@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
+from app.bot.chat_cleanup import replace_home
 from app.db.models import BotUser, UserService
 from app.services.service_scope import shop_services_clause
 from app.services.users import current_shop_reseller_id, get_all_settings
@@ -430,7 +431,7 @@ async def restore_main_reply(
         reseller_owner_id=reseller_owner_id,
         as_user=as_user,
     )
-    await message.answer(text, reply_markup=markup)
+    await replace_home(await message.answer(text, reply_markup=markup))
     return ui
 
 

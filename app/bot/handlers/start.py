@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
+from app.bot.chat_cleanup import note_throwaway, replace_home
 from app.bot.nav_input import delete_user_message
 from app.bot.reply_keyboard_state import take_keyboard_folded
 from app.bot.tg_utils import safe_edit_text
@@ -138,7 +139,8 @@ async def render_home(
             except Exception:
                 pass
 
-    await message.answer(text, reply_markup=reply_kb, **home_send_kw)
+    home = await message.answer(text, reply_markup=reply_kb, **home_send_kw)
+    await replace_home(home, sweep=True)
     _ = seed_reply_kb
 
 
@@ -150,7 +152,7 @@ async def seed_main_reply_kb(message: Message, reply_kb, *, tip: str = "·") -> 
     body = (tip or "").strip()
     if is_filler_chrome_text(body) or body.startswith("⌨️"):
         body = "منوی اصلی"
-    await attach_reply_keyboard(message, reply_kb, text=body)
+    await replace_home(await attach_reply_keyboard(message, reply_kb, text=body))
 
 @router.message(F.text.func(kb.is_restart_text))
 async def cmd_restart(
@@ -183,6 +185,8 @@ async def cmd_start(
     reseller_owner_id: int | None = None,
 ):
     await state.clear()
+    # The typed /start goes with the next home, like a menu tap.
+    note_throwaway(message)
     args = (command.args or "").strip()
     if args.startswith("ref_"):
         await message.answer(
@@ -706,6 +710,7 @@ async def cmd_menu(
     reseller_owner_id: int | None = None,
 ):
     await state.clear()
+    note_throwaway(message)
     await render_home(
         message,
         session,

@@ -11,7 +11,7 @@ from aiogram.types import InlineKeyboardMarkup, ReplyKeyboardMarkup
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from app.bot import chat_cleanup, nav_inline
+from app.bot import chat_cleanup, menu_nav, nav_inline
 from app.bot.handlers import shop
 from app.bot.chat_cleanup import DELETE_WINDOW_SECONDS, ChatCleanupMiddleware, ThrowawayLog
 from app.db.models import ResellerSetting, Setting
@@ -137,6 +137,62 @@ class CleanupTests(unittest.IsolatedAsyncioTestCase):
         chat.bot.edit_message_text = AsyncMock()
         await nav_inline.present_nav_panel(tap, text="b", inline=PANEL, state=state)
         self.assertEqual(chat.deleted(), [tap.message_id])
+
+
+
+MENU = ReplyKeyboardMarkup(keyboard=[])
+
+
+class HomeReplacementTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self) -> None:
+        for name in ("_log", "_homes"):
+            patcher = patch.object(chat_cleanup, name, ThrowawayLog())
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        self.token = chat_cleanup._cleanup_on.set(True)
+        self.addCleanup(chat_cleanup._cleanup_on.reset, self.token)
+
+    async def test_a_new_home_deletes_the_older_homes_and_the_typed_start(self) -> None:
+        chat = _Chat()
+        first = chat.message()
+        await chat_cleanup.replace_home(first, sweep=True)
+        typed_start = chat.message(from_bot=False)
+        chat_cleanup.note_throwaway(typed_start)
+        second = chat.message()
+        await chat_cleanup.replace_home(second, sweep=True)
+        third = chat.message()
+        await chat_cleanup.replace_home(third, sweep=True)
+        self.assertEqual(sorted(chat.deleted()), [first.message_id, typed_start.message_id, second.message_id])
+        self.assertNotIn(third.message_id, chat.deleted())
+
+    async def test_a_keyboard_under_a_new_panel_keeps_that_panel(self) -> None:
+        chat = _Chat()
+        panel = await nav_inline.present_inline_only(chat.message(from_bot=False), text="a", inline=PANEL)
+        await chat_cleanup.replace_home(chat.message())
+        self.assertNotIn(panel.message_id, chat.deleted())
+
+    async def test_a_failed_send_leaves_the_last_home_in_place(self) -> None:
+        chat = _Chat()
+        home = chat.message()
+        await chat_cleanup.replace_home(home)
+        await chat_cleanup.replace_home(None)
+        self.assertEqual(chat.deleted(), [])
+
+    async def test_homes_stay_while_switched_off(self) -> None:
+        chat = _Chat()
+        await chat_cleanup.replace_home(chat.message())
+        chat_cleanup._cleanup_on.set(False)
+        await chat_cleanup.replace_home(chat.message())
+        self.assertEqual(chat.deleted(), [])
+
+    async def test_back_to_the_main_menu_replaces_the_previous_menu_message(self) -> None:
+        chat = _Chat()
+        tap = chat.message(from_bot=False)
+        build = AsyncMock(return_value=(MENU, {}, "user"))
+        with patch.object(menu_nav, "build_main_reply_keyboard", build):
+            await menu_nav.restore_main_reply(tap, MagicMock(), MagicMock(), is_reseller_bot=False, reseller_owner_id=None)
+            await menu_nav.restore_main_reply(tap, MagicMock(), MagicMock(), is_reseller_bot=False, reseller_owner_id=None)
+        self.assertEqual(chat.deleted(), [tap.message_id + 1])
 
 
 class LogTests(unittest.TestCase):
