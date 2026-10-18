@@ -21,6 +21,9 @@ from app.services.plans_catalog import (
 from app.services.resellers import has_bot_perm
 from app.services import bot_feedback_texts as feedback
 
+# The shop plans screen: add / catalog actions and the plan list.
+PLANS_SCREEN = "res:plans"
+
 router = Router(name="reseller_plans")
 
 
@@ -83,16 +86,17 @@ async def _staff_ctx(profile: ResellerProfile, session: AsyncSession) -> dict:
 async def _plans_kb(
     session: AsyncSession, plans: list[Plan], *, reseller_id: int | None = None
 ) -> InlineKeyboardMarkup:
-    """Dynamic plan rows only — static «پلن جدید» lives on reply keyboard."""
+    """The shop's plan rows, with «بازگشت» to the plans screen (add / catalog actions)."""
     from app.bot.keyboards import reseller_plans_list_keyboard
+    from app.bot.nav_inline import with_inline_back
     from app.services.users import get_all_settings
 
     ui = await get_all_settings(session, reseller_id=reseller_id)
-    return reseller_plans_list_keyboard(plans, ui)
+    return with_inline_back(reseller_plans_list_keyboard(plans, ui), ui, PLANS_SCREEN)
 
 
 def _plan_item_kb(plan: Plan) -> InlineKeyboardMarkup:
-    """Plan actions only (no list-back chrome — use reply Back)."""
+    """One plan's actions; «بازگشت» returns to the plans screen."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -108,6 +112,7 @@ def _plan_item_kb(plan: Plan) -> InlineKeyboardMarkup:
                     callback_data=f"res:plan:catpick:{plan.id}",
                 )
             ],
+            [kb.back_button(None, PLANS_SCREEN)],
         ]
     )
 
@@ -532,11 +537,9 @@ async def res_plan_gb(message: Message, state: FSMContext, session: AsyncSession
                 )
             ]
         )
+    rows.append([InlineKeyboardButton(text="❌ انصراف", callback_data=PLANS_SCREEN)])
     await message.answer(
         "🏷 برچسب دسته را انتخاب کنید (اختیاری):",
-    )
-    await message.answer(
-        "برچسب دسته:",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
     )
 
@@ -574,15 +577,13 @@ async def _reseller_continue_pg_mode(
             await target_msg.answer(
                 "گروه یا تمپلیت مجازی در نقش پاسارگارد شما نیست.\n"
                 "از وب‌پنل → پاسارگارد دسترسی‌ها را بررسی کنید یا از ادمین بخواهید نقش را باز کند."
-                + note
+                + note,
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[[kb.back_button(None, PLANS_SCREEN)]]),
             )
         return
     if target_msg:
         await target_msg.answer(
             "منبع ساخت سرویس در پاسارگارد را انتخاب کنید:" + note,
-        )
-        await target_msg.answer(
-            "یکی از گزینه‌های زیر را انتخاب کنید:",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
         )
 

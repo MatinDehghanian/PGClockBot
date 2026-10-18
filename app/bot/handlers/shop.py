@@ -332,7 +332,7 @@ async def shop_list(callback: CallbackQuery, session: AsyncSession, db_user: Bot
             title="🛒 فروشگاه",
         )
         if callback.message:
-            await safe_edit_text(callback.message, text, reply_markup=None, **send_kw)
+            await safe_edit_text(callback.message, text, reply_markup=kb.back_home(ui), **send_kw)
         return
     cats, include_other = await _shop_category_menu(session, fixed_plans)
     body, _cap = _shop_picker_copy(use_categories=bool(cats))
@@ -1873,7 +1873,7 @@ async def pay_wallet_cb(
                 await safe_edit_text(
                     callback.message,
                     body,
-                    reply_markup=None,
+                    reply_markup=kb.back_home(None),
                 )
             else:
                 await safe_edit_text(
@@ -1886,7 +1886,7 @@ async def pay_wallet_cb(
                             else "هزینه نمایندگی پرداخت شد.\nدرخواست شما برای تأیید ادمین ارسال شد."
                         ),
                     ),
-                    reply_markup=None,
+                    reply_markup=kb.back_home(None),
                 )
             _ = main_kb
         for aid in get_settings().admin_ids:

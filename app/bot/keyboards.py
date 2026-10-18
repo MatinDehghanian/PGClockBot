@@ -2580,9 +2580,12 @@ def reseller_home(profile=None, ui: dict | None = None) -> InlineKeyboardMarkup:
 
 
 def back_home(ui: dict | None = None) -> InlineKeyboardMarkup:
-    """Legacy stub — use main reply keyboard / Back+Home footer instead of inline back."""
-    _ = ui
-    return InlineKeyboardMarkup(inline_keyboard=[])
+    """One «🏠 منوی اصلی» button, for screens that are the end of a path (nothing to go back to)."""
+    return InlineKeyboardMarkup(inline_keyboard=[[home_button(ui)]])
+
+
+def home_button(ui: dict | None = None) -> InlineKeyboardButton:
+    return _ikb(_home_label(ui), callback_data="menu:home", ui=ui, label_key="btn_menu_home", style_id="back")
 
 
 BTN_CANCEL = "انصراف"

@@ -22,6 +22,7 @@ from aiogram.types import (
 from app.bot import keyboards as kb
 from app.bot.auth import is_platform_admin as _is_admin
 from app.bot.auth import require_bot_owner_handler
+from app.bot.nav_inline import admin_backup_hub_keyboard, with_inline_back
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser
 from app.services.redact import user_safe_error
@@ -58,13 +59,16 @@ def _kb(rows: list[list[InlineKeyboardButton]]) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def _hub_keyboard(backups: list[dict] | None = None) -> InlineKeyboardMarkup:
-    """Dynamic backup file rows only — static actions live on reply keyboard."""
-    return kb.backup_files_keyboard(backups)
+def backup_hub_markup(backups: list[dict] | None, ui: dict | None) -> InlineKeyboardMarkup:
+    """The backup panel: create / upload actions, the backup files, «بازگشت» to the system hub."""
+    hub = admin_backup_hub_keyboard(ui)
+    actions = [list(row) for row in hub.inline_keyboard[:-1]]  # its own «بازگشت» comes after the files
+    files = with_inline_back(kb.backup_files_keyboard(backups), ui, "nv:adm:system")
+    return InlineKeyboardMarkup(inline_keyboard=actions + [list(row) for row in files.inline_keyboard])
 
 
 def _item_keyboard(backup_id: str) -> InlineKeyboardMarkup:
-    """Per-file actions only — hub/list nav via reply keyboard."""
+    """One backup file's actions; «بازگشت» returns to the backup panel."""
     return _kb(
         [
             [InlineKeyboardButton(text="⬇️ دریافت فایل", callback_data=f"adm:backup:dl:{backup_id}")],
@@ -81,6 +85,7 @@ def _item_keyboard(backup_id: str) -> InlineKeyboardMarkup:
                 )
             ],
             [InlineKeyboardButton(text="🗑 حذف", callback_data=f"adm:backup:del:{backup_id}")],
+            [kb.back_button(None, "nv:adm:backup")],
         ]
     )
 
@@ -118,8 +123,8 @@ async def backup_hub(callback: CallbackQuery, db_user: BotUser, state: FSMContex
     if callback.message:
         await safe_edit_text(
             callback.message,
-            _hub_text(backups, await get_all_settings(session)),
-            reply_markup=_hub_keyboard(backups),
+            _hub_text(backups, ui := await get_all_settings(session)),
+            reply_markup=backup_hub_markup(backups, ui),
         )
 
 
@@ -209,8 +214,8 @@ async def backup_create(callback: CallbackQuery, db_user: BotUser, session: Asyn
             )
         backups = await asyncio.to_thread(list_backups)
         await callback.message.answer(
-            _hub_text(backups, await get_all_settings(session)),
-            reply_markup=_hub_keyboard(backups),
+            _hub_text(backups, ui := await get_all_settings(session)),
+            reply_markup=backup_hub_markup(backups, ui),
         )
 
 
@@ -278,8 +283,8 @@ async def backup_delete(callback: CallbackQuery, db_user: BotUser, session: Asyn
     if callback.message:
         await safe_edit_text(
             callback.message,
-            _hub_text(backups, await get_all_settings(session)),
-            reply_markup=_hub_keyboard(backups),
+            _hub_text(backups, ui := await get_all_settings(session)),
+            reply_markup=backup_hub_markup(backups, ui),
         )
 
 

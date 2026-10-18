@@ -40,6 +40,10 @@ from app.services.users import get_all_settings
 from app.services.redact import user_safe_error
 from app.services import bot_feedback_texts as feedback
 
+def _user_card_back(user_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[[kb.back_button(None, f"res:user:{int(user_id)}")]])
+
+
 def _group_back(action: str) -> InlineKeyboardMarkup:
     """«بازگشت» from a shop panel screen to the group it was opened from."""
     return InlineKeyboardMarkup(inline_keyboard=[[kb.back_button(None, back_callback_for(action))]])
@@ -227,7 +231,7 @@ async def res_creds(
                 await safe_edit_text(
                     callback.message,
                     format_message("🤝 پنل نماینده", "دسترسی‌ها با وب‌پنل یکسان است."),
-                    reply_markup=None,
+                    reply_markup=InlineKeyboardMarkup(inline_keyboard=[[kb.back_button(None, "nv:res:home")]]),
                 )
             return
     if db_user.role != Role.RESELLER.value:
@@ -485,9 +489,9 @@ async def res_user_view(
                 )
             ]
         )
-    markup = InlineKeyboardMarkup(inline_keyboard=rows_kb) if rows_kb else None
+    rows_kb.append([kb.back_button(None, "res:users:0")])
     if callback.message:
-        await safe_edit_text(callback.message, text, reply_markup=markup)
+        await safe_edit_text(callback.message, text, reply_markup=InlineKeyboardMarkup(inline_keyboard=rows_kb))
 
 
 @router.callback_query(F.data.startswith("res:usermsg:"))
@@ -586,11 +590,11 @@ async def res_user_message_send(
             actor=str(db_user.telegram_id or owner_id),
         )
         await session.commit()
-        await message.answer(feedback.MESSAGE_SENT)
+        await message.answer(feedback.MESSAGE_SENT, reply_markup=_user_card_back(uid))
     except ValueError as e:
-        await message.answer(user_safe_error(e))
+        await message.answer(user_safe_error(e), reply_markup=_user_card_back(uid))
     except Exception as e:
-        await message.answer(f"خطا: {user_safe_error(e)}")
+        await message.answer(f"خطا: {user_safe_error(e)}", reply_markup=_user_card_back(uid))
 
 
 @router.callback_query(F.data.startswith("res:userrenew:"))
@@ -1560,7 +1564,7 @@ async def res_renew_go(
                 + (f" (خطا: {result['reset_err']})" if result.get("reset_err") else "")
                 + exp_line,
             ),
-            reply_markup=None,
+            reply_markup=_group_back("res_renew"),
         )
 
 
@@ -1657,7 +1661,7 @@ async def res_buy_gb_go(
                 f"مقدار: {result['gb']} گیگابایت\n"
                 f"مبلغ: {format_toman(result['amount'], get_settings().currency)}",
             ),
-            reply_markup=None,
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[kb.back_button(None, "res:addons")]]),
         )
 
 
@@ -1755,7 +1759,7 @@ async def res_buy_users_go(
                 f"سقف جدید: {result['max_users']}\n"
                 f"مبلغ: {format_toman(result['amount'], get_settings().currency)}",
             ),
-            reply_markup=None,
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[kb.back_button(None, "res:addons")]]),
         )
 
 
@@ -1947,5 +1951,5 @@ async def res_addon_buy(
                 f"مبلغ: {format_toman(result['amount'], get_settings().currency)}\n"
                 "تاریخ انقضا تغییر نکرد.",
             ),
-            reply_markup=None,
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[kb.back_button(None, "res:addons")]]),
         )
