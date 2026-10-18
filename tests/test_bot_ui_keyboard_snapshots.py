@@ -239,7 +239,8 @@ def _hub_scenarios(ui: dict[str, str]) -> dict[str, Callable[[], Markup]]:
             services, ui, allow_import=True, reseller_capacity_label="ظرفیت: ۳ از ۱۰"
         ),
         "hub.service_card": lambda: hubs.service_card_keyboard(7, ui),
-        "hub.service_card_external": lambda: hubs.service_card_keyboard(7, ui, external=True),
+        "hub.service_more": lambda: hubs.service_more_keyboard(7, ui),
+        "hub.service_more_external": lambda: hubs.service_more_keyboard(7, ui, external=True),
         "hub.admin.groups": lambda: hubs.admin_groups_hub_keyboard(ui),
         "hub.admin.groups_with_queues": lambda: hubs.admin_groups_hub_keyboard(
             ui, pending_payments=3, pending_tickets=1, pending_cancellations=2

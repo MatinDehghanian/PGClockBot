@@ -7,7 +7,7 @@ import unittest
 import zipfile
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from app.bot.nav_inline import service_card_keyboard
+from app.bot.nav_inline import service_more_keyboard
 from app.services import wireguard_send
 from app.services.pasarguard import WireGuardResponse
 from app.services.wireguard_delivery import (
@@ -167,8 +167,8 @@ class ServicePageTests(unittest.IsolatedAsyncioTestCase):
         return [button.callback_data for row in markup.inline_keyboard for button in row]
 
     def test_the_button_shows_only_for_a_wireguard_service(self) -> None:
-        self.assertIn("svc:wg:7", self._callbacks(service_card_keyboard(7, {}, wireguard=True)))
-        self.assertNotIn("svc:wg:7", self._callbacks(service_card_keyboard(7, {})))
+        self.assertIn("svc:wg:7", self._callbacks(service_more_keyboard(7, {}, wireguard=True)))
+        self.assertNotIn("svc:wg:7", self._callbacks(service_more_keyboard(7, {})))
 
     async def _tap(self, *, may_use: bool, fetched: WireGuardFetch) -> tuple[AsyncMock, AsyncMock]:
         from app.bot.handlers import services

@@ -102,7 +102,8 @@ def _customer_screens() -> list[ScreenSpec]:
             "svc:list",
         ),
         # The card belongs to one service; the editor returns to the service list.
-        customer("c.service", "کارت سرویس", lambda ctx: hubs.service_card_keyboard(0, ctx.ui, wireguard=True), "svc:list"),
+        customer("c.service", "کارت سرویس", lambda ctx: hubs.service_card_keyboard(0, ctx.ui), "svc:list"),
+        customer("c.service_more", "بیشتر سرویس", lambda ctx: hubs.service_more_keyboard(0, ctx.ui, wireguard=True), "svc:list"),
     ]
 
 

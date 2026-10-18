@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, patch
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from app.bot.handlers import services as services_handlers
-from app.bot.nav_inline import service_card_keyboard
+from app.bot.nav_inline import service_more_keyboard
 from app.db.models import BotUser, UserService
 from tests.test_service_import import ImportCase
 
@@ -27,11 +27,11 @@ def _callback(data: str):
 
 class ServiceCardKeyboardTests(unittest.TestCase):
     def test_a_sold_service_offers_cancellation(self):
-        self.assertIn("svc:cancel:7", _callbacks(service_card_keyboard(7)))
+        self.assertIn("svc:cancel:7", _callbacks(service_more_keyboard(7)))
 
     def test_an_external_service_has_no_cancel_button_but_keeps_everything_else(self):
-        sold = _callbacks(service_card_keyboard(7))
-        external = _callbacks(service_card_keyboard(7, external=True))
+        sold = _callbacks(service_more_keyboard(7))
+        external = _callbacks(service_more_keyboard(7, external=True))
         self.assertNotIn("svc:cancel:7", external)
         self.assertEqual([c for c in sold if c != "svc:cancel:7"], external)
 
@@ -91,7 +91,7 @@ class ImportedServiceCardTests(ImportCase):
         self.assertTrue(any(c.startswith("svc:renew:") for c in callbacks))
         self.assertFalse(any(c.startswith("svc:cancel:") for c in callbacks))
 
-    async def test_the_service_view_hides_cancel_for_imported_but_not_for_sold_services(self):
+    async def test_more_hides_cancel_for_imported_but_not_for_sold_services(self):
         async with self.Session() as session:
             session.add_all([
                 UserService(id=901, bot_user_id=1, pg_user_id=901, pg_username="sold", remark="order:1"),
@@ -103,10 +103,9 @@ class ImportedServiceCardTests(ImportCase):
             for service_id in (901, 903):
                 with (
                     patch.object(services_handlers, "get_all_settings", AsyncMock(return_value={})),
-                    patch.object(services_handlers, "fetch_live_service_info", AsyncMock(return_value={})),
                     patch.object(services_handlers, "safe_edit_text", AsyncMock()) as edit,
                 ):
-                    await services_handlers.svc_view(_callback(f"svc:view:{service_id}"), session, user)
+                    await services_handlers.svc_more(_callback(f"svc:more:{service_id}"), session, user)
                 shown[service_id] = _callbacks(edit.await_args.kwargs["reply_markup"])
         self.assertIn("svc:cancel:901", shown[901])
         self.assertNotIn("svc:cancel:903", shown[903])

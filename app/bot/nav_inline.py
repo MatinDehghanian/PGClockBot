@@ -28,6 +28,10 @@ from app.bot.reseller_hub_groups import (
 
 logger = logging.getLogger(__name__)
 
+SERVICES_PAGE_SIZE = 10
+SERVICES_LIST_CALLBACK = "svc:list"
+SERVICES_SEARCH_CALLBACK = "svc:find"
+
 SEARCH_SERVICES_TEXT = "🔍 جستجوی سرویس"
 
 # FSM keys for the single live nav panel (edit instead of spam).
@@ -1305,124 +1309,61 @@ def reseller_plans_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
     return _pack_hub_keyboard(buttons, ui, back_callback=back_callback_for("res_plans"))
 
 
+def _service_button(ui: dict | None, label_key: str, fallback: str, callback_data: str, style_id: str, **kw: Any):
+    return _ikb(
+        _t(ui, label_key) or fallback, callback_data=callback_data, ui=ui, label_key=label_key, style_id=style_id, **kw
+    )
+
+
 @editable_screen("c.service")
-def service_card_keyboard(
-    service_id: int, ui: dict | None = None, *, external: bool = False, wireguard: bool = False
-) -> InlineKeyboardMarkup:
-    """Inline actions for one service card (replaces service_actions_reply_keyboard).
+def service_card_keyboard(service_id: int, ui: dict | None = None) -> InlineKeyboardMarkup:
+    """Inline actions for one service card: the daily ones, then «⚙️ بیشتر» for the rest.
 
     Reuses existing ``svc:*`` / ``guide:svc:*`` callbacks — no duplicated business logic.
-    Cancel sits above delete so destructive delete stays visually separated. A service that was
-    not sold by the bot (``external``) can never be cancelled for a refund, so it has no cancel button.
-    The WireGuard button shows only for a service the panel gave a WireGuard address (``wireguard``).
     """
     sid = int(service_id)
-    cancel_rows = (
-        []
-        if external
-        else [
-            [
-                _ikb(
-                    _t(ui, "btn_svc_cancel"),
-                    callback_data=f"svc:cancel:{sid}",
-                    ui=ui,
-                    label_key="btn_svc_cancel",
-                    style_id="svc_cancel",
-                )
-            ]
-        ]
-    )
-    wireguard_rows = (
-        [
-            [
-                _ikb(
-                    _t(ui, "btn_svc_wireguard") or "🔐 فایل WireGuard",
-                    callback_data=f"svc:wg:{sid}",
-                    ui=ui,
-                    label_key="btn_svc_wireguard",
-                    style_id="svc_wireguard",
-                )
-            ]
-        ]
-        if wireguard
-        else []
-    )
     rows: list[list[InlineKeyboardButton]] = [
         [
-            _ikb(
-                _t(ui, "btn_renew") or "🔄 تمدید",
-                callback_data=f"svc:renew:{sid}",
-                ui=ui,
-                label_key="btn_renew",
-                style_id="svc_renew", style_fallback="primary",
-            ),
-            _ikb(
-                _t(ui, "btn_svc_addon") or "➕ حجم / زمان",
-                callback_data=f"svc:addon:{sid}",
-                ui=ui,
-                label_key="btn_svc_addon",
-                style_id="svc_addon", style_fallback="primary",
-            ),
+            _service_button(ui, "btn_renew", "🔄 تمدید", f"svc:renew:{sid}", "svc_renew", style_fallback="primary"),
+            _service_button(ui, "btn_svc_addon", "➕ حجم / زمان", f"svc:addon:{sid}", "svc_addon", style_fallback="primary"),
         ],
         [
-            _ikb(
-                _t(ui, "btn_sub_link") or "🔗 لینک و QR",
-                callback_data=f"svc:link:{sid}",
-                ui=ui,
-                label_key="btn_sub_link",
-                style_id="svc_link",
-            ),
-            _ikb(
-                _t(ui, "btn_guides") or _t(ui, "btn_guide") or "📘 آموزش اتصال",
-                callback_data=f"guide:svc:{sid}",
-                ui=ui,
-                label_key="btn_guides",
-                style_id="guides", style_fallback="primary",
+            _service_button(ui, "btn_sub_link", "🔗 لینک و QR", f"svc:link:{sid}", "svc_link"),
+            _service_button(
+                ui, "btn_guides", _t(ui, "btn_guide") or "📘 آموزش اتصال", f"guide:svc:{sid}", "guides",
+                style_fallback="primary",
             ),
         ],
-        *wireguard_rows,
-        [
-            _ikb(
-                _t(ui, "btn_svc_refresh"),
-                callback_data=f"svc:view:{sid}",
-                ui=ui,
-                label_key="btn_svc_refresh",
-                style_id="svc_refresh",
-            ),
-            _ikb(
-                _t(ui, "btn_svc_auto"),
-                callback_data=f"svc:auto:{sid}",
-                ui=ui,
-                label_key="btn_svc_auto",
-                style_id="svc_auto",
-            ),
-        ],
-        *cancel_rows,
-        [
-            _ikb(
-                _t(ui, "btn_svc_delete"),
-                callback_data=f"svc:delask:{sid}",
-                ui=ui,
-                label_key="btn_svc_delete",
-                style_id="svc_delete", style_fallback="danger",
-            ),
-        ],
-        [
-            _ikb(
-                _t(ui, "btn_back") or "⬅️ بازگشت",
-                callback_data="svc:list",
-                ui=ui,
-                label_key="btn_back",
-                style_id="back",
-            )
-        ],
+        [_service_button(ui, "btn_svc_more", "⚙️ بیشتر", f"svc:more:{sid}", "svc_more")],
+        [_service_button(ui, "btn_back", "⬅️ بازگشت", SERVICES_LIST_CALLBACK, "back")],
     ]
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-SERVICES_PAGE_SIZE = 10
-SERVICES_LIST_CALLBACK = "svc:list"
-SERVICES_SEARCH_CALLBACK = "svc:find"
+@editable_screen("c.service_more")
+def service_more_keyboard(
+    service_id: int, ui: dict | None = None, *, external: bool = False, wireguard: bool = False
+) -> InlineKeyboardMarkup:
+    """«⚙️ بیشتر» of a service card: refresh, WireGuard, automation, cancellation and delete.
+
+    The WireGuard button shows only for a service the panel gave a WireGuard address (``wireguard``).
+    Cancel sits above delete so destructive delete stays visually separated. A service that was
+    not sold by the bot (``external``) can never be cancelled for a refund, so it has no cancel button.
+    """
+    sid = int(service_id)
+    rows: list[list[InlineKeyboardButton]] = [
+        [_service_button(ui, "btn_svc_refresh", "♻️ رفرش وضعیت", f"svc:view:{sid}", "svc_refresh")]
+    ]
+    if wireguard:
+        rows.append([_service_button(ui, "btn_svc_wireguard", "🔐 فایل WireGuard", f"svc:wg:{sid}", "svc_wireguard")])
+    rows.append([_service_button(ui, "btn_svc_auto", "⚙️ تنظیمات خودکار", f"svc:auto:{sid}", "svc_auto")])
+    if not external:
+        rows.append([_service_button(ui, "btn_svc_cancel", "📝 درخواست لغو", f"svc:cancel:{sid}", "svc_cancel")])
+    rows.append(
+        [_service_button(ui, "btn_svc_delete", "🗑 حذف سرویس", f"svc:delask:{sid}", "svc_delete", style_fallback="danger")]
+    )
+    rows.append([_service_button(ui, "btn_back", "⬅️ بازگشت", f"svc:view:{sid}", "back")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def services_page(services: list, page_index: int = 0) -> Page:

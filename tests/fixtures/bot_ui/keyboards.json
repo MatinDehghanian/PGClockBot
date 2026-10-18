@@ -1100,9 +1100,28 @@
       ],
       [
         {
+          "callback_data": "svc:more:7",
+          "text": "⚙️ بیشتر"
+        }
+      ],
+      [
+        {
+          "callback_data": "svc:list",
+          "text": "⬅️ بازگشت"
+        }
+      ]
+    ],
+    "kind": "inline"
+  },
+  "hub.service_more": {
+    "inline_keyboard": [
+      [
+        {
           "callback_data": "svc:view:7",
           "text": "♻️ رفرش وضعیت"
-        },
+        }
+      ],
+      [
         {
           "callback_data": "svc:auto:7",
           "text": "⚙️ تنظیمات خودکار"
@@ -1123,43 +1142,22 @@
       ],
       [
         {
-          "callback_data": "svc:list",
+          "callback_data": "svc:view:7",
           "text": "⬅️ بازگشت"
         }
       ]
     ],
     "kind": "inline"
   },
-  "hub.service_card_external": {
+  "hub.service_more_external": {
     "inline_keyboard": [
-      [
-        {
-          "callback_data": "svc:renew:7",
-          "style": "primary",
-          "text": "🔄 تمدید"
-        },
-        {
-          "callback_data": "svc:addon:7",
-          "style": "primary",
-          "text": "➕ حجم / زمان"
-        }
-      ],
-      [
-        {
-          "callback_data": "svc:link:7",
-          "text": "🔗 لینک و QR"
-        },
-        {
-          "callback_data": "guide:svc:7",
-          "style": "primary",
-          "text": "📘 آموزش اتصال"
-        }
-      ],
       [
         {
           "callback_data": "svc:view:7",
           "text": "♻️ رفرش وضعیت"
-        },
+        }
+      ],
+      [
         {
           "callback_data": "svc:auto:7",
           "text": "⚙️ تنظیمات خودکار"
@@ -1174,7 +1172,7 @@
       ],
       [
         {
-          "callback_data": "svc:list",
+          "callback_data": "svc:view:7",
           "text": "⬅️ بازگشت"
         }
       ]

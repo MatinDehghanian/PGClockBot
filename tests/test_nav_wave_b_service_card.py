@@ -8,10 +8,16 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 class ServiceCardKeyboardTests(unittest.TestCase):
     def test_callbacks_reuse_svc_prefix(self):
-        from app.bot.nav_inline import service_card_keyboard
+        from app.bot.nav_inline import service_card_keyboard, service_more_keyboard
 
-        kb = service_card_keyboard(42, {"btn_renew": "تمدید", "btn_sub_link": "لینک"})
-        data = [b.callback_data for row in kb.inline_keyboard for b in row]
+        ui = {"btn_renew": "تمدید", "btn_sub_link": "لینک"}
+        # The card and its «⚙️ بیشتر» screen together.
+        data = [
+            b.callback_data
+            for kb in (service_card_keyboard(42, ui), service_more_keyboard(42, ui))
+            for row in kb.inline_keyboard
+            for b in row
+        ]
         self.assertIn("svc:renew:42", data)
         self.assertIn("svc:addon:42", data)
         self.assertIn("svc:link:42", data)

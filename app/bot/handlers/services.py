@@ -41,6 +41,11 @@ WIREGUARD_NOT_READY = {
 class CancellationStates(StatesGroup):
     reason = State()
 
+
+def more_callback(service_id: int) -> str:
+    return f"svc:more:{int(service_id)}"
+
+
 @router.callback_query(F.data.startswith("svc:cancel:"))
 async def svc_cancel(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     from app.services.service_cancellations import cancellation_status
@@ -63,7 +68,7 @@ async def svc_cancel(callback: CallbackQuery, session: AsyncSession, db_user: Bo
         buttons.append([InlineKeyboardButton(text="ثبت درخواست و دلیل لغو", callback_data=f"svc:cancelnew:{service_id}")])
     else:
         buttons.append([InlineKeyboardButton(text="به‌روزرسانی درخواست", callback_data=f"svc:cancel:{service_id}")])
-    buttons.append([kb.back_button(None, f"svc:view:{service_id}")])
+    buttons.append([kb.back_button(None, more_callback(service_id))])
     if callback.message:
         await safe_edit_text(callback.message, text, reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons))
     await callback.answer()
@@ -179,7 +184,7 @@ async def _show_automation(callback, session, db_user, service_id):
             InlineKeyboardButton(text="انتخاب پلن" if action == "renew" else "انتخاب بسته", callback_data=f"svc:autopick:{service_id}:{action}"),
         ])
     lines.append("\nبا روشن کردن هر گزینه، خرید تکرارشونده از کیف پول را فعال می‌کنید. موجودی ناکافی باعث خرید نمی‌شود؛ پس از شارژ دوباره تلاش می‌شود.")
-    buttons.append([kb.back_button(None, f"svc:view:{service_id}")])
+    buttons.append([kb.back_button(None, more_callback(service_id))])
     if callback.message:
         await safe_edit_text(callback.message, format_message("⚙️ تنظیمات خودکار سرویس", "\n".join(lines)), reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons))
 
@@ -413,9 +418,7 @@ async def svc_view(
         await safe_edit_text(
             callback.message,
             text,
-            reply_markup=service_card_keyboard(
-                svc_id, ui, external=is_external_service(svc), wireguard=has_wireguard(info)
-            ),
+            reply_markup=service_card_keyboard(svc_id, ui),
         )
     if state is not None:
         from app.bot import menu_nav as nav
@@ -894,6 +897,34 @@ async def svc_addon_pay(
             reseller_owner_id=reseller_owner_id,
         )
 
+@router.callback_query(F.data.startswith("svc:more:"))
+async def svc_more(callback: CallbackQuery, session: AsyncSession, db_user: BotUser) -> None:
+    from app.bot.nav_inline import service_more_keyboard
+
+    try:
+        svc_id = int((callback.data or "").rsplit(":", 1)[-1])
+    except ValueError:
+        await callback.answer(feedback.INVALID, show_alert=True)
+        return
+    svc = await session.get(UserService, svc_id)
+    if not await customer_may_use_service(session, svc, db_user.id, current_shop_reseller_id()):
+        await callback.answer(feedback.NOT_FOUND, show_alert=True)
+        return
+    await callback.answer()
+    ui = await get_all_settings(session)
+    # Same live read as the card: it tells whether the panel gave the service WireGuard.
+    info = await fetch_live_service_info(svc, client_factory=get_pg)
+    label = html.escape(svc.pg_username or f"#{svc_id}")
+    if callback.message:
+        await safe_edit_text(
+            callback.message,
+            format_message("⚙️ گزینه‌های بیشتر", f"سرویس <b>{label}</b>"),
+            reply_markup=service_more_keyboard(
+                svc_id, ui, external=is_external_service(svc), wireguard=has_wireguard(info)
+            ),
+        )
+
+
 @router.callback_query(F.data.startswith("svc:delask:"))
 async def svc_delete_ask(
     callback: CallbackQuery, session: AsyncSession, db_user: BotUser
@@ -915,7 +946,7 @@ async def svc_delete_ask(
                 ),
                 InlineKeyboardButton(
                     text="انصراف",
-                    callback_data=f"svc:view:{svc_id}",
+                    callback_data=more_callback(svc_id),
                 ),
             ]
         ]
@@ -1033,11 +1064,7 @@ def _register_services_cancel_codes() -> None:
                     )
                 ]
             )
-        buttons.append(
-            [
-                kb.back_button(None, f"svc:view:{service_id}")
-            ]
-        )
+        buttons.append([kb.back_button(None, more_callback(service_id))])
         await present_inline_only(
             message,
             text=text,

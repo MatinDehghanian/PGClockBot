@@ -939,6 +939,7 @@ DEFAULT_SETTINGS = {
     "btn_svc_auto": "⚙️ تنظیمات خودکار",
     "btn_svc_cancel": "📝 درخواست لغو سرویس",
     "btn_svc_delete": "🗑 حذف سرویس",
+    "btn_svc_more": "⚙️ بیشتر",
     "btn_svc_add_existing": "🔗 اتصال اشتراک قبلی",
     "btn_adm_st_find": "🔍 جستجو در تنظیمات",
     "btn_adm_plans_view": "📋 مشاهده پلن‌ها",

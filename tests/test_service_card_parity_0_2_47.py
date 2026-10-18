@@ -34,10 +34,16 @@ _CARD_CALLBACK_BY_ACTION = {
 
 class ServiceCardParityTests(unittest.TestCase):
     def test_every_legacy_svc_action_has_card_button(self):
-        from app.bot.nav_inline import service_card_keyboard
+        from app.bot.nav_inline import service_card_keyboard, service_more_keyboard
 
-        kb = service_card_keyboard(42, {"btn_renew": "تمدید", "btn_guides": "آموزش"})
-        data = [b.callback_data for row in kb.inline_keyboard for b in row]
+        ui = {"btn_renew": "تمدید", "btn_guides": "آموزش"}
+        # The card and its «⚙️ بیشتر» screen together.
+        data = [
+            b.callback_data
+            for kb in (service_card_keyboard(42, ui), service_more_keyboard(42, ui))
+            for row in kb.inline_keyboard
+            for b in row
+        ]
         for action, prefix in _CARD_CALLBACK_BY_ACTION.items():
             self.assertTrue(
                 any((d or "").startswith(prefix) for d in data),
