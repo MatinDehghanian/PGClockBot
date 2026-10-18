@@ -1,4 +1,4 @@
-{% from "macros.html" import modal_title %}
+{% from "macros.html" import flash_warn_icon, modal_title %}
 {% set st = restore_status or {} %}
 {% set restore_ops = st.state == 'running' or st.awaiting_restart or st.state == 'error' or st.restart_required %}
 <div class="card settings-card">
@@ -139,8 +139,9 @@
     بعد از تأیید، مراحل بازیابی اینجا نمایش داده می‌شود — مشابه آپدیت پنل.
   </p>
   <div id="backup-restore-ops" class="update-ops" {% if not restore_ops %}hidden{% endif %}>
-    <div class="flash warn update-stay-warn" id="backup-restore-stay-warn" role="status">
-      تا پایان عملیات از این صفحه خارج نشوید و رفرش نکنید؛ ممکن است چند دقیقه طول بکشد.
+    <div class="flash warn update-stay-warn flash-has-ico" id="backup-restore-stay-warn" role="status">
+      {{ flash_warn_icon() }}
+      <span class="flash-copy">تا پایان عملیات از این صفحه خارج نشوید و رفرش نکنید؛ ممکن است چند دقیقه طول بکشد.</span>
     </div>
     <div class="progress-wrap" aria-label="نوار پیشرفت ریستور">
       <div class="progress-bar">
