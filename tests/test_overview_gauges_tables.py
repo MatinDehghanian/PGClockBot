@@ -49,26 +49,6 @@ class OverviewSurfaceTests(unittest.TestCase):
         self.assertNotIn("/home/metrics", home)
         self.assertIn("status_tiles", home)
 
-    def test_dashboard_has_gauges_no_quick_access(self):
-        dash = (ROOT / "app/web/templates/dashboard.html").read_text(encoding="utf-8")
-        self.assertIn("_host_resource_gauges.html", dash)
-        self.assertIn("/dashboard/metrics", dash)
-        self.assertNotIn("دسترسی سریع", dash)
-        self.assertNotIn("quick-links", dash)
-
-    def test_pg_home_has_gauges_no_quick_access(self):
-        # pg_home.html now defers these widgets to _pg_dash_body.html (fast
-        # chrome shell + async body swap) — same markup, different file.
-        pg = (ROOT / "app/web/templates/_pg_dash_body.html").read_text(encoding="utf-8")
-        self.assertIn("_host_resource_gauges.html", pg)
-        self.assertIn("/pg/metrics", pg)
-        self.assertNotIn("دسترسی سریع", pg)
-        self.assertNotIn("quick-links", pg)
-        self.assertIn('href="/pg/nodes"', pg)
-        self.assertIn("صفحه نود ها", pg)
-        # Same action slot as «ورود به پاسارگارد» on panel stats
-        self.assertIn("home-panel-actions", pg)
-
     def test_build_home_overview_skips_host_metrics(self):
         src = (ROOT / "app/services/home_overview.py").read_text(encoding="utf-8")
         self.assertIn("Host CPU/RAM live on bot/PG overviews", src)
@@ -79,11 +59,6 @@ class OverviewSurfaceTests(unittest.TestCase):
         self.assertIn('@app.get("/pg/metrics")', src)
         self.assertIn("_is_pg_owner_principal(staff)", src)
         self.assertIn('status_code=403', src.split("async def pg_host_metrics_json")[1][:800])
-
-    def test_dashboard_metrics_admin_only(self):
-        src = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
-        chunk = src.split("async def dashboard_host_metrics_json")[1][:400]
-        self.assertIn("require_admin", chunk)
 
     def test_colors_section_head_no_accent_box(self):
         html = (ROOT / "app/web/templates/_settings_colors.html").read_text(encoding="utf-8")

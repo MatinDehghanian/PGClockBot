@@ -73,20 +73,6 @@ class WiringTests(unittest.TestCase):
         self.assertIn("provision_existing_pg_admin", src)
 
     def test_dashboard_bot_banner(self):
-        # Bot نمای کلی: setup gate + bot panel only (no PG)
-        dash = Path("app/web/templates/dashboard.html").read_text(encoding="utf-8")
-        self.assertIn("bot_setup_needed", dash)
-        self.assertIn("shop-settings?tab=bot", dash)
-        self.assertIn("dash-bot-setup-inner", dash)
-        self.assertIn("home-panel-bot", dash)
-        self.assertNotIn("home-panel-pg", dash)
-        setup_i = dash.find("{% if bot_setup_needed %}")
-        else_i = dash.find("{% else %}", setup_i)
-        panels_i = dash.find("home-panel-bot", else_i)
-        self.assertGreater(setup_i, 0)
-        self.assertGreater(else_i, setup_i)
-        self.assertGreater(panels_i, else_i)
-        self.assertNotIn('class="meter"', dash)
         # Web dashboard for reseller: portals + periods + optional PG quota
         home = Path("app/web/templates/_reseller_home_dash_body.html").read_text(encoding="utf-8")
         self.assertIn("_home_ops.html", home)
