@@ -205,3 +205,4 @@ tests/test_guide_media.py
 tests/test_guide_editor.py
 tests/test_wireguard_delivery_followup.py
 tests/test_settings_back_cancel.py
+tests/test_settings_regroup.py

@@ -59,13 +59,13 @@ class BotButtonLabelCoverageTests(unittest.TestCase):
                 )
                 self.assertTrue(fields)
 
-    def test_shop_section_uses_categorized_button_subs(self):
+    def test_labels_section_holds_the_categorized_button_subs(self):
         from app.bot.handlers.admin_settings import SECTIONS as admin_s
         from app.bot.handlers.reseller_settings import SECTIONS as res_s
 
         for sections, platform in ((admin_s, True), (res_s, False)):
-            sub_ids = {s[0] for s in sections["shop"]["subs"]}
-            self.assertIn("identity", sub_ids)
+            self.assertEqual({s[0] for s in sections["shop"]["subs"]} - {"invite"}, {"identity", "texts"})
+            sub_ids = {s[0] for s in sections["labels"]["subs"]}
             self.assertIn("btn_main", sub_ids)
             self.assertIn("btn_loyalty_sub", sub_ids)
             self.assertNotIn("btn_labels", sub_ids)
@@ -120,7 +120,7 @@ class BotSettingsHubIATestsRegression(unittest.TestCase):
 
         self.assertEqual(
             HUB_ORDER,
-            ["shop", "menu", "pay", "support", "access", "limits", "guides", "notify"],
+            ["shop", "menu", "labels", "pay", "access", "limits", "buy", "support", "guides", "notify"],
         )
         self.assertNotIn("service", HUB_ORDER)
 

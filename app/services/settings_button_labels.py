@@ -156,12 +156,17 @@ BTN_ADMIN_PEOPLE_SUB: list[Field] = [
 ]
 
 BTN_ADMIN_SETTINGS_SUB: list[Field] = [
-    ("btn_adm_st_shop", "تنظیمات: فروشگاه", "text"),
-    ("btn_adm_st_menu", "تنظیمات: ظاهر و دکمه‌ها", "text"),
+    ("btn_adm_st_shop", "تنظیمات: نام و متن‌ها", "text"),
+    ("btn_adm_st_menu", "تنظیمات: ظاهر منو", "text"),
+    ("btn_adm_st_labels", "تنظیمات: متن دکمه‌ها", "text"),
     ("btn_adm_st_pay", "تنظیمات: پرداخت", "text"),
+    ("btn_adm_st_access", "تنظیمات: تحویل سرویس", "text"),
+]
+
+BTN_ADMIN_SETTINGS_MORE: list[Field] = [
+    ("btn_adm_st_limits", "تنظیمات: ورود و عضویت", "text"),
+    ("btn_adm_st_buy", "تنظیمات: قوانین خرید", "text"),
     ("btn_adm_st_support", "تنظیمات: پشتیبان‌ها", "text"),
-    ("btn_adm_st_access", "تنظیمات: دسترسی", "text"),
-    ("btn_adm_st_limits", "تنظیمات: محدودیت", "text"),
     ("btn_adm_st_guides", "تنظیمات: آموزش اتصال", "text"),
     ("btn_adm_st_notify", "تنظیمات: اعلان‌ها", "text"),
 ]
@@ -243,11 +248,12 @@ BTN_RESELLER_PLANS_SUB: list[Field] = [
 ]
 
 BTN_RESELLER_SETTINGS_SUB: list[Field] = [
-    ("btn_res_st_shop", "فروشگاه", "text"),
-    ("btn_res_st_menu", "منو", "text"),
+    ("btn_res_st_shop", "نام و متن‌ها", "text"),
+    ("btn_res_st_menu", "ظاهر منو", "text"),
+    ("btn_res_st_labels", "متن دکمه‌ها", "text"),
     ("btn_res_st_pay", "پرداخت", "text"),
     ("btn_res_st_support", "پشتیبان‌ها", "text"),
-    ("btn_res_st_access", "دسترسی", "text"),
+    ("btn_res_st_access", "تحویل سرویس", "text"),
 ]
 
 BTN_CONNECTION_STATUS: list[Field] = [
@@ -256,7 +262,8 @@ BTN_CONNECTION_STATUS: list[Field] = [
 ]
 
 BTN_RESELLER_SETTINGS_MORE: list[Field] = [
-    ("btn_res_st_limits", "محدودیت", "text"),
+    ("btn_res_st_limits", "ورود و عضویت", "text"),
+    ("btn_res_st_buy", "قوانین خرید", "text"),
     ("btn_res_st_guides", "آموزش اتصال", "text"),
     ("btn_res_st_notify", "اعلان‌ها", "text"),
     ("btn_res_st_bot", "ربات", "text"),
@@ -270,6 +277,7 @@ PLATFORM_ONLY_BTN_KEYS = PLATFORM_ONLY_BTN_KEYS | frozenset(
         BTN_ADMIN_PG,
         BTN_ADMIN_PEOPLE_SUB,
         BTN_ADMIN_SETTINGS_SUB,
+        BTN_ADMIN_SETTINGS_MORE,
         BTN_ADMIN_BACKUP_BROADCAST,
         BTN_ADMIN_PLANS_SUB,
         BTN_ADMIN_PLAN_KINDS,
@@ -325,17 +333,18 @@ def shop_button_subs(*, include_platform: bool) -> list[tuple]:
         ("btn_adm_pg_sub", "دکمه‌های ادمین — پاسارگارد", BTN_ADMIN_PG),
         ("btn_adm_people_sub", "دکمه‌های ادمین — کاربران و نمایندگان", BTN_ADMIN_PEOPLE_SUB),
         ("btn_adm_settings_sub", "دکمه‌های ادمین — بخش‌های تنظیمات", BTN_ADMIN_SETTINGS_SUB),
+        ("btn_adm_settings_more", "دکمه‌های ادمین — قوانین و پشتیبانی در تنظیمات", BTN_ADMIN_SETTINGS_MORE),
         ("btn_adm_backup_sub", "دکمه‌های ادمین — بکاپ و پیام همگانی", BTN_ADMIN_BACKUP_BROADCAST),
         ("btn_adm_plans_sub", "دکمه‌های ادمین — پلن‌ها", BTN_ADMIN_PLANS_SUB),
         ("btn_adm_plan_kinds", "دکمه‌های ادمین — نوع پلن نمایندگی", BTN_ADMIN_PLAN_KINDS),
         ("btn_adm_loy_sub", "دکمه‌های ادمین — باشگاه", BTN_ADMIN_LOYALTY_SUB),
         ("btn_adm_mkt_sub", "دکمه‌های ادمین — کدهای هدیه و کمپین", BTN_ADMIN_MARKETING_SUB),
-        ("btn_service_more", "دکمه‌های سرویس (ادامه)", BTN_SERVICE_MORE),
+        ("btn_service_more", "دکمه‌های مدیریت سرویس", BTN_SERVICE_MORE),
         ("btn_res_hub", "دکمه‌های پنل نماینده", BTN_RESELLER_HUB),
-        ("btn_res_hub_more", "دکمه‌های پنل نماینده (ادامه)", BTN_RESELLER_HUB_MORE),
+        ("btn_res_hub_more", "دکمه‌های پنل نماینده — مشتریان و حساب", BTN_RESELLER_HUB_MORE),
         ("btn_res_plans_sub", "دکمه‌های پلن‌های فروش", BTN_RESELLER_PLANS_SUB),
         ("btn_res_st_sub", "دکمه‌های تنظیمات فروشگاه", BTN_RESELLER_SETTINGS_SUB),
-        ("btn_res_st_more", "دکمه‌های تنظیمات فروشگاه (ادامه)", BTN_RESELLER_SETTINGS_MORE),
+        ("btn_res_st_more", "دکمه‌های تنظیمات فروشگاه — قوانین و ربات", BTN_RESELLER_SETTINGS_MORE),
         ("btn_status", "دکمه‌های وضعیت اتصال", BTN_CONNECTION_STATUS),
     ]
     out: list[tuple] = []
@@ -344,6 +353,33 @@ def shop_button_subs(*, include_platform: bool) -> list[tuple]:
         if filtered:
             out.append((sub_id, title, filtered))
     return out
+
+
+# «متن دکمه‌ها» in the bot settings first asks whose menu: customers, the admin panel or the
+# reseller panel; each audience then lists its button groups.
+LABEL_AUDIENCES: tuple[tuple[str, str], ...] = (
+    ("user", "👤 منوی مشتری"),
+    ("admin", "🛠 پنل ادمین"),
+    ("reseller", "🤝 پنل نماینده"),
+)
+
+
+def label_audience(sub_id: str) -> str:
+    if sub_id.startswith("btn_adm"):
+        return "admin"
+    if sub_id.startswith("btn_res"):
+        return "reseller"
+    return "user"
+
+
+def button_label_subs(*, include_platform: bool) -> list[tuple[str, str, list[Field]]]:
+    """Every button-label group of the bot settings (owner-only appearance groups included)."""
+    extra = appearance_button_subs() if include_platform else []
+    return [*shop_button_subs(include_platform=include_platform), *extra]
+
+
+def label_subs_for(audience: str, subs: list[tuple[str, str, list[Field]]]) -> list[tuple[str, str, list[Field]]]:
+    return [sub for sub in subs if label_audience(sub[0]) == audience]
 
 
 def all_btn_field_keys(*, include_platform: bool) -> frozenset[str]:
