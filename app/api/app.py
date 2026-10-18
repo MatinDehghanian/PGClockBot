@@ -107,7 +107,9 @@ from app.api.funnel_pages import register_funnel_pages
 from app.api.gift_code_pages import legacy_gift_modal_redirect, register_gift_code_pages
 from app.api.dashboard_trend_pages import register_dashboard_trend_pages
 from app.api.home_pages import register_home_pages
+from app.api.user_service_preview_pages import register_user_service_preview_pages
 from app.api.pg_pages import register_pg_pages
+from app.services.service_status import SERVICE_STATUSES
 from app.api.service_import_pages import register_service_import_pages
 from app.api.panel_connection import PanelConnectionMiddleware, finish_panel_authentication
 from app.api.login_guard import (
@@ -1505,6 +1507,7 @@ def create_api_app(lifespan=None) -> FastAPI:
     register_funnel_pages(app, render=render, require_staff=require_staff, get_db=get_db)
     register_service_import_pages(app, require_staff=require_staff, get_db=get_db)
     register_connection_status_pages(app, render=render, require_staff=require_staff, get_db=get_db)
+    register_user_service_preview_pages(app, require_staff=require_perm("dashboard"), get_db=get_db)
 
     @app.get("/settings/ssl/progress")
     async def ssl_progress(staff: dict = Depends(require_admin)):
@@ -3831,6 +3834,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "rows": rows,
                 "users": [r.user for r in rows],
                 "counts": counts,
+                "service_statuses": SERVICE_STATUSES,
                 "filter": filter_key,
                 "focus_uid": focus_uid,
                 "filter_href": _users_href,

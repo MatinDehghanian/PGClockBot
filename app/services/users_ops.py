@@ -3,11 +3,12 @@
 Expire/volume prefer ``UserService.quota_*`` when ``quota_synced_at`` is set
 (admin adjust / renew / live modal snapshot). Otherwise fall back to plan +
 ``created_at`` approximations (action-center parity) plus ``notified_*`` flags.
-Live PasarGuard snapshots stay on the per-user edit modal.
+Live PasarGuard reads stay on individual service previews and edit modals.
 """
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Iterable, Literal
@@ -19,6 +20,7 @@ from sqlalchemy.orm import selectinload
 from app.db.models import BotUser, Plan, Role, UserService
 from app.services.formatting import format_bytes
 from app.services.service_scope import shop_services_clause
+from app.services.service_status import SERVICE_STATUSES, ServiceStatus, service_status
 from app.services.shop_membership import shop_member_clause
 
 UserFilter = Literal[
@@ -28,10 +30,17 @@ UserFilter = Literal[
     "no_service",
     "blocked",
     "alerts",
+    "active",
+    "disabled",
+    "limited",
+    "expired",
+    "on_hold",
+    "unknown",
 ]
 
 VALID_FILTERS: frozenset[str] = frozenset(
     {"all", "expiring", "low_volume", "no_service", "blocked", "alerts"}
+    | {status.key for status in SERVICE_STATUSES}
 )
 
 DEFAULT_EXPIRE_DAYS = 3
@@ -151,6 +160,9 @@ class ServiceSummary:
     has_alert: bool
     sort_expire: float  # sooner first; inf if unknown
     sort_volume: float  # smaller plan GB first; inf if unlimited/unknown
+    status: ServiceStatus = field(default_factory=lambda: service_status(None))
+    username: str = ""
+    plan_name: str = ""
 
 
 @dataclass
@@ -169,6 +181,7 @@ class UserOpsRow:
     # Scoped purse for the current staff shop (platform or ShopWallet) — never
     # cross-tenant. Template must use this, not raw user.wallet_balance.
     wallet_balance: int = 0
+    status_counts: dict[str, int] = field(default_factory=dict)
 
 
 def _service_label(svc: UserService, plan: Plan | None) -> str:
@@ -179,6 +192,18 @@ def _service_label(svc: UserService, plan: Plan | None) -> str:
     return name or uname or f"#{int(svc.id)}"
 
 
+def _service_expiry_text(
+    *, status: ServiceStatus, synced: bool, expire_at: datetime | None, days_left: int | None
+) -> str:
+    if status.key == "on_hold":
+        return "پس از اولین اتصال"
+    if synced and expire_at is None:
+        return "نامحدود"
+    if days_left is None:
+        return "—"
+    return "منقضی" if days_left <= 0 else f"{days_left} روز"
+
+
 def _summarize_service(
     svc: UserService,
     *,
@@ -186,12 +211,16 @@ def _summarize_service(
     now: datetime,
 ) -> ServiceSummary:
     plan = getattr(svc, "plan", None)
+    status = service_status(getattr(svc, "quota_status", None))
     synced = getattr(svc, "quota_synced_at", None) is not None
     if synced:
         exp = _aware(getattr(svc, "quota_expire_at", None))
     else:
         exp = approx_expire_at(svc, plan)
     left = days_until(exp, now=now)
+    if status.key == "on_hold":
+        exp = None
+        left = None
     # Synced + no expire ⇒ unlimited time (never "expiring")
     expiring = bool(
         exp is not None and now <= exp <= now + timedelta(days=expire_days)
@@ -201,18 +230,7 @@ def _summarize_service(
     has_alert = expiring or low_volume or (
         bool(getattr(svc, "notified_expire", False)) and left is not None and left <= expire_days
     )
-    if synced and exp is None:
-        expire_text = "نامحدود"
-        left = None
-    elif exp is not None:
-        if left is None:
-            expire_text = "—"
-        elif left <= 0:
-            expire_text = "منقضی"
-        else:
-            expire_text = f"{left} روز"
-    else:
-        expire_text = "—"
+    expire_text = _service_expiry_text(status=status, synced=synced, expire_at=exp, days_left=left)
 
     gb_sort = float("inf")
     if synced:
@@ -252,6 +270,9 @@ def _summarize_service(
         has_alert=has_alert,
         sort_expire=exp.timestamp() if exp is not None else float("inf"),
         sort_volume=gb_sort,
+        status=status,
+        username=getattr(svc, "pg_username", "") or "",
+        plan_name=getattr(plan, "name", "") or "",
     )
 
 
@@ -265,10 +286,11 @@ def build_user_ops_row(
     expire_days = max(1, min(30, int(expire_days or DEFAULT_EXPIRE_DAYS)))
     now = now or _utcnow()
     snaps = [_summarize_service(s, expire_days=expire_days, now=now) for s in services]
-    # Alerted services first (then soonest expiry) so UI default selection matches
+    # Show alerted services first, then the ones expiring soonest.
     snaps.sort(key=lambda s: (0 if s.has_alert else 1, s.sort_expire, s.sort_volume, s.id))
 
     row = UserOpsRow(user=user, services=snaps, service_count=len(snaps))
+    row.status_counts = dict(Counter(s.status.key for s in snaps))
     row.no_service = len(snaps) == 0
     if not snaps:
         return row
@@ -338,6 +360,8 @@ def scoped_users_where(scope_reseller_id: int | None):
 
 
 def filter_ops_rows(rows: list[UserOpsRow], filter_key: UserFilter) -> list[UserOpsRow]:
+    if filter_key in {status.key for status in SERVICE_STATUSES}:
+        return [r for r in rows if any(s.status.key == filter_key for s in r.services)]
     if filter_key == "all":
         return rows
     if filter_key == "expiring":
@@ -369,6 +393,10 @@ def sort_ops_rows(
 
 def summarize_ops_counts(rows: list[UserOpsRow]) -> dict[str, int]:
     return {
+        **{
+            status.key: sum(any(s.status.key == status.key for s in r.services) for r in rows)
+            for status in SERVICE_STATUSES
+        },
         "total": len(rows),
         "expiring": sum(1 for r in rows if r.expiring),
         "low_volume": sum(1 for r in rows if r.low_volume),

@@ -13,6 +13,7 @@
 {% set ops = can_user_ops if can_user_ops is defined else true %}
 {% set bulk_count = rows|length if flt != 'all' else 0 %}
 {% block title %}کاربران بات{% endblock %}
+{% block head %}<link rel="stylesheet" href="/static/users.css" />{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
@@ -31,46 +32,24 @@
 </div>
 {# flash_ok / flash_err rendered once in base.html (above title) #}
 
-<div class="home-panels users-ops-overview">
-  <section class="home-panel home-panel-neutral">
-    <div class="home-panel-grid users-ops-stats">
-      <a class="stat{% if flt=='expiring' %} is-active{% endif %}" href="{{ filter_href(filter_key='expiring', q=q) }}">
-        <div class="stat-top">
-          <span class="stat-ico" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l2.5 1.5"/></svg>
-          </span>
-          <span>نزدیک انقضا</span>
-        </div>
-        <strong>{{ c.expiring | default(0) | num }}</strong>
-      </a>
-      <a class="stat{% if flt=='low_volume' %} is-active{% endif %}" href="{{ filter_href(filter_key='low_volume', q=q) }}">
-        <div class="stat-top">
-          <span class="stat-ico" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><path d="M4 18h16M6 14l3-6 3 4 3-5 3 7"/></svg>
-          </span>
-          <span>حجم کم</span>
-        </div>
-        <strong>{{ c.low_volume | default(0) | num }}</strong>
-      </a>
-      <a class="stat{% if flt=='alerts' %} is-active{% endif %}" href="{{ filter_href(filter_key='alerts', q=q) }}">
-        <div class="stat-top">
-          <span class="stat-ico" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><path d="M12 4a5 5 0 0 1 5 5v2.2l1.8 3.3H5.2L7 11.2V9a5 5 0 0 1 5-5z"/><path d="M10 18a2 2 0 0 0 4 0"/></svg>
-          </span>
-          <span>دارای اعلان</span>
-        </div>
-        <strong>{{ c.alerts | default(0) | num }}</strong>
-      </a>
-    </div>
-  </section>
-</div>
-
-<nav class="section-tabs" role="tablist" aria-label="فیلتر کاربران">
-  <a class="{% if flt=='all' %}active{% endif %}" href="{{ filter_href(filter_key='all', q=q) }}">همه{% if c.total is defined %} ({{ c.total | num }}){% endif %}</a>
+<section class="card users-ops-overview" aria-label="دسته‌بندی وضعیت سرویس‌ها">
+  <p class="muted">دسته‌بندی نتایج این فهرست بر اساس آخرین وضعیت ذخیره‌شدهٔ پاسارگارد است. هر کاربر ممکن است در چند دسته باشد.</p>
+  <nav class="users-status-filters" aria-label="وضعیت سرویس‌های پاسارگارد">
+    <a class="stat{% if flt == 'all' %} is-active{% endif %}" href="{{ filter_href(filter_key='all', q=q) }}"{% if flt == 'all' %} aria-current="page"{% endif %}>
+      <span>همه کاربران</span><strong>{{ c.total | default(0) | num }}</strong>
+    </a>
+    {% for status in service_statuses %}
+    <a class="stat{% if flt == status.key %} is-active{% endif %}" href="{{ filter_href(filter_key=status.key, q=q) }}"{% if flt == status.key %} aria-current="page"{% endif %}>
+      <span class="badge {{ status.tone }}">{{ status.title }}</span><strong>{{ c[status.key] | default(0) | num }}</strong>
+    </a>
+    {% endfor %}
+  </nav>
+</section>
+<nav class="section-tabs" aria-label="فیلترهای تکمیلی کاربران">
   <a class="{% if flt=='expiring' %}active{% endif %}" href="{{ filter_href(filter_key='expiring', q=q) }}">نزدیک انقضا</a>
   <a class="{% if flt=='low_volume' %}active{% endif %}" href="{{ filter_href(filter_key='low_volume', q=q) }}">حجم کم</a>
   <a class="{% if flt=='no_service' %}active{% endif %}" href="{{ filter_href(filter_key='no_service', q=q) }}">بدون سرویس</a>
-  <a class="{% if flt=='blocked' %}active{% endif %}" href="{{ filter_href(filter_key='blocked', q=q) }}">مسدود</a>
+  <a class="{% if flt=='blocked' %}active{% endif %}" href="{{ filter_href(filter_key='blocked', q=q) }}">مسدود در بات</a>
   <a class="{% if flt=='alerts' %}active{% endif %}" href="{{ filter_href(filter_key='alerts', q=q) }}">دارای اعلان</a>
 </nav>
 <div class="card card-flush">
@@ -134,11 +113,11 @@
         <th class="col-id col-hide-sm" data-sort-type="num">#</th>
         <th class="col-tg col-hide-sm" data-sort-type="num">تلگرام</th>
         <th class="col-name" data-sort-type="text">نام</th>
-        <th class="col-svc" data-sort-type="text">سرویس</th>
+        <th class="col-svc" data-sort-type="text">سرویس‌ها</th>
         <th class="col-vol" data-sort-type="text">حجم</th>
         <th class="col-exp" data-sort-type="num">انقضا</th>
         <th class="col-wallet" data-sort-type="num">کیف پول</th>
-        <th class="col-status" data-sort-type="text">وضعیت</th>
+        <th class="col-status" data-sort-type="text">وضعیت سرویس‌ها</th>
         {% if ops or manage or provision or edit_svc %}<th class="col-actions"></th>{% endif %}
       </tr>
     </thead>
@@ -171,41 +150,44 @@
         <td class="col-svc" data-sort-value="{{ row.services[0].label if row.service_count > 0 else '' }}">
           {% if row.service_count == 0 %}
           <span class="muted">بدون سرویس</span>
-          {% elif row.service_count == 1 %}
-          <span class="users-svc-name" title="{{ row.services[0].label }}">
-            <span class="users-svc-name-text">{{ row.services[0].label }}</span>
-            {% if row.services[0].has_alert %}<span class="alert-dot" title="اعلان سرویس" aria-label="اعلان سرویس"></span>{% endif %}
-          </span>
           {% else %}
-          {% set sel = namespace(id=none) %}
-          {% for s in row.services %}
-            {% if sel.id is none and s.has_alert %}{% set sel.id = s.id %}{% endif %}
-          {% endfor %}
-          {% if sel.id is none %}{% set sel.id = row.services[0].id %}{% endif %}
-          <label class="users-svc-select-wrap">
-            <span class="sr-only">سرویس‌های کاربر</span>
-            <select class="select-sm users-svc-select" data-uid="{{ u.id }}" aria-label="سرویس‌های کاربر">
+          <details class="users-services"{% if focus_uid and u.id == focus_uid %} open{% endif %}>
+            <summary aria-label="نمایش سرویس‌های {{ u.full_name or u.username or u.telegram_id }}">
+              <span>{{ row.service_count | num }} سرویس</span>
+              <span class="muted">مشاهده سرویس‌ها</span>
+            </summary>
+            <ul class="users-service-list">
               {% for s in row.services %}
-              <option value="{{ s.id }}"
-                      data-volume="{{ s.volume_text }}"
-                      data-expire="{{ s.expire_text }}"
-                      data-days="{{ s.days_left if s.days_left is not none else 9999 }}"
-                      data-alert="{{ '1' if s.has_alert else '0' }}"
-                      {% if s.id == sel.id %}selected{% endif %}>{{ s.label }}</option>
+              <li class="users-service-item">
+                <div class="users-service-heading">
+                  <span class="users-service-label">{{ s.plan_name or 'بدون پلن' }}</span>
+                  <span class="mono users-service-username" dir="ltr">{{ s.username or '—' }}</span>
+                  <span class="badge {{ s.status.tone }}">{{ s.status.title }}</span>
+                  {% if s.has_alert %}<span class="alert-dot" title="اعلان سرویس" aria-label="اعلان سرویس"></span>{% endif %}
+                </div>
+                <div class="users-service-meta"><span>{{ s.volume_text }}</span><span>{{ s.expire_text }}</span></div>
+                <button type="button" class="btn btn-ghost btn-sm"
+                        data-modal-open="modal-service-preview"
+                        data-service-preview="/users/{{ u.id }}/services/{{ s.id }}/preview"
+                        aria-label="پیش‌نمایش سرویس {{ s.label }}">پیش‌نمایش سریع</button>
+              </li>
               {% endfor %}
-            </select>
-          </label>
+            </ul>
+          </details>
           {% endif %}
         </td>
-        <td class="col-vol users-vol-cell" data-sort-value="{{ row.volume_text }}">{{ row.volume_text }}</td>
-        <td class="col-exp users-exp-cell" data-sort-value="{{ row.days_left if row.days_left is not none else 9999 }}">{{ row.expire_text }}</td>
+        <td class="col-vol users-vol-cell" title="کمترین سقف حجم بین سرویس‌ها" data-sort-value="{{ row.volume_text }}">{{ row.volume_text }}</td>
+        <td class="col-exp users-exp-cell" title="نزدیک‌ترین انقضا بین سرویس‌ها" data-sort-value="{{ row.days_left if row.days_left is not none else 9999 }}">{{ row.expire_text }}</td>
         <td class="mono col-wallet" dir="ltr" data-sort-value="{{ row.wallet_balance }}">{{ row.wallet_balance | money }}</td>
-        <td class="col-status" data-sort-value="{{ '1' if u.is_blocked else '0' }}">
-          {% if u.is_blocked %}
-          <span class="badge blocked">مسدود</span>
-          {% else %}
-          <span class="badge active">فعال</span>
-          {% endif %}
+        <td class="col-status" data-sort-value="{{ row.status_counts | join(',') }}">
+          <div class="users-status-summary">
+            {% for status in service_statuses %}
+              {% set count = row.status_counts.get(status.key, 0) %}
+              {% if count %}<span class="badge {{ status.tone }}">{{ status.title }} · {{ count | num }}</span>{% endif %}
+            {% endfor %}
+            {% if row.no_service %}<span class="muted">بدون سرویس</span>{% endif %}
+            {% if u.is_blocked %}<span class="badge blocked">مسدود در بات</span>{% endif %}
+          </div>
         </td>
         {% if ops or manage or provision or edit_svc %}
         <td class="col-actions">
@@ -264,10 +246,35 @@
         {% endif %}
       </tr>
     {% else %}
-      <tr><td colspan="{% if manage or ops or provision or edit_svc %}10{% else %}8{% endif %}" class="muted">کاربری نیست</td></tr>
+      <tr><td colspan="{% if manage or ops or provision or edit_svc %}10{% else %}8{% endif %}" class="muted">کاربری مطابق این فیلتر پیدا نشد.</td></tr>
     {% endfor %}
     </tbody>
   </table>
+  </div>
+</div>
+
+<div class="ui-modal" id="modal-service-preview" hidden>
+  <div class="ui-modal-backdrop" data-modal-close></div>
+  <div class="ui-modal-panel" role="dialog" aria-modal="true" aria-labelledby="service-preview-title">
+    <div class="ui-modal-head">
+      {{ modal_title('users', 'پیش‌نمایش سرویس', heading_id='service-preview-title') }}
+      <button type="button" class="icon-btn" data-modal-close aria-label="بستن"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <p data-preview-loading role="status" hidden>در حال دریافت اطلاعات سرویس…</p>
+    <p data-preview-error class="flash err" role="alert" hidden></p>
+    <div data-preview-content hidden>
+      <span data-preview-field="status_title" class="badge neutral"></span>
+      <dl class="users-preview-grid">
+        <div><dt>نام کاربری</dt><dd data-preview-field="username" dir="ltr"></dd></div>
+        <div><dt>پلن</dt><dd data-preview-field="plan"></dd></div>
+        <div><dt>سقف حجم</dt><dd data-preview-field="volume"></dd></div>
+        <div><dt>مصرف‌شده</dt><dd data-preview-field="used"></dd></div>
+        <div><dt>باقی‌مانده</dt><dd data-preview-field="remaining"></dd></div>
+        <div><dt>انقضا</dt><dd data-preview-field="expire"></dd></div>
+      </dl>
+      <p data-preview-field="source" class="muted"></p>
+    </div>
+    <div class="actions"><button type="button" class="btn btn-ghost" data-preview-retry>به‌روزرسانی</button></div>
   </div>
 </div>
 
@@ -381,33 +388,9 @@
 {% endblock %}
 
 {% block page_scripts %}
+<script src="/static/user-service-preview.js" defer></script>
 <script>
 (function(){
-  function syncSvcMeta(sel){
-    var opt = sel.options[sel.selectedIndex];
-    if (!opt) return;
-    var cell = sel.closest('td.col-svc');
-    var tr = sel.closest('tr');
-    if (!cell || !tr) return;
-    var volText = opt.getAttribute('data-volume') || '—';
-    var expText = opt.getAttribute('data-expire') || '—';
-    var days = opt.getAttribute('data-days') || '9999';
-    tr.querySelectorAll('.users-vol-cell').forEach(function(vol){
-      vol.textContent = volText;
-      vol.setAttribute('data-sort-value', volText);
-    });
-    tr.querySelectorAll('.users-exp-cell').forEach(function(exp){
-      exp.textContent = expText;
-      exp.setAttribute('data-sort-value', days);
-    });
-    cell.setAttribute('data-sort-value', (opt.textContent || '').trim());
-  }
-
-  document.querySelectorAll('.users-svc-select').forEach(function(sel){
-    sel.addEventListener('change', function(){ syncSvcMeta(sel); });
-    syncSvcMeta(sel);
-  });
-
   var focus = document.querySelector('tr.users-row.is-focus');
   if (focus && typeof focus.scrollIntoView === 'function') {
     try { focus.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) {}
