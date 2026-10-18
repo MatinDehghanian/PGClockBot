@@ -16,6 +16,8 @@ RETIRED_TEXT_DEFAULTS: dict[str, tuple[str, ...]] = {
     "btn_adm_res_add": ("➕ افزودن دستی",),
     "btn_adm_plans_addons": ("⏱ بسته حجم/زمان",),
     "btn_adm_reports": ("📈 گزارشات",),
+    "btn_res_reports": ("📈 گزارشات",),
+    "screen_caption_r_plans": ("ساخت و کاتالوگ از دکمه‌های زیر.\nبرچسب دسته و بسته حجم/زمان از کیبورد — مثل وب‌پنل.",),
     "screen_title_a_product": ("📦 محصول و PG",),
     "screen_title_a_users": ("👥 کاربران بات",),
     "screen_caption_a_home": ("یک گروه را از دکمه‌های زیر انتخاب کنید.",),

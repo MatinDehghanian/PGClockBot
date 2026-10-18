@@ -82,12 +82,12 @@ async def start_add_representative(
     try:
         assert_staff_can_manage_representatives(staff)
     except RepresentativeUnifyError:
-        await message.answer("قابلیت ساخت نماینده برای این حساب فعال نیست.")
+        await message.answer("ساخت نماینده برای این حساب فعال نیست.")
         return
     await state.set_state(ResellerRepStates.username)
     await message.answer(
-        "افزودن نماینده\n\nنام کاربری پاسارگارد را بفرستید.\n"
-        "والد همیشه همین حساب است — شناسه والد از پیام پذیرفته نمی‌شود."
+        "➕ افزودن نماینده\n\nنام کاربری پاسارگارد نمایندهٔ جدید را بفرستید.\n"
+        "نمایندهٔ جدید زیرمجموعهٔ همین حساب ساخته می‌شود."
     )
 
 
@@ -110,7 +110,7 @@ async def rrep_username(
         assert_staff_can_manage_representatives(staff)
     except RepresentativeUnifyError:
         await state.clear()
-        await message.answer("قابلیت ساخت نماینده برای این حساب فعال نیست.")
+        await message.answer("ساخت نماینده برای این حساب فعال نیست.")
         return
     username = (message.text or "").strip()
     if not username or "parent_id" in username.lower() or len(username) > 64:
@@ -140,7 +140,7 @@ async def rrep_password(
         assert_staff_can_manage_representatives(staff)
     except RepresentativeUnifyError:
         await state.clear()
-        await message.answer("قابلیت ساخت نماینده برای این حساب فعال نیست.")
+        await message.answer("ساخت نماینده برای این حساب فعال نیست.")
         return
     password = message.text or ""
     data = await state.get_data()
@@ -148,12 +148,12 @@ async def rrep_password(
     await state.update_data(**{_PASSWORD_KEY: password})
     if not username:
         await state.clear()
-        await message.answer("جلسه ساخت نماینده نامعتبر است. دوباره شروع کنید.")
+        await message.answer("اطلاعات این مرحله از بین رفته است. ساخت نماینده را از اول شروع کنید.")
         return
     roles = await _parent_roles(session, staff)
     if not roles:
         await state.clear()
-        await message.answer("نقش پاسارگارد در دسترس نیست — ساخت نماینده ممکن نیست.")
+        await message.answer("نقشی در پاسارگارد برای نمایندهٔ جدید پیدا نشد. از ادمین بخواهید یک نقش بسازد.")
         return
     rows = [
         [
@@ -259,7 +259,7 @@ async def rrep_role(
     await state.clear()
     if not username or not password:
         try:
-            await callback.answer("جلسه منقضی شد", show_alert=True)
+            await callback.answer("این مرحله منقضی شده است؛ از اول شروع کنید", show_alert=True)
         except Exception:
             pass
         return
@@ -295,7 +295,7 @@ async def rrep_role(
         except Exception:
             pass
         try:
-            await callback.answer("ساخت نماینده ناموفق بود", show_alert=True)
+            await callback.answer("ساخت نماینده انجام نشد", show_alert=True)
         except Exception:
             pass
         return

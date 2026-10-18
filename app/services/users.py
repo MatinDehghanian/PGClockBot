@@ -956,7 +956,7 @@ DEFAULT_SETTINGS = {
     "btn_res_dash": "🏠 خانه نماینده",
     "btn_res_users": "👥 مشتریان من",
     "btn_res_add_rep": "➕ افزودن نماینده",
-    "btn_res_reports": "📈 گزارشات",
+    "btn_res_reports": "📈 گزارش‌ها",
     "btn_res_stats": "📊 آمار",
     "btn_res_plans": "💎 پلن‌های فروش",
     "btn_res_orders": "🛒 سفارش‌های مشتریان",
