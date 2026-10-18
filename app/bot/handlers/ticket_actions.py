@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import html
+import logging
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, Message
+from aiogram.exceptions import TelegramBadRequest
+from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
@@ -18,6 +20,7 @@ from app.services.resellers import has_bot_perm
 from app.services.tickets import close_ticket, get_ticket, reply_ticket
 from app.services import bot_feedback_texts as feedback
 
+logger = logging.getLogger(__name__)
 router = Router(name="ticket_actions")
 
 
@@ -319,7 +322,7 @@ async def tkt_reply_body(
         message,
         state,
         text=feedback.SENT,
-        inline=None,
+        inline=InlineKeyboardMarkup(inline_keyboard=[[kb.back_button(None, "support:list")]]),
     )
 
 
@@ -352,19 +355,29 @@ async def tkt_close(
         return
     if ticket.status == TicketStatus.CLOSED.value:
         await callback.answer(feedback.ALREADY_CLOSED, show_alert=True)
-        if callback.message:
-            try:
-                await callback.message.edit_reply_markup(reply_markup=None)
-            except Exception:
-                pass
+        await _drop_ticket_buttons(callback, ticket_id)
         return
     await close_ticket(session, ticket)
     await callback.answer(feedback.TICKET_CLOSED_DONE, show_alert=True)
-    if callback.message:
-        try:
-            await callback.message.edit_reply_markup(reply_markup=None)
-        except Exception:
-            pass
+    await _drop_ticket_buttons(callback, ticket_id)
+
+
+async def _drop_ticket_buttons(callback: CallbackQuery, ticket_id: int) -> None:
+    """Remove the closed ticket's reply/close buttons; a list keeps its other rows and «بازگشت»."""
+    message = callback.message
+    markup = getattr(message, "reply_markup", None) if message else None
+    if message is None or markup is None:
+        return
+    suffix = f":{int(ticket_id)}"
+    rows = [
+        row
+        for row in markup.inline_keyboard
+        if not any((b.callback_data or "").startswith("tkt:") and (b.callback_data or "").endswith(suffix) for b in row)
+    ]
+    try:
+        await message.edit_reply_markup(reply_markup=InlineKeyboardMarkup(inline_keyboard=rows) if rows else None)
+    except TelegramBadRequest:
+        logger.debug("ticket buttons already gone", exc_info=True)
 
 
 def _register_ticket_cancel_codes() -> None:

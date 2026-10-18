@@ -30,6 +30,7 @@ from app.services.pasarguard import get_pg
 from app.services.tickets import get_ticket, reply_ticket
 from app.services.updates import local_version
 from app.services.users import get_all_settings, get_setting, on, set_setting
+from app.bot.nav_inline import with_inline_back
 from app.bot.nav_input import form_origin
 from app.bot.tg_utils import parse_bot_float, parse_bot_int, safe_edit_text
 from app.services import bot_feedback_texts as feedback
@@ -427,6 +428,9 @@ async def _pending_user_plan_finish(
         )
     raise ValueError("pending PG link missing")
 
+# The reseller applications list the review screens back up to.
+RESELLER_APPS_LIST = "adm:resapp:list"
+
 router = Router(name="admin")
 
 class AdminStates(StatesGroup):
@@ -789,7 +793,8 @@ async def order_approve_cb(callback: CallbackQuery, session: AsyncSession, db_us
     text = f"🛒 سفارش #{order.id}\nوضعیت: <b>{order_status_fa(order.status)}</b>\n✅ انجام شد"
     if callback.message:
         try:
-            await callback.message.edit_text(text, reply_markup=kb.order_review(order.id) if order.status != OrderStatus.DELIVERED.value else InlineKeyboardMarkup(inline_keyboard=[[kb.back_button(None, "adm:orders")]]))
+            review = kb.order_review(order.id) if order.status != OrderStatus.DELIVERED.value else None
+            await callback.message.edit_text(text, reply_markup=with_inline_back(review, None, "adm:orders"))
         except Exception:
             pass
 
@@ -4357,7 +4362,9 @@ async def adm_resapp_view(callback: CallbackQuery, session: AsyncSession, db_use
         pending_pay = app.status == ResellerApplicationStatus.PENDING_PAYMENT.value
         await callback.message.edit_text(
             text,
-            reply_markup=kb.reseller_app_review(app.id, allow_approve=not pending_pay),
+            reply_markup=with_inline_back(
+                kb.reseller_app_review(app.id, allow_approve=not pending_pay), None, RESELLER_APPS_LIST
+            ),
         )
 
 @router.callback_query(F.data.startswith("adm:resapp:ok:"))
@@ -4402,7 +4409,7 @@ async def adm_resapp_ok(callback: CallbackQuery, session: AsyncSession, db_user:
     if callback.message:
         await callback.message.edit_text(
             f"✅ درخواست #{app.id} تأیید شد — اطلاعات ورود ارسال شد.",
-            reply_markup=None,
+            reply_markup=with_inline_back(None, None, RESELLER_APPS_LIST),
         )
 
 @router.callback_query(F.data.startswith("adm:resapp:no:"))
@@ -4436,7 +4443,7 @@ async def adm_resapp_no(callback: CallbackQuery, session: AsyncSession, db_user:
     if callback.message:
         await callback.message.edit_text(
             f"❌ درخواست #{app.id} رد شد.",
-            reply_markup=None,
+            reply_markup=with_inline_back(None, None, RESELLER_APPS_LIST),
         )
 
 @router.message(AdminStates.make_reseller)

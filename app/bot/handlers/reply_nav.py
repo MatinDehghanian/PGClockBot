@@ -52,10 +52,9 @@ class _SoftCallback:
         self.message = message
         self.data = data
         self.bot = message.bot
-        self._denial_markup = (
-            InlineKeyboardMarkup(inline_keyboard=[[kb.back_button(None, back_callback)]])
-            if back_callback
-            else None
+        # A denial replaces the «⏳» bubble, so it always keeps a way out.
+        self._denial_markup = InlineKeyboardMarkup(
+            inline_keyboard=[[kb.back_button(None, back_callback)] if back_callback else [kb.home_button(None)]]
         )
 
     async def answer(self, *args, **kwargs):
@@ -69,6 +68,10 @@ class _SoftCallback:
             except TelegramAPIError:
                 logger.debug("soft callback denial edit failed", exc_info=True)
         return True
+
+
+def _admin_back(callback_data: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[[kb.back_button(None, callback_data)]])
 
 
 def _hub_back_markup() -> InlineKeyboardMarkup:
@@ -1248,7 +1251,7 @@ async def open_admin_backup_hub(
     import asyncio
 
     from app.bot.handlers import admin_backup as backup_h
-    from app.bot.nav_inline import admin_backup_hub_keyboard, present_nav_panel, with_inline_back
+    from app.bot.nav_inline import present_nav_panel
     from app.services.backup import list_backups
 
     _ = (reseller_profile_id, reseller_owner_id)
@@ -1260,19 +1263,10 @@ async def open_admin_backup_hub(
     backups = await asyncio.to_thread(list_backups)
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_ADMIN_BACKUP, push=push)
-    files_kb = with_inline_back(
-        kb.backup_files_keyboard(backups), ui, "nv:adm:system"
-    )
-    # Prefixed actions from hub keyboard without trailing back, then files + back.
-    hub = admin_backup_hub_keyboard(ui)
-    hub_rows = [list(r) for r in hub.inline_keyboard[:-1]]  # drop Back
-    file_rows = [list(r) for r in files_kb.inline_keyboard]
-    from aiogram.types import InlineKeyboardMarkup
-    combined = InlineKeyboardMarkup(inline_keyboard=hub_rows + file_rows)
     await present_nav_panel(
         message,
         text=backup_h._hub_text(backups, ui),
-        inline=combined,
+        inline=backup_h.backup_hub_markup(backups, ui),
         state=state,
     )
     return
@@ -1842,20 +1836,19 @@ async def _soft_admin(
         elif data == "adm:backup:upload":
             await backup_h.backup_upload_ask(cb, db_user, state, session=session)
         elif data == "adm:broadcast":
-            # Audience is chosen on reply keyboard (open_broadcast_hub)
-            await bubble.edit_text("مخاطب را از کیبورد پایین انتخاب کنید.")
+            await bubble.edit_text("مخاطب پیام گروهی را انتخاب کنید.", reply_markup=_admin_back("nv:adm:broadcast"))
         elif data.startswith("adm:broadcast:aud:"):
             await admin_h.adm_broadcast_audience(cb, db_user, state, session=session)
         elif data in {"adm:settings", "adm:st:hub"}:
             if state is not None:
                 await settings_h.settings_hub(cb, session, db_user, state)
             else:
-                await bubble.edit_text("⚙️ تنظیمات را از کیبورد پایین انتخاب کنید.")
+                await bubble.edit_text("⚙️ تنظیمات", reply_markup=_admin_back("nv:adm:settings"))
         else:
-            await bubble.edit_text("این بخش در دسترس نیست.")
+            await bubble.edit_text("این بخش در دسترس نیست.", reply_markup=_admin_back("nv:adm:home"))
     except Exception as e:
         try:
-            await bubble.edit_text(f"خطا: {user_safe_error(e)}")
+            await bubble.edit_text(f"خطا: {user_safe_error(e)}", reply_markup=_admin_back("nv:adm:home"))
         except Exception:
             pass
 

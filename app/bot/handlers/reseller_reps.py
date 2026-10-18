@@ -19,7 +19,7 @@ from aiogram.types import (
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.bot.keyboards import REPLY_ACTION_RES_ADD_REP
+from app.bot.keyboards import REPLY_ACTION_RES_ADD_REP, back_button
 from app.bot.reseller_hub_groups import back_callback_for
 from app.bot.screen_replay import replay_screen
 from app.db.models import BotUser
@@ -304,4 +304,9 @@ async def rrep_role(
     except Exception:
         pass
     if callback.message:
-        await callback.message.answer("نماینده ساخته شد.")
+        await callback.message.answer(
+            "نماینده ساخته شد.",
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[[back_button(None, back_callback_for(REPLY_ACTION_RES_ADD_REP))]]
+            ),
+        )
