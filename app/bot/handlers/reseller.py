@@ -168,7 +168,7 @@ async def _resapply_plan_list_keyboard(
         price = format_toman(p.price, get_settings().currency) if p.price else "رایگان"
         if reseller_plan_mode_of(p) == "payg":
             rate = int(getattr(p, "price_per_gb", 0) or 0)
-            extra = f" · {format_toman(rate, get_settings().currency)}/گیگ" if rate else ""
+            extra = f" · {format_toman(rate, get_settings().currency)}/گیگابایت" if rate else ""
         else:
             extra = ""
         cid = getattr(p, "category_id", None)
@@ -234,7 +234,7 @@ async def res_creds(
         return
     profile = await get_reseller_profile(session, db_user.id)
     if not profile or not profile.is_active:
-        await callback.answer("پروفایل نماینده یافت نشد", show_alert=True)
+        await callback.answer("حساب نمایندگی شما پیدا نشد؛ با پشتیبانی تماس بگیرید", show_alert=True)
         return
     await callback.answer()
     from app.bot.nav_inline import reseller_access_card_keyboard
@@ -317,7 +317,7 @@ async def res_dash(
         "🏠 <b>خانه نماینده</b>\n\n"
         f"👥 مشتریان: {users_n}\n"
         f"🛒 سفارش‌ها: {orders_n}\n"
-        f"🧾 رسید معلق: {pending_pay}\n"
+        f"🧾 رسید در انتظار: {pending_pay}\n"
         f"🎫 تیکت باز: {open_tickets}"
     )
     if callback.message:
@@ -401,7 +401,7 @@ async def res_users_list(
         f"<i>🔔 اعلان · ⏰ انقضا · 📉 حجم — جزئیات در وب‌پنل /users</i>"
     )
     if not users:
-        text += "\n\nهنوز مشتری ثبت‌شده‌ای ندارید."
+        text += "\n\nهنوز مشتری ثبت‌شده‌ای ندارید. لینک ربات فروشگاه را برای مشتری‌ها بفرستید."
     if callback.message:
         await safe_edit_text(
             callback.message,
@@ -711,7 +711,7 @@ async def res_stats(
         f"تأیید رسید: {'بله' if has_bot_perm(profile, 'payments') else 'خیر'}\n"
         f"وب‌پنل: <code>{profile.web_username or '—'}</code>\n"
         f"ربات: <code>{('@' + profile.bot_username) if profile.bot_username else '—'}</code>\n"
-        f"ادمین PG: <code>{profile.pg_admin_username or '—'}</code>"
+        f"ادمین پاسارگارد: <code>{profile.pg_admin_username or '—'}</code>"
     )
     if callback.message:
         await safe_edit_text(callback.message, text, reply_markup=_group_back("res_stats"))
@@ -755,11 +755,11 @@ async def res_billing(
         "💰 <b>کیف پول (PAYG)</b>",
         "",
         f"موجودی: <b>{format_toman(int(bal), get_settings().currency)}</b>",
-        f"نرخ پلن: {format_toman(rate, get_settings().currency)} / گیگ",
+        f"نرخ پلن: {format_toman(rate, get_settings().currency)} / گیگابایت",
         f"وضعیت سیستم: {'فعال' if enabled else 'غیرفعال'}",
         "",
         "مصرف ترافیک از همین کیف پول (همان موجودی منوی کیف پول) کسر می‌شود.",
-        "برای شارژ از منوی کیف پول یا با ادمین اصلی هماهنگ کنید.",
+        "برای افزایش موجودی از منوی «کیف پول» اقدام کنید یا با ادمین هماهنگ کنید.",
     ]
     if profile.billing_suspended_at is not None:
         lines.insert(3, "⚠️ <b>حساب به‌خاطر موجودی صفر مسدود است</b>")
@@ -806,7 +806,7 @@ async def res_orders(
         if callback.message:
             await safe_edit_text(
                 callback.message,
-                "سفارشی برای مشتریان شما ثبت نشده.",
+                "هنوز سفارشی از مشتریان شما ثبت نشده است.",
                 reply_markup=_group_back("res_orders"),
             )
         return
@@ -859,7 +859,7 @@ async def present_reseller_tickets_list(
     ui = await get_all_settings(session)
     if not rows:
         markup = with_inline_back(None, ui, back_callback_for("res_tickets"))
-        text = "تیکت بازی از مشتریان نیست."
+        text = "تیکت بازی از مشتریان ندارید."
     else:
         lines = ["🎫 <b>تیکت‌های مشتریان</b>\n"]
         rows_kb: list[list[InlineKeyboardButton]] = []
@@ -1034,7 +1034,7 @@ async def res_payments(
         await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
         return
     if not has_bot_perm(profile, "payments"):
-        await callback.answer("اجازه تأیید ندارید", show_alert=True)
+        await callback.answer("اجازهٔ تأیید رسید را ندارید", show_alert=True)
         return
     await callback.answer()
     result = await session.execute(
@@ -1080,7 +1080,7 @@ async def res_payments(
         except Exception:
             pass
     if callback.message:
-        await safe_edit_text(callback.message, "رسیدهای باز ارسال شد.", reply_markup=_group_back("res_payments"))
+        await safe_edit_text(callback.message, "✅ رسیدهای در انتظار برایتان فرستاده شد. هر کدام را تأیید یا رد کنید.", reply_markup=_group_back("res_payments"))
 
 
 def _resapply_list_back_for_plan(plan) -> str:
@@ -1290,7 +1290,7 @@ async def resapply_plan(
     plans = {p.id: p for p in await list_active_reseller_plans(session)}
     plan = plans.get(plan_id)
     if not plan:
-        await callback.answer("پلن یافت نشد", show_alert=True)
+        await callback.answer("این پلن پیدا نشد", show_alert=True)
         return
     mode = reseller_plan_mode_of(plan)
     body = format_reseller_plan_apply_detail(plan, currency=get_settings().currency)
@@ -1362,7 +1362,7 @@ async def resapply_buy(
     plans = {p.id: p for p in await list_active_reseller_plans(session)}
     plan = plans.get(plan_id)
     if not plan:
-        await callback.answer("پلن یافت نشد", show_alert=True)
+        await callback.answer("این پلن پیدا نشد", show_alert=True)
         return
     try:
         app, order = await create_application(session, user=db_user, plan=plan)
@@ -1508,8 +1508,8 @@ async def res_renew(
                 "🔄 تمدید سرویس نماینده",
                 f"پلن: <b>{plan.name}</b>\n"
                 f"{detail}{exp_line}\n\n"
-                "با تمدید، دسترسی در صورت انقضا باز می‌شود و مصرف ترافیک کاربران ریست می‌شود.\n"
-                "هزینه از کیف پول فروشگاهی کسر می‌شود.",
+                "با تمدید، دسترسی در صورت انقضا باز می‌شود و مصرف ترافیک کاربران صفر می‌شود.\n"
+                "هزینه از کیف پول فروشگاه کسر می‌شود.",
             ),
             reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
         )
@@ -1555,7 +1555,7 @@ async def res_renew_go(
             format_message(
                 "✅ تمدید انجام شد",
                 f"مبلغ: {format_toman(result['amount'], get_settings().currency)}\n"
-                f"ریست مصرف کاربران: {result['reset_ok']}"
+                f"صفر شدن مصرف کاربران: {result['reset_ok']}"
                 + (f" (خطا: {result['reset_err']})" if result.get("reset_err") else "")
                 + exp_line,
             ),
@@ -1591,7 +1591,7 @@ async def res_buy_gb(
         rows.append(
             [
                 InlineKeyboardButton(
-                    text=f"{gb} گیگ — {format_toman(price * gb, get_settings().currency)}",
+                    text=f"{gb} گیگابایت — {format_toman(price * gb, get_settings().currency)}",
                     callback_data=f"res:buy_gb:{gb}",
                 )
             ]
@@ -1603,9 +1603,9 @@ async def res_buy_gb(
             callback.message,
             format_message(
                 "📦 خرید حجم اضافه",
-                f"نرخ: <b>{format_toman(price, get_settings().currency)}</b> / گیگ\n"
+                f"نرخ: <b>{format_toman(price, get_settings().currency)}</b> / گیگابایت\n"
                 "سقف حجم ادمین پاسارگارد شما افزایش می‌یابد.\n"
-                "هزینه از کیف پول فروشگاهی کسر می‌شود.",
+                "هزینه از کیف پول فروشگاه کسر می‌شود.",
             ),
             reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
         )
@@ -1635,7 +1635,7 @@ async def res_buy_gb_go(
     try:
         gb = int(callback.data.split(":")[-1])
     except ValueError:
-        await callback.answer("مقدار نامعتبر", show_alert=True)
+        await callback.answer("این مقدار مجاز نیست", show_alert=True)
         return
     if gb not in ALLOWED_EXTRA_GB:
         await callback.answer("مقدار مجاز نیست", show_alert=True)
@@ -1653,7 +1653,7 @@ async def res_buy_gb_go(
             callback.message,
             format_message(
                 "✅ حجم اضافه خریداری شد",
-                f"مقدار: {result['gb']} گیگ\n"
+                f"مقدار: {result['gb']} گیگابایت\n"
                 f"مبلغ: {format_toman(result['amount'], get_settings().currency)}",
             ),
             reply_markup=None,
@@ -1702,7 +1702,7 @@ async def res_buy_users(
                 "👤 خرید کاربر اضافه",
                 f"نرخ: <b>{format_toman(price, get_settings().currency)}</b> / کاربر\n"
                 "سقف تعداد کاربران ادمین شما افزایش می‌یابد.\n"
-                "هزینه از کیف پول فروشگاهی کسر می‌شود.",
+                "هزینه از کیف پول فروشگاه کسر می‌شود.",
             ),
             reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
         )
@@ -1732,7 +1732,7 @@ async def res_buy_users_go(
     try:
         n = int(callback.data.split(":")[-1])
     except ValueError:
-        await callback.answer("مقدار نامعتبر", show_alert=True)
+        await callback.answer("این مقدار مجاز نیست", show_alert=True)
         return
     if n not in ALLOWED_EXTRA_USERS:
         await callback.answer("مقدار مجاز نیست", show_alert=True)
@@ -1789,7 +1789,7 @@ async def res_addons(
         return
     if plan is None or not is_subscription_plan(plan):
         await callback.answer(
-            "ابتدا باید پلن نمایندگی (اشتراک) خریده باشید",
+            "اول یک پلن نمایندگی (اشتراک) بخرید",
             show_alert=True,
         )
         return
@@ -1803,7 +1803,7 @@ async def res_addons(
         sub = None
     if sub is None or str(getattr(sub, "access_status", "") or "") != "active":
         await callback.answer(
-            "اشتراک فعال ندارید — ابتدا تمدید کنید",
+            "اشتراک فعال ندارید؛ اول آن را تمدید کنید",
             show_alert=True,
         )
         return
@@ -1816,7 +1816,7 @@ async def res_addons(
         kind = str(getattr(p, "plan_kind", "") or "")
         if kind == "addon_volume":
             label = (
-                f"{p.name} — +{int(p.addon_gb or 0)} گیگ — "
+                f"{p.name} — +{int(p.addon_gb or 0)} گیگابایت — "
                 f"{format_toman(p.price, get_settings().currency)}"
             )
         else:
@@ -1841,7 +1841,7 @@ async def res_addons(
                 InlineKeyboardButton(
                     text=(
                         f"📦 حجم واحدی — "
-                        f"{format_toman(gb_price, get_settings().currency)}/گیگ"
+                        f"{format_toman(gb_price, get_settings().currency)}/گیگابایت"
                     ),
                     callback_data="res:buy_gb",
                 )
@@ -1860,7 +1860,7 @@ async def res_addons(
         )
 
     if not rows:
-        await callback.answer("بستهٔ اضافه فعالی تعریف نشده", show_alert=True)
+        await callback.answer("هنوز بستهٔ فعالی تعریف نشده است", show_alert=True)
         return
 
     rows.append([kb.back_button(None, back_callback_for("res_addon_packs"))])
@@ -1871,7 +1871,7 @@ async def res_addons(
     if allow_extra and not addons:
         body = (
             "هنوز بستهٔ آماده‌ای در کاتالوگ نیست — می‌توانید از خرید واحدی استفاده کنید.\n"
-            f"نرخ حجم: <b>{format_toman(plan_extra_gb_price(plan), get_settings().currency)}</b> / گیگ\n"
+            f"نرخ حجم: <b>{format_toman(plan_extra_gb_price(plan), get_settings().currency)}</b> / گیگابایت\n"
             f"نرخ کاربر: <b>{format_toman(plan_extra_user_price(plan), get_settings().currency)}</b> / کاربر"
         )
     await callback.answer()
@@ -1910,18 +1910,18 @@ async def res_addon_buy(
         return
     if plan is None or not is_subscription_plan(plan):
         await callback.answer(
-            "ابتدا باید پلن نمایندگی (اشتراک) خریده باشید",
+            "اول یک پلن نمایندگی (اشتراک) بخرید",
             show_alert=True,
         )
         return
     try:
         plan_id = int(callback.data.split(":")[-1])
     except ValueError:
-        await callback.answer("پلن نامعتبر", show_alert=True)
+        await callback.answer("این پلن پیدا نشد", show_alert=True)
         return
     addon = await session.get(ResellerPlan, plan_id)
     if not addon or not addon.is_active or not is_addon_plan(addon):
-        await callback.answer("بسته یافت نشد", show_alert=True)
+        await callback.answer("این بسته پیدا نشد", show_alert=True)
         return
     uname = (profile.pg_admin_username or "").strip()
     if not uname:
@@ -1941,7 +1941,7 @@ async def res_addon_buy(
             callback.message,
             format_message(
                 "✅ بسته اعمال شد",
-                f"حجم اضافه کل: {result['extra_gb']} گیگ\n"
+                f"حجم اضافه کل: {result['extra_gb']} گیگابایت\n"
                 f"کاربر اضافه کل: {result['extra_users']}\n"
                 f"مبلغ: {format_toman(result['amount'], get_settings().currency)}\n"
                 "تاریخ انقضا تغییر نکرد.",

@@ -49,6 +49,18 @@ class RetiredDefaultRefreshTests(MonitorDatabaseCase):
         self.assertEqual(shop2["screen_caption_a_people"], DEFAULT_SETTINGS["screen_caption_a_people"])
         self.assertEqual(shop3["screen_caption_a_people"], "توضیح فروشگاه سه")
 
+    async def test_a_shop_that_kept_the_old_reports_label_sees_the_new_one(self) -> None:
+        async with self.Session() as session:
+            session.add_all([
+                ResellerSetting(reseller_user_id=2, key="btn_res_reports", value="📈 گزارشات"),
+                ResellerSetting(reseller_user_id=3, key="btn_res_reports", value="📈 آمار فروش"),
+            ])
+            await session.commit()
+            shop2 = await get_all_settings(session, reseller_id=2)
+            shop3 = await get_all_settings(session, reseller_id=3)
+        self.assertEqual(shop2["btn_res_reports"], "📈 گزارش‌ها")
+        self.assertEqual(shop3["btn_res_reports"], "📈 آمار فروش")
+
 
 class RetiredDefaultTableTests(MonitorDatabaseCase):
     async def test_every_retired_entry_names_a_current_default_with_new_wording(self) -> None:

@@ -233,7 +233,7 @@ BTN_RESELLER_HUB: list[Field] = [
     ("btn_res_dash", "خانه نماینده", "text"),
     ("btn_res_users", "مشتریان من", "text"),
     ("btn_res_add_rep", "افزودن نماینده", "text"),
-    ("btn_res_reports", "گزارشات", "text"),
+    ("btn_res_reports", "گزارش‌ها", "text"),
     ("btn_res_stats", "آمار", "text"),
     ("btn_res_plans", "پلن‌های فروش", "text"),
     ("btn_res_orders", "سفارش‌های مشتریان", "text"),

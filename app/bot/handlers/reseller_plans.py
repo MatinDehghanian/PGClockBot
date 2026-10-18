@@ -122,7 +122,7 @@ async def _list_plans(session: AsyncSession, owner_id: int) -> list[Plan]:
 
 
 def _plan_text(plan: Plan, *, category_name: str | None = None) -> str:
-    gb = f"{plan.data_limit_gb:g} گیگ" if plan.data_limit_gb is not None else "نامحدود"
+    gb = f"{plan.data_limit_gb:g} گیگابایت" if plan.data_limit_gb is not None else "نامحدود"
     src = (
         f"تمپلیت #{plan.pg_template_id}"
         if plan.pg_template_id
@@ -183,7 +183,7 @@ async def res_plans(callback: CallbackQuery, session: AsyncSession, db_user: Bot
         await callback.answer(feedback.NOT_RESELLER, show_alert=True)
         return
     if not has_bot_perm(profile, "plans"):
-        await callback.answer("دسترسی پلن ندارید", show_alert=True)
+        await callback.answer("به بخش پلن‌ها دسترسی ندارید", show_alert=True)
         return
     await state.clear()
     await callback.answer()
@@ -429,7 +429,7 @@ async def res_plan_price(
     await ask_text(
         message,
         state,
-        prompt="مدت اعتبار به روز را بفرستید:",
+        prompt="مدت اعتبار را به روز بفرستید؛ مثلاً 30.",
         cancel_code="rs_pln",
         fsm_state=ResellerPlanStates.days,
         edit=False,
@@ -511,7 +511,7 @@ async def res_plan_gb(message: Message, state: FSMContext, session: AsyncSession
     owner_id, profile = await _actor(session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id)
     if not owner_id or not profile:
         await state.clear()
-        await message.answer("نماینده نیستید.")
+        await message.answer("این بخش فقط برای نماینده است.")
         return
     staff = await _staff_ctx(profile, session)
     from app.services.plan_categories import list_categories

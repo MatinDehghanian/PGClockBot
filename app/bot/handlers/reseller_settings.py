@@ -187,7 +187,7 @@ SECTIONS: dict[str, dict] = {
     "buy": {
         "title": "قوانین خرید",
         "subs": [
-            ("trial_gate", "اکانت تست", [
+            ("trial_gate", "سرویس تست", [
                 ("trial_require_contact", "تأیید شماره تماس", "toggle"),
                 ("trial_require_iran_phone", "فقط شماره ایران", "toggle"),
             ]),
