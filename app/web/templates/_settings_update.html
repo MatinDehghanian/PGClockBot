@@ -1,3 +1,4 @@
+{% from "macros.html" import flash_warn_icon %}
 {% set available = update_info.update_available %}
 {% set running = status.state == 'running' %}
 {% set has_error = status.state == 'error' or status.restart_required %}
@@ -101,8 +102,9 @@
   </div>
 
   <div id="upd-ops" class="update-ops" {% if not show_ops %}hidden{% endif %}>
-    <div class="flash warn update-stay-warn" id="upd-stay-warn" role="status">
-      تا پایان عملیات از این صفحه خارج نشوید و رفرش نکنید؛ ممکن است چند دقیقه طول بکشد.
+    <div class="flash warn update-stay-warn flash-has-ico" id="upd-stay-warn" role="status">
+      {{ flash_warn_icon() }}
+      <span class="flash-copy">تا پایان عملیات از این صفحه خارج نشوید و رفرش نکنید؛ ممکن است چند دقیقه طول بکشد.</span>
     </div>
     <div class="progress-wrap" aria-label="نوار پیشرفت">
       <div class="progress-bar">

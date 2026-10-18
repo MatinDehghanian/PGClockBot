@@ -2808,6 +2808,26 @@ input.mono, textarea.mono, select.mono { font-size: var(--control-fs); }
   background-color: rgba(239, 68, 68, 0.16);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fca5a5' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='8.5'/%3E%3Cpath d='M9 9l6 6M15 9l-6 6'/%3E%3C/svg%3E");
 }
+/* Icon drawn in the markup (alerts revealed by script); replaces the ::before box */
+.flash.flash-has-ico::before { content: none; }
+.flash-ico {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-sm);
+}
+.flash-ico svg { width: 15px; height: 15px; }
+.flash.warn .flash-ico { background-color: rgba(234, 179, 8, 0.16); }
+html[data-theme="light"] .flash.warn .flash-ico { background-color: rgba(202, 138, 4, 0.14); }
+/* A group's warning sits inside its box, under the title */
+.settings-card > .settings-group-notice {
+  align-items: flex-start;
+  margin: 0 0 var(--space-2);
+}
+.settings-group-notice .muted-list { margin-top: var(--space-1); }
 .flash-copy {
   display: flex;
   flex-direction: column;
@@ -10659,8 +10679,16 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
 }
 .guides-link-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) auto;
+  align-items: end;
   gap: var(--space-2);
+}
+.guides-link-row > .guides-link-remove { margin-bottom: var(--space-1); }
+.guides-links > .guides-link-add { padding: var(--space-1) var(--space-2); }
+.guides-links > .guides-link-add[hidden] { display: none; }
+.guides-link-row + .guides-link-row {
+  border-top: 1px solid var(--border);
+  padding-top: var(--space-2);
 }
 .guides-media-list {
   list-style: none;
@@ -10685,8 +10713,9 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
 }
 @media (max-width: 640px) {
   .guides-link-row {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) auto;
   }
+  .guides-link-row > label:first-child { grid-column: 1 / -1; }
 }
 
 .supports-fields-grid .supports-enabled-field {
