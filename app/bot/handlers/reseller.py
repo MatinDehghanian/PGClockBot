@@ -20,6 +20,7 @@ from app.db.models import (
     Ticket,
     TicketStatus,
 )
+from app.services.color_tags import risk_mark
 from app.services.home_overview import reseller_shop_summary
 from app.services.formatting import format_message, format_toman, order_status_fa
 from app.services.reseller_access import load_reseller_actor
@@ -378,7 +379,7 @@ async def res_users_list(
     for u in users:
         ops = build_user_ops_row(u, by_svc.get(int(u.id), []))
         name = (u.full_name or u.username or str(u.telegram_id))[:16]
-        flag = bot_user_alert_flags(ops)
+        flag = risk_mark(u, shop_id=int(owner_id)) + bot_user_alert_flags(ops)
         buttons.append(
             InlineKeyboardButton(
                 text=f"{flag} {name}",
@@ -448,7 +449,7 @@ async def res_user_view(
 
     by = await load_services_by_user_ids(session, [int(user.id)], shop_id=int(owner_id))
     ops = build_user_ops_row(user, by.get(int(user.id), []))
-    flags = bot_user_alert_flags(ops)
+    flags = risk_mark(user, shop_id=int(owner_id)) + bot_user_alert_flags(ops)
     blocked = "بله" if user.is_blocked else "خیر"
     display = html.escape(user.full_name or user.username or "—")
     alert_line = ""
