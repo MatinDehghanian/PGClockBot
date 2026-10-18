@@ -25,7 +25,7 @@ def render_dashboard_shell(template: str) -> str:
         "funnel": dict(_EMPTY_FUNNEL), "periods": empty_period_stats(),
         "action_center": dict(_EMPTY_ACTION), "widgets_deferred": True,
         "widgets_body_url": "/pg/body" if template == "pg_home.html" else "/home/body",
-        "stats_rows": [], "nodes": [], "counts": {}, "reseller_overview": None,
+        "view": None, "nodes": [], "counts": {}, "reseller_overview": None,
     }
     return templates.env.get_template(template).render(context)
 
@@ -143,7 +143,7 @@ class PanelShellFirstContractTests(unittest.TestCase):
         self.assertIn('id="panel-widget-status"', html)
         self.assertIn("/pg/body", html)
         self.assertIn("panel-widgets-ready", html)
-        self.assertIn("function els()", html)
+        self.assertIn("/static/overview-live.js", html)
 
     def test_deferred_widgets_use_nav_clock_not_veil(self):
         """Deferred /body shows #panel-nav-clock — never the deleted page-load veil."""

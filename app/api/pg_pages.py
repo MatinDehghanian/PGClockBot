@@ -3,13 +3,14 @@ from __future__ import annotations
 """PasarGuard manager pages — admin + reseller (permission-gated)."""
 
 import asyncio
+import logging
 from urllib.parse import quote
 
 from fastapi import Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.formatting import data_limit_to_gb, format_stat_row, pg_expire_fields
+from app.services.formatting import data_limit_to_gb, pg_expire_fields
 from app.services.numbers import normalize_number_text, parse_float, parse_int, parse_optional_float, parse_optional_int
 from app.services.pasarguard import (
     PasarGuardError,
@@ -21,6 +22,7 @@ from app.services.pasarguard import (
     user_group_ids,
     user_subscription_url,
 )
+from app.services.pg_overview_view import overview_view, owner_user_counts
 from app.services.pg_access import staff_pg_action, staff_pg_writes, staff_user_actions
 from app.services.pg_quota import (
     PgQuotaError,
@@ -33,6 +35,10 @@ from app.services.provision_gate import (
 )
 from app.services.shop_scope import is_platform_admin, shop_owner_id
 
+
+logger = logging.getLogger(__name__)
+
+PG_STATS_ERROR = "دریافت آمار پاسارگارد ممکن نشد؛ چند لحظهٔ دیگر صفحه را تازه کنید."
 
 def _q(msg: str) -> str:
     return quote(str(msg), safe="")
@@ -292,10 +298,10 @@ def register_pg_pages(
 
     async def _pg_display_widgets(staff: dict, session: AsyncSession) -> dict:
         """Decorative PG overview data — never used for allow/deny."""
-        from app.services.pg_overview import build_reseller_pg_overview, is_server_stat_key
+        from app.services.pg_overview import build_reseller_pg_overview
 
         err = None
-        stats_rows: list[tuple[str, str]] = []
+        system_stats: dict | None = None
         nodes: list = []
         nodes_overview = None
         counts = {"admins": 0, "groups": 0, "hosts": 0, "nodes": 0, "users": 0}
@@ -303,7 +309,7 @@ def register_pg_pages(
         host_gauges = None
 
         async def _load():
-            nonlocal err, stats_rows, nodes, nodes_overview, counts
+            nonlocal err, system_stats, nodes, nodes_overview, counts
             nonlocal reseller_overview, host_gauges
             if _is_pg_owner_principal(staff):
                 from app.services.host_gauges import gauges_from_pg_system_stats
@@ -321,43 +327,11 @@ def register_pg_pages(
                 )
                 if isinstance(raw, dict):
                     host_gauges = gauges_from_pg_system_stats(raw)
-                    _count_dup_keys = {
-                        "total_user",
-                        "total_users",
-                        "users",
-                        "users_total",
-                        "total_admin",
-                        "admins_total",
-                        "total_admins",
-                        "admins",
-                        "total_node",
-                        "nodes_total",
-                        "total_nodes",
-                        "nodes",
-                        "total_group",
-                        "groups_total",
-                        "total_groups",
-                        "groups",
-                        "total_host",
-                        "hosts_total",
-                        "total_hosts",
-                        "hosts",
-                    }
-                    for key, val in raw.items():
-                        if isinstance(val, (dict, list)):
-                            continue
-                        k = str(key)
-                        if is_server_stat_key(k):
-                            continue
-                        if k.lower() in _count_dup_keys:
-                            continue
-                        stats_rows.append(format_stat_row(k, val))
-                    for key in ("total_user", "users_active", "users", "total_users"):
-                        if key in raw and isinstance(raw[key], (int, float)):
-                            counts["users"] = int(raw[key])
-                            break
+                    system_stats = raw
+                    counts["users"] = owner_user_counts(raw).total
                 elif isinstance(raw, Exception):
-                    err = str(raw)
+                    logger.warning("pg system stats failed", exc_info=raw)
+                    err = PG_STATS_ERROR
                 nodes = nodes_raw if isinstance(nodes_raw, list) else []
                 rt = realtime if not isinstance(realtime, Exception) else None
                 try:
@@ -376,18 +350,21 @@ def register_pg_pages(
         try:
             await asyncio.wait_for(_load(), timeout=3.0)
         except asyncio.TimeoutError:
-            import logging
+            logger.info("pg display widgets timed out after 3.0s — serving partial data")
+        except Exception:
+            logger.warning("pg display widgets failed", exc_info=True)
+            err = PG_STATS_ERROR
 
-            logging.getLogger(__name__).info(
-                "pg display widgets timed out after 3.0s — serving partial data"
-            )
-        except Exception as e:
-            err = str(e)
-
+        owner = _is_pg_owner_principal(staff)
         return {
             "err": err,
-            "stats_rows": stats_rows,
-            "nodes": nodes if _is_pg_owner_principal(staff) else [],
+            "view": overview_view(
+                owner=owner,
+                system_stats=system_stats,
+                user_stats=(reseller_overview or {}).get("user_stats"),
+                nodes=(nodes_overview or {}).get("nodes") if owner else [],
+            ),
+            "nodes": nodes if owner else [],
             "nodes_overview": nodes_overview,
             "counts": counts,
             "reseller_overview": reseller_overview,
@@ -416,7 +393,7 @@ def register_pg_pages(
             mark(request, "page_data")
             ctx = _pg_ctx(
                 staff,
-                stats_rows=[],
+                view=None,
                 nodes=[],
                 counts={"admins": 0, "groups": 0, "hosts": 0, "nodes": 0, "users": 0},
                 reseller_overview=None,
@@ -434,7 +411,7 @@ def register_pg_pages(
         mark(request, "page_data")
         ctx = _pg_ctx(
             staff,
-            stats_rows=widgets["stats_rows"],
+            view=widgets["view"],
             nodes=widgets["nodes"],
             counts=widgets["counts"],
             reseller_overview=widgets["reseller_overview"],
@@ -469,7 +446,7 @@ def register_pg_pages(
         mark(request, "page_data")
         ctx = _pg_ctx(
             staff,
-            stats_rows=widgets["stats_rows"],
+            view=widgets["view"],
             nodes=widgets["nodes"],
             counts=widgets["counts"],
             reseller_overview=widgets["reseller_overview"],

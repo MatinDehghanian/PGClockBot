@@ -13,7 +13,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from itsdangerous import BadSignature, BadTimeSignature, URLSafeTimedSerializer
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -80,7 +80,6 @@ from app.services.updates import local_version
 from app.services.message_variables import template_variable_specs
 from app.services.panel_assets import get_panel_asset_cache_key
 from app.services.shop_scope import is_platform_admin, payment_shop_id
-from app.services.ux20 import payment_shop_clause
 from app.services.settings_tab_groups import group_settings_tabs, tabs_with_message_variables
 from app.services.users import (
     SETTINGS_DOMAIN_REDIRECTS,
@@ -106,6 +105,7 @@ from app.api.catalog_discounts import register_catalog_discounts
 from app.api.connection_status_pages import register_connection_status_pages
 from app.api.funnel_pages import register_funnel_pages
 from app.api.gift_code_pages import legacy_gift_modal_redirect, register_gift_code_pages
+from app.api.bot_overview_pages import register_bot_overview_pages
 from app.api.dashboard_trend_pages import register_dashboard_trend_pages
 from app.api.home_pages import register_home_pages
 from app.api.pg_pages import register_pg_pages
@@ -1382,6 +1382,9 @@ def create_api_app(lifespan=None) -> FastAPI:
         get_db=get_db,
     )
     register_dashboard_trend_pages(app, require_staff=require_staff, get_db=get_db)
+    register_bot_overview_pages(
+        app, render=render, require_perm=require_perm, require_admin=require_admin, get_db=get_db
+    )
     register_pg_pages(
         app,
         render=render,
@@ -2395,190 +2398,6 @@ def create_api_app(lifespan=None) -> FastAPI:
         resp = RedirectResponse("/login", status_code=303)
         resp.delete_cookie("session", path="/")
         return resp
-
-    @app.get("/dashboard", response_class=HTMLResponse)
-    async def dashboard(
-        request: Request,
-        staff: dict = Depends(require_perm("dashboard")),
-        session: AsyncSession = Depends(get_db),
-    ):
-        # Bot overview (/dashboard): platform admin sees bot boxes;
-        # overall web home stays at /home. Resellers stay shop-scoped.
-        from app.services.shop_scope import empty_shop_stats, is_platform_admin, shop_owner_id
-
-        rid = shop_owner_id(staff)
-        stats = empty_shop_stats()
-        recent_payments: list = []
-        recent_orders: list = []
-        bot_setup_needed = False
-        host_gauges = None
-
-        if is_platform_admin(staff):
-
-            from app.services.db_safe import rollback_quiet
-            from app.services.home_overview import bot_panel_summary
-            from app.services.host_gauges import local_host_gauges
-
-            try:
-                host_gauges = await asyncio.to_thread(local_host_gauges, wait_cpu=0.0)
-            except Exception:
-                from app.services.host_gauges import empty_host_gauges
-
-                host_gauges = empty_host_gauges()
-
-            try:
-                summary = await bot_panel_summary(session)
-            except Exception:
-                await rollback_quiet(session)
-                summary = {
-                    "users": 0,
-                    "orders": 0,
-                    "services": 0,
-                    "pending": 0,
-                    "revenue": 0,
-                    "tickets": 0,
-                    "resellers": 0,
-                }
-            try:
-                plans_count = (
-                    await session.scalar(
-                        select(func.count())
-                        .select_from(Plan)
-                        .where(Plan.is_active.is_(True), Plan.owner_reseller_id.is_(None))
-                    )
-                    or 0
-                )
-            except Exception:
-                await rollback_quiet(session)
-                plans_count = 0
-            stats = {
-                "users": summary["users"],
-                "orders": summary["orders"],
-                "pending": summary["pending"],
-                "services": summary["services"],
-                "revenue": summary["revenue"],
-                "plans": int(plans_count),
-                "tickets": summary["tickets"],
-            }
-            # Hard shop isolation: platform dashboard never lists tenant shop traffic
-            try:
-                recent_payments = list(
-                    (
-                        await session.execute(
-                            select(Payment)
-                            .outerjoin(Order, Order.id == Payment.order_id)
-                            .where(payment_shop_clause(None))
-                            .order_by(Payment.id.desc())
-                            .limit(6)
-                        )
-                    ).scalars().all()
-                )
-                recent_orders = list(
-                    (
-                        await session.execute(
-                            select(Order)
-                            .where(Order.reseller_id.is_(None))
-                            .order_by(Order.id.desc())
-                            .limit(6)
-                        )
-                    ).scalars().all()
-                )
-            except Exception:
-                await rollback_quiet(session)
-                recent_payments = []
-                recent_orders = []
-            return render(
-                request,
-                "dashboard.html",
-                {
-                    "staff": staff,
-                    "stats": stats,
-                    "recent_payments": recent_payments,
-                    "recent_orders": recent_orders,
-                    "bot_setup_needed": False,
-                    "host_gauges": host_gauges,
-                },
-            )
-
-        # Fail closed: never fall through to platform/admin aggregates.
-        # Bot نمای کلی is bot-only (PG lives on /home and /pg).
-        if rid:
-            from app.db.models import ResellerProfile
-            from app.services.resellers import bot_needs_setup
-
-            profile = (
-                await session.execute(
-                    select(ResellerProfile).where(ResellerProfile.user_id == int(rid))
-                )
-            ).scalar_one_or_none()
-            bot_setup_needed = bot_needs_setup(profile)
-            # Until dedicated bot token is set, bot overview is setup-only.
-            if bot_setup_needed:
-                return render(
-                    request,
-                    "dashboard.html",
-                    {
-                        "staff": staff,
-                        "stats": stats,
-                        "recent_payments": [],
-                        "recent_orders": [],
-                        "bot_setup_needed": True,
-                    },
-                )
-
-            from app.api.home_pages import _reseller_shop_stats
-
-            perms = staff.get("permissions") or []
-            stats = await _reseller_shop_stats(session, int(rid))
-            if "payments" in perms:
-                recent_payments = list(
-                    (
-                        await session.execute(
-                            select(Payment)
-                            .outerjoin(Order, Order.id == Payment.order_id)
-                            .where(payment_shop_clause(int(rid)))
-                            .order_by(Payment.id.desc())
-                            .limit(6)
-                        )
-                    ).scalars().all()
-                )
-            if "orders" in perms:
-                recent_orders = list(
-                    (
-                        await session.execute(
-                            select(Order)
-                            .where(Order.reseller_id == rid)
-                            .order_by(Order.id.desc())
-                            .limit(6)
-                        )
-                    ).scalars().all()
-                )
-
-        return render(
-            request,
-            "dashboard.html",
-            {
-                "staff": staff,
-                "stats": stats,
-                "recent_payments": recent_payments,
-                "recent_orders": recent_orders,
-                "bot_setup_needed": bot_setup_needed,
-                "host_gauges": host_gauges,
-            },
-        )
-
-    @app.get("/dashboard/metrics")
-    async def dashboard_host_metrics_json(staff: dict = Depends(require_admin)):
-        """Local bot-server CPU/RAM for the bot overview gauges (platform admin only)."""
-
-        from fastapi.responses import JSONResponse
-
-        from app.services.host_gauges import gauges_json, local_host_gauges
-
-        host = await asyncio.to_thread(local_host_gauges, wait_cpu=0.0)
-        if host.get("cpu_percent") is None:
-            host = await asyncio.to_thread(local_host_gauges, wait_cpu=0.12)
-        return JSONResponse(gauges_json(host))
 
     @app.get("/plans", response_class=HTMLResponse)
     async def plans_page(

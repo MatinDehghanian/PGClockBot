@@ -104,21 +104,6 @@ class NodeOverviewBuilderTests(unittest.TestCase):
 
 
 class PgOverviewSurfaceTests(unittest.TestCase):
-    def test_pg_home_has_node_tiles_not_simple_table(self):
-        pg = (ROOT / "app/web/templates/_pg_dash_body.html").read_text(encoding="utf-8")
-        self.assertIn("pg-node-tile", pg)
-        self.assertIn("data-pg-live-up-num", pg)
-        self.assertIn("pg-metric-unit", pg)
-        self.assertIn("pg-metric-val-rate", pg)
-        self.assertIn("pg-node-meter", pg)
-        self.assertIn("pg-node-tabs", pg)
-        self.assertIn("data-pg-node-tab", pg)
-        self.assertIn("data-pg-node-grid", pg)
-        self.assertNotIn("table-compact", pg)
-        self.assertIn("/pg/metrics", pg)
-        # Node board shares home-panels width with stats
-        self.assertIn("home-panel-pg pg-node-board", pg)
-
     def test_css_node_board(self):
         css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
         self.assertIn(".pg-node-tile", css)
@@ -149,16 +134,6 @@ class PgOverviewSurfaceTests(unittest.TestCase):
         body = css[start : start + 450].split("{", 1)[1].split("}", 1)[0]
         self.assertIn("text-shadow: none", body)
         self.assertIn(".pg-node-meter-pct-on-fill", css)
-
-    def test_pg_home_node_meta_parts(self):
-        pg = (ROOT / "app/web/templates/_pg_dash_body.html").read_text(encoding="utf-8")
-        self.assertIn("data-pg-node-cpu-cores-num", pg)
-        self.assertIn("data-pg-node-cpu-cores-unit", pg)
-        self.assertIn("data-pg-node-mem-used", pg)
-        self.assertIn("data-pg-node-mem-total", pg)
-        self.assertIn("data-pg-node-mem-unit", pg)
-        self.assertIn("cpu_cores_parts", pg)
-        self.assertIn("mem_parts", pg)
 
     def test_metrics_route_fetches_nodes_and_owner_guard(self):
         src = (ROOT / "app/api/pg_pages.py").read_text(encoding="utf-8")

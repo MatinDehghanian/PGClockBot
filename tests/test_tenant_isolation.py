@@ -169,7 +169,10 @@ class SourceGuardTests(unittest.TestCase):
     def test_dashboard_uses_shop_scope(self):
         from pathlib import Path
 
-        src = Path("app/api/app.py").read_text(encoding="utf-8")
+        # The bot overview moved out of app.py; guard both files.
+        src = Path("app/api/app.py").read_text(encoding="utf-8") + Path(
+            "app/services/bot_overview.py"
+        ).read_text(encoding="utf-8")
         # Old leak pattern must stay gone
         self.assertNotIn(
             'rid = staff.get("bot_user_id") if staff.get("role") == "reseller" else None',
