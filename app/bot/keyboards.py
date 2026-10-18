@@ -284,6 +284,20 @@ def sync_show_flags_for_order(order: list[str]) -> dict[str, str]:
     return flags
 
 
+def default_menu_layout_settings(*, for_shop: bool) -> dict[str, str]:
+    """Menu order, layout and show flags of a fresh install; a shop never offers «درخواست نمایندگی»."""
+    order = [key for key in DEFAULT_ACTIVE_MENU_ORDER if not (for_shop and key == "reseller_apply")]
+    payload = {
+        "menu_order": ",".join(order),
+        "menu_layout": str(DEFAULT_SETTINGS.get("menu_layout") or "compact"),
+        **sync_show_flags_for_order(order),
+        "show_miniapp": "0",
+    }
+    if for_shop:
+        payload["show_reseller_apply"] = "0"
+    return payload
+
+
 def _connection_status_buttons(key: str, ui: dict | None) -> list[InlineKeyboardButton]:
     if key != CONNECTION_STATUS_MENU_KEY:
         return []
