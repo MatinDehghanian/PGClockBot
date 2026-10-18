@@ -21,6 +21,7 @@ from app.services.resellers import (
     complete_reseller_setup,
 )
 from app.api.guide_media_pages import SHOP_BASE, guides_media_view
+from app.services.chat_cleanup_config import chat_cleanup_payload
 from app.services.connection_guides import prune_guide_media, serialize_submitted_guides
 from app.services.secret_box import reveal_bot_token
 from app.services.settings_button_labels import PLATFORM_ONLY_BTN_KEYS
@@ -627,6 +628,7 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         payload = {"menu_order": ",".join(order), **sync_show_flags_for_order(order)}
         payload["show_reseller_apply"] = "0"
         payload["show_miniapp"] = "0"
+        payload.update(chat_cleanup_payload(form))
         if layout in {"classic", "compact"}:
             payload["menu_layout"] = layout
         await set_settings_bulk(session, payload, reseller_id=rid)

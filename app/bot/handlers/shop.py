@@ -14,6 +14,7 @@ from app.services.service_scope import list_customer_services
 from app.services.users import current_shop_reseller_id
 from app.services.catalog_pricing import PriceTarget, active_discounts, displayed_quote, price_html, quote_price, sale_price
 from app.bot import keyboards as kb
+from app.bot.chat_cleanup import keep_message
 from app.bot.handlers.purchase_contact import prompt_purchase_contact_if_needed
 from app.bot.tg_utils import safe_edit_text
 from app.config import get_settings
@@ -1888,6 +1889,7 @@ async def pay_wallet_cb(
                     ),
                     reply_markup=kb.back_home(None),
                 )
+            keep_message(callback.message)
             _ = main_kb
         for aid in get_settings().admin_ids:
             try:
@@ -1917,6 +1919,7 @@ async def pay_wallet_cb(
                 format_message("✅ پرداخت تأیید شد", f"سفارش #{order.id}"),
                 reply_markup=None,
             )
+            keep_message(callback.message)
         except Exception:
             logger.debug("pay_wallet checkout clear failed order=%s", order.id, exc_info=True)
     try:
@@ -1980,6 +1983,8 @@ async def _await_order_receipt(
         )
         if state is not None:
             await remember_prompt(state, callback.message, cancel_code="pay_rcpt")
+        # The card number or address must stay while the person pays elsewhere.
+        keep_message(callback.message)
     if state is not None:
         from app.bot import menu_nav as nav
 

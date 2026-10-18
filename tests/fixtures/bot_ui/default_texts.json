@@ -346,6 +346,7 @@
   "card_holder": "",
   "card_number": "",
   "card_pay_text": "مبلغ قابل پرداخت: <b>{amount}</b>\nشماره کارت: <code>{card}</code>\nبه نام: {holder}\n\nپس از واریز، عکس رسید را در همین گفتگو ارسال کنید.",
+  "chat_cleanup_enabled": "1",
   "connection_guides": "[]",
   "connection_status_account_prompt": "فقط نام کاربری یک کاربر تست موجود در پاسارگارد را بفرستید؛ مثلاً MattDev. این کاربر باید جدا از سرویس مشتری باشد. لینک، توکن یا رمز عبور نفرستید.",
   "connection_status_admin_title": "📡 وضعیت اتصال",

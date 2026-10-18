@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.catalog_pricing import displayed_quote, price_html, quote_product, sale_price
 from app.bot import keyboards as kb
+from app.bot.chat_cleanup import keep_message
 from app.bot.list_pages import page_line, page_number
 from app.bot.tg_utils import safe_edit_text
 from app.config import get_settings
@@ -683,6 +684,7 @@ async def svc_renew_pay(
                 format_message("✅ تمدید رایگان", f"سفارش #{order.id}"),
                 reply_markup=service_back_markup(svc.id),
             )
+            keep_message(callback.message)
         return
 
     summary = format_message(
@@ -880,6 +882,7 @@ async def svc_addon_pay(
                 ),
                 reply_markup=service_back_markup(svc.id),
             )
+            keep_message(callback.message)
         return
 
     summary = format_message(

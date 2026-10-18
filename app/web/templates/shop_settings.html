@@ -75,6 +75,7 @@
             <option value="compact" {% if values.get('menu_layout','compact')=='compact' %}selected{% endif %}>فشرده (جفتی — پیشنهادی)</option>
           </select>
         </label>
+        {% include "_settings_chat_cleanup.html" %}
       </div>
     </div>
     <form method="post" action="/shop-settings/menu-layout" id="menu-form" class="menu-layout-form">
