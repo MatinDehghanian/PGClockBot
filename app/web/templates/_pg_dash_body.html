@@ -3,7 +3,7 @@
    sees only their quota and the users they own (view.counts), never panel-wide figures. #}
 {% from "macros.html" import card_title %}
 {% from "_home_widgets.html" import status_tiles %}
-<div id="pg-dash" class="pg-dash">
+<div id="pg-dash" class="pg-dash home-dash">
 {% if request is defined and request.url.path == '/pg/body' %}{% include "_pg_connection_notice.html" %}{% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}{% endif %}
 {% set uc = view.counts if view else none %}
 {% set can_users = 'pg_users' in (pg_perms or []) %}
