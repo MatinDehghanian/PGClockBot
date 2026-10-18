@@ -1,7 +1,7 @@
 """Keep the private chat tidy: a new panel deletes the throwaway messages above it.
 
-Only messages noted here as throwaway are ever deleted: panels the navigation helpers
-send and the person's menu-button taps. Everything else stays: deliveries, configs,
+Only messages noted here as throwaway are ever deleted: panels, prompts and fixed one-line
+notices the bot sends, and the person's menu-button taps and typed form replies. Everything else stays: deliveries, configs,
 receipts, ticket replies, staff notices, and the message carrying the menu keyboard
 (deleting that one drops the menu on iOS). A panel that turns into something worth
 keeping, such as a payment confirmation, is taken off the list with ``keep_message``.
@@ -19,10 +19,13 @@ from contextvars import ContextVar
 from typing import Any
 
 from aiogram import BaseMiddleware, Bot
+from aiogram.client.session.middlewares.base import NextRequestMiddlewareType
 from aiogram.exceptions import TelegramAPIError
+from aiogram.methods import SendMessage, TelegramMethod
 from aiogram.types import Message, ReplyKeyboardMarkup, TelegramObject
 
 from app.bot.reply_keyboard_state import is_menu_tap
+from app.services import bot_feedback_texts as feedback
 from app.services.chat_cleanup_config import is_chat_cleanup_on
 from app.services.users import get_all_settings
 
@@ -34,6 +37,33 @@ TRACKED_CHATS = 20_000
 DELETE_WINDOW_SECONDS = 47 * 3600
 # deleteMessages takes at most 100 ids per call.
 DELETE_BATCH = 100
+
+# Fixed one-line replies that only acknowledge a step; none of them records anything.
+SHORT_NOTICES = frozenset(
+    {
+        "⏳",
+        feedback.CANCELLED,
+        feedback.CANCELLED_SHORT,
+        feedback.CANCELLED_BACK_TO_HUB,
+        feedback.SAVED,
+        feedback.SAVED_CHECK,
+        feedback.SAVED_WITH_ICON,
+        feedback.COLOR_SAVED,
+        feedback.UPDATED,
+        feedback.DELETED,
+        feedback.CONNECTION_DELETED,
+        feedback.MAIN_KEYBOARD_RESTORED,
+        feedback.INVALID,
+        feedback.NOT_FOUND,
+        feedback.ENTER_VALID_NUMBER,
+        feedback.ENTER_VALID_NUMBER_SHORT,
+        feedback.ENTER_ONE_VALID_NUMBER,
+        feedback.NAME_REQUIRED,
+        feedback.PICK_SECTION_BELOW,
+        feedback.PICK_OPTION_BELOW,
+        feedback.PICK_CATEGORY_BELOW,
+    }
+)
 
 _cleanup_on: ContextVar[bool] = ContextVar("chat_cleanup_on", default=False)
 
@@ -80,10 +110,10 @@ def is_cleanup_on() -> bool:
     return _cleanup_on.get()
 
 
-def chat_key(message: Message) -> ChatKey | None:
+def chat_key(message: Message, bot: Bot | None = None) -> ChatKey | None:
     """(bot id, chat id) of a private chat; None for groups and channels."""
     chat = getattr(message, "chat", None)
-    bot = getattr(message, "bot", None)
+    bot = bot or getattr(message, "bot", None)
     if getattr(chat, "type", None) != "private" or bot is None:
         return None
     try:
@@ -92,11 +122,11 @@ def chat_key(message: Message) -> ChatKey | None:
         return None
 
 
-def note_throwaway(message: Message | None, *, reply_markup: Any = None) -> None:
+def note_throwaway(message: Message | None, *, reply_markup: Any = None, bot: Bot | None = None) -> None:
     """Remember a panel or a menu tap so the next panel can delete it."""
     if message is None or not is_cleanup_on() or isinstance(reply_markup, ReplyKeyboardMarkup):
         return
-    key = chat_key(message)
+    key = chat_key(message, bot)
     if key is not None and getattr(message, "message_id", None) is not None:
         _log.add(key, int(message.message_id), time.monotonic())
 
@@ -130,6 +160,25 @@ async def delete_messages(bot: Bot, chat_id: int, message_ids: list[int]) -> Non
         except TelegramAPIError:
             # Already gone or too old: the chat is merely less tidy.
             logger.debug("chat cleanup could not delete %s messages", len(message_ids), exc_info=True)
+
+
+async def _note_short_notices(
+    make_request: NextRequestMiddlewareType[Any], bot: Bot, method: TelegramMethod[Any]
+) -> Any:
+    result = await make_request(bot, method)
+    if isinstance(method, SendMessage) and isinstance(result, Message) and is_short_notice(method.text):
+        note_throwaway(result, reply_markup=method.reply_markup, bot=bot)
+    return result
+
+
+def is_short_notice(text: str | None) -> bool:
+    return (text or "").strip() in SHORT_NOTICES
+
+
+def install_notice_watch(bot: Bot) -> Bot:
+    """Treat the bot's fixed one-line notices («لغو شد.»، «⏳» …) as throwaway."""
+    bot.session.middleware(_note_short_notices)
+    return bot
 
 
 class ChatCleanupMiddleware(BaseMiddleware):
