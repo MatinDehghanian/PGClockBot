@@ -14,6 +14,7 @@ from app.bot.auth import is_platform_admin as _is_admin
 from app.bot.auth import require_bot_owner_handler, require_platform_rep_mgmt
 from app.config import get_settings
 from app.db.models import BotUser, Order, OrderStatus, Payment, PaymentStatus, Plan, Role, Ticket, UserService
+from app.services.color_tags import risk_mark
 from app.services.home_overview import bot_dashboard_summary
 from app.services.formatting import (
     format_system_stats,
@@ -2271,7 +2272,7 @@ async def adm_users_list(callback: CallbackQuery, session: AsyncSession, db_user
     for u in users:
         ops = build_user_ops_row(u, by_svc.get(int(u.id), []))
         name = (u.full_name or u.username or str(u.telegram_id))[:16]
-        flag = bot_user_alert_flags(ops)
+        flag = risk_mark(u, shop_id=None) + bot_user_alert_flags(ops)
         rows.append(
             [
                 InlineKeyboardButton(
@@ -2392,7 +2393,7 @@ async def _render_user_card(
 
     by = await load_services_by_user_ids(session, [int(user.id)], shop_id=None)
     ops = build_user_ops_row(user, by.get(int(user.id), []))
-    flags = bot_user_alert_flags(ops)
+    flags = risk_mark(user, shop_id=None) + bot_user_alert_flags(ops)
     blocked = "بله 🚫" if user.is_blocked else "خیر"
     alert_line = ""
     if ops.has_alert:

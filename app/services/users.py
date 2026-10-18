@@ -1175,13 +1175,6 @@ SETTING_GROUPS = {
         ),
     ],
     "متن پیام‌ها": [
-        ("connection_status_title", "عنوان وضعیت اتصال مشتری", "text", "بدون متغیر"),
-        ("connection_status_empty", "فهرست وضعیت خالی", "textarea", "بدون متغیر"),
-        ("connection_status_error", "خطای دریافت وضعیت", "textarea", "بدون متغیر"),
-        ("connection_status_admin_title", "عنوان مدیریت وضعیت اتصال", "text", "بدون متغیر"),
-        ("connection_status_account_prompt", "تنظیم کاربر تست", "textarea", "بدون متغیر"),
-        ("connection_status_name_prompt", "دریافت نام عمومی هاست", "text", "بدون متغیر"),
-        ("connection_status_order_prompt", "دریافت ترتیب هاست", "text", "بدون متغیر"),
         ("guide_text", "متن راهنما", "textarea", "دستور /help در تلگرام"),
         ("faq_text", "متن سوالات متداول", "textarea", "قابل استفاده در پیام‌ها"),
         ("empty_services_text", "وقتی سرویسی ندارد", "textarea", "پیام بخش سرویس‌های من اگر لیست خالی باشد"),
@@ -1191,6 +1184,14 @@ SETTING_GROUPS = {
         ("wallet_success_title", "عنوان موفقیت شارژ کیف پول", "text", "عنوان پیام بعد از تأیید شارژ"),
         ("wallet_success_text", "متن موفقیت شارژ کیف پول", "textarea", "متغیرها: {amount} {payment_id}"),
         ("payment_ok_title", "عنوان تأیید پرداخت", "text", "عنوان پیام وقتی پرداخت غیر از شارژ کیف پول تأیید می‌شود"),
+        # Connection status is still being built; its texts come last.
+        ("connection_status_title", "عنوان وضعیت اتصال مشتری", "text", "بدون متغیر"),
+        ("connection_status_empty", "فهرست وضعیت خالی", "textarea", "بدون متغیر"),
+        ("connection_status_error", "خطای دریافت وضعیت", "textarea", "بدون متغیر"),
+        ("connection_status_admin_title", "عنوان مدیریت وضعیت اتصال", "text", "بدون متغیر"),
+        ("connection_status_account_prompt", "تنظیم کاربر تست", "textarea", "بدون متغیر"),
+        ("connection_status_name_prompt", "دریافت نام عمومی هاست", "text", "بدون متغیر"),
+        ("connection_status_order_prompt", "دریافت ترتیب هاست", "text", "بدون متغیر"),
     ],
     "متن پشتیبانی ربات": [
         ("support_text", "متن صفحه پشتیبانی", "textarea", "بالای دکمه/فرم پشتیبانی در ربات نمایش داده می‌شود"),
@@ -1876,15 +1877,17 @@ def keys_for_tab(tab: str) -> set[str]:
 
 
 # Tabs whose texts and colors the web panel can put back to the shipped defaults in one step.
-RESETTABLE_SETTINGS_TABS = frozenset({"buttons", "colors", SCREEN_TEXT_TAB})
+RESETTABLE_SETTINGS_TABS = frozenset({"welcome", "messages", "buttons", "colors", "menu", SCREEN_TEXT_TAB})
+# A reset brings back the shipped texts, never a placeholder shop name.
+RESET_KEEPS_KEYS = frozenset({"shop_title"})
 
 
 def default_values_for_keys(keys: set[str]) -> dict[str, str]:
-    """Shipped defaults for ``keys``; switches and images keep their current value."""
+    """Shipped defaults for ``keys``; switches, images and the shop name keep their current value."""
     return {
         key: str(DEFAULT_SETTINGS.get(key, ""))
         for key in keys
-        if key not in TOGGLE_KEYS and key not in IMAGE_KEYS
+        if key not in TOGGLE_KEYS and key not in IMAGE_KEYS and key not in RESET_KEEPS_KEYS
     }
 
 
