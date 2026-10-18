@@ -921,6 +921,11 @@
           "callback_data": "nv:res:grp:shop",
           "style": "primary",
           "text": "🏪 فروشگاه من"
+        },
+        {
+          "callback_data": "nv:res:grp:account",
+          "style": "primary",
+          "text": "💼 حساب من"
         }
       ],
       [

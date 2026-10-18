@@ -18,7 +18,7 @@ class DeadEndScreenTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("shop:list", _callbacks(kb.custom_confirm_keyboard({})))
 
     def test_reseller_info_screens_return_to_their_group(self):
-        self.assertEqual(_callbacks(reseller._group_back("res_stats")), ["nv:res:grp:shop"])
+        self.assertEqual(_callbacks(reseller._group_back("res_stats")), ["nv:res:grp:account"])
         self.assertEqual(_callbacks(reseller._group_back("res_billing")), ["nv:res:grp:account"])
 
     async def test_pg_user_card_error_offers_back_to_users(self):

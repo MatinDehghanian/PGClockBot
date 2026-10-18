@@ -103,9 +103,9 @@ SCREEN_CAPTION_DEFAULTS: dict[str, str] = {
     ),
     "r.plans": "ساخت و کاتالوگ از دکمه‌های زیر.\nبرچسب دسته و بسته حجم/زمان از کیبورد — مثل وب‌پنل.",
     "r.daily": "خلاصهٔ فروشگاه، سفارش‌ها، رسیدها و تیکت‌های مشتریان.",
-    "r.customers": "مشتریان، نمایندگان زیرمجموعه و باشگاه مشتریان.",
-    "r.shop": "پلن‌های فروش، تنظیمات، آمار و گزارش فروشگاه.",
-    "r.account": "کیف پول، تمدید و بسته‌های حجم/کاربر.",
+    "r.customers": "فهرست مشتریان و نمایندگان زیرمجموعه.",
+    "r.shop": "پلن‌های فروش، باشگاه مشتریان و تنظیمات فروشگاه.",
+    "r.account": "کیف پول، تمدید، بسته‌های حجم/کاربر، گزارش و آمار.",
 }
 # The support menu already shows an editable setting under its title.
 CAPTION_SETTING_OVERRIDES: dict[str, str] = {"c.support": "support_text"}
