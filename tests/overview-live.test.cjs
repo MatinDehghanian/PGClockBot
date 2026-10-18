@@ -24,10 +24,20 @@ assert.equal(buf[buf.length - 1], live.SAMPLES + 4);
 assert.deepEqual(live.pushSample([], 'x', 3), [0], 'non-numbers become zero');
 
 assert.equal(live.sparkPoints([], 10, 300, 60), '');
-assert.equal(live.sparkPoints([1, 2], 0, 300, 60), '', 'no peak, no line');
+assert.equal(live.sparkPoints([5], 10, 300, 60), '0.0,30.0 300.0,30.0', 'one sample is a level line');
+assert.equal(live.sparkPoints([0, 0], 0, 300, 60).split(' ')[1], '0.0,59.0', 'idle traffic rests on the floor');
+assert.equal(live.areaPoints('10.0,5.0 300.0,1.0', 60), '10.0,60 10.0,5.0 300.0,1.0 300.0,60');
+assert.equal(live.areaPoints('', 60), '');
+
+assert.equal(live.fmtRate(0), '0 بایت/ثانیه');
+assert.equal(live.fmtRate(1536), '1.5 کیلوبایت/ثانیه');
+assert.equal(live.fmtRate(12.5 * 1024 * 1024), '12.5 مگ/ثانیه');
+assert.equal(live.fmtRate(150 * 1024 * 1024), '150 مگ/ثانیه');
+assert.equal(live.fmtRate(NaN), '—');
 const pts = live.sparkPoints([0, 10], 10, 300, 60).split(' ');
 assert.equal(pts.length, 2);
-assert.equal(pts[1], '300.0,1.0', 'newest sample at the right edge, peak at the top');
+assert.equal(pts[1], '0.0,1.0', 'newest sample at the left edge, peak at the top');
+assert.equal(pts[0].split(',')[0], (300 / (live.SAMPLES - 1)).toFixed(1));
 
 assert.equal(live.badgeClass('ok'), 'badge connected');
 assert.equal(live.badgeClass('<x>'), 'badge neutral');

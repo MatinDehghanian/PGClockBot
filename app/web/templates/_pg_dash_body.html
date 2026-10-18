@@ -75,7 +75,7 @@
 
 {% set ov_nodes = (nodes_overview.nodes if nodes_overview else nodes) if (nodes_overview or nodes is defined) else [] %}
 {% set live = (nodes_overview.live if nodes_overview else none) or {} %}
-<section class="card ov-traffic" aria-label="ترافیک زنده" data-pg-live data-metrics-url="/pg/metrics">
+<section class="card ov-traffic" aria-label="ترافیک زنده" data-pg-live data-metrics-url="/pg/metrics"{% if live.rate_up is number %} data-seed-up="{{ live.rate_up|int }}"{% endif %}{% if live.rate_down is number %} data-seed-down="{{ live.rate_down|int }}"{% endif %}>
   <header class="ov-head">
     {{ card_title('traffic', 'ترافیک زنده') }}
     <span class="ov-live"><i aria-hidden="true"></i>مجموع همهٔ نودها</span>
@@ -90,10 +90,22 @@
       <strong dir="ltr"><span data-live-down-num>{{ live.rate_down_num or '—' }}</span> <i data-live-down-unit>{{ live.rate_down_unit or '' }}</i></strong>
     </div>
   </div>
-  <svg class="ov-spark" viewBox="0 0 300 60" preserveAspectRatio="none" aria-hidden="true" data-live-spark>
-    <polyline class="ov-spark-down" points="" data-spark="down"/>
-    <polyline class="ov-spark-up" points="" data-spark="up"/>
-  </svg>
+  <div class="ov-chart" data-live-chart>
+    <div class="ov-chart-head">
+      <ul class="ov-chart-legend">
+        <li data-dir="up"><i aria-hidden="true"></i>آپلود</li>
+        <li data-dir="down"><i aria-hidden="true"></i>دانلود</li>
+      </ul>
+      <span class="muted">بیشینه <b data-live-peak>—</b></span>
+      <span class="muted ov-chart-span">۵ دقیقهٔ اخیر</span>
+    </div>
+    <svg class="ov-spark" viewBox="0 0 300 60" preserveAspectRatio="none" role="img" aria-label="نمودار ترافیک ۵ دقیقهٔ اخیر" data-live-spark>
+      <polygon class="ov-spark-fill ov-spark-down" points="" data-spark-fill="down"/>
+      <polygon class="ov-spark-fill ov-spark-up" points="" data-spark-fill="up"/>
+      <polyline class="ov-spark-down" points="" data-spark="down"/>
+      <polyline class="ov-spark-up" points="" data-spark="up"/>
+    </svg>
+  </div>
 </section>
 
 {% if view %}

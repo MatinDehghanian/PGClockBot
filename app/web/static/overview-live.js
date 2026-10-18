@@ -31,15 +31,37 @@
     next.push(typeof value === 'number' && isFinite(value) && value > 0 ? value : 0);
     return next;
   }
-  /* Polyline points of samples on a shared peak; the newest sample sits on the right edge. */
+  /* Polyline points of samples on a shared peak. Like the sales chart, the newest sample sits on
+     the left edge and older ones move right.
+     A single sample is drawn as a level line so the chart shows from the first value. */
   function sparkPoints(values, peak, width, height) {
-    if (!values.length || !(peak > 0)) return '';
-    var step = values.length > 1 ? width / (SAMPLES - 1) : 0;
-    var offset = width - step * (values.length - 1);
+    if (!values.length) return '';
+    var scale = peak > 0 ? peak : 1;
+    function y(v) { return (height - (Math.min(v, scale) / scale) * (height - 2) - 1).toFixed(1); }
+    if (values.length === 1) return '0.0,' + y(values[0]) + ' ' + width.toFixed(1) + ',' + y(values[0]);
+    var step = width / (SAMPLES - 1);
+    var last = values.length - 1;
     return values.map(function (v, i) {
-      var y = height - (Math.min(v, peak) / peak) * (height - 2) - 1;
-      return (offset + step * i).toFixed(1) + ',' + y.toFixed(1);
+      return (step * (last - i)).toFixed(1) + ',' + y(v);
     }).join(' ');
+  }
+  /* The line closed down to the bottom edge, for the shaded area under it. */
+  function areaPoints(line, height) {
+    if (!line) return '';
+    var pts = line.split(' ');
+    return pts[0].split(',')[0] + ',' + height + ' ' + line + ' ' + pts[pts.length - 1].split(',')[0] + ',' + height;
+  }
+  var RATE_UNITS = [[1, 'بایت'], [1024, 'کیلوبایت'], [Math.pow(1024, 2), 'مگ'], [Math.pow(1024, 3), 'گیگ'],
+    [Math.pow(1024, 4), 'ترابایت']];
+  /* Same amount and units as format_bytes_rate on the server. */
+  function fmtRate(bytes) {
+    if (typeof bytes !== 'number' || !isFinite(bytes) || bytes < 0) return '—';
+    var unit = RATE_UNITS[0];
+    RATE_UNITS.forEach(function (u) { if (bytes >= u[0]) unit = u; });
+    var n = bytes / unit[0];
+    var text = unit[0] === 1 ? String(Math.round(n))
+      : n >= 100 ? n.toFixed(0) : n >= 10 ? String(Number(n.toFixed(1))) : String(Number(n.toFixed(2)));
+    return text + ' ' + unit[1] + '/ثانیه';
   }
   function badgeClass(kind) {
     if (kind === 'ok') return 'badge connected';
@@ -70,21 +92,41 @@
   }
 
   var series = { up: [], down: [] };
+  function record(up, down) {
+    series.up = pushSample(series.up, up, SAMPLES);
+    series.down = pushSample(series.down, down, SAMPLES);
+  }
+  function drawChart(card) {
+    var chart = card && card.querySelector('[data-live-chart]');
+    if (!chart) return;
+    chart.classList.toggle('has-data', series.up.length > 0);
+    var peak = Math.max.apply(null, [0].concat(series.up, series.down));
+    setText(chart.querySelector('[data-live-peak]'), fmtRate(peak));
+    ['up', 'down'].forEach(function (dir) {
+      var line = sparkPoints(series[dir], peak, SPARK_W, SPARK_H);
+      var stroke = chart.querySelector('[data-spark="' + dir + '"]');
+      var fill = chart.querySelector('[data-spark-fill="' + dir + '"]');
+      if (stroke) stroke.setAttribute('points', line);
+      if (fill) fill.setAttribute('points', areaPoints(line, SPARK_H));
+    });
+  }
+  /* The rate rendered with the page starts the chart before the first poll. */
+  function seedChart() {
+    var card = document.querySelector('[data-pg-live]');
+    if (!card) return;
+    if (!series.up.length && card.hasAttribute('data-seed-up')) {
+      record(Number(card.getAttribute('data-seed-up')), Number(card.getAttribute('data-seed-down')));
+    }
+    drawChart(card);
+  }
   function applyLive(card, live) {
     if (!card || !live) return;
     setText(card.querySelector('[data-live-up-num]'), live.rate_up_num || '—');
     setText(card.querySelector('[data-live-up-unit]'), live.rate_up_unit || '');
     setText(card.querySelector('[data-live-down-num]'), live.rate_down_num || '—');
     setText(card.querySelector('[data-live-down-unit]'), live.rate_down_unit || '');
-    series.up = pushSample(series.up, live.rate_up, SAMPLES);
-    series.down = pushSample(series.down, live.rate_down, SAMPLES);
-    var peak = Math.max.apply(null, series.up.concat(series.down));
-    var spark = card.querySelector('[data-live-spark]');
-    if (spark) spark.classList.toggle('has-data', peak > 0);
-    ['up', 'down'].forEach(function (dir) {
-      var line = card.querySelector('[data-spark="' + dir + '"]');
-      if (line) line.setAttribute('points', sparkPoints(series[dir], peak, SPARK_W, SPARK_H));
-    });
+    if (typeof live.rate_up === 'number' || typeof live.rate_down === 'number') record(live.rate_up, live.rate_down);
+    drawChart(card);
   }
   function applyNode(row, n) {
     var st = row.querySelector('[data-node-status]');
@@ -153,13 +195,15 @@
   }
 
   var api = { clampPct: clampPct, fmtPct: fmtPct, memHint: memHint, partsText: partsText,
-    pushSample: pushSample, sparkPoints: sparkPoints, badgeClass: badgeClass, SAMPLES: SAMPLES };
+    pushSample: pushSample, sparkPoints: sparkPoints, areaPoints: areaPoints, fmtRate: fmtRate, badgeClass: badgeClass, SAMPLES: SAMPLES };
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;
     return;
   }
   setInterval(tick, POLL_MS);
   setTimeout(tick, 1500);
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', seedChart);
+  else seedChart();
   document.addEventListener('visibilitychange', function () { if (!document.hidden) tick(); });
-  document.addEventListener('panel-widgets-ready', tick);
+  document.addEventListener('panel-widgets-ready', function () { seedChart(); tick(); });
 })(typeof window !== 'undefined' ? window : globalThis);
