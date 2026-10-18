@@ -108,28 +108,9 @@ async def reopen_admin_settings(
     state: FSMContext,
     **_kw,
 ) -> None:
-    from app.bot import keyboards as kb
-    from app.bot.handlers.admin_settings import _keep_settings_nav
-    from app.bot.handlers.reply_nav import open_admin_settings_hub
-    from app.bot.nav_chrome import answer_staff_nav
+    from app.bot.handlers.admin_settings import reopen_settings_location
 
-    await _keep_settings_nav(state)
-
-    async def _panel(msg, sess, user, st, **_pkw):
-        await open_admin_settings_hub(msg, sess, user, st, push=False)
-
-    await answer_staff_nav(
-        message,
-        session,
-        db_user,
-        text=feedback.CANCELLED,
-        classic=kb.admin_settings_reply_keyboard(),
-        state=state,
-        reopen_panel=_panel,
-        clear_state=True,
-        is_reseller_bot=False,
-        reseller_owner_id=None,
-    )
+    await reopen_settings_location(message, session, db_user, state)
 
 
 async def reopen_admin_backup(
@@ -321,39 +302,10 @@ async def reopen_reseller_settings(
     reseller_owner_id: int | None = None,
     **_kw,
 ) -> None:
-    from app.bot import keyboards as kb
-    from app.bot.handlers.reseller_settings import _lasting_kb
-    from app.bot.handlers.reply_nav import open_reseller_settings_hub
-    from app.bot.nav_chrome import answer_staff_nav
+    from app.bot.handlers.reseller_settings import reopen_shop_settings_location
 
-    async def _panel(msg, sess, user, st, **_pkw):
-        await open_reseller_settings_hub(
-            msg,
-            sess,
-            user,
-            st,
-            push=False,
-            is_reseller_bot=is_reseller_bot,
-            reseller_owner_id=reseller_owner_id,
-        )
-
-    await answer_staff_nav(
-        message,
-        session,
-        db_user,
-        text=feedback.CANCELLED,
-        classic=await _lasting_kb(
-            session,
-            db_user,
-            kb.reseller_settings_reply_keyboard(),
-            is_reseller_bot=is_reseller_bot,
-            reseller_owner_id=reseller_owner_id,
-        ),
-        state=state,
-        reopen_panel=_panel,
-        clear_state=True,
-        is_reseller_bot=is_reseller_bot,
-        reseller_owner_id=reseller_owner_id,
+    await reopen_shop_settings_location(
+        message, session, db_user, state, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
     )
 
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import inspect
+from typing import Any
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -62,14 +63,35 @@ async def _silent_settings_cancel(
     session: AsyncSession,
     db_user: BotUser,
 ) -> None:
-    """Cancel typed settings input without a «لغو شد.» bubble (like Back)."""
-    ui = await get_all_settings(session)
-    await finish_text_step(
-        message, state, text=_settings_hub_text(ui), inline=_hub_markup(ui)
-    )
+    """Cancel typed settings input without a «لغو شد.» bubble: back to the screen it came from."""
+    text, markup = await _cancel_panel(session, state)
+    await finish_text_step(message, state, text=text, inline=markup)
     await state.clear()
     await _keep_settings_nav(state)
     await delete_user_message(message)
+
+
+async def _cancel_panel(session: AsyncSession, state: FSMContext) -> Panel:
+    """The screen a settings prompt was opened from (``edit_loc``), or the hub when unknown."""
+    loc = (await state.get_data()).get("edit_loc")
+    panel = await _settings_location_panel(session, tuple(loc) if loc else None)
+    if panel is None:
+        ui = await get_all_settings(session)
+        panel = (_settings_hub_text(ui), _hub_markup(ui))
+    return panel
+
+
+async def reopen_settings_location(
+    message: Message, session: AsyncSession, db_user: BotUser, state: FSMContext, **_kw: Any
+) -> None:
+    """Inline «انصراف» (and typed, through ``try_legacy_cancel``) of any settings prompt."""
+    # nav_inline imports this package's helpers; defer to avoid an import cycle.
+    from app.bot.nav_inline import present_nav_panel
+
+    text, markup = await _cancel_panel(session, state)
+    await state.clear()
+    await _keep_settings_nav(state)
+    await present_nav_panel(message, text=text, inline=markup, state=state)
 
 Panel = tuple[str, InlineKeyboardMarkup]
 
@@ -618,6 +640,12 @@ async def _render_menu_order(callback: CallbackQuery, session: AsyncSession, bac
 
 
 async def _render_supports(callback: CallbackQuery, session: AsyncSession) -> None:
+    if callback.message:
+        text, markup = await _supports_panel(session)
+        await callback.message.edit_text(text, reply_markup=markup)
+
+
+async def _supports_panel(session: AsyncSession) -> Panel:
     contacts = await get_support_contacts(session)
     rows: list[list[InlineKeyboardButton]] = [
         [InlineKeyboardButton(text="➕ پشتیبان جدید", callback_data="adm:st:sup:add")]
@@ -635,13 +663,12 @@ async def _render_supports(callback: CallbackQuery, session: AsyncSession) -> No
     if not contacts:
         rows.append([InlineKeyboardButton(text="لیست خالی است", callback_data="adm:st:noop")])
     rows.append(_back_row("adm:st:hub"))
-    if callback.message:
-        await callback.message.edit_text(
-            "🎧 <b>پشتیبان‌ها</b>\n"
-            "۱ نفر → دکمه پشتیبانی مستقیم به چت می‌رود\n"
-            "چند نفر → لیست انتخاب برای کاربر",
-            reply_markup=_kb(rows),
-        )
+    return (
+        "🎧 <b>پشتیبان‌ها</b>\n"
+        "۱ نفر → دکمه پشتیبانی مستقیم به چت می‌رود\n"
+        "چند نفر → لیست انتخاب برای کاربر",
+        _kb(rows),
+    )
 
 
 async def _render_notify(callback: CallbackQuery, session: AsyncSession) -> None:
@@ -664,6 +691,12 @@ async def _render_notify(callback: CallbackQuery, session: AsyncSession) -> None
 
 
 async def _render_trial(callback: CallbackQuery, session: AsyncSession) -> None:
+    if callback.message:
+        text, markup = await _trial_panel(session)
+        await callback.message.edit_text(text, reply_markup=markup)
+
+
+async def _trial_panel(session: AsyncSession) -> Panel:
     result = await session.execute(select(Plan).where(Plan.is_trial.is_(True)))
     trial = result.scalar_one_or_none()
     ui = await get_all_settings(session)
@@ -696,11 +729,7 @@ async def _render_trial(callback: CallbackQuery, session: AsyncSession) -> None:
         [InlineKeyboardButton(text="گروه پاسارگارد", callback_data="adm:st:trial:grp")],
         _back_row("adm:plans:kind:users:trial"),
     ]
-    if callback.message:
-        await callback.message.edit_text(
-            f"🧪 <b>پلن تست</b>\n\n{body}",
-            reply_markup=_kb(rows),
-        )
+    return f"🧪 <b>پلن تست</b>\n\n{body}", _kb(rows)
 
 
 def _owner_screen_for_key(key: str) -> tuple[str, str] | None:
@@ -772,6 +801,9 @@ async def _settings_location_panel(
     if not loc:
         return None
     sec_id, sub_id = loc
+    if sec_id == "support":
+        # The supports list, or one support's card (sub_id is its id).
+        return await (_support_view_panel(session, sub_id) if sub_id else _supports_panel(session))
     if sec_id == "notify":
         ui = await get_all_settings(session)
         rows: list[list[InlineKeyboardButton]] = []
@@ -811,10 +843,7 @@ async def _settings_location_panel(
     payload = sub[2]
     back = f"adm:st:sec:{sec_id}"
     if payload == "trial":
-        return (
-            "🧪 <b>پلن تست</b>\nاز دکمه زیر ادامه دهید.",
-            _kb([[kb.back_button(None, "adm:st:sub:service:trial")]]),
-        )
+        return await _trial_panel(session)
     if payload == "custom":
         ui = await get_all_settings(session)
         extra = [
@@ -1225,7 +1254,7 @@ async def support_add_start(
         await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
     await callback.answer()
-    await state.update_data(support_edit_id=None)
+    await state.update_data(support_edit_id=None, edit_loc=("support", ""))
     from app.bot.nav_input import ask_text
 
     await ask_text(
@@ -1319,11 +1348,19 @@ async def support_view(
         await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
     cid = callback.data.split(":")[-1]
-    c = next((x for x in await get_support_contacts(session) if x["id"] == cid), None)
-    if not c:
+    panel = await _support_view_panel(session, cid)
+    if panel is None:
         await callback.answer(feedback.NOT_FOUND, show_alert=True)
         return
     await callback.answer()
+    if callback.message:
+        await callback.message.edit_text(panel[0], reply_markup=panel[1])
+
+
+async def _support_view_panel(session: AsyncSession, cid: str) -> Panel | None:
+    c = next((x for x in await get_support_contacts(session) if x["id"] == cid), None)
+    if not c:
+        return None
     url = support_chat_url(c["telegram"]) or "—"
     text = (
         f"🎧 <b>{c['title']}</b>\n"
@@ -1343,8 +1380,7 @@ async def support_view(
         ],
         _back_row("adm:st:sec:support"),
     ]
-    if callback.message:
-        await callback.message.edit_text(text, reply_markup=_kb(rows))
+    return text, _kb(rows)
 
 
 @settings_actor_required
@@ -1498,7 +1534,7 @@ async def support_edit_start(
         await callback.answer(feedback.NOT_FOUND, show_alert=True)
         return
     await callback.answer()
-    await state.update_data(support_edit_id=cid)
+    await state.update_data(support_edit_id=cid, edit_loc=("support", cid))
     from app.bot.nav_input import ask_text
 
     await ask_text(
@@ -1556,6 +1592,7 @@ async def trial_ask_name(callback: CallbackQuery, state: FSMContext, db_user: Bo
         await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
     await callback.answer()
+    await state.update_data(edit_loc=("service", "trial"))
     from app.bot.nav_input import ask_text
 
     await ask_text(
@@ -1599,6 +1636,7 @@ async def trial_ask_days(callback: CallbackQuery, state: FSMContext, db_user: Bo
         await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
     await callback.answer()
+    await state.update_data(edit_loc=("service", "trial"))
     from app.bot.nav_input import ask_text
 
     await ask_text(
@@ -1647,6 +1685,7 @@ async def trial_ask_gb(callback: CallbackQuery, state: FSMContext, db_user: BotU
         await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
     await callback.answer()
+    await state.update_data(edit_loc=("service", "trial"))
     from app.bot.nav_input import ask_text
 
     await ask_text(

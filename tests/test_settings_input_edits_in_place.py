@@ -80,17 +80,19 @@ class AdminSettingsInPlaceTests(unittest.IsolatedAsyncioTestCase):
         message.answer.assert_awaited_once()
 
     async def test_every_section_panel_builds_for_in_place_editing(self):
+        # The trial screen reads the trial plan; an empty database has none.
+        session = MagicMock(execute=AsyncMock(return_value=MagicMock(scalar_one_or_none=lambda: None)))
         with patch.object(admin_settings, "get_all_settings", AsyncMock(return_value={})):
             for sec_id, sec in admin_settings.SECTIONS.items():
                 if sec.get("kind") in {"supports", "notify"}:
                     continue
                 panel = await admin_settings._settings_location_panel(
-                    MagicMock(), (sec_id, "")
+                    session, (sec_id, "")
                 )
                 self.assertIsNotNone(panel, sec_id)
                 for sub in sec.get("subs") or []:
                     panel = await admin_settings._settings_location_panel(
-                        MagicMock(), (sec_id, sub[0])
+                        session, (sec_id, sub[0])
                     )
                     self.assertIsNotNone(panel, (sec_id, sub[0]))
 
@@ -107,7 +109,8 @@ class ResellerSettingsInPlaceTests(unittest.IsolatedAsyncioTestCase):
             ),
             patch.object(reseller_settings, "get_all_settings", AsyncMock(return_value={})),
         ):
-            await reseller_settings._close_input_to_hub(
+            # No prompt origin recorded: the prompt becomes the settings hub.
+            await reseller_settings._close_input_to_location(
                 message, state, MagicMock(), profile, note="✅ ذخیره شد."
             )
         message.answer.assert_not_awaited()
