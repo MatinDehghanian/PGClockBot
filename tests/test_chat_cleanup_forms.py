@@ -1,4 +1,4 @@
-"""Forms leave no clutter, and a typed reply that ends a form unfolds the menu keyboard again."""
+"""Forms and one-line notices leave no clutter, and a typed reply that ends a form unfolds the menu keyboard again."""
 
 from __future__ import annotations
 
@@ -11,10 +11,11 @@ from aiogram.fsm.state import State
 from aiogram.methods import SendMessage
 from aiogram.types import ReplyKeyboardMarkup
 
-from app.bot import chat_cleanup, menu_keyboard_reopen, nav_input
+from app.bot import chat_cleanup, menu_keyboard_reopen, nav_inline, nav_input
 from app.bot.chat_cleanup import ThrowawayLog
 from app.bot.menu_keyboard_reopen import MENU_REOPEN_TEXT, MenuKeyboardReopenMiddleware
 from app.bot.reply_keyboard_state import KEYBOARD_FOLDED
+from app.services import bot_feedback_texts as feedback
 from tests.test_chat_cleanup import PANEL, _Chat
 
 MENU = ReplyKeyboardMarkup(keyboard=[])
@@ -139,3 +140,27 @@ class MenuReopenTests(_CleanupOn):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ShortNoticeTests(_CleanupOn):
+    async def _send(self, chat: _Chat, text: str, markup=None) -> int:
+        sent = chat.message()
+        method = SendMessage(chat_id=100, text=text, reply_markup=markup)
+        with patch.object(chat_cleanup, "Message", MagicMock):
+            await chat_cleanup._note_short_notices(AsyncMock(return_value=sent), chat.bot, method)
+        return sent.message_id
+
+    async def test_a_fixed_notice_goes_with_the_next_panel(self) -> None:
+        chat = _Chat()
+        cancelled = await self._send(chat, feedback.CANCELLED)
+        waiting = await self._send(chat, "⏳")
+        await nav_inline.present_inline_only(chat.message(from_bot=False), text="hub", inline=PANEL)
+        self.assertEqual(chat.deleted(), [cancelled, waiting])
+
+    async def test_other_messages_and_the_menu_keyboard_stay(self) -> None:
+        chat = _Chat()
+        await self._send(chat, "سرویس شما آماده است: vless://…")
+        await self._send(chat, feedback.CANCELLED, MENU)
+        await self._send(chat, feedback.SENT)
+        await nav_inline.present_inline_only(chat.message(from_bot=False), text="hub", inline=PANEL)
+        chat.bot.delete_messages.assert_not_awaited()
