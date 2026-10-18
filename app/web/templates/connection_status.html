@@ -8,7 +8,8 @@
   <div class="actions"><a class="btn btn-ghost" href="/connection-status">تازه‌سازی</a></div>
 </div>
 
-<div class="flash info" role="note"><div class="flash-copy">این نتیجه فقط اتصال از سرور ربات را نشان می‌دهد و دسترسی کاربران داخل ایران را تأیید نمی‌کند. این قابلیت آزمایشی است.</div></div>
+<div class="flash warn" role="note"><div class="flash-copy"><strong>⚠️ این قابلیت در حال توسعه است و هنوز کامل نشده است.</strong> بعضی بخش‌ها ممکن است تغییر کنند یا درست کار نکنند؛ برای تصمیم مهم به نتیجه‌هایش تکیه نکنید.</div></div>
+<div class="flash info" role="note"><div class="flash-copy">این نتیجه فقط اتصال از سرور ربات را نشان می‌دهد و دسترسی کاربران داخل ایران را تأیید نمی‌کند.</div></div>
 {% if request.query_params.get('error') %}<div class="flash warn" role="alert"><div class="flash-copy">{{ request.query_params.get('error') }}</div></div>{% endif %}
 {% if request.query_params.get('saved') == '1' %}<div class="flash ok" role="status"><div class="flash-copy">انجام شد. نتیجه‌های جدید بعد از اجرای تست نمایش داده می‌شوند.</div></div>{% endif %}
 

@@ -6,6 +6,8 @@ const media = require('../app/web/static/guide-media.js');
 const empty = media.mediaBlockHtml([], '');
 assert.ok(empty.includes('data-media-upload'));
 assert.ok(empty.includes('هنوز فایلی اضافه نشده است'));
+// The upload control is the shared upload box, in its compact size.
+assert.ok(/<label class="file-label upload-box upload-box--compact">[\s\S]*data-media-upload/.test(empty));
 
 // Items keep their order, the first cannot move up and the last cannot move down.
 const two = media.mediaBlockHtml([

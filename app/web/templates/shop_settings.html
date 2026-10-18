@@ -123,6 +123,9 @@
         <button class="btn" type="submit">ذخیره منو</button>
       </div>
     </form>
+    {% set reset_action = '/shop-settings?tab=menu' %}
+    {% set reset_confirm = 'ترتیب و چیدمان دکمه‌های منو به حالت اولیهٔ ربات برمی‌گردد. ادامه می‌دهید؟' %}
+    {% include "_settings_reset_defaults.html" %}
 
   {% elif tab == 'colors' %}
     {% set settings_action = '/shop-settings?tab=colors' %}
