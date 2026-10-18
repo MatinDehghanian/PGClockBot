@@ -11,6 +11,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.bot.list_pages import page_number
 from app.db.models import BotUser
 from app.services.users import get_all_settings
 from app.services import bot_feedback_texts as feedback
@@ -844,7 +845,9 @@ async def nv_adm_plans_aud(
         present_admin_plans_audience,
     )
 
-    aud = (callback.data or "").split(":")[-1]
+    # nv:adm:plans:aud:<audience>[:p:<page>]
+    parts = (callback.data or "").split(":")
+    aud = parts[4] if len(parts) > 4 else ""
     if aud not in {"users", "resellers"}:
         await callback.answer(feedback.INVALID, show_alert=True)
         return
@@ -863,6 +866,7 @@ async def nv_adm_plans_aud(
         state,
         audience=aud,
         is_reseller_bot=is_reseller_bot,
+        page_index=page_number(callback.data),
     )
 
 @router.callback_query(F.data.startswith("nv:adm:plans:list:"))
@@ -873,7 +877,7 @@ async def nv_adm_plans_list(
     state: FSMContext,
     is_reseller_bot: bool = False,
 ):
-    """Open the plan list by editing the audience hub panel."""
+    """«مشاهده پلن‌ها» on older audience hubs: the same one-screen plans view."""
     from app.bot.handlers.admin_plans import (
         send_resellers_plans_overview,
         send_users_plans_overview,

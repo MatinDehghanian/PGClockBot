@@ -152,6 +152,24 @@ async def _plan_text_for(session: AsyncSession, plan: Plan) -> str:
     return _plan_text(plan, category_name=cat_name)
 
 
+async def _cancel_to_plans(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    db_user: BotUser,
+    *,
+    is_reseller_bot: bool,
+    reseller_owner_id: int | None,
+) -> None:
+    """Typed cancel inside the new-plan form: back to the plans screen the form started from."""
+    from app.bot.handlers.reply_nav import open_reseller_plans_hub  # reply_nav imports this module
+
+    await state.clear()
+    await open_reseller_plans_hub(
+        message, session, db_user, state, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id, push=False
+    )
+
+
 @router.callback_query((F.data == "res:plans") | F.data.startswith("res:plans:p:"))
 async def res_plans(callback: CallbackQuery, session: AsyncSession, db_user: BotUser,
     state: FSMContext,
@@ -358,10 +376,8 @@ async def res_plan_name(
             reseller_owner_id=reseller_owner_id,
         ):
             return
-        await state.clear()
-        await message.answer(
-            feedback.CANCELLED,
-            reply_markup=kb.reseller_plans_reply_keyboard(),
+        await _cancel_to_plans(
+            message, state, session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
         )
         return
     await state.update_data(name=(message.text or "").strip(), owner_id=owner_id)
@@ -398,10 +414,8 @@ async def res_plan_price(
             reseller_owner_id=reseller_owner_id,
         ):
             return
-        await state.clear()
-        await message.answer(
-            feedback.CANCELLED,
-            reply_markup=kb.reseller_plans_reply_keyboard(),
+        await _cancel_to_plans(
+            message, state, session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
         )
         return
     try:
@@ -443,10 +457,8 @@ async def res_plan_days(
             reseller_owner_id=reseller_owner_id,
         ):
             return
-        await state.clear()
-        await message.answer(
-            feedback.CANCELLED,
-            reply_markup=kb.reseller_plans_reply_keyboard(),
+        await _cancel_to_plans(
+            message, state, session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
         )
         return
     try:
@@ -484,10 +496,8 @@ async def res_plan_gb(message: Message, state: FSMContext, session: AsyncSession
             reseller_owner_id=reseller_owner_id,
         ):
             return
-        await state.clear()
-        await message.answer(
-            feedback.CANCELLED,
-            reply_markup=kb.reseller_plans_reply_keyboard(),
+        await _cancel_to_plans(
+            message, state, session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
         )
         return
     raw = (message.text or "").strip().replace(",", ".")
@@ -524,7 +534,6 @@ async def res_plan_gb(message: Message, state: FSMContext, session: AsyncSession
         )
     await message.answer(
         "🏷 برچسب دسته را انتخاب کنید (اختیاری):",
-        reply_markup=kb.reseller_plans_reply_keyboard(),
     )
     await message.answer(
         "برچسب دسته:",
@@ -571,7 +580,6 @@ async def _reseller_continue_pg_mode(
     if target_msg:
         await target_msg.answer(
             "منبع ساخت سرویس در پاسارگارد را انتخاب کنید:" + note,
-            reply_markup=kb.reseller_plans_reply_keyboard(),
         )
         await target_msg.answer(
             "یکی از گزینه‌های زیر را انتخاب کنید:",
@@ -580,15 +588,20 @@ async def _reseller_continue_pg_mode(
 
 
 @router.message(ResellerPlanStates.category)
-async def res_plan_category_cancel(message: Message, state: FSMContext):
+async def res_plan_category_cancel(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+) -> None:
     if kb.is_cancel_text(message.text):
-        await state.clear()
-        await message.answer(feedback.CANCELLED, reply_markup=kb.reseller_plans_reply_keyboard())
+        await _cancel_to_plans(
+            message, state, session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
+        )
         return
-    await message.answer(
-        "دسته را از دکمه‌های زیر پیام انتخاب کنید، یا انصراف بزنید.",
-        reply_markup=kb.reseller_plans_reply_keyboard(),
-    )
+    await message.answer("دسته را از دکمه‌های زیر پیام انتخاب کنید، یا انصراف بزنید.")
 
 
 @router.callback_query(F.data.startswith("res:plan:newcat:"), ResellerPlanStates.category)
@@ -626,15 +639,20 @@ async def res_plan_new_category(
 
 
 @router.message(ResellerPlanStates.mode)
-async def res_plan_mode_cancel(message: Message, state: FSMContext):
+async def res_plan_mode_cancel(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+) -> None:
     if kb.is_cancel_text(message.text):
-        await state.clear()
-        await message.answer(feedback.CANCELLED, reply_markup=kb.reseller_plans_reply_keyboard())
+        await _cancel_to_plans(
+            message, state, session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
+        )
         return
-    await message.answer(
-        "منبع را از دکمه‌های زیر پیام انتخاب کنید، یا انصراف بزنید.",
-        reply_markup=kb.reseller_plans_reply_keyboard(),
-    )
+    await message.answer("منبع را از دکمه‌های زیر پیام انتخاب کنید، یا انصراف بزنید.")
 
 
 @router.callback_query(F.data == "res:plan:mode:groups", ResellerPlanStates.mode)

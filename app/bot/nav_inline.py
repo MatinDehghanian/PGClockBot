@@ -513,9 +513,11 @@ def queue_shortcut_row(
     payments: int = 0,
     tickets: int = 0,
     cancellations: int = 0,
+    deliveries: int = 0,
     payments_cb: str = "adm:payments",
     tickets_cb: str = "adm:tickets",
     cancellations_cb: str = "adm:cancellations",
+    deliveries_cb: str = "adm:orders",
 ) -> list[InlineKeyboardButton]:
     """Non-zero queue counts → danger shortcuts (side by side)."""
     from app.services.admin_counters import with_badge
@@ -548,6 +550,15 @@ def queue_shortcut_row(
                 style_id="reject", style_fallback="danger",
             )
         )
+    if int(deliveries or 0) > 0:
+        row.append(
+            _ikb(
+                with_badge("⚠️ تحویل", deliveries),
+                callback_data=deliveries_cb,
+                ui=ui,
+                style_id="reject", style_fallback="danger",
+            )
+        )
     return row
 
 
@@ -558,12 +569,17 @@ def admin_groups_hub_keyboard(
     pending_payments: int = 0,
     pending_tickets: int = 0,
     pending_cancellations: int = 0,
+    pending_deliveries: int = 0,
 ) -> InlineKeyboardMarkup:
     """Top-level admin groups (Wave D) — mirrors ``_reply_admin_hub_entries``.
 
-    Non-zero queue counts become a danger shortcut row above the groups.
+    Non-zero queue counts become a danger shortcut row above the groups, and the daily-operations
+    group carries their sum so open work is visible before opening it.
     """
     from app.bot.reply_keyboards import _reply_admin_hub_entries
+    from app.services.admin_counters import with_badge
+
+    open_work = pending_payments + pending_tickets + pending_cancellations + pending_deliveries
 
     cb_map = {
         "adm_hub_ops": "nv:adm:ops",
@@ -575,7 +591,7 @@ def admin_groups_hub_keyboard(
     }
     buttons = [
         _ikb(
-            text,
+            with_badge(text, open_work) if key == "adm_hub_ops" else text,
             callback_data=cb_map[key],
             ui=ui,
             action=key,
@@ -590,6 +606,7 @@ def admin_groups_hub_keyboard(
         payments=pending_payments,
         tickets=pending_tickets,
         cancellations=pending_cancellations,
+        deliveries=pending_deliveries,
     )
     if shortcuts:
         rows.append(shortcuts)
@@ -616,6 +633,7 @@ def admin_ops_hub_keyboard(
     *,
     pending_payments: int = 0,
     pending_tickets: int = 0,
+    pending_deliveries: int = 0,
 ) -> InlineKeyboardMarkup:
     """Daily ops — leaf buttons reuse existing ``adm:*`` callbacks."""
     from app.bot.reply_keyboards import (
@@ -638,6 +656,7 @@ def admin_ops_hub_keyboard(
     badge_for = {
         REPLY_ACTION_ADMIN_PAYMENTS: pending_payments,
         REPLY_ACTION_ADMIN_TICKETS: pending_tickets,
+        REPLY_ACTION_ADMIN_ORDERS: pending_deliveries,
     }
     buttons = [
         _ikb(
@@ -900,6 +919,7 @@ def reseller_manage_hub_keyboard(
     pending_payments: int = 0,
     pending_tickets: int = 0,
     pending_cancellations: int = 0,
+    pending_deliveries: int = 0,
 ) -> InlineKeyboardMarkup:
     """Shop panel home: queue shortcuts, then one button per group that has an entry."""
     from app.bot.reply_keyboards import _reseller_submenu_entries
@@ -908,7 +928,7 @@ def reseller_manage_hub_keyboard(
     entries = _reseller_submenu_entries(
         profile, can_add_representative=can_add_representative, ui=ui
     )
-    group_badge = {"daily": pending_payments + pending_tickets}
+    group_badge = {"daily": pending_payments + pending_tickets + pending_deliveries}
     buttons = [
         _ikb(
             with_badge(_t(ui, group.label_key), group_badge.get(group.id, 0)),
@@ -926,9 +946,11 @@ def reseller_manage_hub_keyboard(
         payments=pending_payments,
         tickets=pending_tickets,
         cancellations=pending_cancellations,
+        deliveries=pending_deliveries,
         payments_cb="res:payments",
         tickets_cb="res:tickets",
         cancellations_cb="res:cancellations",
+        deliveries_cb="res:orders",
     )
     if shortcuts:
         rows.append(shortcuts)
@@ -947,6 +969,7 @@ def reseller_group_hub_keyboard(
     can_add_representative: bool = False,
     pending_payments: int = 0,
     pending_tickets: int = 0,
+    pending_deliveries: int = 0,
 ) -> InlineKeyboardMarkup:
     """One shop panel group; «بازگشت» returns to the panel home."""
     from app.bot.reply_keyboards import _reseller_submenu_entries
@@ -956,7 +979,7 @@ def reseller_group_hub_keyboard(
         profile, can_add_representative=can_add_representative, ui=ui
     )
     shown = group_entries(group, entries) if group else []
-    badge_for = {"res_payments": pending_payments, "res_tickets": pending_tickets}
+    badge_for = {"res_payments": pending_payments, "res_tickets": pending_tickets, "res_orders": pending_deliveries}
     return _pack_hub_keyboard(
         _reseller_entry_buttons(shown, ui, badge_for), ui, back_callback=RESELLER_HOME_CALLBACK
     )
@@ -1213,10 +1236,14 @@ def _plans_kind_screen_id(audience: str, *_args: object, **_kwargs: object) -> s
 
 
 @editable_screen(_plans_kind_screen_id)
-def admin_plans_kind_hub_keyboard(
-    audience: str, ui: dict | None = None
+def admin_plans_audience_keyboard(
+    audience: str,
+    ui: dict | None = None,
+    *,
+    plan_rows: list[list[InlineKeyboardButton]] | None = None,
+    pager: list[InlineKeyboardButton] | None = None,
 ) -> InlineKeyboardMarkup:
-    """List-screen actions after choosing users/resellers audience."""
+    """One audience's plans: add / catalog actions, a page of plan rows, «بازگشت» to the plans hub."""
     from app.bot.reply_keyboards import (
         REPLY_ACTION_ADM_PLANS_ADD,
         REPLY_ACTION_ADM_PLANS_ADDONS,
@@ -1224,32 +1251,23 @@ def admin_plans_kind_hub_keyboard(
         _admin_plans_list_entries,
     )
 
+    _ = audience  # names the screen for the menu editor
     cb_map = {
         REPLY_ACTION_ADM_PLANS_ADD: "nv:adm:ra:adm_plans_add",
         REPLY_ACTION_ADM_PLANS_CATEGORIES: "nv:adm:ra:adm_plans_categories",
         REPLY_ACTION_ADM_PLANS_ADDONS: "nv:adm:ra:adm_plans_addons",
     }
-    buttons = [
-        _ikb(
-            _t(ui, "btn_adm_plans_view"),
-            callback_data=f"nv:adm:plans:list:{audience}",
-            ui=ui,
-            label_key="btn_adm_plans_view",
-            style_id="adm_plans_view", style_fallback="primary",
-        ),
-        *(
-            _ikb(
-                text,
-                callback_data=cb_map[key],
-                ui=ui,
-                action=key,
-                style_id=key, style_fallback="primary",
-            )
-            for key, text in _admin_plans_list_entries(ui)
-            if key in cb_map
-        ),
+    actions = [
+        _ikb(text, callback_data=cb_map[key], ui=ui, action=key, style_id=key, style_fallback="primary")
+        for key, text in _admin_plans_list_entries(ui)
+        if key in cb_map
     ]
-    return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:plans")
+    rows = [actions[i : i + 2] for i in range(0, len(actions), 2)]
+    rows.extend(plan_rows or [])
+    if pager:
+        rows.append(pager)
+    rows.append(_hub_back_row(ui, callback_data="nv:adm:plans"))
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def admin_plans_add_type_hub_keyboard(

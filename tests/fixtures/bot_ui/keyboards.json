@@ -138,7 +138,7 @@
         {
           "callback_data": "nv:adm:ops",
           "style": "success",
-          "text": "🗓 عملیات روزانه"
+          "text": "🗓 عملیات روزانه (۶)"
         },
         {
           "callback_data": "nv:adm:people",
@@ -578,25 +578,20 @@
     ],
     "kind": "inline"
   },
-  "hub.admin.plans_kind_resellers": {
+  "hub.admin.plans_audience_resellers": {
     "inline_keyboard": [
       [
-        {
-          "callback_data": "nv:adm:plans:list:resellers",
-          "style": "primary",
-          "text": "📋 مشاهده پلن‌ها"
-        },
         {
           "callback_data": "nv:adm:ra:adm_plans_add",
           "style": "primary",
           "text": "➕ افزودن پلن"
-        }
-      ],
-      [
+        },
         {
           "callback_data": "nv:adm:ra:adm_plans_categories",
           "text": "🏷 برچسب دسته"
-        },
+        }
+      ],
+      [
         {
           "callback_data": "nv:adm:ra:adm_plans_addons",
           "style": "primary",
@@ -612,25 +607,20 @@
     ],
     "kind": "inline"
   },
-  "hub.admin.plans_kind_users": {
+  "hub.admin.plans_audience_users": {
     "inline_keyboard": [
       [
-        {
-          "callback_data": "nv:adm:plans:list:users",
-          "style": "primary",
-          "text": "📋 مشاهده پلن‌ها"
-        },
         {
           "callback_data": "nv:adm:ra:adm_plans_add",
           "style": "primary",
           "text": "➕ افزودن پلن"
-        }
-      ],
-      [
+        },
         {
           "callback_data": "nv:adm:ra:adm_plans_categories",
           "text": "🏷 برچسب دسته"
-        },
+        }
+      ],
+      [
         {
           "callback_data": "nv:adm:ra:adm_plans_addons",
           "style": "primary",

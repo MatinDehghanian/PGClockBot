@@ -1602,9 +1602,9 @@ def admin_users_plans_overview_keyboard(
     plans: list,
     ui: dict | None = None,
     *,
-    back_callback: str = "adm:plans",
+    back_callback: str | None = "adm:plans",
 ) -> InlineKeyboardMarkup:
-    """All user plan rows inline — mirrors web /plans user table (add via reply keyboard)."""
+    """User plan rows inline — mirrors web /plans user table; no back row when ``back_callback`` is None."""
     from app.services.button_styles import resolve_custom_plan_button_style
 
     wholesale_label = _label_or(ui, "btn_wholesale", "فروش عمده")
@@ -1684,7 +1684,8 @@ def admin_users_plans_overview_keyboard(
         ]
     )
     rows = rows[:-3] + chunk_buttons([row[0] for row in rows[-3:]], cols=2)
-    rows.append([back_button(ui, back_callback)])
+    if back_callback:
+        rows.append([back_button(ui, back_callback)])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -1694,9 +1695,9 @@ def admin_resellers_plans_overview_keyboard(
     ui: dict | None = None,
     addon_plans: list | None = None,
     *,
-    back_callback: str = "adm:plans",
+    back_callback: str | None = "adm:plans",
 ) -> InlineKeyboardMarkup:
-    """All reseller subscription + addon packs — mirrors web /plans sections."""
+    """Reseller subscription + addon packs — mirrors web /plans sections; no back row when ``back_callback`` is None."""
     fixed_style = _style(ui, "plan_res_fixed", fallback="primary")
     payg_style = _style(ui, "plan_res_payg", fallback="primary")
     addon_style = _style(ui, "plan_res_fixed", fallback="primary")
@@ -1757,7 +1758,8 @@ def admin_resellers_plans_overview_keyboard(
                 )
             ]
         )
-    rows.append([back_button(ui, back_callback)])
+    if back_callback:
+        rows.append([back_button(ui, back_callback)])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 

@@ -46,7 +46,9 @@ class SyncPlansInlineTests(unittest.IsolatedAsyncioTestCase):
 
         message = AsyncMock()
         message.answer = AsyncMock(return_value=MagicMock())
-        session = AsyncMock()
+        result = MagicMock()
+        result.scalars.return_value.all.return_value = []
+        session = MagicMock(execute=AsyncMock(return_value=result))
         db_user = MagicMock()
         state = AsyncMock()
         state.get_data = AsyncMock(return_value={"_adm_plans_aud": "users"})

@@ -265,8 +265,8 @@ def _hub_scenarios(ui: dict[str, str]) -> dict[str, Callable[[], Markup]]:
         "hub.admin.backup": lambda: hubs.admin_backup_hub_keyboard(ui),
         "hub.admin.broadcast": lambda: hubs.admin_broadcast_hub_keyboard(ui),
         "hub.admin.plans_audience": lambda: hubs.admin_plans_audience_hub_keyboard(ui),
-        "hub.admin.plans_kind_users": lambda: hubs.admin_plans_kind_hub_keyboard("users", ui),
-        "hub.admin.plans_kind_resellers": lambda: hubs.admin_plans_kind_hub_keyboard("resellers", ui),
+        "hub.admin.plans_audience_users": lambda: hubs.admin_plans_audience_keyboard("users", ui),
+        "hub.admin.plans_audience_resellers": lambda: hubs.admin_plans_audience_keyboard("resellers", ui),
         "hub.admin.plans_add_users": lambda: hubs.admin_plans_add_type_hub_keyboard("users", ui),
         "hub.admin.plans_add_resellers": lambda: hubs.admin_plans_add_type_hub_keyboard(
             "resellers", ui
