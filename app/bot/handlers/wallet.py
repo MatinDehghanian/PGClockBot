@@ -8,11 +8,13 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.bot import bbc_checkout_view as bbc_view
 from app.bot import keyboards as kb
 from app.bot.chat_cleanup import keep_message
 from app.bot.tg_utils import safe_edit_text
 from app.config import get_settings
 from app.db.models import BotUser, Order, Payment, PaymentMethod, PaymentStatus
+from app.services.bbc_settlement import reusable_bbc_topup, start_bbc_checkout
 from app.services.redact import user_safe_error
 from app.services.formatting import format_message, format_toman, kv_line
 from app.services.orders import create_wallet_topup
@@ -30,6 +32,7 @@ _TOPUP_METHODS = {
     "card": ("pay_card_enabled", PaymentMethod.CARD.value),
     "gateway": ("pay_gateway_enabled", PaymentMethod.GATEWAY.value),
     "psp": ("pay_psp_enabled", PaymentMethod.PSP.value),
+    "bbc": ("pay_bbc_enabled", PaymentMethod.BBC.value),
     "crypto": ("pay_crypto_enabled", PaymentMethod.CRYPTO.value),
 }
 
@@ -236,6 +239,7 @@ async def wallet_topup(callback: CallbackQuery, state: FSMContext, session: Asyn
             "pay_card_enabled",
             "pay_gateway_enabled",
             "pay_psp_enabled",
+            "pay_bbc_enabled",
             "pay_crypto_enabled",
         )
     )
@@ -455,6 +459,43 @@ async def _topup_instructions(
     rows.append([kb.back_button(ui, "wallet:home")])
     return text, InlineKeyboardMarkup(inline_keyboard=rows), send_kw
 
+async def _show_bbc_topup(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    state: FSMContext,
+    db_user: BotUser,
+    ui: dict,
+    *,
+    amount: int,
+    method: str,
+) -> None:
+    """Wallet top-up through «بزن به کارت»; an unused top-up of the same amount is reused."""
+    payment = await reusable_bbc_topup(
+        session, int(db_user.id), amount, shop_id=current_shop_reseller_id()
+    ) or await create_wallet_topup(session, db_user.id, amount, method=method)
+    try:
+        checkout = await start_bbc_checkout(session, payment, description=f"شارژ کیف پول #{payment.id}")
+    except ValueError as exc:
+        await callback.answer(user_safe_error(exc), show_alert=True)
+        return
+    await callback.answer()
+    await state.clear()
+    if callback.message is None:
+        return
+    rows = [*bbc_view.checkout_rows(checkout), [kb.back_button(ui, "wallet:home")]]
+    text = bbc_view.checkout_text(
+        ui,
+        checkout,
+        amount_toman=amount,
+        currency=get_settings().currency,
+        order_id=0,
+        payment_id=int(payment.id),
+    )
+    await safe_edit_text(callback.message, text, reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
+    # The link and the exact amount must stay while the person pays elsewhere.
+    keep_message(callback.message)
+
+
 @router.callback_query(
     # Picker buttons are wtop:card:0:<dest_id> (order_id placeholder 0), matching shop pay:* shape.
     F.data.regexp(r"^wtop:(card|gateway|psp|crypto)(?::\d+(?::\w+)?)?$"),
@@ -529,6 +570,10 @@ async def wtop_choose_method(
                 format_message("🏦 درگاه آنلاین", body),
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
             )
+        return
+
+    if key == "bbc":
+        await _show_bbc_topup(callback, session, state, db_user, ui, amount=amount, method=method)
         return
 
     card = gateway = wallet = None

@@ -13,12 +13,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.service_scope import list_customer_services
 from app.services.users import current_shop_reseller_id
 from app.services.catalog_pricing import PriceTarget, active_discounts, displayed_quote, price_html, quote_price, sale_price
+from app.bot import bbc_checkout_view as bbc_view
 from app.bot import keyboards as kb
 from app.bot.chat_cleanup import keep_message
 from app.bot.handlers.purchase_contact import prompt_purchase_contact_if_needed
 from app.bot.tg_utils import safe_edit_text
 from app.config import get_settings
 from app.db.models import BotUser, Order, PaymentMethod
+from app.services.bbc_settlement import start_bbc_checkout
 from app.services.redact import user_safe_error
 from app.services.delivery import send_delivery_to_user
 from app.services.formatting import (
@@ -2425,6 +2427,50 @@ async def pay_psp_cb(
             await state.update_data(**{nav.NAV_LEVEL: nav.NAV_MAIN})
         except Exception:
             pass
+
+
+@router.callback_query(F.data.regexp(r"^pay:bbc:\d+$"))
+async def pay_bbc_cb(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext | None = None,
+):
+    """«بزن به کارت»: the payment link and the exact Rial amount; no receipt photo."""
+    ui = await get_all_settings(session)
+    if not on(ui.get("pay_bbc_enabled")):
+        await callback.answer("این روش پرداخت غیرفعال است", show_alert=True)
+        return
+    order = await session.get(Order, int((callback.data or "").rsplit(":", 1)[-1]))
+    if not is_customer_order_in_current_shop(order, db_user.id):
+        await callback.answer("این سفارش دیگر در دسترس نیست", show_alert=True)
+        return
+    try:
+        payment = await start_method_payment(session, order, db_user.id, PaymentMethod.BBC.value)
+        checkout = await start_bbc_checkout(session, payment, description=f"سفارش #{order.id}")
+    except ValueError as exc:
+        await callback.answer(user_safe_error(exc), show_alert=True)
+        return
+    await callback.answer()
+    if callback.message:
+        from app.bot.nav_input import cancel_keyboard
+
+        rows = [*bbc_view.checkout_rows(checkout), *cancel_keyboard("pay_wait").inline_keyboard]
+        text = bbc_view.checkout_text(
+            ui,
+            checkout,
+            amount_toman=int(order.amount),
+            currency=get_settings().currency,
+            order_id=int(order.id),
+            payment_id=int(payment.id),
+        )
+        await safe_edit_text(callback.message, text, reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
+        # The link and the exact amount must stay while the person pays elsewhere.
+        keep_message(callback.message)
+    if state is not None:
+        from app.bot import menu_nav as nav
+
+        await state.update_data(**{nav.NAV_LEVEL: nav.NAV_MAIN})
 
 
 def _register_shop_cancel_codes() -> None:

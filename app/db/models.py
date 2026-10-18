@@ -48,6 +48,7 @@ class PaymentMethod(str, Enum):
     CRYPTO = "crypto"
     STARS = "stars"
     PSP = "psp"  # Iranian/online PSP with request→verify (additive)
+    BBC = "bbc"  # BezanBeCard card-to-card match (per-shop API key)
 
 
 class PaymentStatus(str, Enum):
@@ -348,8 +349,8 @@ class PaymentSettlement(Base):
     )
     # 0 = platform; else reseller user id — for UNIQUE indexes (NULL-safe).
     tenant_key: Mapped[int] = mapped_column(Integer, default=0, index=True)
-    channel: Mapped[str] = mapped_column(String(32), index=True)  # psp | card_auto
-    provider: Mapped[str] = mapped_column(String(32), index=True)  # mock | zarinpal | generic
+    channel: Mapped[str] = mapped_column(String(32), index=True)  # psp | card_auto | bbc
+    provider: Mapped[str] = mapped_column(String(32), index=True)  # mock | zarinpal | generic | bezanbecard
     status: Mapped[str] = mapped_column(
         String(32), default=SettlementStatus.CREATED.value, index=True
     )
@@ -363,6 +364,8 @@ class PaymentSettlement(Base):
     provider_payload: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     settled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Set by the one caller that sends the delivery of a settled payment (claim, then send).
+    notified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

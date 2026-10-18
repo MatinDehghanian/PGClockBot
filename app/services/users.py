@@ -1038,6 +1038,7 @@ DEFAULT_SETTINGS = {
     "pay_crypto_enabled": "0",
     "pay_stars_enabled": "0",
     "pay_psp_enabled": "0",
+    "pay_bbc_enabled": "0",
     "pay_card_auto_enabled": "0",
     "pay_discount_enabled": "1",
     "psp_provider": "zarinpal",
@@ -1049,6 +1050,13 @@ DEFAULT_SETTINGS = {
         "پس از تأیید درگاه، سرویس به‌صورت خودکار تحویل می‌شود."
     ),
     "btn_pay_psp": "🔵🏦 درگاه آنلاین",
+    "bbc_api_key": "",
+    "bbc_pay_text": (
+        "مبلغ: <b>{amount}</b>\n"
+        "مبلغ دقیق واریز: <b>{unique_amount}</b>\n"
+        "از دکمهٔ زیر وارد صفحهٔ پرداخت شوید و همین مبلغ را کارت‌به‌کارت کنید."
+    ),
+    "btn_pay_bbc": "💳 بزن به کارت",
     "card_auto_provider": "generic",
     "card_auto_webhook_secret": "",
     "card_auto_hint_text": (
@@ -1508,6 +1516,13 @@ SETTING_GROUPS = {
         ("pay_card_enabled", "کارت به کارت", "toggle", ""),
         ("pay_gateway_enabled", "درگاه پرداخت (لینک + رسید)", "toggle", "لینک درگاه خارجی + ارسال رسید — روش قبلی حفظ می‌شود"),
         ("pay_psp_enabled", "درگاه آنلاین API", "toggle", "درگاه واقعی request→verify (Mock بدون مرچنت / زرین‌پال با مرچنت)"),
+        (
+            "pay_bbc_enabled",
+            "بزن به کارت",
+            "toggle",
+            "کارت‌به‌کارت خودکار با bezanbecard.ir و کلید API خود فروشگاه: مشتری مبلغ یکتا را "
+            "واریز می‌کند و ربات بعد از تأیید بزن به کارت، خودکار تحویل می‌دهد.",
+        ),
         ("pay_card_auto_enabled", "تأیید خودکار کارت به کارت", "toggle", "وب‌هوک امضادار از سرویس تأیید کارت — کنار رسید دستی"),
         ("pay_crypto_enabled", "رمزارز", "toggle", ""),
         ("pay_stars_enabled", "استارز تلگرام", "toggle", "پرداخت درون‌برنامه‌ای با ⭐"),
@@ -1610,6 +1625,25 @@ SETTING_GROUPS = {
             "متغیرها: {amount} {order_id} {payment_id}",
         ),
         ("btn_pay_psp", "متن دکمه درگاه آنلاین", "text", ""),
+    ],
+    "بزن به کارت": [
+        (
+            "bbc_api_key",
+            "کلید API",
+            "password",
+            "در bezanbecard.ir ثبت‌نام کنید، کارت مقصد را ثبت کنید، طرح دارای API بگیرید و کلید را "
+            "اینجا بگذارید. کلید دسترسی کامل حساب شما را دارد؛ جای دیگری نمایش داده نمی‌شود. "
+            "خالی بگذارید تا کلید فعلی بماند. سفارش «نیاز به بررسی» را در داشبورد بزن به کارت "
+            "تأیید کنید؛ ربات خودش تحویل می‌دهد.",
+        ),
+        (
+            "bbc_pay_text",
+            "راهنمای پرداخت",
+            "textarea",
+            "متن بالای دکمهٔ پرداخت. {unique_amount} مبلغ دقیق واریز به ریال است. "
+            "متغیرها: {amount} {unique_amount} {order_id} {payment_id} {shop_title}",
+        ),
+        ("btn_pay_bbc", "متن دکمه بزن به کارت", "text", ""),
     ],
     "تأیید خودکار کارت به کارت": [
         (
@@ -1799,6 +1833,7 @@ TAB_SETTING_GROUPS: dict[str, list[str]] = {
         "تأیید خودکار کارت به کارت",
         "درگاه پرداخت",
         "درگاه آنلاین API",
+        "بزن به کارت",
         "رمزارز",
         "استارز تلگرام",
         "متن دکمه‌های پرداخت",

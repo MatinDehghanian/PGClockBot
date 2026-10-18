@@ -316,6 +316,7 @@ BTN_PAY_GATEWAY: list[Field] = [("btn_pay_gateway", "متن دکمه درگاه"
 BTN_PAY_CRYPTO: list[Field] = [("btn_pay_crypto", "متن دکمه رمزارز", "text")]
 BTN_PAY_STARS: list[Field] = [("btn_pay_stars", "متن دکمه استارز", "text")]
 BTN_PAY_PSP: list[Field] = [("btn_pay_psp", "متن دکمه درگاه API", "text")]
+BTN_PAY_BBC: list[Field] = [("btn_pay_bbc", "متن دکمه بزن به کارت", "text")]
 
 
 def filter_btn_fields(
@@ -403,6 +404,7 @@ def all_btn_field_keys(*, include_platform: bool) -> frozenset[str]:
         BTN_PAY_CRYPTO,
         BTN_PAY_STARS,
         BTN_PAY_PSP,
+        BTN_PAY_BBC,
     ):
         keys.update(
             f[0]

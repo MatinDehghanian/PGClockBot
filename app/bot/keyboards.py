@@ -520,10 +520,12 @@ REPLY_ACTION_PAY_GATEWAY = "pay_gateway"
 REPLY_ACTION_PAY_CRYPTO = "pay_crypto"
 REPLY_ACTION_PAY_STARS = "pay_stars"
 REPLY_ACTION_PAY_PSP = "pay_psp"
+REPLY_ACTION_PAY_BBC = "pay_bbc"
 REPLY_ACTION_PAY_DISCOUNT = "pay_discount"
 REPLY_ACTION_TOPUP_CARD = "topup_card"
 REPLY_ACTION_TOPUP_GATEWAY = "topup_gateway"
 REPLY_ACTION_TOPUP_PSP = "topup_psp"
+REPLY_ACTION_TOPUP_BBC = "topup_bbc"
 REPLY_ACTION_TOPUP_CRYPTO = "topup_crypto"
 REPLY_ACTION_PG_STATS = "pg_stats"
 REPLY_ACTION_PG_USERS = "pg_users"
@@ -1482,6 +1484,7 @@ def any_checkout_method_enabled(ui: dict | None = None) -> bool:
             "pay_card_enabled",
             "pay_gateway_enabled",
             "pay_psp_enabled",
+            "pay_bbc_enabled",
             "pay_crypto_enabled",
             "pay_stars_enabled",
         )
@@ -1492,6 +1495,7 @@ _PAY_METHOD_STYLE_FALLBACKS: tuple[tuple[str, str | None], ...] = (
     ("card", "primary"),
     ("gateway", "primary"),
     ("psp", "primary"),
+    ("bbc", "primary"),
     ("crypto", "primary"),
     ("stars", "primary"),
     ("discount", None),

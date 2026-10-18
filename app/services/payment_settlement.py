@@ -3,6 +3,7 @@
 Channels:
   - psp: Iranian/online gateway (mock gated by env / zarinpal / …)
   - card_auto: signed webhook from card-confirm providers (per-tenant secret)
+  - bbc: BezanBeCard card-to-card match (see ``bbc_settlement``)
 
 Existing wallet / card+receipt / gateway-link / crypto / stars paths are untouched.
 Success always ends in ``approve_payment`` — settlement becomes SETTLED only after approve.
@@ -46,6 +47,8 @@ logger = logging.getLogger(__name__)
 
 CHANNEL_PSP = "psp"
 CHANNEL_CARD_AUTO = "card_auto"
+CHANNEL_BBC = "bbc"
+BBC_PROVIDER = "bezanbecard"
 
 _OPEN_STATUSES = (
     SettlementStatus.CREATED.value,
@@ -85,6 +88,10 @@ def idem_key_psp(payment_id: int) -> str:
 
 def idem_key_card_auto(payment_id: int) -> str:
     return f"cardauto:{int(payment_id)}"
+
+
+def idem_key_bbc(payment_id: int) -> str:
+    return f"bbc:{int(payment_id)}"
 
 
 async def resolve_payment_shop_owner_id(

@@ -3,6 +3,7 @@
 Public surface:
   - Real PSP return (provider != mock) — verifies via provider API
   - Card-auto webhooks — per-tenant path + HMAC secret from that tenant only
+  - BezanBeCard callback/return — tenant path + checkout token; always re-fetches API
   - Mock checkout/pay — ONLY when ALLOW_SETTLEMENT_MOCK=1 + one-time token
 """
 
@@ -289,4 +290,89 @@ def register_settlement_pages(app, *, get_db):
         return JSONResponse(
             {"ok": False, "error": "use /card-auto/platform/webhook or /card-auto/shop/{id}/webhook"},
             status_code=410,
+        )
+
+    async def _bbc_finish(
+        session: AsyncSession,
+        *,
+        tenant_key: int,
+        settlement_id: int,
+        token: str,
+        as_html: bool,
+    ):
+        from app.services.bbc_settlement import handle_bbc_link
+
+        try:
+            settlement = await handle_bbc_link(
+                session, settlement_id=settlement_id, tenant_key=tenant_key, token=token
+            )
+        except ValueError:
+            logger.info("bbc link rejected tenant=%s settlement=%s", tenant_key, settlement_id)
+            if as_html:
+                return _html_page(
+                    "نامعتبر",
+                    "<h1>این لینک پرداخت معتبر نیست</h1>"
+                    "<p class='muted'>به ربات برگردید و وضعیت سفارش را آنجا ببینید.</p>",
+                    ok=False,
+                    status_code=404,
+                )
+            return JSONResponse({"ok": False}, status_code=404)
+        if not as_html:
+            return JSONResponse({"ok": True})
+        title, body, ok = _bbc_return_page(settlement)
+        return _html_page(title, body, ok=ok)
+
+    def _bbc_return_page(settlement) -> tuple[str, str, bool]:
+        """What the payer sees after the payment page; never internal ids or reasons."""
+        status = settlement.status
+        error = str(settlement.error_message or "")
+        if status == SettlementStatus.SETTLED.value:
+            return "موفق", "<h1>پرداخت تأیید شد</h1><p>سرویس در تلگرام برای شما فرستاده شد.</p>", True
+        if error.startswith("review:") or status == SettlementStatus.FAILED.value:
+            return (
+                "در حال بررسی",
+                "<h1>پرداخت در حال بررسی است</h1>"
+                "<p>فروشگاه واریز را بررسی می‌کند و نتیجه در ربات به شما اطلاع داده می‌شود.</p>",
+                True,
+            )
+        if status == SettlementStatus.EXPIRED.value:
+            return (
+                "منقضی",
+                "<h1>مهلت پرداخت تمام شد</h1><p class='muted'>به ربات برگردید و دوباره پرداخت را شروع کنید.</p>",
+                False,
+            )
+        return (
+            "در انتظار",
+            "<h1>هنوز واریزی ثبت نشده</h1>"
+            "<p>بعد از واریز دقیقِ مبلغ یکتا، تأیید و تحویل خودکار انجام می‌شود.</p>"
+            "<p class='muted'>می‌توانید این صفحه را ببندید و به ربات برگردید.</p>",
+            True,
+        )
+
+    @app.api_route(
+        "/payments/settlement/bbc/tenant/{tenant_key}/callback/{settlement_id}",
+        methods=["GET", "POST"],
+    )
+    async def bbc_callback(
+        tenant_key: int,
+        settlement_id: int,
+        request: Request,
+        session: AsyncSession = Depends(get_db),
+    ):
+        # The body is never read: payment truth comes from the API with the shop's key.
+        token = (request.query_params.get("t") or "").strip()
+        return await _bbc_finish(
+            session, tenant_key=tenant_key, settlement_id=settlement_id, token=token, as_html=False
+        )
+
+    @app.get("/payments/settlement/bbc/tenant/{tenant_key}/return/{settlement_id}")
+    async def bbc_return(
+        tenant_key: int,
+        settlement_id: int,
+        request: Request,
+        session: AsyncSession = Depends(get_db),
+    ):
+        token = (request.query_params.get("t") or "").strip()
+        return await _bbc_finish(
+            session, tenant_key=tenant_key, settlement_id=settlement_id, token=token, as_html=True
         )

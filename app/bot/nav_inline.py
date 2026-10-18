@@ -338,6 +338,7 @@ def topup_methods_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
         ("pay_card_enabled", "btn_pay_card", "wtop:card", "topup_card"),
         ("pay_gateway_enabled", "btn_pay_gateway", "wtop:gateway", "topup_gateway"),
         ("pay_psp_enabled", "btn_pay_psp", "wtop:psp", "topup_psp"),
+        ("pay_bbc_enabled", "btn_pay_bbc", "wtop:bbc", "topup_bbc"),
         ("pay_crypto_enabled", "btn_pay_crypto", "wtop:crypto", "topup_crypto"),
     )
     rows: list[list[InlineKeyboardButton]] = []

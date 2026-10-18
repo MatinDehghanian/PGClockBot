@@ -15,6 +15,7 @@ from app.bot import keyboards as kb
 from app.bot.auth import bot_admin_settings_in_flow, is_platform_admin as _is_admin
 from app.bot.auth import require_bot_owner
 from app.bot.nav_input import delete_user_message, finish_text_step
+from app.bot.secret_fields import SECRET, is_secret, secret_prompt
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser, Plan
 from app.services.connection_status_texts import CONNECTION_STATUS_MENU_KEY
@@ -36,6 +37,7 @@ from app.services.settings_button_labels import (
     BTN_PAY_CARD,
     BTN_PAY_CRYPTO,
     BTN_PAY_GATEWAY,
+    BTN_PAY_BBC,
     BTN_PAY_PSP,
     BTN_PAY_STARS,
     BTN_PAY_WALLET_DISCOUNT,
@@ -217,6 +219,7 @@ SECTIONS: dict[str, dict] = {
                 ("pay_card_auto_enabled", "تأیید خودکار کارت به کارت", "toggle"),
                 ("pay_gateway_enabled", "درگاه لینک", "toggle"),
                 ("pay_psp_enabled", "درگاه API", "toggle"),
+                ("pay_bbc_enabled", "بزن به کارت (bezanbecard.ir)", "toggle"),
                 ("pay_crypto_enabled", "رمزارز", "toggle"),
                 ("pay_stars_enabled", "استارز", "toggle"),
                 ("pay_discount_enabled", "کد تخفیف", "toggle"),
@@ -232,7 +235,7 @@ SECTIONS: dict[str, dict] = {
             ]),
             ("card_auto", "تأیید خودکار کارت به کارت", [
                 ("card_auto_provider", "ارائه‌دهنده", "text"),
-                ("card_auto_webhook_secret", "رمز وب‌هوک", "text"),
+                ("card_auto_webhook_secret", "رمز وب‌هوک", SECRET),
                 ("card_auto_hint_text", "راهنما", "textarea"),
             ]),
             ("gateway", "درگاه لینک", [
@@ -247,6 +250,11 @@ SECTIONS: dict[str, dict] = {
                 ("psp_sandbox", "سندباکس", "toggle"),
                 ("psp_pay_text", "راهنما", "textarea"),
                 *BTN_PAY_PSP,
+            ]),
+            ("bbc", "بزن به کارت", [
+                ("bbc_api_key", "کلید API (bezanbecard.ir)", SECRET),
+                ("bbc_pay_text", "راهنمای مشتری", "textarea"),
+                *BTN_PAY_BBC,
             ]),
             ("crypto", "رمزارز", [
                 ("crypto_asset", "رمزارز", "text"),
@@ -555,6 +563,12 @@ def _field_button(ui: dict, key: str, label: str, kind: str) -> InlineKeyboardBu
     return InlineKeyboardButton(text=label, callback_data=f"adm:st:edit:{key}")
 
 
+def _bbc_fields_intro(title: str) -> str:
+    from app.services.payment_providers.bezanbecard import SETUP_HELP_HTML
+
+    return f"<b>{title}</b>\n\n{SETUP_HELP_HTML}\n\nبرای تغییر، روی مورد بزنید."
+
+
 async def _render_fields(
     callback: CallbackQuery,
     session: AsyncSession,
@@ -563,6 +577,7 @@ async def _render_fields(
     fields: list[Field],
     back_cb: str,
     extra_rows: list[list[InlineKeyboardButton]] | None = None,
+    intro: str | None = None,
 ) -> None:
     ui = await get_all_settings(session)
     rows = kb.pack_long_list([_field_button(ui, k, lab, kind) for k, lab, kind in fields])
@@ -570,8 +585,9 @@ async def _render_fields(
         rows.extend(extra_rows)
     rows.append(_back_row(back_cb))
     if callback.message:
+        body = intro or f"<b>{title}</b>\nبرای تغییر، روی مورد بزنید."
         await callback.message.edit_text(
-            f"<b>{title}</b>\nبرای تغییر، روی مورد بزنید.",
+            body,
             reply_markup=_kb(rows),
         )
 
@@ -625,7 +641,15 @@ async def _render_sub(callback: CallbackQuery, session: AsyncSession, sec_id: st
             extra_rows=extra,
         )
     if isinstance(payload, list):
-        await _render_fields(callback, session, title=title, fields=payload, back_cb=back)
+        intro = _bbc_fields_intro(title) if sub_id == "bbc" else None
+        await _render_fields(
+            callback,
+            session,
+            title=title,
+            fields=payload,
+            back_cb=back,
+            intro=intro,
+        )
         return
     await _render_section(callback, session, sec_id)
 
@@ -804,13 +828,15 @@ async def _fields_panel(
     fields: list[Field],
     back_cb: str,
     extra_rows: list[list[InlineKeyboardButton]] | None = None,
+    intro: str | None = None,
 ) -> Panel:
     ui = await get_all_settings(session)
     rows = kb.pack_long_list([_field_button(ui, k, lab, kind) for k, lab, kind in fields])
     if extra_rows:
         rows.extend(extra_rows)
     rows.append(_back_row(back_cb))
-    return f"<b>{title}</b>\nبرای تغییر، روی مورد بزنید.", _kb(rows)
+    body = intro or f"<b>{title}</b>\nبرای تغییر، روی مورد بزنید."
+    return body, _kb(rows)
 
 
 async def _settings_location_panel(
@@ -883,7 +909,10 @@ async def _settings_location_panel(
             extra_rows=extra,
         )
     if isinstance(payload, list):
-        return await _fields_panel(session, title=title, fields=payload, back_cb=back)
+        intro = _bbc_fields_intro(title) if sub_id == "bbc" else None
+        return await _fields_panel(
+            session, title=title, fields=payload, back_cb=back, intro=intro
+        )
     # menu_layout / menu_order — one Back into that sub (callback still works with nav kept)
     return (
         f"<b>{title}</b>",
@@ -1163,10 +1192,15 @@ async def settings_edit_ask(
             hint += "\n<i>ایموجی پریمیوم در متن پیام حفظ می‌شود.</i>"
     from app.bot.nav_input import ask_text
 
+    prompt = (
+        secret_prompt(label, cur)
+        if is_secret(kind)
+        else f"<b>{label}</b>\nفعلی:\n<code>{_preview(cur)}</code>\n\n{hint}"
+    )
     await ask_text(
         callback,
         state,
-        prompt=f"<b>{label}</b>\nفعلی:\n<code>{_preview(cur)}</code>\n\n{hint}",
+        prompt=prompt,
         cancel_code="adm_set",
         fsm_state=SettingsStates.edit_value,
         edit=True,
@@ -1196,7 +1230,10 @@ async def settings_edit_save(
         return
     meta = FIELDS.get(key)
     kind = meta[2] if meta else "text"
-    if kind == "number":
+    if is_secret(kind):
+        await delete_user_message(message)
+        await set_setting(session, key, text)
+    elif kind == "number":
         raw = text.replace(",", "").replace("٬", "")
         try:
             float(raw)
