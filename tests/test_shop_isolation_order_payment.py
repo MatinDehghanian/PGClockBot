@@ -85,4 +85,4 @@ class OrderShopTests(unittest.IsolatedAsyncioTestCase):
         finally:
             reset_shop_reseller_id(token)
         callback.answer.assert_awaited_once()
-        self.assertEqual(callback.answer.await_args.args[0], "سفارش نامعتبر")
+        self.assertEqual(callback.answer.await_args.args[0], "این سفارش دیگر در دسترس نیست")
