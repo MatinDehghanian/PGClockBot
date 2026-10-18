@@ -1526,6 +1526,7 @@ async def seed_reseller_shop_settings(session: AsyncSession, reseller_user_id: i
         "pay_card_enabled",
         "pay_gateway_enabled",
         "pay_psp_enabled",
+        "pay_bbc_enabled",
         "pay_card_auto_enabled",
         "pay_crypto_enabled",
         "pay_wallet_enabled",

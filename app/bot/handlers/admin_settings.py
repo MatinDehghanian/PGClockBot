@@ -36,6 +36,7 @@ from app.services.settings_button_labels import (
     BTN_PAY_CARD,
     BTN_PAY_CRYPTO,
     BTN_PAY_GATEWAY,
+    BTN_PAY_BBC,
     BTN_PAY_PSP,
     BTN_PAY_STARS,
     BTN_PAY_WALLET_DISCOUNT,
@@ -217,6 +218,7 @@ SECTIONS: dict[str, dict] = {
                 ("pay_card_auto_enabled", "تأیید خودکار کارت به کارت", "toggle"),
                 ("pay_gateway_enabled", "درگاه لینک", "toggle"),
                 ("pay_psp_enabled", "درگاه API", "toggle"),
+                ("pay_bbc_enabled", "بزن به کارت (bezanbecard.ir)", "toggle"),
                 ("pay_crypto_enabled", "رمزارز", "toggle"),
                 ("pay_stars_enabled", "استارز", "toggle"),
                 ("pay_discount_enabled", "کد تخفیف", "toggle"),
@@ -247,6 +249,11 @@ SECTIONS: dict[str, dict] = {
                 ("psp_sandbox", "سندباکس", "toggle"),
                 ("psp_pay_text", "راهنما", "textarea"),
                 *BTN_PAY_PSP,
+            ]),
+            ("bbc", "بزن به کارت", [
+                ("bbc_api_key", "کلید API (bezanbecard.ir)", "text"),
+                ("bbc_pay_text", "راهنمای مشتری", "textarea"),
+                *BTN_PAY_BBC,
             ]),
             ("crypto", "رمزارز", [
                 ("crypto_asset", "رمزارز", "text"),

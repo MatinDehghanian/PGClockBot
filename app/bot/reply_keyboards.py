@@ -84,6 +84,7 @@ REPLY_ACTION_PAY_CRYPTO = _k.REPLY_ACTION_PAY_CRYPTO
 REPLY_ACTION_PAY_DISCOUNT = _k.REPLY_ACTION_PAY_DISCOUNT
 REPLY_ACTION_PAY_GATEWAY = _k.REPLY_ACTION_PAY_GATEWAY
 REPLY_ACTION_PAY_PSP = _k.REPLY_ACTION_PAY_PSP
+REPLY_ACTION_PAY_BBC = _k.REPLY_ACTION_PAY_BBC
 REPLY_ACTION_PAY_STARS = _k.REPLY_ACTION_PAY_STARS
 REPLY_ACTION_PAY_WALLET = _k.REPLY_ACTION_PAY_WALLET
 REPLY_ACTION_PG_CREATE = _k.REPLY_ACTION_PG_CREATE
@@ -107,6 +108,7 @@ REPLY_ACTION_TOPUP_CARD = _k.REPLY_ACTION_TOPUP_CARD
 REPLY_ACTION_TOPUP_CRYPTO = _k.REPLY_ACTION_TOPUP_CRYPTO
 REPLY_ACTION_TOPUP_GATEWAY = _k.REPLY_ACTION_TOPUP_GATEWAY
 REPLY_ACTION_TOPUP_PSP = _k.REPLY_ACTION_TOPUP_PSP
+REPLY_ACTION_TOPUP_BBC = _k.REPLY_ACTION_TOPUP_BBC
 REPLY_ACTION_WALLET = _k.REPLY_ACTION_WALLET
 REPLY_ACTION_WALLET_TOPUP = _k.REPLY_ACTION_WALLET_TOPUP
 REPLY_ACTION_WALLET_TX = _k.REPLY_ACTION_WALLET_TX
@@ -630,6 +632,8 @@ def _pay_method_entries(ui: dict | None = None) -> list[tuple[str, str]]:
         entries.append((REPLY_ACTION_PAY_GATEWAY, _t(ui, "btn_pay_gateway")))
     if on(_t(ui, "pay_psp_enabled")):
         entries.append((REPLY_ACTION_PAY_PSP, _t(ui, "btn_pay_psp")))
+    if on(_t(ui, "pay_bbc_enabled")):
+        entries.append((REPLY_ACTION_PAY_BBC, _t(ui, "btn_pay_bbc")))
     if on(_t(ui, "pay_crypto_enabled")):
         entries.append((REPLY_ACTION_PAY_CRYPTO, _t(ui, "btn_pay_crypto")))
     if on(_t(ui, "pay_stars_enabled")):
@@ -647,6 +651,8 @@ def _topup_method_entries(ui: dict | None = None) -> list[tuple[str, str]]:
         entries.append((REPLY_ACTION_TOPUP_GATEWAY, _t(ui, "btn_pay_gateway")))
     if on(_t(ui, "pay_psp_enabled")):
         entries.append((REPLY_ACTION_TOPUP_PSP, _t(ui, "btn_pay_psp")))
+    if on(_t(ui, "pay_bbc_enabled")):
+        entries.append((REPLY_ACTION_TOPUP_BBC, _t(ui, "btn_pay_bbc")))
     if on(_t(ui, "pay_crypto_enabled")):
         entries.append((REPLY_ACTION_TOPUP_CRYPTO, _t(ui, "btn_pay_crypto")))
     return entries

@@ -2422,6 +2422,96 @@ async def pay_psp_cb(
             pass
 
 
+@router.callback_query(F.data.startswith("pay:bbc:"))
+async def pay_bbc_cb(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext | None = None,
+):
+    """BezanBeCard checkout — unique amount + payment link; no receipt photo."""
+    import json
+
+    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
+    from app.services.payment_providers.bezanbecard import format_unique_rial
+    from app.services.payment_settlement import create_bbc_checkout
+
+    ui = await get_all_settings(session)
+    if not on(ui.get("pay_bbc_enabled")):
+        await callback.answer("این روش پرداخت غیرفعال است", show_alert=True)
+        return
+    order_id = int((callback.data or "").split(":")[-1])
+    order = await session.get(Order, order_id)
+    if not is_customer_order_in_current_shop(order, db_user.id):
+        await callback.answer("این سفارش دیگر در دسترس نیست", show_alert=True)
+        return
+    try:
+        payment = await start_method_payment(
+            session, order, db_user.id, PaymentMethod.BBC.value
+        )
+        settlement = await create_bbc_checkout(
+            session,
+            payment,
+            description=f"سفارش #{order.id}",
+        )
+    except ValueError as e:
+        await callback.answer(user_safe_error(e), show_alert=True)
+        return
+    await callback.answer()
+    amount = format_toman(order.amount, get_settings().currency)
+    unique_txt = amount
+    try:
+        payload = json.loads(settlement.provider_payload or "{}")
+        unique_rial = int(payload.get("unique_amount_rial") or 0)
+        if unique_rial > 0:
+            unique_txt = format_unique_rial(unique_rial)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        pass
+    try:
+        body = render_message_template(
+            ui.get("bbc_pay_text") or "",
+            domain=DOMAIN_PAYMENT,
+            amount=amount,
+            unique_amount=unique_txt,
+            order_id=order.id,
+            payment_id=payment.id,
+            shop_title=ui.get("shop_title") or "",
+        )
+    except Exception:
+        body = (
+            f"مبلغ سفارش: {amount}\n"
+            f"مبلغ یکتای واریز: <b>{unique_txt}</b>\n"
+            "از دکمه زیر وارد صفحه پرداخت شوید و دقیقاً همان مبلغ را واریز کنید."
+        )
+    body += f"\n\n(پرداخت #{payment.id})"
+    rows: list[list[InlineKeyboardButton]] = []
+    link = (settlement.checkout_url or "").strip()
+    if link.startswith("http://") or link.startswith("https://"):
+        rows.append([InlineKeyboardButton(text="💳 ورود به بزن به کارت", url=link)])
+    if callback.message:
+        from app.bot.nav_input import cancel_keyboard
+
+        wait_rows: list[list[InlineKeyboardButton]] = list(rows)
+        wait_rows.extend(cancel_keyboard("pay_wait").inline_keyboard)
+        wait_markup = InlineKeyboardMarkup(inline_keyboard=wait_rows)
+        await safe_edit_text(
+            callback.message,
+            format_message(
+                "💳 بزن به کارت",
+                body + "\n\nپس از واریز مبلغ یکتا، تأیید و تحویل خودکار انجام می‌شود.",
+            ),
+            reply_markup=wait_markup,
+        )
+    if state is not None:
+        from app.bot import menu_nav as nav
+
+        try:
+            await state.update_data(**{nav.NAV_LEVEL: nav.NAV_MAIN})
+        except Exception:
+            pass
+
+
 def _register_shop_cancel_codes() -> None:
     from app.bot.nav_input import CancelEntry, register_cancel_code
 

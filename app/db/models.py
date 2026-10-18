@@ -48,6 +48,7 @@ class PaymentMethod(str, Enum):
     CRYPTO = "crypto"
     STARS = "stars"
     PSP = "psp"  # Iranian/online PSP with request→verify (additive)
+    BBC = "bbc"  # BezanBeCard card-to-card match (per-shop API key)
 
 
 class PaymentStatus(str, Enum):
@@ -348,8 +349,8 @@ class PaymentSettlement(Base):
     )
     # 0 = platform; else reseller user id — for UNIQUE indexes (NULL-safe).
     tenant_key: Mapped[int] = mapped_column(Integer, default=0, index=True)
-    channel: Mapped[str] = mapped_column(String(32), index=True)  # psp | card_auto
-    provider: Mapped[str] = mapped_column(String(32), index=True)  # mock | zarinpal | generic
+    channel: Mapped[str] = mapped_column(String(32), index=True)  # psp | card_auto | bbc
+    provider: Mapped[str] = mapped_column(String(32), index=True)  # mock | zarinpal | generic | bezanbecard
     status: Mapped[str] = mapped_column(
         String(32), default=SettlementStatus.CREATED.value, index=True
     )

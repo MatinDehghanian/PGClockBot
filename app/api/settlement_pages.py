@@ -3,6 +3,7 @@
 Public surface:
   - Real PSP return (provider != mock) — verifies via provider API
   - Card-auto webhooks — per-tenant path + HMAC secret from that tenant only
+  - BezanBeCard callback/return — tenant path + checkout token; always re-fetches API
   - Mock checkout/pay — ONLY when ALLOW_SETTLEMENT_MOCK=1 + one-time token
 """
 
@@ -289,4 +290,113 @@ def register_settlement_pages(app, *, get_db):
         return JSONResponse(
             {"ok": False, "error": "use /card-auto/platform/webhook or /card-auto/shop/{id}/webhook"},
             status_code=410,
+        )
+
+    async def _bbc_finish(
+        session: AsyncSession,
+        *,
+        tenant_key: int,
+        settlement_id: int,
+        token: str,
+        as_html: bool,
+    ):
+        from app.services.payment_settlement import (
+            handle_bbc_callback,
+            notify_after_settlement,
+        )
+
+        try:
+            settlement = await handle_bbc_callback(
+                session,
+                settlement_id=int(settlement_id),
+                tenant_key=int(tenant_key),
+                token=str(token or ""),
+            )
+        except ValueError:
+            logger.info(
+                "bbc callback rejected tenant=%s settlement=%s",
+                tenant_key,
+                settlement_id,
+            )
+            if as_html:
+                return _html_page(
+                    "ناموفق",
+                    "<h1>تأیید پرداخت ناموفق</h1>"
+                    "<p class='muted'>به ربات برگردید یا چند لحظه دیگر دوباره تلاش کنید.</p>",
+                    ok=False,
+                    status_code=400,
+                )
+            return JSONResponse({"ok": False}, status_code=400)
+
+        payment = await session.get(Payment, int(settlement.payment_id))
+        order = None
+        if payment and payment.order_id:
+            order = await session.get(Order, payment.order_id)
+        if payment and settlement.status == SettlementStatus.SETTLED.value:
+            try:
+                await notify_after_settlement(session, payment, order)
+            except Exception:
+                logger.exception(
+                    "bbc notify failed payment=%s", getattr(payment, "id", None)
+                )
+
+        if as_html:
+            if settlement.status == SettlementStatus.SETTLED.value:
+                return _html_page(
+                    "موفق",
+                    "<h1>پرداخت تأیید شد</h1><p>می‌توانید به تلگرام برگردید.</p>",
+                )
+            if settlement.status == SettlementStatus.EXPIRED.value:
+                return _html_page(
+                    "منقضی",
+                    "<h1>مهلت پرداخت تمام شد</h1><p class='muted'>به ربات برگردید.</p>",
+                    ok=False,
+                )
+            return _html_page(
+                "در انتظار",
+                "<h1>هنوز در انتظار واریز</h1>"
+                "<p>پس از واریز مبلغ یکتا، تأیید خودکار انجام می‌شود.</p>"
+                "<p class='muted'>می‌توانید این صفحه را ببندید و به ربات برگردید.</p>",
+            )
+        return JSONResponse(
+            {
+                "ok": True,
+                "settlement_id": int(settlement.id),
+                "status": settlement.status,
+            }
+        )
+
+    @app.api_route(
+        "/payments/settlement/bbc/tenant/{tenant_key}/callback/{settlement_id}",
+        methods=["GET", "POST"],
+    )
+    async def bbc_callback(
+        tenant_key: int,
+        settlement_id: int,
+        request: Request,
+        session: AsyncSession = Depends(get_db),
+    ):
+        token = (request.query_params.get("t") or "").strip()
+        return await _bbc_finish(
+            session,
+            tenant_key=tenant_key,
+            settlement_id=settlement_id,
+            token=token,
+            as_html=False,
+        )
+
+    @app.get("/payments/settlement/bbc/tenant/{tenant_key}/return/{settlement_id}")
+    async def bbc_return(
+        tenant_key: int,
+        settlement_id: int,
+        request: Request,
+        session: AsyncSession = Depends(get_db),
+    ):
+        token = (request.query_params.get("t") or "").strip()
+        return await _bbc_finish(
+            session,
+            tenant_key=tenant_key,
+            settlement_id=settlement_id,
+            token=token,
+            as_html=True,
         )

@@ -29,6 +29,7 @@ _TOPUP_METHODS = {
     "card": ("pay_card_enabled", PaymentMethod.CARD.value),
     "gateway": ("pay_gateway_enabled", PaymentMethod.GATEWAY.value),
     "psp": ("pay_psp_enabled", PaymentMethod.PSP.value),
+    "bbc": ("pay_bbc_enabled", PaymentMethod.BBC.value),
     "crypto": ("pay_crypto_enabled", PaymentMethod.CRYPTO.value),
 }
 
@@ -235,6 +236,7 @@ async def wallet_topup(callback: CallbackQuery, state: FSMContext, session: Asyn
             "pay_card_enabled",
             "pay_gateway_enabled",
             "pay_psp_enabled",
+            "pay_bbc_enabled",
             "pay_crypto_enabled",
         )
     )
@@ -526,6 +528,60 @@ async def wtop_choose_method(
             await safe_edit_text(
                 callback.message,
                 format_message("🏦 درگاه آنلاین", body),
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+            )
+        return
+
+    if key == "bbc":
+        import json
+
+        from app.services.payment_providers.bezanbecard import format_unique_rial
+        from app.services.payment_settlement import create_bbc_checkout
+
+        payment = await create_wallet_topup(session, db_user.id, amount, method=method)
+        try:
+            settlement = await create_bbc_checkout(
+                session, payment, description=f"شارژ کیف پول #{payment.id}"
+            )
+        except ValueError as e:
+            await callback.answer(user_safe_error(e), show_alert=True)
+            return
+        await callback.answer()
+        amount_txt = format_toman(amount, get_settings().currency)
+        unique_txt = amount_txt
+        try:
+            payload = json.loads(settlement.provider_payload or "{}")
+            unique_rial = int(payload.get("unique_amount_rial") or 0)
+            if unique_rial > 0:
+                unique_txt = format_unique_rial(unique_rial)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            pass
+        try:
+            body = render_message_template(
+                ui.get("bbc_pay_text") or "",
+                domain=DOMAIN_PAYMENT,
+                amount=amount_txt,
+                unique_amount=unique_txt,
+                order_id=0,
+                payment_id=payment.id,
+                shop_title=ui.get("shop_title") or "",
+            )
+        except Exception:
+            body = (
+                f"مبلغ شارژ: {amount_txt}\n"
+                f"مبلغ یکتای واریز: <b>{unique_txt}</b>"
+            )
+        body += f"\n\n(پرداخت #{payment.id})"
+        rows: list[list[InlineKeyboardButton]] = []
+        link = (settlement.checkout_url or "").strip()
+        if link.startswith("http://") or link.startswith("https://"):
+            rows.append([InlineKeyboardButton(text="💳 ورود به بزن به کارت", url=link)])
+        rows.append([kb.back_button(ui, "wallet:home")])
+        await state.clear()
+        if callback.message:
+            await safe_edit_text(
+                callback.message,
+                format_message("💳 بزن به کارت", body),
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
             )
         return

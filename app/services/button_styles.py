@@ -159,12 +159,14 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "pay_card", "label": "کارت به کارت", "group": "پرداخت", "default": "primary"},
     {"id": "pay_gateway", "label": "درگاه پرداخت", "group": "پرداخت", "default": "primary"},
     {"id": "pay_psp", "label": "درگاه آنلاین API", "group": "پرداخت", "default": "primary"},
+    {"id": "pay_bbc", "label": "بزن به کارت", "group": "پرداخت", "default": "primary"},
     {"id": "pay_crypto", "label": "رمزارز", "group": "پرداخت", "default": "primary"},
     {"id": "pay_stars", "label": "استارز تلگرام", "group": "پرداخت", "default": "primary"},
     {"id": "pay_discount", "label": "کد تخفیف", "group": "پرداخت", "default": ""},
     {"id": "topup_card", "label": "شارژ — کارت", "group": "پرداخت", "default": "primary"},
     {"id": "topup_gateway", "label": "شارژ — درگاه", "group": "پرداخت", "default": "primary"},
     {"id": "topup_psp", "label": "شارژ — درگاه آنلاین API", "group": "پرداخت", "default": "primary"},
+    {"id": "topup_bbc", "label": "شارژ — بزن به کارت", "group": "پرداخت", "default": "primary"},
     {"id": "topup_crypto", "label": "شارژ — رمزارز", "group": "پرداخت", "default": "primary"},
     # Customer loyalty sub
     {"id": "loy_referral", "label": "دعوت دوستان", "group": "باشگاه مشتریان", "default": "primary"},
@@ -338,6 +340,7 @@ PAY_METHOD_STYLE_IDS: dict[str, str] = {
     "card": "pay_card",
     "gateway": "pay_gateway",
     "psp": "pay_psp",
+    "bbc": "pay_bbc",
     "crypto": "pay_crypto",
 }
 

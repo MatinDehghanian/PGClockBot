@@ -81,6 +81,7 @@ SETTING_DOMAIN: dict[str, str] = {
     "gateway_link": DOMAIN_PAYMENT,
     "crypto_pay_text": DOMAIN_PAYMENT,
     "psp_pay_text": DOMAIN_PAYMENT,
+    "bbc_pay_text": DOMAIN_PAYMENT,
     "force_join_msg": DOMAIN_FORCE_JOIN,
     "pg_username_pattern": DOMAIN_NAMING,
     "custom_plan_username_pattern": DOMAIN_NAMING,
@@ -100,6 +101,9 @@ _SETTING_CONTEXT_KEYS: dict[str, frozenset[str]] = {
     "gateway_link": frozenset({"amount", "order_id", "payment_id"}),
     "crypto_pay_text": frozenset({"amount", "asset", "network", "address", "payment_id", "shop_title"}),
     "psp_pay_text": frozenset({"amount", "order_id", "payment_id", "shop_title"}),
+    "bbc_pay_text": frozenset(
+        {"amount", "unique_amount", "order_id", "payment_id", "shop_title"}
+    ),
     "force_join_msg": frozenset({"channels"}),
 }
 
@@ -187,6 +191,14 @@ _VARS: tuple[MessageVar, ...] = (
         description_fa="مبلغ فرمت‌شده با واحد پول پنل (مثلاً ۵۰٬۰۰۰ تومان).",
         example="۵۰٬۰۰۰ تومان",
         domains=frozenset({DOMAIN_PAYMENT, DOMAIN_WALLET}),
+        html_escape=True,
+    ),
+    MessageVar(
+        key="unique_amount",
+        title_fa="مبلغ یکتای واریز",
+        description_fa="مبلغ دقیق کارت‌به‌کارت بزن به کارت (ریال یکتا). مشتری باید دقیقاً همین را واریز کند.",
+        example="۲٬۰۰۰٬۰۴۳ ریال",
+        domains=frozenset({DOMAIN_PAYMENT}),
         html_escape=True,
     ),
     MessageVar(

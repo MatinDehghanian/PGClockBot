@@ -88,6 +88,7 @@ class BotButtonLabelCoverageTests(unittest.TestCase):
             "btn_pay_crypto",
             "btn_pay_stars",
             "btn_pay_psp",
+            "btn_pay_bbc",
         ):
             self.assertIn(key, admin_f, key)
             self.assertIn(key, res_f, key)
