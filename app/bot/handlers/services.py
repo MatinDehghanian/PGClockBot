@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.catalog_pricing import displayed_quote, price_html, quote_product, sale_price
 from app.bot import keyboards as kb
+from app.bot.chat_cleanup import keep_message
 from app.bot.list_pages import page_line, page_number
 from app.bot.tg_utils import safe_edit_text
 from app.config import get_settings
@@ -44,6 +45,11 @@ class CancellationStates(StatesGroup):
 
 def more_callback(service_id: int) -> str:
     return f"svc:more:{int(service_id)}"
+
+
+def service_back_markup(service_id: int) -> InlineKeyboardMarkup:
+    """A result screen about one service backs up to that service's card."""
+    return InlineKeyboardMarkup(inline_keyboard=[[kb.back_button(None, f"svc:view:{int(service_id)}")]])
 
 
 @router.callback_query(F.data.startswith("svc:cancel:"))
@@ -127,7 +133,7 @@ async def svc_cancel_reason(message: Message, session: AsyncSession, db_user: Bo
             f"درخواست #{row['id']} ثبت شد. نتیجه و اعتبار برگشتی را "
             "از «درخواست لغو سرویس» ببینید."
         ),
-        inline=None,
+        inline=service_back_markup(int(data.get("cancellation_service_id") or 0)),
     )
 
 @router.callback_query(F.data == "campaign:optout")
@@ -670,14 +676,15 @@ async def svc_renew_pay(
                 await safe_edit_text(
                     callback.message,
                     f"❌ {user_safe_error(e)}",
-                    reply_markup=None,
+                    reply_markup=service_back_markup(svc.id),
                 )
             return
         if callback.message:
             await safe_edit_text(callback.message, 
                 format_message("✅ تمدید رایگان", f"سفارش #{order.id}"),
-                reply_markup=None,
+                reply_markup=service_back_markup(svc.id),
             )
+            keep_message(callback.message)
         return
 
     summary = format_message(
@@ -863,7 +870,7 @@ async def svc_addon_pay(
                 await safe_edit_text(
                     callback.message,
                     f"❌ {user_safe_error(e)}",
-                    reply_markup=None,
+                    reply_markup=service_back_markup(svc.id),
                 )
             return
         if callback.message:
@@ -873,8 +880,9 @@ async def svc_addon_pay(
                     "✅ افزونه رایگان",
                     f"سفارش #{order.id}\n{kind_label(pack.kind)}: +{amount_label(pack)}",
                 ),
-                reply_markup=None,
+                reply_markup=service_back_markup(svc.id),
             )
+            keep_message(callback.message)
         return
 
     summary = format_message(
@@ -1009,7 +1017,11 @@ async def svc_delete(
             await state.update_data(**{nav.SERVICE_ID: None})
     if callback.message:
         done = format_message("✅ حذف شد", f"سرویس #{svc_id} حذف شد.")
-        await safe_edit_text(callback.message, done, reply_markup=None)
+        await safe_edit_text(
+            callback.message,
+            done,
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[kb.back_button(None, "svc:list")]]),
+        )
         _ = (is_reseller_bot, reseller_owner_id)
 
 
@@ -1024,14 +1036,14 @@ def _register_services_cancel_codes() -> None:
         data = await state.get_data()
         service_id = int(data.get("cancellation_service_id") or 0)
         if not service_id:
-            await present_inline_only(message, text="این سرویس پیدا نشد.", inline=None)
+            await present_inline_only(message, text="این سرویس پیدا نشد.", inline=InlineKeyboardMarkup(inline_keyboard=[[kb.back_button(None, "svc:list")]]))
             return
         try:
             status = await cancellation_status(
                 session, db_user, service_id, shop_id=current_shop_reseller_id()
             )
         except ValueError as exc:
-            await present_inline_only(message, text=str(exc), inline=None)
+            await present_inline_only(message, text=str(exc), inline=InlineKeyboardMarkup(inline_keyboard=[[kb.back_button(None, "svc:list")]]))
             return
         text = (
             "📝 درخواست لغو سرویس\n"

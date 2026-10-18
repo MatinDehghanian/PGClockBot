@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import html
+import logging
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
@@ -14,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot import keyboards as kb
 from app.bot.reseller_hub_groups import back_callback_for
 from app.bot.tg_utils import safe_edit_text
+from app.services.db_safe import rollback_quiet
 from app.config import get_settings
 from app.db.models import BotUser, LoyaltyReward, LoyaltyTier, PointsRule, Role
 from app.services.formatting import format_message, format_toman, kv_line
@@ -50,6 +52,10 @@ from app.services import bot_feedback_texts as feedback
 from app.services.button_color_editor import PLATFORM_SCOPE
 from app.services.screen_titles import screen_caption, screen_heading, screen_title_html, with_caption
 
+# The club home every club screen backs up to.
+CLUB_HOME = "nv:loy:home"
+logger = logging.getLogger(__name__)
+
 router = Router(name="loyalty")
 
 
@@ -77,6 +83,7 @@ def _ref_actions_keyboard(*, share_url: str | None = None) -> InlineKeyboardMark
     rows.append(
         [InlineKeyboardButton(text="📊 آمار دعوت", callback_data="ref:stats")]
     )
+    rows.append([kb.back_button(None, CLUB_HOME)])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 def _points_extras_keyboard() -> InlineKeyboardMarkup:
@@ -410,6 +417,7 @@ def _wheel_spin_keyboard(*, can_spin: bool) -> InlineKeyboardMarkup:
     rows.append(
         [InlineKeyboardButton(text="🔄 به‌روزرسانی", callback_data="loy:wheel:hub")]
     )
+    rows.append([kb.back_button(None, CLUB_HOME)])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 async def _build_wheel_hub_text(session: AsyncSession, db_user: BotUser) -> tuple[str, bool]:
@@ -469,15 +477,10 @@ async def open_loyalty_wheel_message(
         )
         return
     body, can_spin = await _build_wheel_hub_text(session, db_user)
-    spin_kb = _wheel_spin_keyboard(can_spin=can_spin)
-    rows = list(spin_kb.inline_keyboard)
-    rows.append(
-        [kb.back_button(ui, "nv:loy:home")]
-    )
     await present_inline_only(
         message,
         text=format_message("🎡 چرخ شانس", body),
-        inline=InlineKeyboardMarkup(inline_keyboard=rows),
+        inline=_wheel_spin_keyboard(can_spin=can_spin),
     )
     return
 
@@ -1081,15 +1084,16 @@ async def loyalty_home(callback: CallbackQuery, session: AsyncSession, db_user: 
             await safe_edit_text(
                 callback.message,
                 format_message(screen_title_html(ui, "c.loyalty"), "این بخش فعلاً غیرفعال است."),
-                reply_markup=None,
+                reply_markup=kb.back_home(ui),
             )
         return
     text = await build_loyalty_text(session, db_user)
     if callback.message:
+        extras = _points_extras_keyboard()
         await safe_edit_text(
             callback.message,
             text,
-            reply_markup=_points_extras_keyboard(),
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[*extras.inline_keyboard, [kb.home_button(None)]]),
         )
 
 @router.callback_query(F.data == "loy:rewards")
@@ -1248,7 +1252,7 @@ async def loyalty_wheel_hub(callback: CallbackQuery, session: AsyncSession, db_u
             await safe_edit_text(
                 callback.message,
                 format_message("🎡 چرخ شانس", "چرخ شانس فعلاً غیرفعال است."),
-                reply_markup=None,
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[[kb.back_button(None, CLUB_HOME)]]),
             )
         return
     body, can_spin = await _build_wheel_hub_text(session, db_user)
@@ -1299,7 +1303,17 @@ async def loyalty_wheel_spin(callback: CallbackQuery, session: AsyncSession, db_
             )
         return
     except Exception:
+        # The spin key makes a retry safe: an applied spin is found again, never repeated.
+        logger.warning("wheel spin failed user=%s", db_user.id, exc_info=True)
+        await rollback_quiet(session)
         await callback.answer("خطا در چرخش. دوباره تلاش کنید.", show_alert=True)
+        body, can_spin = await _build_wheel_hub_text(session, db_user)
+        if callback.message:
+            await safe_edit_text(
+                callback.message,
+                format_message("🎡 چرخ شانس", body),
+                reply_markup=_wheel_spin_keyboard(can_spin=can_spin),
+            )
         return
 
     await callback.answer("نتیجه آماده است ✅")

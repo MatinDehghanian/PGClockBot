@@ -396,7 +396,8 @@ async def support_reply(
         message,
         state,
         text="پاسخ ثبت شد.",
-        inline=None,
+        inline=InlineKeyboardMarkup(inline_keyboard=[[kb.back_button(None, "support:list")]]),
+        keep_input=True,
     )
 
 

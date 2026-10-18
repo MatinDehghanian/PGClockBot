@@ -15,6 +15,7 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 
+from app.bot.chat_cleanup import note_throwaway, sweep_above
 from app.bot.edit_mode import editable_screen
 from app.bot.keyboards import _ikb, _t
 from app.bot.list_pages import Page, page_of, pager_row
@@ -86,13 +87,24 @@ async def present_inline_only(
     """
     if is_bot_panel_message(message):
         if await safe_edit_inline(message, text, reply_markup=inline, **send_kw):
+            await sweep_above(message)
             return message
         # Edit failed (deleted/too old) — fall through to one new panel.
     try:
-        return await message.answer(text, reply_markup=inline, **send_kw)
+        sent = await message.answer(text, reply_markup=inline, **send_kw)
     except Exception:
         logger.warning("present_inline_only failed", exc_info=True)
         return None
+    await _show_as_the_panel(sent, inline)
+    return sent
+
+
+async def _show_as_the_panel(sent: Message | None, markup: Any) -> None:
+    """A freshly sent panel is throwaway itself and clears the throwaway messages above it."""
+    if sent is None:
+        return
+    note_throwaway(sent, reply_markup=markup)
+    await sweep_above(sent)
 
 
 async def safe_edit_inline(
@@ -190,6 +202,7 @@ async def present_nav_panel(
     if prefer_edit and is_bot_panel_message(message):
         if await safe_edit_inline(message, text, reply_markup=inline, **send_kw):
             await remember_nav_panel(state, message)
+            await sweep_above(message)
             return message
     if prefer_edit and state is not None and message.bot is not None:
         data = await state.get_data()
@@ -211,9 +224,11 @@ async def present_nav_panel(
                     reply_markup=inline,
                     **send_kw,
                 )
+                await sweep_above(message, panel_id=int(msg_id))
                 return None
             except TelegramBadRequest as e:
                 if "message is not modified" in str(e).lower():
+                    await sweep_above(message, panel_id=int(msg_id))
                     return None
             except Exception:
                 logger.info("present_nav_panel tracked edit failed", exc_info=True)
@@ -227,6 +242,7 @@ async def present_nav_panel(
         logger.warning("present_nav_panel answer failed", exc_info=True)
         sent = None
     await remember_nav_panel(state, sent)
+    await _show_as_the_panel(sent, inline)
     return sent
 
 

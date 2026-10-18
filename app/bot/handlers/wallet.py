@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
+from app.bot.chat_cleanup import keep_message
 from app.bot.tg_utils import safe_edit_text
 from app.config import get_settings
 from app.db.models import BotUser, Order, Payment, PaymentMethod, PaymentStatus
@@ -680,6 +681,8 @@ async def wtop_choose_method(
             **send_kw,
         )
         await remember_prompt(state, callback.message, cancel_code="w_rcpt")
+        # The card number or address must stay while the person pays elsewhere.
+        keep_message(callback.message)
 
 @router.message(WalletStates.choose_method)
 async def wallet_choose_method_cancel(

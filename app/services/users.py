@@ -1113,6 +1113,7 @@ DEFAULT_SETTINGS = {
     "funnel_tracking_enabled": "1",
     "one_tap_renew_enabled": "1",
     "service_import_enabled": "0",
+    "chat_cleanup_enabled": "1",
     "service_import_mode": "instant",
     "service_import_max_per_user": "5",
     "service_import_paths": "",

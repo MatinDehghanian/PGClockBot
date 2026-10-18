@@ -39,6 +39,9 @@ from app.services import bot_feedback_texts as feedback
 _USERS_BACK = InlineKeyboardMarkup(
     inline_keyboard=[[kb.back_button(None, "adm:pg:users")]]
 )
+# The PasarGuard hub the users list is opened from.
+PG_HUB_CALLBACK = "nv:adm:pg"
+_PG_HUB_BACK = InlineKeyboardMarkup(inline_keyboard=[[kb.back_button(None, PG_HUB_CALLBACK)]])
 
 router = Router(name="admin_pg_users")
 
@@ -236,7 +239,7 @@ async def _render_users_list(
         )
     except Exception as e:
         text = format_message("❌ خطا", _err_msg(e))
-        markup = None  # navigation is on reply keyboard (pg_reply_keyboard)
+        markup = _PG_HUB_BACK
         if edit:
             await safe_edit_text(target, text, reply_markup=markup)
         else:
@@ -276,7 +279,7 @@ async def _render_users_list(
         rows.append(
             [InlineKeyboardButton(text="🧹 پاک کردن جستجو", callback_data="adm:pg:users:clear")]
         )
-    # Hub actions (search/create/back) live on the reply keyboard — not inline
+    rows.append([kb.back_button(None, PG_HUB_CALLBACK)])
 
     title = "👥 کاربران پاسارگارد"
     bits = [f"صفحه {page_label}"]

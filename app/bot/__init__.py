@@ -8,7 +8,9 @@ from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import TelegramObject
 
+from app.bot.chat_cleanup import ChatCleanupMiddleware, install_notice_watch
 from app.bot.edit_mode import EditModeMiddleware
+from app.bot.menu_keyboard_reopen import MenuKeyboardReopenMiddleware, install_menu_keyboard_watch
 from app.bot.reply_keyboard_state import ReplyKeyboardStateMiddleware
 from app.bot.screen_replay import install_replay_guard, set_dispatcher
 from app.bot.middlewares import (
@@ -87,9 +89,8 @@ class _RequireBotOwnerPrincipal(BaseMiddleware):
 
 def create_bot(token: str | None = None) -> Bot:
     settings = get_settings()
-    return install_replay_guard(
-        Bot(token=(token or settings.bot_token).strip(), default=DefaultBotProperties(parse_mode=ParseMode.HTML))
-    )
+    bot = Bot(token=(token or settings.bot_token).strip(), default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+    return install_notice_watch(install_menu_keyboard_watch(install_replay_guard(bot)))
 
 
 def bot_routers() -> list[Router]:
@@ -193,8 +194,10 @@ def create_dispatcher() -> Dispatcher:
     dp.update.middleware(ForceJoinMiddleware())
     dp.update.middleware(TermsEntryMiddleware())
     dp.update.middleware(EditModeMiddleware())
+    dp.update.middleware(ChatCleanupMiddleware())
     # Notes typed text so the next main menu unfolds the reply keyboard again.
     dp.message.outer_middleware(ReplyKeyboardStateMiddleware())
+    dp.message.outer_middleware(MenuKeyboardReopenMiddleware())
 
     for router in bot_routers():
         dp.include_router(router)

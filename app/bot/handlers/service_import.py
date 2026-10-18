@@ -9,7 +9,7 @@ from __future__ import annotations
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
@@ -39,6 +39,7 @@ from app.services import bot_feedback_texts as feedback
 router = Router(name="service_import")
 
 CANCEL_CODE = "svc_imp"
+_SERVICES_BACK = InlineKeyboardMarkup(inline_keyboard=[[kb.back_button(None, "svc:list")]])
 PROMPT = format_message(
     "🔗 اتصال اشتراک قبلی",
     "لینک اشتراک سرویس را بفرستید.\n"
@@ -118,13 +119,15 @@ async def svc_import_link(
         text = format_message("⚠️ افزودن سرویس", str(exc))
         if str(exc) == RATE_LIMITED:
             await state.set_state(None)
-            await finish_text_step(message, state, text=text)
+            await finish_text_step(message, state, text=text, inline=_SERVICES_BACK)
             return
         await message.answer(text, reply_markup=cancel_keyboard(CANCEL_CODE))
         return
     await state.set_state(None)
     if result.outcome == ImportOutcome.PENDING_APPROVAL:
-        await finish_text_step(message, state, text=format_message("⏳ در انتظار تأیید", PENDING_NOTICE))
+        await finish_text_step(
+            message, state, text=format_message("⏳ در انتظار تأیید", PENDING_NOTICE), inline=_SERVICES_BACK
+        )
         await announce_new_request(message, session, db_user, result)
         return
     from app.bot.nav_inline import service_card_keyboard
