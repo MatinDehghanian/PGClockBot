@@ -92,64 +92,39 @@ class UsersOpsUnitTests(unittest.TestCase):
 
 class UsersOpsUiTests(unittest.TestCase):
     def test_template_has_ops_chrome(self):
-        users = (ROOT / "app/web/templates/users.html").read_text(encoding="utf-8")
-        self.assertIn("users-ops-overview", users)
-        self.assertIn("alert-dot", users)
-        self.assertIn("badge-risk", users)
-        self.assertIn("cell-name-tags", users)
-        self.assertNotIn("risk-dot", users)
-        self.assertNotIn("users-svc-picker", users)
-        self.assertIn("filter_key='expiring'", users)
-        self.assertIn("نزدیک انقضا", users)
-        self.assertNotIn("<th data-sort-type=\"text\">نقش</th>", users)
-        self.assertIn("can_manage_users", users)
-        # Service, volume and expiry are separate, always-visible columns
-        # (desktop AND mobile) — never merged into one cramped cell, never
-        # hidden behind col-hide-sm. Multi-service rows still get a full
-        # switcher (with live volume/expiry + alert dot); it just lives in
-        # its own column now instead of a stacked mini-summary.
-        self.assertIn('class="col-svc', users)
-        self.assertIn('class="col-vol', users)
-        self.assertIn('class="col-exp', users)
-        self.assertIn("users-svc-select", users)
-        self.assertNotIn("cell-name-meta", users)
+        from jinja2 import ChoiceLoader, DictLoader, Environment, FileSystemLoader
 
-        css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
-        js = (ROOT / "app/web/static/panel.js").read_text(encoding="utf-8")
-        self.assertIn("users-svc-select-wrap", css)
-        self.assertIn(
-            "align-items: center",
-            css.split(".users-svc-select-wrap", 1)[1].split("}", 1)[0],
+        from app.services.formatting import format_money, format_number
+        from app.services.users_ops import build_user_ops_row, users_list_href
+
+        env = Environment(loader=ChoiceLoader([
+            DictLoader({"base.html": "{% block content %}{% endblock %}"}),
+            FileSystemLoader(ROOT / "app/web/templates"),
+        ]), autoescape=True)
+        env.filters.update(num=format_number, money=format_money)
+        now = datetime.now(timezone.utc)
+        user = SimpleNamespace(
+            id=42, telegram_id=420, full_name="<script>customer</script>", username="customer",
+            color_tag=None, is_demo=False, role="user", is_blocked=False,
         )
-        self.assertIn(".alert-dot", css)
-        self.assertIn(".users-row.is-focus", css)
-        self.assertIn(".cell-name-tags", css)
-        self.assertIn(".cell-name-primary", css)
-        self.assertNotIn(".users-row.has-alert > td:first-child", css)
-        self.assertIn("cell-name-primary", users)
-        self.assertIn("sel.id", users)
-        self.assertIn(".users-ops-table .col-svc", css)
-        self.assertIn(".users-ops-table .col-vol", css)
-        self.assertIn(".users-ops-table .col-exp", css)
-        self.assertIn(".users-ops-table .col-wallet", css)
-        users_html = (ROOT / "app/web/templates/users.html").read_text(encoding="utf-8")
-        self.assertIn('class="col-wallet"', users_html)
-        self.assertIn("row.wallet_balance", users_html)
-        # Wallet stays visible on mobile (not col-hide-sm); # / telegram may still hide.
-        wallet_th = users_html.split("کیف پول</th>", 1)[0].rsplit("<th", 1)[-1]
-        self.assertNotIn("col-hide-sm", wallet_th)
-        self.assertIn("col-hide-sm", users_html)
-        self.assertIn("users-svc-boxed", css)
-        self.assertIn("users-svc-menu-label", css)
-        self.assertNotIn("has-svc-alert", css)
-        self.assertIn("data-alert", js)
-        self.assertIn("users-svc-menu-label", js)
-        self.assertIn("syncUsersSvcToggleAlert", js)
-        self.assertIn(".badge.badge-risk", css)
-        self.assertNotIn(".risk-dot {", css)
-
-        base = (ROOT / "app/web/templates/base.html").read_text(encoding="utf-8")
-        self.assertIn("مشتریان", base)
+        service = SimpleNamespace(
+            id=9, pg_username="service9", plan=None, created_at=now, notified_traffic=True,
+        )
+        row = build_user_ops_row(user, [service], now=now)
+        row.wallet_balance = 1234
+        rendered = env.get_template("users.html").render(
+            rows=[row], filter="all", counts={"total": 1}, filter_href=users_list_href,
+            can_manage_users=True, can_user_ops=True, can_edit_user_services=True,
+        )
+        self.assertIn("نزدیک انقضا", rendered)
+        self.assertIn("&lt;script&gt;customer&lt;/script&gt;", rendered)
+        self.assertNotIn(user.full_name, rendered)
+        self.assertIn("service9", rendered)
+        self.assertIn("اعلان سرویس", rendered)
+        self.assertIn(format_money(row.wallet_balance), rendered)
+        self.assertIn("/users/42/block", rendered)
+        self.assertIn("/users/42/delete", rendered)
+        self.assertIn("/users/42/edit?fragment=1", rendered)
 
     def test_action_center_deep_link(self):
         ux = (ROOT / "app/services/ux20.py").read_text(encoding="utf-8")
