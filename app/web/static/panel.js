@@ -3286,19 +3286,35 @@
         html += '</select></div></div>';
         return html;
       }
+      // Same cap as MAX_LINKS_PER_GUIDE on the server.
       const GUIDE_LINK_SLOTS = 3;
+      function linkRowHtml(link) {
+        const item = link || {};
+        return (
+          '<div class="guides-link-row" data-guides-link>' +
+            '<label>متن دکمه<input type="text" class="guides-link-label" maxlength="48" value="' + esc(item.label) + '" placeholder="▶️ دیدن ویدیو" autocomplete="off" /></label>' +
+            '<label>لینک<input type="url" class="guides-link-url" dir="ltr" maxlength="512" value="' + esc(item.url) + '" placeholder="https://youtu.be/…" autocomplete="off" /></label>' +
+            '<button type="button" class="icon-btn icon-remove guides-link-remove" aria-label="حذف این لینک" title="حذف این لینک">' +
+              '<svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg>' +
+            '</button>' +
+          '</div>'
+        );
+      }
+      function linkAddHtml(count) {
+        return '<button type="button" class="pay-dest-add-row guides-link-add" data-guides-link-add' +
+          (count >= GUIDE_LINK_SLOTS ? ' hidden' : '') +
+          '><span aria-hidden="true">+</span><span>افزودن لینک</span></button>';
+      }
       function linksHtml(links) {
-        const list = Array.isArray(links) ? links : [];
-        let html = '<fieldset class="full guides-links"><legend>لینک ویدیو (یوتیوب یا تلگرام، اختیاری)</legend>';
-        for (let i = 0; i < GUIDE_LINK_SLOTS; i++) {
-          const link = list[i] || {};
-          html +=
-            '<div class="guides-link-row">' +
-              '<label>متن دکمه<input type="text" class="guides-link-label" maxlength="48" value="' + esc(link.label) + '" placeholder="▶️ دیدن ویدیو" autocomplete="off" /></label>' +
-              '<label>لینک<input type="url" class="guides-link-url" dir="ltr" maxlength="512" value="' + esc(link.url) + '" placeholder="https://youtu.be/…" autocomplete="off" /></label>' +
-            '</div>';
-        }
-        return html + '</fieldset>';
+        // Saved links, or one empty row; more rows come from «افزودن لینک».
+        const saved = (Array.isArray(links) ? links : []).filter((l) => l && l.url).slice(0, GUIDE_LINK_SLOTS);
+        const rows = saved.length ? saved : [{}];
+        return '<fieldset class="full guides-links"><legend>لینک ویدیو (یوتیوب یا تلگرام، اختیاری)</legend>' +
+          rows.map(linkRowHtml).join('') + linkAddHtml(rows.length) + '</fieldset>';
+      }
+      function refreshLinkAdd(fieldset) {
+        const add = fieldset.querySelector('[data-guides-link-add]');
+        if (add) add.hidden = fieldset.querySelectorAll('[data-guides-link]').length >= GUIDE_LINK_SLOTS;
       }
       function rowHtml(item) {
         const id = (item && item.id) || uid();
@@ -3404,6 +3420,33 @@
             else if (list) list.insertAdjacentHTML('afterbegin', html);
             sync(root);
             root.dispatchEvent(new CustomEvent('guides-rendered'));
+            return;
+          }
+          const linkAdd = e.target.closest('[data-guides-link-add]');
+          if (linkAdd) {
+            e.preventDefault();
+            const fieldset = linkAdd.closest('.guides-links');
+            if (fieldset.querySelectorAll('[data-guides-link]').length < GUIDE_LINK_SLOTS) {
+              linkAdd.insertAdjacentHTML('beforebegin', linkRowHtml({}));
+              const input = linkAdd.previousElementSibling.querySelector('.guides-link-label');
+              if (input) input.focus();
+            }
+            refreshLinkAdd(fieldset);
+            return;
+          }
+          const linkRemove = e.target.closest('.guides-link-remove');
+          if (linkRemove) {
+            e.preventDefault();
+            const fieldset = linkRemove.closest('.guides-links');
+            const row = linkRemove.closest('[data-guides-link]');
+            if (fieldset.querySelectorAll('[data-guides-link]').length > 1) {
+              row.remove();
+            } else {
+              // The last row stays as the empty default.
+              row.querySelectorAll('input').forEach((input) => { input.value = ''; });
+            }
+            refreshLinkAdd(fieldset);
+            sync(root);
             return;
           }
           if (e.target.closest('.guides-remove')) {
