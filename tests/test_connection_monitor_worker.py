@@ -21,7 +21,8 @@ from app.db.models import ConnectionMonitorSnapshot, ConnectionMonitorState, Con
 from app.services.connection_monitor_config import MonitorBinding
 from app.services.connection_monitor_subscription import plan_monitor_configs, subscription_entries
 from app.services.connection_monitor_panel import MonitorAccount, MonitorCatalog
-from app.services.connection_monitor_types import MonitorEndpoint, MonitorConfigPlan
+from app.services.connection_monitor_accounts import MonitorAccountError
+from app.services.connection_monitor_types import MonitorConfigError, MonitorEndpoint, MonitorConfigPlan, MonitorIssue
 from app.services.connection_monitor_worker import run_monitor_cycle
 from app.services.connection_status_types import ObservationKind, ProbeObservation
 from app.services.xray_probe_resources import XrayBinary, XrayProbeError
@@ -216,6 +217,36 @@ class MonitorWorkerTests(MonitorDatabaseCase):
         async with self.Session() as session:
             rows = (await session.scalars(select(ConnectionMonitorSnapshot))).all()
             self.assertTrue(all(row.status == "unknown" and row.failure_streak == 0 and row.delay_ms is None for row in rows))
+
+    async def test_inactive_account_error_is_not_ready_not_catalog_outage(self) -> None:
+        await run_monitor_cycle(self.Session, self.binary)
+        with patch("app.services.connection_monitor_worker.read_monitor_catalog",
+                   AsyncMock(side_effect=MonitorAccountError("inactive"))):
+            result = await run_monitor_cycle(self.Session, self.binary)
+        self.assertEqual(result.reason, "account_unavailable")
+        async with self.Session() as session:
+            rows = (await session.scalars(select(ConnectionMonitorSnapshot))).all()
+            self.assertTrue(all(row.status == "not_ready" and row.reason == "account_unavailable" for row in rows))
+
+    async def test_panel_timeout_account_error_stays_catalog_unavailable(self) -> None:
+        await run_monitor_cycle(self.Session, self.binary)
+        with patch("app.services.connection_monitor_worker.read_monitor_catalog",
+                   AsyncMock(side_effect=MonitorAccountError("panel_timeout"))):
+            result = await run_monitor_cycle(self.Session, self.binary)
+        self.assertEqual(result.reason, "catalog_unavailable")
+        async with self.Session() as session:
+            rows = (await session.scalars(select(ConnectionMonitorSnapshot))).all()
+            self.assertTrue(all(row.status == "unknown" and row.reason == "catalog_unavailable" for row in rows))
+
+    async def test_monitor_config_error_stores_issue_code_as_reason(self) -> None:
+        await run_monitor_cycle(self.Session, self.binary)
+        with patch("app.services.connection_monitor_worker.plan_monitor_configs",
+                   side_effect=MonitorConfigError(MonitorIssue.UNSUPPORTED)):
+            result = await run_monitor_cycle(self.Session, self.binary)
+        self.assertEqual(result.reason, "unsupported_route")
+        async with self.Session() as session:
+            rows = (await session.scalars(select(ConnectionMonitorSnapshot))).all()
+            self.assertTrue(all(row.status == "not_ready" and row.reason == "unsupported_route" for row in rows))
 
     async def test_catalog_planning_leaves_the_event_loop_responsive(self) -> None:
         entered, released = threading.Event(), threading.Event()

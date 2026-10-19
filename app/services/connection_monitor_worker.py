@@ -11,6 +11,7 @@ import httpx
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.services.connection_monitor_accounts import MonitorAccountError
 from app.services.connection_monitor_subscription import plan_monitor_configs
 from app.services.connection_monitor_config import MonitorBinding
 from app.services.connection_monitor_claims import (
@@ -24,7 +25,7 @@ from app.services.connection_monitor_claims import (
 from app.services.connection_monitor_panel import read_monitor_catalog
 from app.services.connection_monitor_snapshots import complete_monitor_target, invalidate_monitor_evidence
 from app.services.connection_monitor_sync import load_cycle_inputs, reconcile_monitor_plans
-from app.services.connection_monitor_types import MonitorConfigPlan
+from app.services.connection_monitor_types import MonitorConfigError, MonitorConfigPlan
 from app.services.connection_probe import probe_client, probe_control, probe_proxy
 from app.services.connection_status_types import ConnectionStatus, ObservationKind, ProbeObservation
 from app.services.pasarguard import PasarGuardError
@@ -37,6 +38,7 @@ logger = logging.getLogger(__name__)
 WORK_SECONDS = 45
 PROXY_CONCURRENCY = 4
 LEASE_CLEANUP_SECONDS = 1
+PANEL_ACCOUNT_CODES = frozenset({"panel_timeout", "panel_unavailable", "panel_denied"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -123,7 +125,8 @@ async def _run_work(sessions: async_sessionmaker[AsyncSession], cycle: MonitorCy
     try:
         catalog = await read_monitor_catalog(account)
     except TimeoutError:
-        raise ValueError("Monitoring catalog deadline") from None
+        # Align mocked/direct timeouts with panel_account_error codes.
+        raise MonitorAccountError("panel_timeout") from None
     plans = await asyncio.to_thread(
         plan_monitor_configs, native_configs=catalog.native_configs,
         selected_keys=selected, account_revision=account.revision,
@@ -149,9 +152,24 @@ async def run_monitor_cycle(sessions: async_sessionmaker[AsyncSession], binary: 
     except XrayProbeError:
         await _record_issue(sessions, cycle, status=ConnectionStatus.NOT_READY, reason="core_unavailable")
         return MonitorCycleResult(True, reason="core_unavailable")
-    except (PasarGuardError, httpx.HTTPError, ValueError):
+    except MonitorAccountError as exc:
+        if exc.code in PANEL_ACCOUNT_CODES:
+            status, reason = ConnectionStatus.UNKNOWN, "catalog_unavailable"
+        else:
+            status, reason = ConnectionStatus.NOT_READY, "account_unavailable"
+        await _record_issue(sessions, cycle, status=status, reason=reason)
+        return MonitorCycleResult(True, reason=reason)
+    except MonitorConfigError as exc:
+        reason = exc.issue.value
+        await _record_issue(sessions, cycle, status=ConnectionStatus.NOT_READY, reason=reason)
+        return MonitorCycleResult(True, reason=reason)
+    except (PasarGuardError, httpx.HTTPError):
         await _record_issue(sessions, cycle, status=ConnectionStatus.UNKNOWN, reason="catalog_unavailable")
         return MonitorCycleResult(True, reason="catalog_unavailable")
+    except ValueError as exc:
+        logger.warning("Monitoring cycle failed error_type=%s", type(exc).__name__)
+        await _record_issue(sessions, cycle, status=ConnectionStatus.UNKNOWN, reason="probe_unavailable")
+        return MonitorCycleResult(True, reason="probe_unavailable")
     except TimeoutError:
         # Missing a turn never becomes a synthetic route failure.
         return MonitorCycleResult(True, reason="cycle_deadline")

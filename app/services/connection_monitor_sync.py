@@ -12,7 +12,7 @@ from app.db.models import ConnectionMonitorSnapshot, ConnectionMonitorState, Con
 from app.services.connection_monitor_claims import MonitorCycleClaim, current_monitor_cycle
 from app.services.connection_monitor_panel import MonitorAccount
 from app.services.connection_monitor_settings import ACCOUNT_UNAVAILABLE, LOCAL_PROBE_ID
-from app.services.connection_monitor_types import MAX_MONITOR_ENDPOINTS, MonitorConfigPlan, MonitorIssue
+from app.services.connection_monitor_types import MAX_MONITOR_ENDPOINTS, MonitorConfigError, MonitorConfigPlan, MonitorIssue
 
 
 async def load_cycle_inputs(session: AsyncSession, cycle: MonitorCycleClaim, *, now: datetime) -> tuple[MonitorAccount, tuple[str, ...]]:
@@ -81,7 +81,7 @@ async def reconcile_monitor_plans(session: AsyncSession, cycle: MonitorCycleClai
         ConnectionMonitorTarget.reseller_id.is_(None), ConnectionMonitorTarget.test_enabled.is_(True),
     ).order_by(ConnectionMonitorTarget.id).limit(MAX_MONITOR_ENDPOINTS + 1))).all()
     if len(targets) > MAX_MONITOR_ENDPOINTS:
-        raise ValueError("Monitoring capacity exceeded")
+        raise MonitorConfigError(MonitorIssue.CAPACITY)
     by_config = {plan.config_key: plan for plan in plans}
     changed_ids, snapshots = [], []
     for target in targets:
