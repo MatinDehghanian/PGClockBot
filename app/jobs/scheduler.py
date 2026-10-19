@@ -330,7 +330,9 @@ async def run_scheduled_backup() -> None:
             from datetime import datetime, timezone
             from pathlib import Path
 
-            from app.services.backup import create_backup, validate_backup_archive
+            from app.services.backup import create_backup, prune_backups, validate_backup_archive
+            from app.services.backup_settings import KEEP_KEY, keep_count
+            from app.services.backup_telegram import send_backup
             from app.services.users import get_setting, on, set_setting
 
             if not on(await get_setting(session, "backup_schedule_enabled", "1")):
@@ -360,6 +362,14 @@ async def run_scheduled_backup() -> None:
                 logger.warning("scheduled backup verify failed: %s", err)
             await set_setting(session, "backup_last_ok_at", now.isoformat())
             await session.commit()
+            await asyncio.to_thread(prune_backups, keep_count(await get_setting(session, KEEP_KEY, "10")))
+            try:
+                await send_backup(
+                    session, path, include_env=include_env,
+                    caption=f"💾 بکاپ خودکار PGClockBot — {now.strftime('%Y-%m-%d %H:%M')} UTC",
+                )
+            except Exception:  # noqa: BLE001 - a failed delivery must not undo a good backup
+                logger.exception("scheduled backup telegram delivery failed")
             logger.info("scheduled backup ok id=%s", meta.get("id"))
         except Exception:
             logger.exception("scheduled backup failed")
