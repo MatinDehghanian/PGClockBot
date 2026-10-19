@@ -176,12 +176,57 @@ class BrowserTests(AppPagesCase):
                 """() => { const panel = document.querySelector('#m1 .ui-modal-panel').getBoundingClientRect();
                   const scroll = document.querySelector('#m1 .ui-modal-scroll');
                   const gutter = scroll.offsetWidth - scroll.clientWidth;
-                  const head = document.querySelector('#m1 .ui-modal-head').getBoundingClientRect();
+                  /* Sticky head sits outside the scrollport; measure to the title
+                     text (not the head box edge) so top air matches side padding. */
+                  const title = document.querySelector('#m1 .ui-modal-head h2').getBoundingClientRect();
                   const last = document.getElementById('last').getBoundingClientRect();
                   const field = document.getElementById('field').getBoundingClientRect();
-                  return {top: head.top - panel.top, bottom: panel.bottom - last.bottom, side: field.left - panel.left - gutter / 2}; }"""
+                  return {top: title.top - panel.top, bottom: panel.bottom - last.bottom, side: field.left - panel.left - gutter / 2}; }"""
             )
             self.assertAlmostEqual(gaps["top"], gaps["side"], delta=1.5, msg=gaps)
             self.assertAlmostEqual(gaps["bottom"], gaps["side"], delta=1.5, msg=gaps)
 
         self._with_browser({"/modal": _modal_page()}, check)
+
+    def test_modal_title_stays_fixed_while_body_scrolls(self):
+        """Sticky header: .ui-modal-head is outside .ui-modal-scroll for every panel."""
+
+        def check(browser, base):
+            page = browser.new_page(viewport=MOBILE)
+            page.goto(base + "/modal")
+            page.click("#open")
+            page.wait_for_selector("#m1.open")
+            page.wait_for_timeout(400)
+            layout = page.evaluate(
+                """() => {
+                  const panel = document.querySelector('#m1 .ui-modal-panel');
+                  const head = panel.querySelector(':scope > .ui-modal-head');
+                  const scroll = panel.querySelector(':scope > .ui-modal-scroll');
+                  const form = document.querySelector('#m1 form');
+                  if (!head || !scroll || !form) return {ok: false};
+                  const headInsideScroll = scroll.contains(head);
+                  const formInsideScroll = scroll.contains(form);
+                  const before = head.getBoundingClientRect().top;
+                  scroll.scrollTop = Math.min(120, scroll.scrollHeight);
+                  const after = head.getBoundingClientRect().top;
+                  const pb = parseFloat(getComputedStyle(head).paddingBottom) || 0;
+                  return {
+                    ok: true,
+                    headInsideScroll,
+                    formInsideScroll,
+                    headFixed: Math.abs(before - after) < 1,
+                    paddingBottom: pb,
+                  };
+                }"""
+            )
+            self.assertTrue(layout["ok"], msg=layout)
+            self.assertFalse(layout["headInsideScroll"], msg=layout)
+            self.assertTrue(layout["formInsideScroll"], msg=layout)
+            self.assertTrue(layout["headFixed"], msg=layout)
+            self.assertGreaterEqual(layout["paddingBottom"], 15, msg=layout)
+
+        tall = _modal_page().replace(
+            '<form class="form-stack">',
+            '<form class="form-stack">' + "".join(f'<p class="muted">خط {i}</p>' for i in range(40)),
+        )
+        self._with_browser({"/modal": tall}, check)

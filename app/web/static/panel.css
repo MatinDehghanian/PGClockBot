@@ -6075,14 +6075,17 @@ form.settings-form > .actions.sticky-actions,
   background: var(--bg-card);
   isolation: isolate;
 }
-/* User-edit only: title/close stay outside the scrollport (see panel.js).
-   Other modals keep the pre-#586 wrap-all shell so their layout width is unchanged. */
-#modal-user-edit .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-head {
+/* Title/close stay outside the scrollport (see panel.js ensureModalScrollShell).
+   Same inline inset as .ui-modal-scroll so the title lines up with the body. */
+.ui-modal-panel[data-scroll-shell="1"] > .ui-modal-head {
   flex: 0 0 auto;
   margin: 0;
   padding: calc(var(--space-3) + var(--modal-scrollbar-room, 8px));
-  padding-bottom: 0;
+  /* Extra air under the sticky chrome before scroll content begins */
+  padding-bottom: var(--space-2);
   box-sizing: border-box;
+  background: var(--bg-card);
+  z-index: 1;
 }
 .ui-modal-scroll {
   flex: 1 1 auto;
@@ -6140,8 +6143,8 @@ form.settings-form > .actions.sticky-actions,
   padding: calc(var(--space-3) + var(--modal-scrollbar-room, 8px));
   box-sizing: border-box;
 }
-/* User-edit scroll uses the shared shell padding (+ --modal-scrollbar-room).
-   Extra 14px inset was removed so content width matches other modals while
+/* Modal scroll uses shared shell padding (+ --modal-scrollbar-room).
+   Extra 14px inset was removed so content width stays consistent while
    scrollbar-gutter + room keep the thumb off the body. Head stays outside
    the scrollport (above) with the same inline inset for title alignment. */
 .ui-modal-panel-lg { width: min(720px, 100%); }
