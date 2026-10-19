@@ -107,6 +107,7 @@ from app.api.funnel_pages import register_funnel_pages
 from app.api.gift_code_pages import legacy_gift_modal_redirect, register_gift_code_pages
 from app.api.bot_overview_pages import register_bot_overview_pages
 from app.api.dashboard_trend_pages import register_dashboard_trend_pages
+from app.services.backup_settings import apply_backup_retention, normalize_backup_payload
 from app.api.home_pages import register_home_pages
 from app.api.pg_pages import register_pg_pages
 from app.api.service_import_pages import register_service_import_pages
@@ -5016,6 +5017,9 @@ def create_api_app(lifespan=None) -> FastAPI:
                 if content:
                     dest.write_bytes(content)
                     payload[key] = f"uploads/{dest_name}"
+        backup_error = normalize_backup_payload(payload) if tab == "backup" else None
+        if backup_error:
+            return RedirectResponse("/settings?tab=backup&err=" + quote(backup_error), status_code=303)
         if tab == SCREEN_TEXT_TAB:
             try:
                 validate_screen_text_settings(payload)
@@ -5031,6 +5035,12 @@ def create_api_app(lifespan=None) -> FastAPI:
             await set_settings_bulk(session, payload)
             if "connection_guides" in payload:
                 await prune_guide_media(session, reseller_id=None)
+            removed = await apply_backup_retention(payload) if tab == "backup" else 0
+            if removed:
+                return RedirectResponse(
+                    "/settings?tab=backup&saved=1&msg=" + quote(f"{removed} بکاپ قدیمی‌تر از سرور پاک شد."),
+                    status_code=303,
+                )
         elif known:
             # Empty payload with expected keys usually means the request body was
             # lost (e.g. CSRF middleware consumed the stream). Do not flash success.

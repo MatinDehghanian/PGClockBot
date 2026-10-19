@@ -529,7 +529,7 @@ class Ux20VersionTests(unittest.TestCase):
 
     def test_export_skips_secrets(self):
         ux = Path("app/services/ux20.py").read_text(encoding="utf-8")
-        self.assertIn('skip = {"bot_token", "webhook_secret"}', ux)
+        self.assertIn('skip = {"bot_token", "webhook_secret", "backup_telegram_bot_token"}', ux)
         inbox = Path("app/services/panel_inbox.py").read_text(encoding="utf-8")
         self.assertIn("never includes bot tokens", inbox)
 

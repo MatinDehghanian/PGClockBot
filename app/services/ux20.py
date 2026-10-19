@@ -959,7 +959,7 @@ async def export_shop_bundle(
 
     values = await get_all_settings(session, reseller_id=reseller_id)
     # Keep operator-facing keys; drop secrets-ish if any sneak in
-    skip = {"bot_token", "webhook_secret"}
+    skip = {"bot_token", "webhook_secret", "backup_telegram_bot_token"}
     settings = {k: v for k, v in values.items() if k not in skip}
     pq = select(Plan).order_by(Plan.sort_order.asc(), Plan.id.asc())
     if reseller_id is None:
