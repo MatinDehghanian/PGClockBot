@@ -1606,6 +1606,16 @@
       ],
       [
         {
+          "callback_data": "adm:resellers:wcredit:6",
+          "text": "➕ افزایش کیف"
+        },
+        {
+          "callback_data": "adm:resellers:wdebit:6",
+          "text": "➖ کاهش کیف"
+        }
+      ],
+      [
+        {
           "callback_data": "adm:resellers:tag:6",
           "text": "🏷 تگ: 🟢 مطمئن"
         },

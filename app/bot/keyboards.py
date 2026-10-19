@@ -2053,6 +2053,9 @@ def admin_reseller_actions(
                 callback_data=f"adm:resellers:capadj:{user_id}",
             )
         ],
+        # One button per row: pack_detail_rows pairs them two by two.
+        [InlineKeyboardButton(text="➕ افزایش کیف", callback_data=f"adm:resellers:wcredit:{user_id}")],
+        [InlineKeyboardButton(text="➖ کاهش کیف", callback_data=f"adm:resellers:wdebit:{user_id}")],
         [
             InlineKeyboardButton(
                 text=f"🏷 تگ: {tag_label}"[:64],
