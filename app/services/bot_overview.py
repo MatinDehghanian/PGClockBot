@@ -155,7 +155,7 @@ async def bot_status(token: str | None) -> dict[str, Any]:
         return hit[1]
     try:
         probe = await asyncio.wait_for(check_bot_connection(token), timeout=BOT_STATUS_TIMEOUT_SECONDS)
-    except TimeoutError:
+    except asyncio.TimeoutError:
         return {"state": "neutral", "username": None, "detail": "بررسی نشد"}
     status = {
         "state": "ok" if probe.get("ok") else "err",

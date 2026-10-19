@@ -13,6 +13,7 @@ from typing import Any
 
 import httpx
 
+from app.py_compat import timeout as async_timeout
 from app.services.security_policy import UnsafePgUrlError, assert_safe_pg_base_url
 
 logger = logging.getLogger(__name__)
@@ -137,7 +138,7 @@ async def validate_panel_base(base_url: str, *, protected: bool = True) -> str:
         if state.dns_task is None:
             state.dns_task = asyncio.create_task(asyncio.to_thread(assert_safe_pg_base_url, base_url))
             state.dns_task.add_done_callback(lambda task: _consume_dns_result(task, state))
-        async with asyncio.timeout(remaining):
+        async with async_timeout(remaining):
             await asyncio.shield(state.dns_task)
         # DNS is shared by origin, but each caller keeps its own API base path.
         return assert_safe_pg_base_url(base_url, resolve_dns=False)
@@ -168,7 +169,7 @@ async def panel_read_request(
     state = _panel_state(str(client.base_url))
     remaining, generation = _claim_read(state, budget)
     try:
-        async with asyncio.timeout(remaining):
+        async with async_timeout(remaining):
             response = await client.request(method, url, **kwargs)
     except (TimeoutError, httpx.TransportError) as exc:
         _pause_reads(state, budget, "timeout" if isinstance(exc, (TimeoutError, httpx.TimeoutException)) else "unavailable")

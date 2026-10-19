@@ -1114,8 +1114,8 @@ PY
   esac
 }
 
-# Panel venv targets CPython 3.10–3.12 (wheels). 3.13+ often builds from
-# source and stalls/OOMs on small VPS — prefer python3.12 explicitly.
+# Panel venv targets CPython 3.10–3.12 (wheels); app/py_compat.py covers what 3.10
+# lacks. 3.13+ often builds from source and stalls/OOMs on small VPS — prefer 3.12.
 _python_minor() {
   local bin="$1"
   "$bin" -c 'import sys; print(sys.version_info.minor)' 2>/dev/null || echo ""
@@ -1153,7 +1153,7 @@ _try_apt_install_python312() {
 }
 
 ensure_python() {
-  # Order: pinned 3.12 → 3.11 → 3.10 → generic python3 only if 3.10–3.12.
+  # Order: pinned 3.12 → 3.11 → 3.10 → generic python3 only if 3.10–3.12; else install 3.12.
   local candidates=(python3.12 python3.11 python3.10)
   local c=""
   SYSTEM_PY=""

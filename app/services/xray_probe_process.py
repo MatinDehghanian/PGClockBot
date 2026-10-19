@@ -8,8 +8,8 @@ import re
 from collections.abc import Awaitable
 from typing import TypeVar
 
+from app.py_compat import timeout as async_timeout
 from app.services.xray_probe_resources import XRAY_VERSION, XrayProbeError
-
 
 logger = logging.getLogger(__name__)
 T = TypeVar("T")
@@ -41,14 +41,14 @@ async def stop_process(process: asyncio.subprocess.Process) -> None:
         except ProcessLookupError:
             logger.debug("Probe child exited before termination")
         try:
-            async with asyncio.timeout(CORE_STOP_SECONDS):
+            async with async_timeout(CORE_STOP_SECONDS):
                 await process.wait()
         except TimeoutError:
             try:
                 process.kill()
             except ProcessLookupError:
                 logger.debug("Probe child exited before forced shutdown")
-    async with asyncio.timeout(CORE_STOP_SECONDS):
+    async with async_timeout(CORE_STOP_SECONDS):
         await process.wait()
 
 
@@ -86,7 +86,7 @@ async def wait_ready(process: asyncio.subprocess.Process, ready: asyncio.Event) 
     marker = asyncio.create_task(ready.wait())
     exited = asyncio.create_task(process.wait())
     try:
-        async with asyncio.timeout(CORE_START_SECONDS):
+        async with async_timeout(CORE_START_SECONDS):
             await asyncio.wait((marker, exited), return_when=asyncio.FIRST_COMPLETED)
         if not ready.is_set() or process.returncode is not None:
             raise XrayProbeError("core_start")
@@ -101,7 +101,7 @@ async def wait_ready(process: asyncio.subprocess.Process, ready: asyncio.Event) 
 async def verify_version(path: str) -> None:
     process = await spawn_process(path, "version")
     try:
-        async with asyncio.timeout(CORE_START_SECONDS):
+        async with async_timeout(CORE_START_SECONDS):
             output = await process.stdout.read(READ_CHUNK_BYTES)
             await process.wait()
         if process.returncode != 0 or not output.startswith(f"Xray {XRAY_VERSION} ".encode()):

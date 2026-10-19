@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
 import httpx
 
+from app.py_compat import timeout as async_timeout
 from app.services.credential_policy import validate_pg_username
 from app.services.formatting import parse_expire
 from app.services.pasarguard import PasarGuardError, get_pg
@@ -113,7 +113,7 @@ def panel_account_error(error: Exception) -> MonitorAccountError:
 
 async def read_monitor_account(username: str) -> ValidatedMonitorAccount:
     try:
-        async with asyncio.timeout(5):
+        async with async_timeout(5):
             record = await get_pg().get_user_by_username(username)
     except (PasarGuardError, httpx.HTTPError, TimeoutError) as exc:
         raise panel_account_error(exc) from None

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import secrets
 from dataclasses import dataclass, field
@@ -11,6 +10,7 @@ from typing import Any
 
 import httpx
 
+from app.py_compat import timeout as async_timeout
 from app.services.connection_monitor_accounts import MonitorAccountError, panel_account_error, validate_monitor_account
 from app.services.connection_monitor_settings import reveal_monitor_token
 from app.services.pasarguard import PasarGuardError, get_pg
@@ -34,7 +34,7 @@ async def read_monitor_catalog(account: MonitorAccount) -> MonitorCatalog:
     pg = get_pg()
     token = await reveal_monitor_token(account.encrypted_token)
     try:
-        async with asyncio.timeout(10):
+        async with async_timeout(10):
             user = await pg.get_user_by_id(account.pg_user_id)
             validated = validate_monitor_account(user, username=account.username)
             revision = hashlib.sha256(f"{validated.user_id}:{token}".encode()).hexdigest()

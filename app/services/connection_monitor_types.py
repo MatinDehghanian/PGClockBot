@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from enum import StrEnum
 from typing import Any
 
+from app.py_compat import StrEnum
 
 MAX_MONITOR_ENDPOINTS = 12
 MAX_CATALOG_ITEMS = 1000
