@@ -11,13 +11,13 @@ from __future__ import annotations
 import html
 import logging
 from datetime import datetime, timezone
-from enum import StrEnum
 
 from sqlalchemy import or_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.db.models import BotUser, OrgPrincipal, ResellerProfile
+from app.py_compat import StrEnum
 from app.services.org_principals import DEPTH_OWNER, get_principal_by_reseller_profile
 from app.services.platform_identity import deliverable_telegram_id
 from app.services.reseller_access import parse_telegram_ids

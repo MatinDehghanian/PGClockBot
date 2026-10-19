@@ -14,7 +14,6 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from enum import StrEnum
 from typing import Any
 
 from aiogram.types import InlineKeyboardMarkup, ReplyKeyboardMarkup
@@ -24,6 +23,7 @@ from app.bot import reply_keyboards as rk
 from app.bot.button_sources import recording_button_sources
 from app.bot.edit_mode import without_editor
 from app.bot.reseller_hub_groups import RESELLER_GROUPS
+from app.py_compat import StrEnum
 from app.services.button_styles import CATALOG_IDS, setting_key
 from app.services.screen_titles import SCREEN_TITLE_DEFAULTS
 

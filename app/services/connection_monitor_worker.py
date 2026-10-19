@@ -11,6 +11,7 @@ import httpx
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.py_compat import gather_or_cancel, timeout as async_timeout
 from app.services.connection_monitor_accounts import MonitorAccountError
 from app.services.connection_monitor_subscription import plan_monitor_configs
 from app.services.connection_monitor_config import MonitorBinding
@@ -50,7 +51,7 @@ class MonitorCycleResult:
 
 async def _finish_cycle(sessions: async_sessionmaker[AsyncSession], cycle: MonitorCycleClaim) -> None:
     try:
-        async with asyncio.timeout(LEASE_CLEANUP_SECONDS):
+        async with async_timeout(LEASE_CLEANUP_SECONDS):
             async with sessions() as session:
                 await release_cycle_targets(session, cycle)
                 await release_monitor_cycle(session, cycle)
@@ -75,9 +76,7 @@ async def _check_target(sessions: async_sessionmaker[AsyncSession], claim: Monit
 
     bindings = tuple(binding for binding in batch.bindings if binding.endpoint.config_key == claim.config_key)
     try:
-        async with asyncio.TaskGroup() as group:
-            tasks = [group.create_task(check(binding)) for binding in bindings]
-        observations = dict(task.result() for task in tasks)
+        observations = dict(await gather_or_cancel(check(binding) for binding in bindings))
         async with sessions() as session:
             return await complete_monitor_target(session, claim, observations, now=datetime.now(timezone.utc))
     except Exception as exc:
@@ -109,9 +108,10 @@ async def _probe_claims(sessions: async_sessionmaker[AsyncSession], claims: tupl
     try:
         async with run_xray_batch(binary, endpoints) as batch:
             control_ok = await control
-            async with asyncio.TaskGroup() as group:
-                tasks = [group.create_task(_check_target(sessions, claim, batch, semaphore, control_ok=control_ok)) for claim in claims]
-            return sum(task.result() for task in tasks)
+            results = await gather_or_cancel(
+                _check_target(sessions, claim, batch, semaphore, control_ok=control_ok) for claim in claims
+            )
+            return sum(results)
     finally:
         control.cancel()
         await asyncio.gather(control, return_exceptions=True)
@@ -146,7 +146,7 @@ async def run_monitor_cycle(sessions: async_sessionmaker[AsyncSession], binary: 
     if cycle is None:
         return MonitorCycleResult(False)
     try:
-        async with asyncio.timeout(WORK_SECONDS):
+        async with async_timeout(WORK_SECONDS):
             completed = await _run_work(sessions, cycle, binary)
         return MonitorCycleResult(True, completed)
     except XrayProbeError:

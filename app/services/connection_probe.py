@@ -10,8 +10,8 @@ from datetime import datetime, timezone
 
 import httpx
 
+from app.py_compat import timeout as async_timeout
 from app.services.connection_status_types import ObservationKind, ProbeObservation
-
 
 REQUEST_SECONDS = 5
 
@@ -55,7 +55,7 @@ async def request_destination(client: httpx.AsyncClient, destination: ProbeDesti
         raise ValueError("Unsupported monitoring destination")
     started = time.monotonic()
     try:
-        async with asyncio.timeout(REQUEST_SECONDS):
+        async with async_timeout(REQUEST_SECONDS):
             async with client.stream("GET", destination.url) as response:
                 if response.status_code != 204:
                     return ProbeAttempt(destination.key, reason="unexpected_status")
