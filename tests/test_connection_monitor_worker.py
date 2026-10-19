@@ -164,8 +164,10 @@ class MonitorWorkerTests(MonitorDatabaseCase):
             requested.set()
             await asyncio.Event().wait()
 
+        # Allow enough time for catalog/reconcile/claim on slow PostgreSQL CI before
+        # the hanging probe is interrupted by the cycle deadline.
         with patch("app.services.connection_monitor_worker.probe_proxy", side_effect=slow):
-            with patch("app.services.connection_monitor_worker.WORK_SECONDS", 0.12):
+            with patch("app.services.connection_monitor_worker.WORK_SECONDS", 2.0):
                 result = await run_monitor_cycle(self.Session, self.binary)
         self.assertTrue(requested.is_set())
         self.assertEqual(result.reason, "cycle_deadline")
