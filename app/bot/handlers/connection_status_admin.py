@@ -22,7 +22,7 @@ from app.db.models import BotUser
 from app.services.connection_monitor_access import MonitorAccess
 from app.services.connection_monitor_actions import edit_monitor_target, select_monitor_config
 from app.services.connection_monitor_admin import monitor_config_choices, set_monitor_enabled
-from app.services.connection_monitor_preferences import pause_monitor_target
+from app.services.connection_monitor_preferences import delete_monitor_target, pause_monitor_target
 from app.services.connection_monitor_queue import queue_manual_check
 from app.services.connection_monitor_views import monitor_target_view
 from app.services.users import get_all_settings
@@ -79,6 +79,9 @@ async def _mutate(session: AsyncSession, access: MonitorAccess, command: Monitor
         return await edit_monitor_target(session, access, target_id=command.identifier, field="is_public", value=command.flag)
     if command.action == "stop":
         await pause_monitor_target(session, access, target_id=command.identifier)
+    elif command.action == "purge":
+        await delete_monitor_target(session, access, target_id=command.identifier)
+        return None
     elif command.action == "check":
         await queue_manual_check(session, access, target_id=command.identifier, now=datetime.now(timezone.utc))
     elif command.action in ("run", "halt"):
@@ -109,6 +112,17 @@ async def monitor_admin_callback(callback: CallbackQuery, session: AsyncSession,
             data = f"cma:stop:{command.identifier}" if command.action == "pause" else "cma:halt:0"
             markup = InlineKeyboardMarkup(inline_keyboard=[[button("تأیید توقف تست‌ها و نمایش عمومی", data)], [button("انصراف", "cma:home:0")]])
             await safe_edit_text(callback.message, "تست‌ها متوقف شوند؟ کانفیگ‌ها از فهرست کاربران هم مخفی می‌شوند.", reply_markup=markup)
+        elif command.action == "delete":
+            await session.commit()
+            markup = InlineKeyboardMarkup(inline_keyboard=[
+                [button("تأیید حذف از فهرست تست", f"cma:purge:{command.identifier}")],
+                [button("انصراف", f"cma:item:{command.identifier}")],
+            ])
+            await safe_edit_text(
+                callback.message,
+                "این کانفیگ از فهرست تست حذف شود؟ تست و نمایش عمومی آن متوقف می‌شود.",
+                reply_markup=markup,
+            )
         elif command.action == "item":
             await show_monitor_target(callback.message, session, access, target_id=command.identifier)
         else:

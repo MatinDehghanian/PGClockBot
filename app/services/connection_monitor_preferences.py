@@ -132,3 +132,25 @@ async def pause_monitor_target(session: AsyncSession, access: MonitorAccess, *, 
         await session.rollback()
         raise ValueError(PREFERENCES_UNAVAILABLE)
     await session.commit()
+
+
+async def delete_monitor_target(session: AsyncSession, access: MonitorAccess, *, target_id: int) -> None:
+    """Remove a local selection and its snapshots; never touches the panel config."""
+    if type(target_id) is not int or not 1 <= target_id <= 2147483647:
+        raise ValueError(PREFERENCES_UNAVAILABLE)
+    await require_monitor_owner(session, access)
+    owned = select(ConnectionMonitorTarget.id).where(
+        ConnectionMonitorTarget.id == target_id, ConnectionMonitorTarget.reseller_id.is_(None),
+        active_monitor_owner(access),
+    ).limit(1)
+    await session.execute(delete(ConnectionMonitorSnapshot).where(
+        ConnectionMonitorSnapshot.reseller_id.is_(None), ConnectionMonitorSnapshot.target_id.in_(owned),
+    ))
+    result = await session.execute(delete(ConnectionMonitorTarget).where(
+        ConnectionMonitorTarget.id == target_id, ConnectionMonitorTarget.reseller_id.is_(None),
+        active_monitor_owner(access),
+    ))
+    if result.rowcount != 1:
+        await session.rollback()
+        raise ValueError(PREFERENCES_UNAVAILABLE)
+    await session.commit()

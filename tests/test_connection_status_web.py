@@ -274,6 +274,7 @@ class MonitorWebTests(MonitorDatabaseCase):
             for path, data in (("/connection-status/account", {"username": "monitor-only"}),
                                ("/connection-status/runtime", {"enabled": "1"}), (f"/connection-status/configs/{subscription_fixture_key()}", {}),
                                ("/connection-status/targets/1/check", {}), ("/connection-status/targets/1/pause", {}),
+                               ("/connection-status/targets/1/delete", {}),
                                ("/connection-status/targets/1", {"public_name": "x", "display_order": "0", "is_public": "0"})):
                 with self.subTest(staff=staff, path=path):
                     self.assertEqual((await self.client.post(path, data=data)).status_code, 403)
@@ -287,7 +288,7 @@ class MonitorWebTests(MonitorDatabaseCase):
             session.add(ConnectionMonitorTarget(id=999, reseller_id=2, pg_host_id=41, test_enabled=True, public_name="other"))
             await session.commit()
         for suffix, data in (("", {"public_name": "changed", "display_order": "1", "is_public": "0"}),
-                             ("/pause", {}), ("/check", {})):
+                             ("/pause", {}), ("/check", {}), ("/delete", {})):
             response = await self.client.post("/connection-status/targets/999" + suffix, data=data)
             self.assertIn("error=", response.headers["location"])
         async with self.Session() as session:
@@ -346,6 +347,22 @@ class MonitorWebTests(MonitorDatabaseCase):
         text = (await self.client.get("/connection-status")).text
         badge = text.split('class="badge neutral">', 2)[-1].split("</span>", 1)[0]
         self.assertEqual(badge.strip(), "متوقف")
+
+    async def test_delete_uses_panel_confirm_pattern_and_removes_the_target(self) -> None:
+        target_id = await self.select_host()
+        text = (await self.client.get("/connection-status")).text
+        form = text.split(f'action="/connection-status/targets/{target_id}/delete"', 1)[1].split("</form>", 1)[0]
+        self.assertIn('data-confirm="این کانفیگ از فهرست تست حذف شود؟', form)
+        self.assertIn('data-confirm-title="تأیید حذف کانفیگ"', form)
+        self.assertIn('data-confirm-danger="1"', form)
+        self.assertIn('data-confirm-label="حذف کانفیگ"', form)
+        self.assertIn(">حذف</button>", form)
+        response = await self.client.post(f"/connection-status/targets/{target_id}/delete")
+        self.assertEqual(response.status_code, 303)
+        self.assertNotIn("error=", response.headers["location"])
+        async with self.Session() as session:
+            self.assertIsNone(await session.get(ConnectionMonitorTarget, target_id))
+            self.assertEqual(len((await session.scalars(select(ConnectionMonitorSnapshot))).all()), 0)
 
     async def test_missing_core_configuration_disables_start_but_keeps_settings_visible(self) -> None:
         await self.attach()

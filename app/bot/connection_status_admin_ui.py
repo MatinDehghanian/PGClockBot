@@ -37,8 +37,8 @@ class MonitorCommand:
 def parse_monitor_callback(raw: str) -> MonitorCommand:
     parts = raw.split(":")
     arity = {"account": 2, "home": 3, "hosts": 3, "item": 3, "pick": 3,
-             "check": 3, "pause": 3, "stop": 3, "name": 3, "order": 3,
-             "run": 3, "halt": 3, "public": 4}
+             "check": 3, "pause": 3, "stop": 3, "delete": 3, "purge": 3,
+             "name": 3, "order": 3, "run": 3, "halt": 3, "public": 4}
     if len(parts) < 2 or parts[0] != "cma" or arity.get(parts[1]) != len(parts):
         raise ValueError("درخواست نامعتبر است.")
     if len(parts) == 2:

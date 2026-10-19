@@ -114,12 +114,33 @@ class MonitorAdminBotTests(MonitorDatabaseCase):
 
     async def test_config_screens_go_back_to_the_monitor_home(self) -> None:
         stub = SimpleNamespace(id=1, test_enabled=False, config_key=None, is_public=False, public_name="", config_name="")
-        self.assertEqual(target_keyboard(stub).inline_keyboard[-1][0].callback_data, "cma:home:0")
+        markup = target_keyboard(stub)
+        self.assertEqual(markup.inline_keyboard[-2][0].callback_data, "cma:delete:1")
+        self.assertEqual(markup.inline_keyboard[-1][0].callback_data, "cma:home:0")
         with patch.object(admin, "monitor_config_choices", AsyncMock(return_value=MonitorConfigPage((), None))), \
              patch.object(admin, "safe_edit_text", new_callable=AsyncMock) as render:
             async with self.Session() as session:
                 await admin._config_picker(self.message, session, self.access, after_id=0)
         self.assertEqual(render.call_args.kwargs["reply_markup"].inline_keyboard[-1][0].callback_data, "cma:home:0")
+
+    async def test_delete_callback_asks_for_confirmation_then_purges_and_returns_home(self) -> None:
+        self.assertEqual(parse_monitor_callback("cma:delete:12").action, "delete")
+        self.assertEqual(parse_monitor_callback("cma:purge:12").identifier, 12)
+        with patch.object(CallbackQuery, "answer", new_callable=AsyncMock):
+            with patch.object(admin, "bot_monitor_access", AsyncMock(return_value=self.access)):
+                with patch.object(admin, "safe_edit_text", new_callable=AsyncMock) as render:
+                    async with self.Session() as session:
+                        await admin.monitor_admin_callback(self.callback("cma:delete:12"), session, self.user, self.state)
+                prompt = render.call_args.args[1]
+                self.assertIn("از فهرست تست حذف شود", prompt)
+                self.assertEqual(render.call_args.kwargs["reply_markup"].inline_keyboard[0][0].callback_data, "cma:purge:12")
+                with patch.object(admin, "delete_monitor_target", new_callable=AsyncMock) as purge:
+                    with patch.object(admin, "show_monitor_home", new_callable=AsyncMock) as home:
+                        async with self.Session() as session:
+                            await admin.monitor_admin_callback(self.callback("cma:purge:12"), session, self.user, self.state)
+                        purge.assert_awaited_once()
+                        self.assertEqual(purge.await_args.kwargs["target_id"], 12)
+                        home.assert_awaited_once()
 
     async def asyncSetUp(self) -> None:
         await super().asyncSetUp()

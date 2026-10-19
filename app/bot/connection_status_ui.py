@@ -110,11 +110,14 @@ def target_keyboard(target: MonitorTargetView, ui: dict[str, str] | None = None)
     if target.test_enabled:
         rows = [[button("🔄 تست الان", f"cma:check:{target.id}"), button("⏸ توقف این کانفیگ", f"cma:pause:{target.id}")],
                 [button("✏️ نام نمایشی", f"cma:name:{target.id}"), button("ترتیب نمایش", f"cma:order:{target.id}")],
-                [button("🙈 مخفی از کاربران" if target.is_public else "👁 نمایش به کاربران", f"cma:public:{target.id}:{int(not target.is_public)}")]]
+                [button("🙈 مخفی از کاربران" if target.is_public else "👁 نمایش به کاربران", f"cma:public:{target.id}:{int(not target.is_public)}")],
+                [button("🗑 حذف از فهرست تست", f"cma:delete:{target.id}")]]
     elif target.config_key:
-        rows = [[button("▶️ فعال کردن تست کانفیگ", f"cma:pick:{target.config_key}")]]
+        rows = [[button("▶️ فعال کردن تست کانفیگ", f"cma:pick:{target.config_key}")],
+                [button("🗑 حذف از فهرست تست", f"cma:delete:{target.id}")]]
     else:
-        rows = [[button("انتخاب دوباره از اشتراک", "cma:hosts:0")]]
+        rows = [[button("انتخاب دوباره از اشتراک", "cma:hosts:0")],
+                [button("🗑 حذف از فهرست تست", f"cma:delete:{target.id}")]]
     rows.append([back_button(ui, MONITOR_HOME_CALLBACK)])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
