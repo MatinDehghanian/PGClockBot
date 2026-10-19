@@ -861,12 +861,6 @@ async def pcm_cat_edit_save(
     if not name:
         await message.answer("نام خالی است.")
         return
-    name, icon_id = split_category_label_from_message(
-        message.text, getattr(message, "entities", None)
-    )
-    if not name:
-        await message.answer("نام خالی است.")
-        return
     try:
         await update_category(
             session,

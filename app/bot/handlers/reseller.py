@@ -1118,36 +1118,6 @@ async def _resapply_picker_copy(session: AsyncSession) -> tuple[str, str, bool]:
     )
 
 
-def _resapply_list_back_for_plan(plan) -> str:
-    """Back from plan detail → category list when linked, else billing-mode list."""
-    cid = getattr(plan, "category_id", None)
-    if cid is not None:
-        return f"resapply:cat:{int(cid)}"
-    mode = reseller_plan_mode_of(plan)
-    return f"resapply:mode:{mode}"
-
-
-async def _resapply_picker_copy(session: AsyncSession) -> tuple[str, str, bool]:
-    """(title, body_html, use_categories) for the apply home step."""
-    from app.services.plan_categories import reseller_categories_for_menu
-
-    plans = await list_active_reseller_plans(session)
-    cats = await reseller_categories_for_menu(session, reseller_plans=plans)
-    if cats:
-        return (
-            "درخواست نمایندگی",
-            "ابتدا <b>دسته</b> را از دکمه‌های زیر پیام انتخاب کنید.",
-            True,
-        )
-    return (
-        "درخواست نمایندگی",
-        "ابتدا <b>نوع پلن</b> را انتخاب کنید:\n"
-        "• <b>ثابت</b> — اشتراک با قیمت ثابت\n"
-        "• <b>PAYG</b> — پرداخت بر اساس مصرف ترافیک",
-        False,
-    )
-
-
 @router.callback_query(F.data == "resapply:home")
 async def resapply_home(
     callback: CallbackQuery,

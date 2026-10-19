@@ -267,27 +267,6 @@ async def list_packs_for_service(
     )
 
 
-async def list_packs_for_service(
-    session: AsyncSession,
-    service: UserService,
-    *,
-    kind: str | None = None,
-    active_only: bool = True,
-) -> list[ServiceAddonPack]:
-    """Packs purchasable for one service — shop scope ∧ matching plan category."""
-    from app.services.service_automation import service_shop_id
-
-    shop_rid = await service_shop_id(session, service)
-    cat_id = await service_plan_category_id(session, service)
-    return await list_shop_packs(
-        session,
-        reseller_id=shop_rid,
-        active_only=active_only,
-        kind=kind,
-        category_id=cat_id,
-    )
-
-
 async def get_owned_pack(
     session: AsyncSession, pack_id: int, staff: dict | None
 ) -> ServiceAddonPack | None:

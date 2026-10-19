@@ -24,8 +24,6 @@ from app.services.user_purge import purge_user_references
 
 logger = logging.getLogger("pgclock.users")
 
-logger = logging.getLogger("pgclock.users")
-
 # When handling updates on a reseller-owned bot, settings read/write overlay
 # that reseller's shop settings automatically.
 _shop_reseller_id: ContextVar[int | None] = ContextVar("shop_reseller_id", default=None)
