@@ -891,14 +891,15 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         staff: dict = Depends(require_admin),
         session: AsyncSession = Depends(get_db),
     ):
-        """Manual increase or decrease of a PAYG shop wallet, Super Admin only."""
-        from app.services.billing import credit_topup, debit_adjustment
-        from app.services.bot_user_admin import (
-            MIN_ADMIN_WALLET_ADJUST,
-            parse_admin_wallet_amount,
-            parse_admin_wallet_mode,
-        )
+        """Manual increase or decrease of a reseller wallet (PAYG or fixed), Super Admin only."""
+        from app.services.bot_user_admin import parse_admin_wallet_amount, parse_admin_wallet_mode
+        from app.services.reseller_wallet import adjust_reseller_wallet, schedule_followups
 
+        user = await session.get(BotUser, user_id)
+        if user is None or await session.scalar(
+            select(ResellerProfile.id).where(ResellerProfile.user_id == user_id)
+        ) is None:
+            return RedirectResponse(f"/resellers?err={_q('نماینده یافت نشد')}", status_code=303)
         form = await request.form()
         note = str(form.get("note") or "").strip()
         try:
@@ -907,33 +908,23 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             mode = parse_admin_wallet_mode(str(form.get("mode") or "credit"))
         except ValueError as e:
             return _redirect_reseller_edit(user_id, err=str(e))
-        if amount < MIN_ADMIN_WALLET_ADJUST:
-            return _redirect_reseller_edit(user_id, err=f"حداقل مبلغ {MIN_ADMIN_WALLET_ADJUST:,} تومان است")
         nonce = str(form.get("nonce") or "").strip()
         if len(nonce) < 8:
             return _redirect_reseller_edit(user_id, err='فرم شارژ منقضی شده — صفحه را تازه کنید')
         actor = str(staff.get("username") or staff.get("role") or "admin")
+        # The charge key keeps its earlier format so a form opened before the update stays a no-op.
+        key = (
+            f"manual:{user_id}:{amount}:{note}:{actor}:{nonce}"
+            if mode == "credit"
+            else f"manual-debit:{user_id}:{amount}:{note}:{actor}:{nonce}"
+        )
         try:
-            if mode == "credit":
-                await credit_topup(
-                    session,
-                    int(user_id),
-                    amount,
-                    created_by=actor,
-                    note=note or "شارژ دستی ادمین",
-                    idempotency_key=f"manual:{user_id}:{amount}:{note}:{actor}:{nonce}",
-                )
-            else:
-                await debit_adjustment(
-                    session,
-                    int(user_id),
-                    amount,
-                    created_by=actor,
-                    note=note or "کسر دستی ادمین",
-                    idempotency_key=f"manual-debit:{user_id}:{amount}:{note}:{actor}:{nonce}",
-                )
+            change = await adjust_reseller_wallet(
+                session, user, amount, mode=mode, actor=actor, note=note, idempotency_key=key
+            )
         except ValueError as e:
             return _redirect_reseller_edit(user_id, err=str(e))
+        schedule_followups(change)
         if mode == "credit":
             return _redirect_reseller_edit(user_id, ok=f'شارژ کیف پول به مبلغ {amount:,} تومان ثبت شد')
         return _redirect_reseller_edit(user_id, ok=f'از کیف پول {amount:,} تومان کسر شد')

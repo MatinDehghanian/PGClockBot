@@ -362,3 +362,14 @@ async def _send_reseller_dm(
                 await bot.session.close()
     except Exception:
         logger.debug("reseller DM failed", exc_info=True)
+
+
+async def send_reseller_notice(session: AsyncSession, reseller_user_id: int, text: str) -> None:
+    """Telegram notice to a reseller through their shop bot, else the main bot; best-effort."""
+    from app.db.models import BotUser
+    from app.services.platform_identity import deliverable_telegram_id
+
+    user = await session.get(BotUser, int(reseller_user_id))
+    telegram_id = deliverable_telegram_id(getattr(user, "telegram_id", None))
+    if telegram_id is not None:
+        await _send_reseller_dm(session, int(reseller_user_id), int(telegram_id), text)

@@ -106,29 +106,8 @@
     <h3>تنظیم کیف پول</h3>
     <p class="muted">مبلغ را وارد کنید، سپس افزایش یا کاهش را بزنید. موجودی منفی مجاز نیست.</p>
   </header>
-  <form method="post" action="/users/{{ user.id }}/wallet-credit" class="form-stack"
-        data-confirm="موجودی کیف پول این کاربر مطابق مبلغ و نوع انتخاب‌شده تغییر کند؟"
-        data-confirm-title="تأیید تنظیم کیف پول"
-        data-confirm-label="اعمال">
-    <div class="user-edit-fields">
-      <label class="form-field">مبلغ (تومان)
-        <input name="amount" type="number" data-money min="1000" step="1000" required placeholder="مثلاً ۵۰,۰۰۰" inputmode="numeric" />
-      </label>
-      <div class="wallet-adjust-modes" role="group" aria-label="نوع تنظیم کیف پول">
-        <button class="wallet-mode-btn wallet-mode-btn--debit" type="submit" name="mode" value="debit">
-          <span class="wallet-mode-swatch" aria-hidden="true"></span>
-          <span class="wallet-mode-label">کاهش</span>
-        </button>
-        <button class="wallet-mode-btn wallet-mode-btn--credit" type="submit" name="mode" value="credit">
-          <span class="wallet-mode-swatch" aria-hidden="true"></span>
-          <span class="wallet-mode-label">افزایش</span>
-        </button>
-      </div>
-      <label class="form-field">یادداشت
-        <input name="note" type="text" maxlength="120" placeholder="اختیاری" />
-      </label>
-    </div>
-  </form>
+  {% from "_wallet_adjust_form.html" import wallet_adjust_form %}
+  {{ wallet_adjust_form('/users/' ~ user.id ~ '/wallet-credit', 'موجودی کیف پول این کاربر مطابق مبلغ و نوع انتخاب‌شده تغییر کند؟', nonce=wallet_nonce) }}
 </section>
 
 {% endif %}

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import html
+import secrets
 from urllib.parse import quote
 
 from fastapi import Depends, Request
@@ -268,6 +269,7 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
             "display_wallet": display_wallet,
             "services": snaps,
             "wallet_txs": wallet_txs,
+            "wallet_nonce": secrets.token_hex(8),
             "plans": plans,
             "format_toman": format_toman,
             "flash_ok": request.query_params.get("ok"),
@@ -300,6 +302,7 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
             parse_admin_wallet_mode,
         )
         from app.services.notifications import actor_label_from_staff
+        from app.services.reseller_wallet import adjust_reseller_wallet, load_reseller_profile, schedule_followups
 
         loaded = await _require_scoped_user(session, staff, user_id)
         if isinstance(loaded, RedirectResponse):
@@ -315,14 +318,24 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
         except (TypeError, ValueError) as e:
             return _redirect_user(user_id, err=str(e) or "مبلغ نامعتبر است")
         try:
-            await admin_adjust_user_wallet(
-                session,
-                user,
-                amount,
-                mode=mode,
-                actor=actor_label_from_staff(staff),
-                note=note or None,
-            )
+            if await load_reseller_profile(session, int(user.id)) is not None:
+                # A reseller's wallet is also their PAYG shop wallet: same path as the reseller page.
+                nonce = str(form.get("nonce") or "").strip()
+                key = f"user-page:{mode}:{user_id}:{amount}:{nonce}" if len(nonce) >= 8 else None
+                change = await adjust_reseller_wallet(
+                    session, user, amount, mode=mode, actor=actor_label_from_staff(staff),
+                    note=note or None, idempotency_key=key,
+                )
+                schedule_followups(change)
+            else:
+                await admin_adjust_user_wallet(
+                    session,
+                    user,
+                    amount,
+                    mode=mode,
+                    actor=actor_label_from_staff(staff),
+                    note=note or None,
+                )
         except ValueError as e:
             return _redirect_user(user_id, err=str(e))
         if mode == "credit":
