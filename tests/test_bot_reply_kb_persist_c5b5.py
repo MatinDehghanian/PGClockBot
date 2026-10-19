@@ -118,6 +118,9 @@ class AdminFsmFinishKeepsReplyKeyboardTests(unittest.IsolatedAsyncioTestCase):
                     AsyncMock(return_value=(user, None)),
                 )
             )
+            stack.enter_context(
+                patch("app.bot.handlers.admin.load_reseller_profile", AsyncMock(return_value=None))
+            )
             adjust = stack.enter_context(
                 patch(
                     "app.services.bot_user_admin.admin_adjust_user_wallet",
