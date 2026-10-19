@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from aiogram import F, Router
 from aiogram.filters import Command, CommandObject
 from aiogram.fsm.context import FSMContext
@@ -14,7 +16,9 @@ from app.bot.chat_cleanup import keep_message
 from app.bot.tg_utils import safe_edit_text
 from app.config import get_settings
 from app.db.models import BotUser, Order, Payment, PaymentMethod, PaymentStatus
-from app.services.bbc_settlement import reusable_bbc_topup, start_bbc_checkout
+from app.services.bbc_settlement import (
+    CUSTOMER_UNAVAILABLE, BbcNotReady, ensure_gateway_ready, reusable_bbc_topup, start_bbc_checkout,
+)
 from app.services.redact import user_safe_error
 from app.services.formatting import format_message, format_toman, kv_line
 from app.services.orders import create_wallet_topup
@@ -25,6 +29,8 @@ from app.services.wallet import list_activity
 from app.services.message_variables import DOMAIN_PAYMENT, render_message_template
 from app.services import bot_feedback_texts as feedback
 from app.services.screen_titles import screen_caption, screen_title_html
+
+logger = logging.getLogger(__name__)
 
 router = Router(name="wallet")
 
@@ -470,11 +476,21 @@ async def _show_bbc_topup(
     method: str,
 ) -> None:
     """Wallet top-up through «بزن به کارت»; an unused top-up of the same amount is reused."""
+    try:
+        await ensure_gateway_ready(session, current_shop_reseller_id())
+    except BbcNotReady as exc:
+        logger.warning("bezanbecard top-up refused: %s", exc)
+        await callback.answer(CUSTOMER_UNAVAILABLE, show_alert=True)
+        return
     payment = await reusable_bbc_topup(
         session, int(db_user.id), amount, shop_id=current_shop_reseller_id()
     ) or await create_wallet_topup(session, db_user.id, amount, method=method)
     try:
         checkout = await start_bbc_checkout(session, payment, description=f"شارژ کیف پول #{payment.id}")
+    except BbcNotReady as exc:
+        logger.warning("bezanbecard top-up refused: %s", exc)
+        await callback.answer(CUSTOMER_UNAVAILABLE, show_alert=True)
+        return
     except ValueError as exc:
         await callback.answer(user_safe_error(exc), show_alert=True)
         return

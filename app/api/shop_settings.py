@@ -14,6 +14,7 @@ from starlette.datastructures import UploadFile
 from app.config import DATA_DIR
 from app.db.models import ResellerProfile
 from app.api.safe_next import safe_internal_next
+from app.services.bbc_settlement import bbc_enable_error
 from app.services.resellers import (
     RESELLER_SETTINGS_TABS,
     SHOP_SETTINGS_DOMAIN_POST_TABS,
@@ -520,6 +521,10 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
         for k in list(payload.keys()):
             if str(k).startswith("btn_style_") and k not in allowed_btn:
                 payload.pop(k, None)
+        gateway_error = await bbc_enable_error(session, payload, reseller_id=rid) if tab == "payment" else None
+        if gateway_error:
+            back = _safe_next(request, "/shop-settings?tab=payment")
+            return RedirectResponse(f"{back}{'&' if '?' in back else '?'}err=" + quote(gateway_error), status_code=303)
         if tab == SCREEN_TEXT_TAB:
             try:
                 validate_screen_text_settings(payload)

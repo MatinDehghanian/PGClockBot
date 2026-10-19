@@ -154,14 +154,14 @@
     {% if help %}<small class="muted">{{ help }}</small>{% endif %}
   </div>
   {% elif kind == 'password' %}
-  <label>{{ label }}
+  <label>{{ label }}{% if val %} <span class="badge active secret-saved">ذخیره شده</span>{% endif %}
     <input
       name="s_{{ key }}"
       type="password"
       value=""
       autocomplete="new-password"
       dir="ltr"
-      placeholder="{% if val %}•••••••• (خالی = بدون تغییر){% else %}وارد کنید{% endif %}"
+      placeholder="{% if val %}•••••••• (ذخیره شده؛ برای تغییر مقدار جدید را بنویسید){% else %}وارد کنید{% endif %}"
     />
     {% if help %}<small class="muted">{{ help }}</small>{% endif %}
   </label>
