@@ -22,6 +22,8 @@ from app.services.connection_monitor_config import MonitorBinding
 from app.services.connection_monitor_subscription import plan_monitor_configs, subscription_entries
 from app.services.connection_monitor_panel import MonitorAccount, MonitorCatalog
 from app.services.connection_monitor_accounts import MonitorAccountError
+from app.services.connection_monitor_claims import claim_monitor_cycle
+from app.services.connection_monitor_sync import reconcile_monitor_plans
 from app.services.connection_monitor_types import MonitorConfigError, MonitorEndpoint, MonitorConfigPlan, MonitorIssue
 from app.services.connection_monitor_worker import run_monitor_cycle
 from app.services.connection_status_types import ObservationKind, ProbeObservation
@@ -268,3 +270,37 @@ class MonitorWorkerTests(MonitorDatabaseCase):
                 if not task.done():
                     task.cancel()
                     await asyncio.gather(task, return_exceptions=True)
+
+
+class MonitorSyncReconcileTests(MonitorDatabaseCase):
+    async def test_unsupported_diagnostic_snapshot_keeps_id_across_identical_reconciles(self) -> None:
+        config_key = "U" * 43
+        plan = MonitorConfigPlan(config_key, issue=MonitorIssue.UNSUPPORTED)
+        async with self.Session() as session:
+            session.add(ConnectionMonitorState(
+                enabled=True, pg_user_id=900, pg_username="monitor-only",
+                account_revision="one", subscription_token_enc="synthetic",
+            ))
+            session.add(ConnectionMonitorTarget(subscription_key=config_key, test_enabled=True, next_check_at=self.now))
+            await session.commit()
+            cycle = await claim_monitor_cycle(session, now=self.now)
+        self.assertIsNotNone(cycle)
+        async with self.Session() as session:
+            self.assertTrue(await reconcile_monitor_plans(session, cycle, (plan,), now=self.now))
+            first = await session.scalar(select(ConnectionMonitorSnapshot).where(
+                ConnectionMonitorSnapshot.endpoint_key == "configuration",
+            ))
+            self.assertIsNotNone(first)
+            self.assertEqual(first.reason, "unsupported_route")
+            first_id = first.id
+            target = await session.scalar(select(ConnectionMonitorTarget))
+            self.assertTrue(target.test_enabled)
+        async with self.Session() as session:
+            self.assertTrue(await reconcile_monitor_plans(session, cycle, (plan,), now=self.now))
+            second = await session.scalar(select(ConnectionMonitorSnapshot).where(
+                ConnectionMonitorSnapshot.endpoint_key == "configuration",
+            ))
+            self.assertEqual(second.id, first_id)
+            self.assertEqual(second.reason, "unsupported_route")
+            target = await session.scalar(select(ConnectionMonitorTarget))
+            self.assertTrue(target.test_enabled)

@@ -83,11 +83,31 @@ async def reconcile_monitor_plans(session: AsyncSession, cycle: MonitorCycleClai
     if len(targets) > MAX_MONITOR_ENDPOINTS:
         raise MonitorConfigError(MonitorIssue.CAPACITY)
     by_config = {plan.config_key: plan for plan in plans}
+    target_ids = [target.id for target in targets]
+    diagnostic_reasons: dict[int, str | None] = {}
+    if target_ids:
+        diagnostic_rows = (await session.execute(select(
+            ConnectionMonitorSnapshot.target_id, ConnectionMonitorSnapshot.reason,
+        ).where(
+            ConnectionMonitorSnapshot.reseller_id.is_(None),
+            ConnectionMonitorSnapshot.target_id.in_(target_ids),
+            ConnectionMonitorSnapshot.endpoint_key == "configuration",
+            ConnectionMonitorSnapshot.probe_id == LOCAL_PROBE_ID,
+        ).limit(MAX_MONITOR_ENDPOINTS + 1))).all()
+        diagnostic_reasons = {target_id: reason for target_id, reason in diagnostic_rows}
     changed_ids, snapshots = [], []
     for target in targets:
         plan = by_config.get(target.subscription_key, MonitorConfigPlan(target.subscription_key or "", issue=MonitorIssue.CONFIG_UNAVAILABLE))
-        # Unsupported targets also need a diagnostic row on their first sync.
-        if apply_target_plan(target, plan, now=now) or not plan.is_ready:
+        changed = apply_target_plan(target, plan, now=now)
+        # Unsupported routes keep test_enabled; rebuild only when evidence is missing or drifted.
+        if changed:
+            should_rebuild = True
+        elif not plan.is_ready:
+            existing_reason = diagnostic_reasons.get(target.id)
+            should_rebuild = existing_reason is None or existing_reason != (plan.issue.value if plan.issue else None)
+        else:
+            should_rebuild = False
+        if should_rebuild:
             changed_ids.append(target.id)
             snapshots.extend(initial_snapshots(target, plan))
     if changed_ids:
