@@ -13,8 +13,8 @@ CONNECTION_STATUS_MENU_KEY = "connection_status"
 
 MONITOR_TEXT_DEFAULTS = {
     "btn_connection_status": "📡 وضعیت سرورها",
-    "connection_status_title": "وضعیت هاست‌ها از دید سرور ربات",
-    "connection_status_empty": "هنوز هاستی برای نمایش به کاربران انتخاب نشده است.",
+    "connection_status_title": "وضعیت کانفیگ‌ها از دید سرور ربات",
+    "connection_status_empty": "هنوز کانفیگی برای نمایش به کاربران انتخاب نشده است.",
     "connection_status_error": "دریافت وضعیت اکنون ممکن نیست؛ کمی بعد دوباره تلاش کنید.",
     "btn_connection_status_admin": "📡 وضعیت اتصال",
     "connection_status_admin_title": "📡 وضعیت اتصال",
@@ -39,10 +39,10 @@ REASON_LABELS = {
     "snapshot_invalid": "نتیجهٔ ذخیره‌شده معتبر نیست.", "monitor_paused": "تست اتصال خاموش است.",
     "stale": "نتیجه قدیمی است و وضعیت فعلی تأیید نشده است.", "slow_delay": "تأخیر واقعی بیشتر از دو ثانیه است.",
     "recovering": "بعضی مسیرها مشکل دارند یا اتصال هنوز کاملاً تأیید نشده.", "no_observation": "هنوز بررسی کامل ثبت نشده است.",
-    "invalid_catalog": "اطلاعات هاست‌ها معتبر نیست.", "host_unavailable": "هاست فعال در دسترس نیست.",
+    "invalid_catalog": "اطلاعات هاست‌ها معتبر نیست.", "host_unavailable": "کانفیگ فعال در دسترس نیست.",
     "config_unavailable": "این کانفیگ دیگر در اشتراک نیست یا محتوای آن تغییر کرده؛ دوباره از فهرست اشتراک انتخاب کنید.",
-    "out_of_scope": "هاست در محدودهٔ مجاز نیست.", "unsupported_route": "این کانفیگ با تنظیمات فعلی Xray قابل تست نیست؛ خروجی آن بدون تغییر در لیست نگه داشته شده است.",
-    "ambiguous_route": "کانفیگ این هاست مشخص نیست؛ تنظیمات هاست را بررسی کنید.", "missing_route": "کانفیگ این هاست در اشتراک کاربر تست نیست.",
+    "out_of_scope": "کانفیگ در محدودهٔ مجاز نیست.", "unsupported_route": "این کانفیگ با تنظیمات فعلی Xray قابل تست نیست؛ خروجی آن بدون تغییر در لیست نگه داشته شده است.",
+    "ambiguous_route": "مسیر این کانفیگ مشخص نیست؛ تنظیمات کانفیگ را بررسی کنید.", "missing_route": "این کانفیگ در اشتراک کاربر تست نیست.",
     "endpoint_capacity": "تعداد مسیرها بیشتر از ظرفیت تست هم‌زمان است.",
 }
 
@@ -73,10 +73,16 @@ LEGACY_HOST_PROMPTS = {
     "connection_status_order_prompt": "ترتیب نمایش این هاست را با عدد وارد کنید؛ عدد کوچک‌تر بالاتر نمایش داده می‌شود. از صفر شروع کنید.",
 }
 
+# Public copy that still said «هاست» for subscription configs before the wording refresh.
+LEGACY_HOST_STATUS_TEXTS = {
+    "connection_status_title": "وضعیت هاست‌ها از دید سرور ربات",
+    "connection_status_empty": "هنوز هاستی برای نمایش به کاربران انتخاب نشده است.",
+}
+
 
 def readable_monitor_texts(settings: dict[str, str]) -> dict[str, str]:
     """Refresh untouched old defaults while retaining every custom label and menu order."""
-    for previous_texts in (LEGACY_MONITOR_TEXTS, LEGACY_HOST_PROMPTS):
+    for previous_texts in (LEGACY_MONITOR_TEXTS, LEGACY_HOST_PROMPTS, LEGACY_HOST_STATUS_TEXTS):
         for key, previous in previous_texts.items():
             outdated = {previous, LATIN_MIXED_MONITOR_TEXTS.get(key, previous), OLDER_ADMIN_LABELS.get(key, previous)}
             if settings.get(key) in outdated:

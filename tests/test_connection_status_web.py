@@ -26,7 +26,8 @@ from app.services.connection_monitor_accounts import ACCOUNT_MESSAGES
 from app.services.connection_monitor_preferences import MonitorPreferences
 from app.services.connection_status import public_connection_page
 from app.services.connection_status_texts import (
-    LATIN_MIXED_MONITOR_TEXTS, LEGACY_HOST_PROMPTS, LEGACY_MONITOR_TEXTS, MONITOR_TEXT_DEFAULTS, readable_monitor_texts,
+    LATIN_MIXED_MONITOR_TEXTS, LEGACY_HOST_PROMPTS, LEGACY_HOST_STATUS_TEXTS, LEGACY_MONITOR_TEXTS,
+    MONITOR_TEXT_DEFAULTS, readable_monitor_texts,
 )
 from app.services.users import clear_settings_cache, get_all_settings, set_settings_bulk
 from app.services.pasarguard import PasarGuardError
@@ -439,6 +440,19 @@ class MonitorTextDefaultsTests(unittest.TestCase):
         custom = readable_monitor_texts({key: "متن دلخواه مدیر"})
         self.assertEqual(custom[key], "متن دلخواه مدیر")
         self.assertEqual(readable_monitor_texts({}), {})
+
+    def test_host_wording_defaults_refresh_while_custom_copy_is_kept(self) -> None:
+        refreshed = readable_monitor_texts(dict(LEGACY_HOST_STATUS_TEXTS))
+        for key, previous in LEGACY_HOST_STATUS_TEXTS.items():
+            self.assertEqual(refreshed[key], MONITOR_TEXT_DEFAULTS[key])
+            self.assertNotEqual(refreshed[key], previous)
+            self.assertIn("کانفیگ", refreshed[key])
+        custom = readable_monitor_texts({
+            "connection_status_title": "عنوان دلخواه مدیر",
+            "connection_status_empty": "متن خالی دلخواه",
+        })
+        self.assertEqual(custom["connection_status_title"], "عنوان دلخواه مدیر")
+        self.assertEqual(custom["connection_status_empty"], "متن خالی دلخواه")
 
     def test_new_defaults_use_persian_terms(self) -> None:
         for value in MONITOR_TEXT_DEFAULTS.values():
