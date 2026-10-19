@@ -1,4 +1,4 @@
-{% from "macros.html" import modal_title %}
+{% from "macros.html" import flash_warn_icon, modal_title %}
 {% from "_list_input.html" import list_input %}
 {% set update_mode = bot_update_mode or env_values.get('BOT_UPDATE_MODE') or 'polling' %}
 {% set wh_url = env_values.get('WEBHOOK_URL','') %}
@@ -161,7 +161,7 @@
   {% set pg_api_key_ready = (env_values.get('PG_API_KEY') or '')|length > 0 %}
   <div class="card settings-card">
     <h2>پاسارگارد</h2>
-    <p class="muted update-card-caption">ریشه API و اعتبارنامهٔ ادمین متصل را وارد کنید — نه مسیر داشبورد UI. این ادمین لزوماً owner پاسارگارد نیست.</p>
+    <p class="muted update-card-caption">آدرس اصلی API و مشخصات ادمین متصل را وارد کنید، نه آدرس داشبورد. این ادمین لازم نیست مالک پاسارگارد باشد.</p>
     <div class="settings-grid">
       <div class="setting-item full">
         <label>آدرس پنل (PG_BASE_URL)
@@ -251,7 +251,8 @@
     <div class="ui-modal-head">
       {{ modal_title('bot-settings', 'در حال اعمال تغییرات', caption='تا پایان عملیات در این صفحه بمانید', tone='neutral', heading='h3', heading_id='bot-restart-progress-title') }}
     </div>
-    <div class="flash warn update-stay-warn" role="status">
+    <div class="flash warn update-stay-warn flash-has-ico" role="status">
+      {{ flash_warn_icon() }}
       <div class="flash-copy">
         <strong>منتظر بمانید</strong>
         <span class="muted">تا پایان عملیات از این صفحه خارج نشوید.</span>

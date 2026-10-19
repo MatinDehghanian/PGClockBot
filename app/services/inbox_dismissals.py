@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 MODE_24H = "24h"
 MODE_FOREVER = "forever"
 SNOOZE_HOURS = 24
+MAX_SEEN_COUNT = 2_000_000_000
 
 ALLOWED_ALERT_KEYS = frozenset(
     {
@@ -74,12 +75,8 @@ def staff_dismiss_key_candidates(staff: dict) -> list[str]:
         add(f"op:{pid}")
         add(f"{role}:p{pid}")
         add(f"{role}:{pid}")
-        # Pre-prefix mistakes
-        add(f"p{pid}")
-        add(str(pid))
     if username:
         add(f"{role}:{username}")
-        add(username)
     for uid in (
         staff.get("bot_user_id"),
         staff.get("pg_staff_id"),
@@ -88,13 +85,10 @@ def staff_dismiss_key_candidates(staff: dict) -> list[str]:
         if uid is None or uid == "":
             continue
         add(f"{role}:{uid}")
-        add(str(uid))
         if staff.get("pg_staff_id") and uid == staff.get("pg_staff_id"):
             add(f"{role}:pgs{uid}")
-            add(f"pgs{uid}")
         if staff.get("bot_user_id") and uid == staff.get("bot_user_id"):
             add(f"{role}:b{uid}")
-            add(f"b{uid}")
     return keys
 
 
@@ -106,16 +100,6 @@ def _staff_dismissal_clause(staff: dict):
     clauses = []
     if keys:
         clauses.append(PanelInboxDismissal.staff_key.in_(keys))
-    username = str(staff.get("username") or "").strip()
-    if username:
-        clauses.append(PanelInboxDismissal.staff_key.endswith(f":{username}"))
-    try:
-        pid = int(staff.get("org_principal_id") or 0)
-    except (TypeError, ValueError):
-        pid = 0
-    if pid > 0:
-        clauses.append(PanelInboxDismissal.staff_key.endswith(f":p{pid}"))
-        clauses.append(PanelInboxDismissal.staff_key == f"op:{pid}")
     if not clauses:
         return None
     return or_(*clauses)
@@ -159,6 +143,7 @@ async def upsert_dismissal(
     alert_key: str,
     mode: str,
     entity_id: str = "",
+    seen_count: int = 0,
 ) -> None:
     key = staff_dismiss_key(staff)
     alert_key = (alert_key or "").strip()
@@ -167,6 +152,7 @@ async def upsert_dismissal(
     if mode not in (MODE_24H, MODE_FOREVER):
         raise ValueError("حالت حذف نامعتبر")
     entity_id = (entity_id or "").strip()[:64]
+    seen_count = max(0, min(int(seen_count or 0), MAX_SEEN_COUNT))
     clause = _staff_dismissal_clause(staff)
     existing = None
     if clause is not None:
@@ -191,6 +177,7 @@ async def upsert_dismissal(
 
     if existing:
         existing.mode = mode
+        existing.seen_count = seen_count
         existing.dismissed_at = _utcnow()
         existing.staff_key = key
     else:
@@ -200,6 +187,7 @@ async def upsert_dismissal(
                 alert_key=alert_key,
                 entity_id=entity_id,
                 mode=mode,
+                seen_count=seen_count,
                 dismissed_at=_utcnow(),
             )
         )
@@ -258,6 +246,45 @@ def _alert_active_map(ctx: dict[str, Any]) -> dict[str, bool]:
     return active
 
 
+_AC_COUNT_FIELDS = {
+    "ac:pending": "pending",
+    "ac:delivery": "failures",
+    "ac:tickets": "tickets",
+    "ac:expiring": "expiring",
+    "ac:low_volume": "low_volume",
+}
+
+
+def alert_counts(ctx: dict[str, Any]) -> dict[str, int]:
+    """How many underlying items each alert key currently represents."""
+    pr = ctx.get("payg_risk") or {}
+    counts: dict[str, int] = {
+        "update": 1 if (ctx.get("update") or {}).get("update_available") else 0,
+        "ticket_alert": 1 if ctx.get("ticket_alert") else 0,
+        "shop_maintenance": 1 if ctx.get("shop_maintenance") else 0,
+        "capacity_warn": 1 if ctx.get("capacity_warn") else 0,
+        "payg_suspended": len(pr.get("suspended") or []),
+        "payg_low": len(pr.get("low") or []),
+    }
+    ac = ctx.get("action_center") or {}
+    for alert_key, field in _AC_COUNT_FIELDS.items():
+        counts[alert_key] = int(ac.get(field) or 0)
+    return counts
+
+
+def has_new_items(row: PanelInboxDismissal, current_count: int) -> bool:
+    """True when more items exist now than when the user dismissed the alert."""
+    seen = int(getattr(row, "seen_count", 0) or 0)
+    return seen > 0 and int(current_count) > seen
+
+
+def is_snooze_expired(row: PanelInboxDismissal, *, now: datetime | None = None) -> bool:
+    if row.mode != MODE_24H:
+        return False
+    now = now or _utcnow()
+    return now >= _aware(row.dismissed_at) + timedelta(hours=SNOOZE_HOURS)
+
+
 async def cleanup_resolved_dismissals(
     session: AsyncSession,
     staff: dict,
@@ -272,8 +299,15 @@ async def cleanup_resolved_dismissals(
     ac_ok = bool(ctx.get("action_center_ok", True))
 
     stale_ids: list[int] = []
+    counts = alert_counts(ctx)
     for row in rows:
+        if is_snooze_expired(row):
+            stale_ids.append(int(row.id))
+            continue
         if row.mode != MODE_FOREVER:
+            continue
+        if row.alert_key in counts and has_new_items(row, counts[row.alert_key]):
+            stale_ids.append(int(row.id))
             continue
         # When action-center build failed, do not guess AC keys are gone —
         # still clean non-AC forever rows (update/capacity/payg/…).
@@ -349,10 +383,13 @@ def filter_inbox_context(
     """Apply dismissals to a built inbox context (mutates copy)."""
     now = now or _utcnow()
     out = dict(ctx)
+    counts = alert_counts(ctx)
 
     def hidden(alert_key: str, active: bool, entity_id: str = "") -> bool:
         for row in dismissals:
             if not _row_matches(row, alert_key, entity_id):
+                continue
+            if alert_key in counts and has_new_items(row, counts[alert_key]):
                 continue
             if is_dismissed(row, alert_active=active, now=now):
                 return True

@@ -84,7 +84,7 @@ class AdmResellersEditInPlaceTests(unittest.IsolatedAsyncioTestCase):
         start = text.index("status_fa = {")
         end = text.index("📋 درخواست‌های باز")
         window = text[start:end]
-        self.assertIn('callback_data="nv:adm:resellers"', window)
+        self.assertIn('back_button(None, "nv:adm:resellers")', window)
         self.assertNotIn('callback_data="adm:resellers"', window)
 
 
@@ -180,40 +180,31 @@ class ResellerApplyRoleGateTests(unittest.TestCase):
         self.assertIn("🤝 درخواست نمایندگی", labels)
 
 
-class NavPayReopenSummaryTests(unittest.IsolatedAsyncioTestCase):
-    async def test_handle_back_nav_pay_passes_summary(self):
-        """Legacy reply Back into NAV_PAY must pass order summary when known."""
+class NavPayBackTests(unittest.IsolatedAsyncioTestCase):
+    async def _back_from_pay(self, *, order_owner_id: int):
         from app.bot import menu_nav as nav
         from app.bot.handlers.reply_nav import handle_back
-        from app.db.models import Order
 
         message = AsyncMock()
         session = AsyncMock()
         db_user = MagicMock()
+        db_user.id = 1
         state = AsyncMock()
         state.get_data = AsyncMock(return_value={nav.PAY_ORDER_ID: 42})
-        state.set_state = AsyncMock()
-        state.set_data = AsyncMock()
         order = MagicMock()
         order.id = 42
-        order.amount = 50_000
+        order.user_id = order_owner_id
         session.get = AsyncMock(return_value=order)
 
         with (
             patch("app.bot.menu_nav.get_nav_level", AsyncMock(return_value=nav.NAV_PAY)),
             patch("app.bot.menu_nav.pop_nav_level", AsyncMock(return_value=nav.NAV_PAY)),
             patch(
-                "app.bot.menu_nav.present_order_pay",
-                new_callable=AsyncMock,
-            ) as pay,
+                "app.bot.handlers.shop.navigate_order_pay_back", new_callable=AsyncMock
+            ) as leave_pay,
             patch(
-                "app.config.get_settings",
-                return_value=MagicMock(currency="IRT"),
-            ),
-            patch(
-                "app.services.formatting.format_toman",
-                return_value="۵۰٬۰۰۰ تومان",
-            ),
+                "app.bot.handlers.reply_nav.open_wallet_home", new_callable=AsyncMock
+            ) as wallet_home,
         ):
             await handle_back(
                 message,
@@ -223,12 +214,27 @@ class NavPayReopenSummaryTests(unittest.IsolatedAsyncioTestCase):
                 is_reseller_bot=False,
                 reseller_owner_id=None,
             )
+        return order, session, leave_pay, wallet_home
 
-        pay.assert_awaited_once()
-        summary = pay.await_args.kwargs.get("summary") or ""
-        self.assertIn("42", summary)
-        self.assertIn("۵۰٬۰۰۰", summary)
+    async def test_handle_back_from_pay_reopens_previous_step_for_own_order(self):
+        from app.db.models import Order
+
+        order, session, leave_pay, wallet_home = await self._back_from_pay(
+            order_owner_id=1
+        )
+
         session.get.assert_awaited_with(Order, 42)
+        leave_pay.assert_awaited_once()
+        self.assertIs(leave_pay.await_args.args[3], order)
+        wallet_home.assert_not_awaited()
+
+    async def test_handle_back_from_pay_ignores_another_users_order(self):
+        _order, _session, leave_pay, wallet_home = await self._back_from_pay(
+            order_owner_id=2
+        )
+
+        leave_pay.assert_not_awaited()
+        wallet_home.assert_awaited_once()
 
 
 if __name__ == "__main__":

@@ -144,10 +144,14 @@ class FieldHintAndPlaceholderTests(unittest.TestCase):
             r'(?s)<strong>آیکن وب‌اپ</strong>\s*<small class="muted">',
         )
 
-    def test_css_cache_busted_by_app_version(self):
-        src = (ROOT / "app/web/templates/base.html").read_text(encoding="utf-8")
-        self.assertIn('href="/static/panel.css?v={{ app_version }}"', src)
-        self.assertIn('src="/static/panel.js?v={{ app_version }}"', src)
+    def test_css_cache_busted_by_app_version(self) -> None:
+        from app.services.panel_assets import get_panel_asset_cache_key
+        from test_panel_safe_speed import render_dashboard_shell
+
+        html = render_dashboard_shell("home.html")
+        self.assertRegex(html, r'href="/static/panel\.css\?v=[^" ]+"')
+        self.assertIn(f'src="/static/panel.js?v={get_panel_asset_cache_key("panel.js")}"', html)
+        self.assertIn(f'src="/static/panel_widget_request.js?v={get_panel_asset_cache_key("panel_widget_request.js")}"', html)
 
     def test_shop_settings_has_live_preview(self):
         shop = (ROOT / "app/web/templates/shop_settings.html").read_text(encoding="utf-8")
@@ -259,13 +263,21 @@ class DeleteButtonAndKebabTests(unittest.TestCase):
         self.assertNotIn("Math.min(mh, 140)", js)
 
     def test_update_warns_stay_on_page(self):
-        upd = (ROOT / "app/web/templates/_settings_update.html").read_text(encoding="utf-8")
-        self.assertIn("upd-stay-warn", upd)
-        self.assertIn("خارج نشوید", upd)
-        self.assertIn("رفرش نکنید", upd)
-        self.assertIn("چند دقیقه", upd)
-        self.assertNotIn("۲ تا ۳ دقیقه", upd)
-        self.assertIn("beforeunload", upd)
+        from jinja2 import Environment, FileSystemLoader
+
+        env = Environment(loader=FileSystemLoader(str(ROOT / "app/web/templates")), autoescape=True)
+        html = env.get_template("_settings_update.html").render(
+            update_info={"update_available": True, "remote_version": "9.9.9", "checked": True, "label": ""},
+            status={"state": "running"},
+            local_version="0.4.0",
+        )
+        self.assertIn("upd-stay-warn", html)
+        self.assertIn("خارج نشوید", html)
+        self.assertIn("رفرش نکنید", html)
+        self.assertIn("چند دقیقه", html)
+        self.assertNotIn("۲ تا ۳ دقیقه", html)
+        # The leave guard lives in panel.js now, not in the partial.
+        self.assertIn("beforeunload", JS.read_text(encoding="utf-8"))
         py = (ROOT / "app/services/panel_update.py").read_text(encoding="utf-8")
         self.assertIn("چند دقیقه", py)
         self.assertNotIn("۲ تا ۳ دقیقه", py)

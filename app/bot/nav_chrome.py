@@ -36,6 +36,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser
 from app.services.users import get_all_settings
+from app.services import bot_feedback_texts as feedback
 
 ReopenPanel = Callable[..., Awaitable[Any]]
 
@@ -139,7 +140,7 @@ async def answer_staff_nav(
     body = (text or "").strip()
     silent_cancel = reopen_panel is not None and (
         not body
-        or body in {"لغو شد.", "لغو شد"}
+        or body in {feedback.CANCELLED, feedback.CANCELLED_SHORT}
         or is_bot_panel_message(message)
     )
     if not silent_cancel:

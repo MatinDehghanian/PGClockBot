@@ -10,18 +10,22 @@ import pytest
 from jinja2 import ChoiceLoader, DictLoader, Environment, FileSystemLoader, Undefined, select_autoescape
 
 from app.services.formatting import format_gb, format_money, format_number, format_toman
+from app.services.panel_assets import get_panel_asset_cache_key
 
 
 class RenderedHtml(HTMLParser):
     def __init__(self, html: str) -> None:
         super().__init__()
         self.inputs: list[dict[str, str | None]] = []
+        self.scripts: list[str] = []
         self.text: list[str] = []
         self.feed(html)
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if tag == "input":
             self.inputs.append(dict(attrs))
+        if tag == "script" and dict(attrs).get("src"):
+            self.scripts.append(str(dict(attrs)["src"]))
 
     def handle_data(self, data: str) -> None:
         self.text.append(data)
@@ -121,3 +125,61 @@ def test_quota_settings_do_not_enable_money_grouping(template_env: Environment) 
     assert "data-money" not in field
     assert field["min"] == "1"
     assert field["max"] == "99"
+
+
+def test_catalog_reductions_group_amounts_and_keep_percentages_plain(template_env: Environment) -> None:
+    def discount(kind: str, amount: int) -> SimpleNamespace:
+        return SimpleNamespace(id=1, title="تخفیف", scope="all", mode="permanent", campaign_id=None,
+                               reduction_kind=kind, reduction_value=amount, ends_at=None, is_active=False)
+
+    html = template_env.get_template("catalog_discounts.html").render(
+        request=SimpleNamespace(query_params={}), scopes={}, modes={}, announcement_status={},
+        discounts=[discount("amount", 1250000), discount("percent", 20)],
+    )
+    rendered = RenderedHtml(html)
+    assert "1,250,000" in "".join(rendered.text)
+    control = next(item for item in rendered.inputs if item.get("name") == "reduction_value")
+    assert control["data-money-kind"] == "reduction_kind"
+    assert control["data-money-value"] == "amount"
+    assert "data-money" not in control
+    assert control["max"] == "2000000000"
+
+
+@pytest.mark.parametrize(("template", "prefix", "items_key"), [
+    ("_loyalty_rewards_panel.html", "reward", "rewards"),
+    ("_loyalty_wheel_panel.html", "prize", "wheel_prizes"),
+])
+@pytest.mark.parametrize("kind", ["wallet_credit", "discount_percent", "traffic_gb"])
+def test_loyalty_values_only_group_wallet_credit(
+    template_env: Environment, template: str, prefix: str, items_key: str, kind: str,
+) -> None:
+    item = SimpleNamespace(id=1, archived=False, enabled=True, name="جایزه", label="جایزه", description="",
+                           reward_type=kind, prize_type=kind, reward_value=1250000, prize_value=1250000,
+                           points_cost=10, redemption_count=0, win_count=0, weight=10, sort_order=1,
+                           max_redemptions_global=None, max_redemptions_per_user=None,
+                           max_wins_global=None, max_wins_per_user=None, min_purchase_toman=0,
+                           max_discount_toman=None, expires_days=None)
+    html = template_env.get_template(template).render(
+        **{items_key: [item]}, reward_type_labels={}, wheel_prize_type_labels={},
+    )
+    controls = [field for field in RenderedHtml(html).inputs if field.get("name") == f"{prefix}_value"]
+    create, edit = controls
+    assert create["data-money-kind"] == f"{prefix}_type"
+    assert create["data-money-value"] == "wallet_credit"
+    assert ("data-money" in edit) == (kind == "wallet_credit")
+    assert edit["value"] == "1250000"
+
+
+def test_grouping_scripts_render_urls_for_their_current_content() -> None:
+    env = Environment(
+        loader=FileSystemLoader(str(Path(__file__).resolve().parents[1] / "app/web/templates")),
+        autoescape=select_autoescape(),
+    )
+    env.globals["template_variable_specs"] = lambda actor: {}
+    context = {"staff": {"role": "reseller", "permissions": []}, "app_version": "unchanged-release",
+               "request": SimpleNamespace(url=SimpleNamespace(path="/home"), query_params={}),
+               "money_inputs_cache_key": get_panel_asset_cache_key("money-inputs.js"),
+               "list_inputs_cache_key": get_panel_asset_cache_key("list-inputs.js")}
+    rendered = RenderedHtml(env.get_template("base.html").render(context))
+    for name in ("money-inputs.js", "list-inputs.js"):
+        assert f"/static/{name}?v={get_panel_asset_cache_key(name)}" in rendered.scripts

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -189,6 +190,8 @@ class MultiAdminReviewTests(AsyncDatabaseTest):
                 raise RuntimeError("message deleted")
 
         self.bot.edit_message_text.side_effect = edit
+        # Alembic's fileConfig (run by earlier migration tests) disables loggers that already exist.
+        logging.getLogger("app.services.payment_review_messages").disabled = False
         async with self.Session() as session:
             payment = await session.get(Payment, self.payment_id)
             with self.assertLogs("app.services.payment_review_messages", level="WARNING"):

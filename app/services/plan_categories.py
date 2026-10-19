@@ -7,12 +7,11 @@ fixed/trial/custom). Each category targets an ``audience``:
 
 from __future__ import annotations
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import Plan, PlanCategory, ResellerPlan
+from app.db.models import Plan, PlanCategory, ResellerPlan, ServiceAddonPack
 from app.services.plans_catalog import (
-    apply_catalog_owner_filter,
     catalog_owner_id,
     require_catalog_owner_id,
 )
@@ -161,6 +160,11 @@ async def reseller_categories_for_menu(
 
 def uncategorized_fixed_plans(fixed_plans: list[Plan]) -> list[Plan]:
     return [p for p in fixed_plans if getattr(p, "category_id", None) is None]
+
+
+async def shop_category_map(session: AsyncSession) -> dict[int, PlanCategory]:
+    """Active shop categories keyed by id — one query for icon inheritance on plan rows."""
+    return {int(c.id): c for c in await list_shop_categories(session, active_only=True)}
 
 
 def plans_in_category(fixed_plans: list[Plan], category_id: int | None) -> list[Plan]:
@@ -348,6 +352,18 @@ async def update_category(
     return cat
 
 
+async def _category_pack_count(session: AsyncSession, cat: PlanCategory) -> int:
+    """Add-on packs of the same shop that are tied to this category."""
+    query = select(func.count()).select_from(ServiceAddonPack).where(
+        ServiceAddonPack.category_id == int(cat.id)
+    )
+    if cat.owner_reseller_id is None:
+        query = query.where(ServiceAddonPack.owner_reseller_id.is_(None))
+    else:
+        query = query.where(ServiceAddonPack.owner_reseller_id == int(cat.owner_reseller_id))
+    return int(await session.scalar(query) or 0)
+
+
 async def delete_category(
     session: AsyncSession, staff: dict | None, category_id: int
 ) -> None:
@@ -364,6 +380,11 @@ async def delete_category(
         )
         await session.execute(detach)
     else:
+        pack_count = await _category_pack_count(session, cat)
+        if pack_count:
+            raise ValueError(
+                f"این برچسب {pack_count} بسته حجم/زمان دارد؛ ابتدا آن‌ها را به «عمومی» منتقل یا حذف کنید"
+            )
         # Detach plans in this shop only (defense-in-depth on owner_reseller_id).
         detach = (
             update(Plan)

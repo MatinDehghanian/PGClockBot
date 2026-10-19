@@ -108,6 +108,19 @@ test("list editor shows every item with only the entry input and no search contr
   assert.match(state.empty.textContent, /هنوز موردی اضافه نشده/);
 });
 
+test("only money list drafts enable live grouping without treating the stored CSV as one amount", (t) => {
+  installDocument(t);
+  for (const kind of ["money", "telegram", "text"]) {
+    const source = {value: "50000,100000", dataset: {normalizeDigits: "0"}};
+    const state = {source, kind, label: "فهرست"};
+    createControls(state);
+    assert.equal(state.draft.dataset.normalizeDigits, kind === "money" ? "1" : "0");
+    assert.equal(Object.hasOwn(state.draft.attributes, "data-money"), kind === "money");
+    assert.equal(source.value, "50000,100000");
+    assert.equal(source.dataset.normalizeDigits, "0");
+  }
+});
+
 test("existing lists keep their order and accept legacy separators", () => {
   assert.deepEqual(parseItems(" one.example, two.example،three.example;four.example\nfive.example ", "text", normalize),
     ["one.example", "two.example", "three.example", "four.example", "five.example"]);

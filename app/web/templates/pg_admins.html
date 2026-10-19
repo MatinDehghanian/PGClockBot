@@ -268,6 +268,8 @@
       <p class="muted">ادمین پاسارگارد: <strong dir="ltr">{{ uname }}</strong>
         — دسترسی «ادمین فرعی» حذف می‌شود و مسیر «نماینده» (پنل ربات + فروشگاه) جایگزین می‌شود.
         هر ادمین فقط یکی از این دو مسیر را می‌تواند داشته باشد. محدودیت‌های نقش پاسارگارد و پلن نمایندگی همچنان اعمال می‌شوند.</p>
+      {% set live_usage = (admin_usage or {}).get(uname|lower) or {} %}
+      <p class="muted">سقف فعلی این ادمین در پاسارگارد (مصرف/سقف): کاربران <strong dir="ltr">{{ live_usage.get('users_text') or '—' }}</strong> · حجم <strong dir="ltr">{{ live_usage.get('traffic_text') or '—' }}</strong>. با پلن «ظرفیت فعلی» همین سقف ثبت می‌شود؛ اگر خوانده نشود، اعطا انجام نمی‌شود.</p>
       {% set grant_plans = (reseller_plans or [])|selectattr('plan_kind', 'in', ['subscription', 'current_capacity'])|list %}
       {% if not grant_plans %}
       {% set grant_plans = (reseller_plans or [])|rejectattr('plan_kind', 'in', ['addon_volume', 'addon_users'])|list %}
@@ -286,12 +288,15 @@
         </select>
         <small class="muted">دسترسی‌های داشبورد، پلن، سفارش، تنظیمات ربات و… از این پلن می‌آید</small>
       </label>
+      <div class="ui-switch-list">
+        {{ switch('confirm_billing_mode_change', 'تأیید تغییر نوع پرداخت', checked=false, help='فقط اگر این ادمین از قبل نماینده است و نوع پلن جدید فرق دارد') }}
+      </div>
       <div class="flash warn">پلن پیش‌فرض «ظرفیت فعلی» سقف حجم/کاربر همین ادمین در پاسارگارد را حفظ می‌کند و صفر نمی‌کند. برای سقف ثابت پلن دیگری انتخاب کنید.</div>
       <label class="form-field">رمز عبور مشترک
         <input name="web_password" type="password" autocomplete="new-password" dir="ltr"
           placeholder="{% if st.get('password_ready') %}خالی = استفاده از رمز ذخیره‌شده{% else %}رمز الزامی است{% endif %}"
           {% if not st.get('password_ready') %}required{% endif %} />
-        <small class="muted">همان رمز برای وب و پاسارگارد — اگر رمز ذخیره‌شده دارید می‌توانید خالی بگذارید (کلید API به‌تنهایی کافی نیست)</small>
+        <small class="muted">رمز وب و پاسارگارد یکی است. اگر رمز ذخیره‌شده دارید، خالی بگذارید (کلید API به‌تنهایی کافی نیست).</small>
       </label>
       <label class="form-field">یادداشت
         <input name="note" placeholder="تبدیل از ادمین فرعی" />
@@ -317,6 +322,8 @@
       <p class="muted">ادمین پاسارگارد: <strong dir="ltr">{{ uname }}</strong>
         — منوی پاسارگارد از نقش ادمین؛ فروشگاه/ربات از پلن نمایندگی.
         اگر این ادمین قبلاً ادمین فرعی باشد، ابتدا آن دسترسی را حذف کنید.</p>
+      {% set live_usage = (admin_usage or {}).get(uname|lower) or {} %}
+      <p class="muted">سقف فعلی این ادمین در پاسارگارد (مصرف/سقف): کاربران <strong dir="ltr">{{ live_usage.get('users_text') or '—' }}</strong> · حجم <strong dir="ltr">{{ live_usage.get('traffic_text') or '—' }}</strong>. با پلن «ظرفیت فعلی» همین سقف ثبت می‌شود؛ اگر خوانده نشود، اعطا انجام نمی‌شود.</p>
       {% set grant_plans = (reseller_plans or [])|selectattr('plan_kind', 'in', ['subscription', 'current_capacity'])|list %}
       {% if not grant_plans %}
       {% set grant_plans = (reseller_plans or [])|rejectattr('plan_kind', 'in', ['addon_volume', 'addon_users'])|list %}
@@ -372,13 +379,13 @@
         <div>
           <label class="form-field">نام کاربری
             <input name="username" required autocomplete="off" placeholder="admin_name" dir="ltr" minlength="3" maxlength="128" pattern="[a-zA-Z0-9\-_@.]+" title="۳ تا ۱۲۸ کاراکتر؛ فقط حروف انگلیسی، عدد و - _ @ ." />
-            <small class="muted">۳ تا ۱۲۸ کاراکتر؛ فقط a-z 0-9 و - _ @ . — بدون دو نماد پشت‌سرهم (قوانین پاسارگارد). همین نام برای ورود وب هم استفاده می‌شود</small>
+            <small class="muted">۳ تا ۱۲۸ کاراکتر از a-z، 0-9 و - _ @ . بدون دو نماد پشت‌سرهم. همین نام برای ورود به وب هم استفاده می‌شود.</small>
           </label>
         </div>
         <div>
           <label class="form-field">رمز عبور
             <input name="password" type="password" required autocomplete="new-password" dir="ltr" placeholder="رمز قوی" minlength="12" />
-            <small class="muted">حداقل ۱۲ کاراکتر، دو رقم، دو حرف بزرگ، دو حرف کوچک و یک کاراکتر خاص — طبق قوانین پاسارگارد؛ برای پاسارگارد و وب یکی است</small>
+            <small class="muted">حداقل ۱۲ کاراکتر شامل دو رقم، دو حرف بزرگ، دو حرف کوچک و یک نماد. برای پاسارگارد و وب یکی است.</small>
           </label>
         </div>
         <div>

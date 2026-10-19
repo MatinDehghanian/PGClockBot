@@ -1,14 +1,35 @@
 from __future__ import annotations
 
 import logging
+import json
+import asyncio
+import secrets
+import time
+from dataclasses import dataclass
 from typing import Any, Optional
 
 import httpx
 
 from app.config import get_settings, normalize_pg_subscription_path, pg_api_base_candidates
+from app.services.pg_read_resilience import DNS_CACHE_TTL_SEC, panel_read_request, reset_read_circuits, validate_panel_base
 from app.services.security_policy import UnsafePgUrlError, assert_safe_pg_base_url
 
 logger = logging.getLogger(__name__)
+
+
+async def _mutation_request(
+    client: httpx.AsyncClient, method: str, url: str, **kwargs: Any
+) -> httpx.Response:
+    """Keep mutation timeouts and unknown outcomes independent of web reads."""
+    return await client.request(method, url, **kwargs)
+
+
+@dataclass(frozen=True, slots=True)
+class WireGuardResponse:
+    """What the panel answered for a subscription's WireGuard files."""
+
+    status: int | None
+    data: bytes | None
 
 
 class PasarGuardError(Exception):
@@ -180,14 +201,16 @@ class PasarGuardClient:
         api_key: str | None = None,
     ) -> None:
         self.settings = get_settings()
+        # Recreated/rotated credentials must never reuse another client's ACL reads.
+        self._cache_partition = secrets.token_hex(16)
         # Use settings value as-is (already normalized with path preserved)
         self.base_url = (self.settings.pg_base_url or "").rstrip("/")
         if self.base_url:
             try:
-                self.base_url = assert_safe_pg_base_url(self.base_url)
+                self.base_url = assert_safe_pg_base_url(self.base_url, resolve_dns=False)
             except UnsafePgUrlError:
                 # Keep empty so ensure_token fails closed instead of dialing SSRF targets
-                logger.error("Refusing unsafe PG_BASE_URL=%s", self.settings.pg_base_url)
+                logger.error("Refusing unsafe PasarGuard base URL")
                 self.base_url = ""
         # Optional per-admin credentials (reseller shop) — never fall back to owner silently
         self._login_username = (username or "").strip() or None
@@ -235,12 +258,20 @@ class PasarGuardClient:
     async def close(self) -> None:
         await self._client.aclose()
 
+    async def _ensure_safe_target(self, *, protected: bool = True) -> None:
+        if not self.base_url:
+            return
+        if getattr(self, "_validated_base", None) == self.base_url and getattr(self, "_validated_until", 0) > time.monotonic():
+            return
+        self._validated_base = await validate_panel_base(self.base_url, protected=protected)
+        self._validated_until = time.monotonic() + DNS_CACHE_TTL_SEC
+
     async def _rebind_base(self, base: str) -> None:
         base = (base or "").rstrip("/")
         if not base or base == self.base_url:
             return
         try:
-            base = assert_safe_pg_base_url(base)
+            base = await validate_panel_base(base)
         except UnsafePgUrlError as exc:
             raise PasarGuardError(str(exc)) from exc
         logger.warning(
@@ -262,6 +293,7 @@ class PasarGuardClient:
 
     async def _ensure_api_base(self) -> None:
         """If PG_BASE_URL includes a dashboard path, switch to the real API root."""
+        await self._ensure_safe_target()
         if getattr(self, "_api_base_resolved", False):
             return
         candidates = pg_api_base_candidates(self.settings.pg_base_url or self.base_url)
@@ -276,13 +308,13 @@ class PasarGuardClient:
                     # Only accept a candidate that identifies as PasarGuard.
                     # Do NOT treat bare /api/system 401/403 as proof — that
                     # pattern matches many unrelated internal services (SSRF).
-                    r = await probe.get("/openapi.json")
+                    r = await panel_read_request(probe, "GET", "/openapi.json")
                     if r.status_code == 200 and "PasarGuard" in (r.text or ""):
                         await self._rebind_base(base)
-                        break
+                        self._api_base_resolved = True
+                        return
             except Exception:
                 continue
-        self._api_base_resolved = True
 
     async def ensure_token(self) -> str:
         if self._api_key:
@@ -324,7 +356,7 @@ class PasarGuardClient:
                 base_url=base, timeout=30.0, follow_redirects=False
             ) as probe:
                 for data in attempts:
-                    last = await probe.post("/api/admin/token", data=data)
+                    last = await panel_read_request(probe, "POST", "/api/admin/token", data=data)
                     if last.status_code < 400:
                         await self._rebind_base(base)
                         self._api_base_resolved = True
@@ -383,8 +415,8 @@ class PasarGuardClient:
         user = (getattr(self, "_login_username", None) or "").strip()
         base = (self.base_url or "").rstrip("/")
         if user:
-            return f"u:{user}@{base}"
-        return f"owner@{base}"
+            return f"u:{user}@{base}:{self._cache_partition}"
+        return f"owner@{base}:{self._cache_partition}"
 
     async def request(
         self,
@@ -399,6 +431,7 @@ class PasarGuardClient:
         from app.services.pg_read_cache import cache_get, cache_put, invalidate_ident
 
         method_u = (method or "GET").upper()
+        await self._ensure_safe_target(protected=method_u == "GET")
         ident = self._read_cache_ident()
         if method_u != "GET":
             invalidate_ident(ident)
@@ -411,14 +444,15 @@ class PasarGuardClient:
             headers.update(await self._headers())
         elif resolve_api_base:
             await self._ensure_api_base()
-        resp = await self._client.request(method, path, headers=headers, **kwargs)
+        send_request = panel_read_request if method_u == "GET" else _mutation_request
+        resp = await send_request(self._client, method, path, headers=headers, **kwargs)
         if resp.status_code == 401 and auth:
             # Bearer: clear JWT and re-login once. API key: same key cannot recover —
             # skip retry (would only double the same unauthorized request).
             if not self._api_key:
                 self._token = None
                 headers.update(await self._headers())
-                resp = await self._client.request(method, path, headers=headers, **kwargs)
+                resp = await send_request(self._client, method, path, headers=headers, **kwargs)
         if resp.status_code >= 400:
             raise PasarGuardError(
                 f"{method} {path} failed ({resp.status_code})",
@@ -576,11 +610,13 @@ class PasarGuardClient:
         data = await self.request("GET", "/api/admin")
         if isinstance(data, dict):
             if data.get("username") or data.get("id") is not None or data.get("role"):
+                self._api_base_resolved = True
                 return data
             inner = data.get("admin")
             if isinstance(inner, dict) and (
                 inner.get("username") or inner.get("id") is not None or inner.get("role")
             ):
+                self._api_base_resolved = True
                 return inner
         return None
 
@@ -846,17 +882,40 @@ class PasarGuardClient:
             auth=False, use_cache=False, resolve_api_base=False,
         )
 
+    async def subscription_xray(self, token: str, *, subscription_url: str | None = None) -> list[dict[str, Any]]:
+        """Read bounded native routes without caching credentials or raw error bodies."""
+        path = self._subscription_endpoint(token, "xray", subscription_url)
+        await self._ensure_safe_target()
+        payload = bytearray()
+        try:
+            async with self._client.stream("GET", path, headers={"Accept": "application/json"}) as response:
+                if response.status_code != 200:
+                    raise PasarGuardError("Monitoring subscription unavailable", response.status_code)
+                async for chunk in response.aiter_bytes(chunk_size=16384):
+                    payload.extend(chunk)
+                    if len(payload) > 2 * 1024 * 1024:
+                        raise PasarGuardError("Monitoring subscription exceeds capacity")
+            result = await asyncio.to_thread(json.loads, payload)
+        except (httpx.HTTPError, ValueError, RecursionError):
+            raise PasarGuardError("Monitoring subscription unavailable") from None
+        if not isinstance(result, list) or len(result) > 1000 or any(not isinstance(item, dict) for item in result):
+            raise PasarGuardError("Monitoring subscription format unavailable")
+        return result
+
     async def subscription_wireguard_bytes(
         self, token: str, *, subscription_url: str | None = None
-    ) -> bytes | None:
-        """Fetch WireGuard payload (``.zip`` or plain ``.conf``). Public sub route.
+    ) -> WireGuardResponse:
+        """Fetch the WireGuard payload (``.zip`` of ``.conf`` files, or one plain ``.conf``).
 
-        Returns ``None`` when the user has no WireGuard inbound (404/empty/HTML).
-        Uses raw bytes — ``request()`` would corrupt zip via ``resp.text``.
+        ``data`` is ``None`` when the panel offered nothing usable; ``status`` tells why
+        (``None`` = transport error, 406 = WireGuard format switched off in the panel).
+        Raw bytes are used because ``request()`` would corrupt a zip through ``resp.text``.
         """
         path = self._subscription_endpoint(token, "wireguard", subscription_url)
         try:
-            resp = await self._client.request(
+            await self._ensure_safe_target()
+            resp = await panel_read_request(
+                self._client,
                 "GET",
                 path,
                 headers={
@@ -866,23 +925,23 @@ class PasarGuardClient:
             )
         except httpx.HTTPError:
             logger.warning("wireguard fetch transport error token=…%s", (token or "")[-6:])
-            return None
-        if resp.status_code in {204, 404}:
-            return None
-        if resp.status_code >= 400:
+            return WireGuardResponse(status=None, data=None)
+        if resp.status_code >= 400 and resp.status_code != 404:
             logger.warning(
                 "wireguard fetch failed status=%s token=…%s",
                 resp.status_code,
                 (token or "")[-6:],
             )
-            return None
         data = resp.content or b""
-        if len(data) < 16:
-            return None
         head = data.lstrip()[:64].lower()
-        if head.startswith(b"<!doctype") or head.startswith(b"<html"):
-            return None
-        return data
+        if (
+            resp.status_code >= 300
+            or len(data) < 16
+            or head.startswith(b"<!doctype")
+            or head.startswith(b"<html")
+        ):
+            return WireGuardResponse(status=resp.status_code, data=None)
+        return WireGuardResponse(status=resp.status_code, data=data)
 
 
 def as_any_list(data: Any, *keys: str) -> list:
@@ -939,6 +998,7 @@ def reset_pg() -> None:
     _pg_reseller_cache = {}
     _pg_staff_cache = {}
     _pg_principal_cache = {}
+    reset_read_circuits()
 
 
 def invalidate_pg_principal_cache(principal_id: int | None) -> None:

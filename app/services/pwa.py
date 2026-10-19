@@ -304,6 +304,7 @@ self.addEventListener('activate', (event) => {
 function isVersionedPanelAsset(url) {
   return url.pathname === '/static/panel.css'
     || url.pathname === '/static/panel.js'
+    || url.pathname === '/static/panel_widget_request.js'
     || url.pathname === '/static/fonts.css'
     || url.pathname.indexOf('/static/fonts/') === 0;
 }

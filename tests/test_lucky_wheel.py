@@ -223,9 +223,16 @@ class LuckyWheelEngineTests(unittest.IsolatedAsyncioTestCase):
             r_plat = await spin(
                 session, platform_user, idempotency_key="plat-1", random_fn=lambda n: 0
             )
-            r_shop = await spin(
-                session, shop_user, idempotency_key="shop-1", random_fn=lambda n: 0
-            )
+            # The wheel belongs to the bot in use, not to the customer's attribution.
+            from app.services.users import reset_shop_reseller_id, set_shop_reseller_id
+
+            token = set_shop_reseller_id(owner.id)
+            try:
+                r_shop = await spin(
+                    session, shop_user, idempotency_key="shop-1", random_fn=lambda n: 0
+                )
+            finally:
+                reset_shop_reseller_id(token)
             self.assertEqual(r_plat.prize_value, 3)
             self.assertEqual(r_shop.prize_value, 7)
             self.assertIsNone(r_plat.spin.reseller_id)

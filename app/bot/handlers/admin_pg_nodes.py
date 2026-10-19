@@ -13,11 +13,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot import keyboards as kb
 from app.bot.auth import can_platform_pg_action, can_platform_pg_page
 from app.bot.auth import is_platform_admin as _is_admin
+from app.bot.nav_input import form_origin
 from app.bot.tg_utils import parse_bot_int, safe_edit_text
 from app.db.models import BotUser
 from app.services.formatting import node_status_fa
 from app.services.redact import user_safe_error
 from app.services.pasarguard import get_pg
+from app.services import bot_feedback_texts as feedback
 
 
 async def _lasting_kb(session, db_user, classic):
@@ -38,9 +40,9 @@ async def _require_nodes(db_user: BotUser, callback=None, message=None, *, actio
     """
     if not _is_admin(db_user):
         if callback is not None:
-            await callback.answer("ادمین نیستید", show_alert=True)
+            await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         elif message is not None:
-            await message.answer("ادمین نیستید.")
+            await message.answer(feedback.NOT_ADMIN_REPLY)
         return False
     if not await can_platform_pg_page(db_user, "pg_nodes"):
         if callback is not None:
@@ -50,9 +52,9 @@ async def _require_nodes(db_user: BotUser, callback=None, message=None, *, actio
         return False
     if action and not await can_platform_pg_action(db_user, "nodes", action):
         if callback is not None:
-            await callback.answer("اجازه این عمل را ندارید", show_alert=True)
+            await callback.answer(feedback.ACTION_NOT_ALLOWED, show_alert=True)
         elif message is not None:
-            await message.answer("اجازه این عمل را ندارید.")
+            await message.answer(feedback.ACTION_NOT_ALLOWED_REPLY)
         return False
     return True
 
@@ -138,7 +140,7 @@ def _nodes_list_kb(items: list) -> InlineKeyboardMarkup:
                 )
             ]
         )
-    rows.append([InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:pg")])
+    rows.append([kb.back_button(None, "adm:pg")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -156,7 +158,7 @@ def _node_detail_kb(nid: int) -> InlineKeyboardMarkup:
             [
                 InlineKeyboardButton(text="🗑 حذف", callback_data=f"adm:pg:ndelask:{nid}"),
             ],
-            [InlineKeyboardButton(text="⬅️ لیست نودها", callback_data="adm:pg:nodes")],
+            [kb.back_button(None, "adm:pg:nodes")],
         ]
     )
 
@@ -189,7 +191,13 @@ async def _render_nodes_list(callback: CallbackQuery, gate) -> None:
         items = await list_scoped_pg_objects(gate, kind="nodes")
     except Exception as e:
         if callback.message:
-            await safe_edit_text(callback.message, f"خطا: {_err_msg(e)}", reply_markup=None)
+            await safe_edit_text(
+                callback.message,
+                f"خطا: {_err_msg(e)}",
+                reply_markup=InlineKeyboardMarkup(
+                    inline_keyboard=[[kb.back_button(None, "nv:adm:pg")]]
+                ),
+            )
         return
     if not isinstance(items, list):
         items = []
@@ -266,7 +274,7 @@ async def pg_node_detail(
     nid = int((n or {}).get("id") or 0)
     await callback.answer()
     if not isinstance(n, dict) or nid <= 0:
-        await callback.answer("یافت نشد", show_alert=True)
+        await callback.answer(feedback.NOT_FOUND, show_alert=True)
         return
     if callback.message:
         await safe_edit_text(
@@ -605,6 +613,7 @@ async def pg_node_create_start(
             state,
             prompt="نام نود:",
             cancel_code="adm_pg_n",
+            return_to="adm:pg:nodes",
             fsm_state=PgNodeStates.create_name,
             edit=False,
         )
@@ -655,6 +664,7 @@ async def pg_node_create_name(
         state,
         prompt="آدرس نود (IP یا دامنه):",
         cancel_code="adm_pg_n",
+        return_to=await form_origin(state),
         fsm_state=PgNodeStates.create_address,
         edit=False,
     )
@@ -705,6 +715,7 @@ async def pg_node_create_address(
         state,
         prompt="پورت (عدد — یا «-» برای رد کردن):",
         cancel_code="adm_pg_n",
+        return_to=await form_origin(state),
         fsm_state=PgNodeStates.create_port,
         edit=False,
     )
@@ -746,7 +757,7 @@ async def pg_node_create_port(
         try:
             data["port"] = parse_bot_int(raw)
         except ValueError:
-            await message.answer("پورت نامعتبر — عدد بفرستید یا «-».")
+            await message.answer("پورت را با عدد بفرستید، یا برای رد کردن «-» بفرستید.")
             return
     await state.update_data(node_create=data)
     await state.set_state(None)
@@ -787,7 +798,7 @@ async def pg_node_create_conn(
         return
     conn = callback.data.rsplit(":", 1)[-1]
     if conn not in {"grpc", "rest"}:
-        await callback.answer("نامعتبر", show_alert=True)
+        await callback.answer(feedback.INVALID, show_alert=True)
         return
     data = (await state.get_data()).get("node_create") or {}
     if not data.get("name") or not data.get("address"):
@@ -813,6 +824,7 @@ async def pg_node_create_conn(
             state,
             prompt="شناسه هسته یا «-»:",
             cancel_code="adm_pg_n",
+            return_to=await form_origin(state),
             fsm_state=PgNodeStates.create_core,
             edit=False,
         )
@@ -865,6 +877,7 @@ async def pg_node_create_core(
         state,
         prompt="API Key (یا «-» برای رد):",
         cancel_code="adm_pg_n",
+        return_to=await form_origin(state),
         fsm_state=PgNodeStates.create_api_key,
         edit=False,
     )
@@ -913,6 +926,7 @@ async def pg_node_create_api_key(
         state,
         prompt="Server CA (گواهی — چندخطی مجاز؛ یا «-» برای رد):",
         cancel_code="adm_pg_n",
+        return_to=await form_origin(state),
         fsm_state=PgNodeStates.create_server_ca,
         edit=False,
     )
@@ -961,7 +975,7 @@ async def pg_node_create_server_ca(
     address = str(data.get("address") or "").strip()
     if not name or not address:
         await state.set_state(None)
-        await message.answer("اطلاعات ناقص — از ابتدا شروع کنید.", reply_markup=await _lasting_kb(session, db_user, kb.admin_product_reply_keyboard()))
+        await message.answer("اطلاعات این مرحله کامل نیست. از ابتدا شروع کنید.", reply_markup=await _lasting_kb(session, db_user, kb.admin_product_reply_keyboard()))
         return
     payload: dict = {
         "name": name,

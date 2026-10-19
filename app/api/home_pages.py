@@ -10,6 +10,9 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.session import SessionLocal
+from app.services.authz import authz_from_staff, can_shop
+from app.services.dashboard_trend import empty_trend, own_account_summary, sales_trend
 from app.services.host_gauges import gauges_json, local_host_gauges
 from app.services.home_overview import build_home_overview, reseller_shop_summary
 from app.services.shop_scope import empty_shop_stats, is_platform_admin, shop_owner_id
@@ -98,6 +101,24 @@ async def _safe_periods(session: AsyncSession, *, reseller_id: int | None):
         return empty_period_stats()
 
 
+async def _safe_trend(*, reseller_id: int | None):
+    """Seven-day sales trend on its own session; a failure shows an empty chart, never an error page."""
+    try:
+        async with SessionLocal() as session:
+            return await sales_trend(session, reseller_id=reseller_id, days=7)
+    except Exception:
+        logger.exception("sales trend failed reseller_id=%s", reseller_id)
+        return empty_trend(7)
+
+
+def kpi_links(staff: dict | None) -> dict[str, bool]:
+    """Which KPI cards may link to their page: only staff who can open that page get a link."""
+    if not staff:
+        return {"payments": False, "tickets": False}
+    authz = authz_from_staff(staff)
+    return {"payments": can_shop(authz, "payments"), "tickets": can_shop(authz, "tickets")}
+
+
 async def _safe_action_center(session: AsyncSession, *, reseller_id: int | None, expire_days: int = 3):
     from app.services.db_safe import rollback_quiet
     from app.services.ux20 import build_action_center
@@ -114,7 +135,6 @@ async def _safe_action_center(session: AsyncSession, *, reseller_id: int | None,
 
 async def _parallel_home_ops(*, reseller_id: int | None, funnel_enabled: bool, expire_days: int):
     """Run funnel / periods / action-center on isolated sessions (safe gather)."""
-    from app.db.session import SessionLocal
     from app.services.home_overview import empty_period_stats
 
     async def _funnel():
@@ -209,8 +229,15 @@ async def _staff_wallet_card(session: AsyncSession, staff: dict) -> dict | None:
     user = await session.get(BotUser, int(uid))
     if user is None:
         return None
-    bal = int(user.wallet_balance or 0)
-    return {"balance": bal, "balance_fa": format_toman(bal)}
+    summary = await own_account_summary(session, int(uid))
+    bal = int(summary["wallet"] or 0)
+    return {
+        "balance": bal,
+        "balance_fa": format_toman(bal),
+        "user_id": int(uid),
+        "services": summary["services"],
+        "nearest_expiry_days": summary["nearest_expiry_days"],
+    }
 
 
 async def _reseller_shop_stats(session: AsyncSession, rid: int) -> dict[str, int]:
@@ -259,37 +286,32 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
         staff: dict = Depends(require_staff),
         session: AsyncSession = Depends(get_db),
     ):
-        from urllib.parse import quote
-
-        from app.services.inbox_dismissals import upsert_dismissal
+        from app.services.inbox_dismissals import alert_counts, upsert_dismissal
+        from app.services.panel_inbox import build_inbox_context
 
         form = await request.form()
         alert_key = str(form.get("alert_key") or "").strip()
         entity_id = str(form.get("entity_id") or "").strip()
         mode = str(form.get("mode") or "").strip()
-        from app.services.table_bulk import sanitize_return_to
+        from app.services.table_bulk import redirect_bulk, sanitize_return_to
 
         return_to = sanitize_return_to(
             str(form.get("return_to") or "/inbox"), default="/inbox"
         )
         try:
+            ctx = await build_inbox_context(session, request, staff)
             await upsert_dismissal(
                 session,
                 staff=staff,
                 alert_key=alert_key,
                 mode=mode,
                 entity_id=entity_id,
+                seen_count=alert_counts(ctx).get(alert_key, 0),
             )
         except ValueError as e:
-            return RedirectResponse(
-                f"{return_to}?err={quote(str(e))}",
-                status_code=303,
-            )
+            return redirect_bulk(return_to, err=str(e))
         _invalidate_inbox_caches(staff)
-        return RedirectResponse(
-            f"{return_to}?ok={quote('اعلان مخفی شد')}",
-            status_code=303,
-        )
+        return redirect_bulk(return_to, ok="اعلان مخفی شد")
 
     @app.post("/inbox/dismiss/reset")
     async def inbox_dismiss_reset(
@@ -297,12 +319,10 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
         staff: dict = Depends(require_staff),
         session: AsyncSession = Depends(get_db),
     ):
-        from urllib.parse import quote
-
         from app.services.inbox_dismissals import clear_staff_dismissals
 
         form = await request.form()
-        from app.services.table_bulk import sanitize_return_to
+        from app.services.table_bulk import redirect_bulk, sanitize_return_to
 
         return_to = sanitize_return_to(
             str(form.get("return_to") or "/inbox"), default="/inbox"
@@ -310,16 +330,14 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
         removed = await clear_staff_dismissals(session, staff)
         _invalidate_inbox_caches(staff)
         msg = "اعلان‌های مخفی‌شده بازنشانی شدند" if removed else "اعلان مخفی‌شده‌ای نبود"
-        return RedirectResponse(
-            f"{return_to}?ok={quote(msg)}",
-            status_code=303,
-        )
+        return redirect_bulk(return_to, ok=msg)
 
     async def _render_home_result(request: Request, result, *, as_body_fragment: bool):
         if isinstance(result, RedirectResponse):
             return result
         template, ctx = result
         ctx = dict(ctx)
+        ctx["kpi_links"] = kpi_links(ctx.get("staff"))
         # Body fragment must never re-trigger defer (no nested fetch loop).
         ctx["widgets_deferred"] = False
         if as_body_fragment:
@@ -364,6 +382,7 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 return result
             template, ctx = result
             ctx = dict(ctx)
+            ctx["kpi_links"] = kpi_links(staff)
             ctx["widgets_deferred"] = True
             ctx["widgets_body_url"] = "/home/body"
             # Intentionally not dashboard_degraded — shell is planned, not failed.
@@ -383,6 +402,7 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
             return result
         template, ctx = result
         ctx = dict(ctx)
+        ctx["kpi_links"] = kpi_links(staff)
         ctx["widgets_deferred"] = False
         return render(request, template, _flash_from_query(request, ctx))
 
@@ -576,10 +596,9 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 expire_days = int(ui.get("action_center_expire_days") or 3)
             except (TypeError, ValueError):
                 expire_days = 3
-            funnel, periods, action_center = await _parallel_home_ops(
-                reseller_id=None,
-                funnel_enabled=funnel_enabled,
-                expire_days=expire_days,
+            (funnel, periods, action_center), trend = await asyncio.gather(
+                _parallel_home_ops(reseller_id=None, funnel_enabled=funnel_enabled, expire_days=expire_days),
+                _safe_trend(reseller_id=None),
             )
             try:
                 from app.services.inbox_dismissals import filter_action_center_for_staff
@@ -591,6 +610,11 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                 logger.exception("home action_center dismiss filter failed")
             pg_limits = None
             wallet_card = None
+            try:
+                wallet_card = await _staff_wallet_card(session, staff)
+            except Exception:
+                logger.exception("owner home account card failed")
+                await rollback_quiet(session)
             if staff.get("pg_is_owner") is False:
                 from app.services.pg_overview import build_reseller_pg_overview
 
@@ -606,12 +630,6 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                     logger.exception("hybrid owner home pg limits failed")
                     await rollback_quiet(session)
                     pg_limits = None
-                try:
-                    wallet_card = await _staff_wallet_card(session, staff)
-                except Exception:
-                    logger.exception("hybrid owner home wallet failed")
-                    await rollback_quiet(session)
-                    wallet_card = None
             return (
                 "home.html",
                 {
@@ -625,6 +643,7 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
                     "dashboard_degraded": False,
                     "pg_limits": pg_limits,
                     "wallet_card": wallet_card,
+                    "trend": trend,
                     "show_pg_nodes": show_pg_nodes,
                 },
             )
@@ -757,10 +776,9 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
             expire_days = int(ui.get("action_center_expire_days") or 3)
         except (TypeError, ValueError):
             expire_days = 3
-        funnel, periods, action_center = await _parallel_home_ops(
-            reseller_id=int(rid),
-            funnel_enabled=funnel_enabled,
-            expire_days=expire_days,
+        (funnel, periods, action_center), trend = await asyncio.gather(
+            _parallel_home_ops(reseller_id=int(rid), funnel_enabled=funnel_enabled, expire_days=expire_days),
+            _safe_trend(reseller_id=int(rid)),
         )
         try:
             from app.services.inbox_dismissals import filter_action_center_for_staff
@@ -775,6 +793,7 @@ def register_home_pages(app, *, render, require_admin, require_staff, get_db):
             {
                 "staff": staff,
                 "stats": stats,
+                "trend": trend,
                 "pg_limits": pg_limits,
                 "bot_setup_needed": bot_setup_needed,
                 "bot": bot,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import unittest
 from pathlib import Path
 
@@ -63,6 +64,30 @@ class ResellerModalLayoutTests(unittest.TestCase):
         self.assertIn("payg-meta", src)
 
 
+def _python_string_literals(src: str) -> list[str]:
+    """Lines of user-facing string literals, skipping docstrings (developer text)."""
+    tree = ast.parse(src)
+    docstrings: set[int] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            first = node.body[0] if node.body else None
+            if (
+                isinstance(first, ast.Expr)
+                and isinstance(first.value, ast.Constant)
+                and isinstance(first.value.value, str)
+            ):
+                docstrings.add(id(first.value))
+    out: list[str] = []
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Constant)
+            and isinstance(node.value, str)
+            and id(node) not in docstrings
+        ):
+            out.extend(node.value.splitlines())
+    return out
+
+
 class VolumeUnitFaTests(unittest.TestCase):
     def test_ratio_unit_once(self):
         text = format_bytes_ratio(10 * GB, 100 * GB)
@@ -86,8 +111,15 @@ class VolumeUnitFaTests(unittest.TestCase):
         ]
         for rel in paths:
             src = (ROOT / rel).read_text(encoding="utf-8")
-            # Allow code identifiers like price_per_gb / data_limit_gb
-            for line in src.splitlines():
+            if rel.endswith(".py"):
+                lines = _python_string_literals(src)
+            else:
+                lines = src.splitlines()
+            # Allow code identifiers like price_per_gb / data_limit_gb, and the
+            # panel-username preview whose {plan_unit} token is ASCII by design.
+            for line in lines:
+                if "{plan_unit}" in line:
+                    continue
                 if "price_per_gb" in line or "data_limit_gb" in line or "extra_gb" in line:
                     continue
                 if "GB =" in line or "* GB" in line or "/ GB" in line.replace("/ گیگ", ""):

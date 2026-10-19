@@ -12,7 +12,7 @@
         {% if user.username %}<span>@{{ user.username }}</span>{% endif %}
         {% if user.is_blocked %}<span class="badge blocked">مسدود</span>{% else %}<span class="badge active">فعال</span>{% endif %}
         {% if user.is_demo %}<span class="badge neutral">دمو</span>{% endif %}
-        {% set tag = color_tag_meta(user.color_tag) if color_tag_meta is defined else none %}
+        {% set tag = color_tag_meta(user.color_tag) if (color_tag_meta is defined and show_private_marks|default(true)) else none %}
         {% if tag %}<span class="badge badge-risk-tag" style="--tag-color: {{ tag.hex }}">{{ tag.title_fa }}</span>{% endif %}
       </p>
     </div>
@@ -29,7 +29,7 @@
 <section class="edit-section">
   <header class="edit-section-head">
     <h3>کاربر دمو</h3>
-    <p class="muted">برای حساب‌های تست ادمین؛ سفارش‌ها، پرداخت‌ها و فعالیت‌های قبلی و جدید از آمار و گزارش‌های مالی کنار گذاشته می‌شوند. سوابق و موجودی کیف پول حفظ می‌شوند. با غیرفعال کردن دمو، سوابق دوباره در گزارش‌ها محاسبه می‌شوند.</p>
+    <p class="muted">برای حساب‌های آزمایشی ادمین. سفارش‌ها و پرداخت‌های این کاربر در آمار و گزارش مالی حساب نمی‌شوند، ولی سوابق و موجودی کیف پول می‌ماند. با غیرفعال‌کردن دمو دوباره حساب می‌شوند.</p>
   </header>
   <form method="post" action="/users/{{ user.id }}/demo" class="form-stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
@@ -43,6 +43,7 @@
   </form>
 </section>
 {% endif %}
+{% if show_private_marks|default(true) %}
 <section class="edit-section">
   <header class="edit-section-head">
     <h3>تگ ریسک</h3>
@@ -56,8 +57,10 @@
     </div>
   </form>
 </section>
+{% endif %}
 
 {% if manage_user %}
+{% if show_private_marks|default(true) %}
 <section class="edit-section">
   <header class="edit-section-head">
     <h3>یادداشت داخلی</h3>
@@ -72,6 +75,7 @@
     </div>
   </form>
 </section>
+{% endif %}
 
 <section class="edit-section">
   <header class="edit-section-head">
@@ -97,7 +101,7 @@
   </form>
 </section>
 
-<section class="edit-section">
+<section class="edit-section" id="user-wallet">
   <header class="edit-section-head">
     <h3>تنظیم کیف پول</h3>
     <p class="muted">مبلغ را وارد کنید، سپس افزایش یا کاهش را بزنید. موجودی منفی مجاز نیست.</p>
@@ -160,7 +164,7 @@
 </section>
 
 {% endif %}
-<section class="edit-section">
+<section class="edit-section" id="user-services">
   <header class="edit-section-head">
     <h3>سرویس‌ها</h3>
     {% if services %}<p class="muted">{{ services|length }} سرویس</p>{% endif %}
@@ -236,6 +240,27 @@
         </form>
 {% endif %}
 {% if can_pg_delete %}
+        {% if s.service.remark in ['linked', 'imported'] %}
+        {# Added from outside the bot: detaching is the safe default; removing the panel account is a separate, explicit choice. #}
+        <form method="post" action="/users/{{ user.id }}/services/{{ s.service.id }}/delete" class="form-stack"
+              data-confirm="سرویس #{{ s.service.id }}{% if s.service.pg_username %} ({{ s.service.pg_username }}){% endif %} فقط از لیست مشتری جدا شود؟ حساب VPN در پاسارگارد حفظ می‌شود و مشتری دیگر آن را در ربات نمی‌بیند."
+              data-confirm-title="جدا کردن سرویس از مشتری"
+              data-confirm-label="جدا شود">
+          <div class="actions user-edit-actions">
+            <button class="btn btn-sm btn-ghost" type="submit">جدا کردن از مشتری</button>
+          </div>
+        </form>
+        <form method="post" action="/users/{{ user.id }}/services/{{ s.service.id }}/delete" class="form-stack"
+              data-confirm="سرویس #{{ s.service.id }}{% if s.service.pg_username %} ({{ s.service.pg_username }}){% endif %} از بیرون ربات اضافه شده است. حساب VPN آن در پاسارگارد هم برای همیشه حذف شود؟ این عمل برگشت‌ناپذیر است."
+              data-confirm-title="حذف همراه حساب پاسارگارد"
+              data-confirm-danger="1"
+              data-confirm-label="حذف با حساب پاسارگارد">
+          <input type="hidden" name="delete_pg" value="1" />
+          <div class="actions user-edit-actions">
+            <button class="btn btn-sm btn-danger" type="submit">حذف همراه حساب پاسارگارد</button>
+          </div>
+        </form>
+        {% else %}
         <form method="post" action="/users/{{ user.id }}/services/{{ s.service.id }}/delete" class="form-stack"
               data-confirm="سرویس #{{ s.service.id }}{% if s.service.pg_username %} ({{ s.service.pg_username }}){% endif %} و کاربر پاسارگارد مرتبط برای همیشه حذف شوند؟ این عمل برگشت‌ناپذیر است."
               data-confirm-title="تأیید حذف سرویس"
@@ -245,6 +270,7 @@
             <button class="btn btn-sm btn-danger" type="submit">حذف سرویس</button>
           </div>
         </form>
+        {% endif %}
 {% endif %}
       </div>
     </li>
@@ -282,7 +308,7 @@
 <section class="edit-section">
   <header class="edit-section-head">
     <h3>حذف کاربر</h3>
-    <p class="muted">کاربر بات و تمام سفارش‌ها، سرویس‌ها، پرداخت‌ها و تیکت‌های مرتبط حذف می‌شوند. برگشت‌ناپذیر است. اگر دوباره به ربات پیام بدهد، حساب جدید (خالی) برای همان تلگرام ساخته می‌شود.</p>
+    <p class="muted">حساب و همهٔ سفارش‌ها، سرویس‌ها، پرداخت‌ها و تیکت‌های او حذف می‌شود و برگشت ندارد. اگر دوباره به ربات پیام بدهد، حساب خالی جدیدی ساخته می‌شود.</p>
   </header>
   {% if wallet_amt > 0 %}
   <div class="flash warn user-edit-wallet-delete-warn">

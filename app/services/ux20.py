@@ -28,7 +28,13 @@ from app.db.models import (
     Ticket,
     UserService,
 )
+from app.services.connection_guides import serialize_submitted_guides
 from app.services.demo_users import non_demo_customer
+from app.services.pasarguard import is_pg_permission_denied
+from app.services.pg_read_resilience import PG_READ_UNAVAILABLE_MESSAGE, PgReadUnavailable
+from app.services.service_scope import shop_services_clause
+from app.services.ticket_scope import ticket_shop_clause
+from app.services import bot_feedback_texts as feedback
 
 logger = logging.getLogger(__name__)
 
@@ -110,8 +116,12 @@ async def check_pg_connection(*, reseller_user_id: int | None = None, session: A
         stats = None
         try:
             stats = await pg.get_system_stats()
-        except Exception:
-            stats = None
+        except Exception as exc:
+            if not is_pg_permission_denied(exc):
+                raise
+            # Limited accounts cannot read server stats; a live self-read still
+            # verifies connectivity. A stored token alone does not prove it.
+            await pg.get_current_admin()
         version = None
         if isinstance(stats, dict):
             version = stats.get("version")
@@ -121,6 +131,14 @@ async def check_pg_connection(*, reseller_user_id: int | None = None, session: A
             "version": str(version) if version else None,
             "base_url": getattr(pg, "base_url", None),
         }
+    except PgReadUnavailable:
+        return {
+            "ok": None,
+            "unchecked": True,
+            "error": PG_READ_UNAVAILABLE_MESSAGE,
+            "version": None,
+            "base_url": None,
+        }
     except Exception:
         return {
             "ok": False,
@@ -128,6 +146,22 @@ async def check_pg_connection(*, reseller_user_id: int | None = None, session: A
             "version": None,
             "base_url": None,
         }
+
+
+def payment_shop_clause(shop_id: int | None):
+    """Payments of one shop (None = platform): a top-up's purse or the order's shop.
+
+    The query must outer-join ``Order`` on ``Order.id == Payment.order_id``.
+    """
+    if shop_id is None:
+        return or_(
+            and_(Payment.is_wallet_topup.is_(True), Payment.wallet_shop_id.is_(None)),
+            and_(Payment.is_wallet_topup.is_(False), Order.reseller_id.is_(None)),
+        )
+    return or_(
+        and_(Payment.is_wallet_topup.is_(True), Payment.wallet_shop_id == int(shop_id)),
+        and_(Payment.is_wallet_topup.is_(False), Order.reseller_id == int(shop_id)),
+    )
 
 
 async def build_action_center(
@@ -146,9 +180,12 @@ async def build_action_center(
         .where(
             Payment.status == PaymentStatus.PENDING.value,
             Payment.receipt_file_id.is_not(None),
+            payment_shop_clause(reseller_id),
         )
     )
-    tickets_q = select(func.count()).select_from(Ticket).where(Ticket.status == "open")
+    tickets_q = select(func.count()).select_from(Ticket).where(
+        Ticket.status == "open", ticket_shop_clause(reseller_id)
+    )
     fail_q = (
         select(func.count())
         .select_from(DeliveryFailure)
@@ -156,22 +193,9 @@ async def build_action_center(
     )
 
     if reseller_id is None:
-        pending_q = pending_q.where(
-            or_(Payment.is_wallet_topup.is_(True), Order.reseller_id.is_(None))
-        )
-        tickets_q = tickets_q.join(BotUser, BotUser.id == Ticket.user_id).where(
-            BotUser.reseller_id.is_(None)
-        )
         fail_q = fail_q.where(DeliveryFailure.reseller_id.is_(None))
     else:
-        rid = int(reseller_id)
-        pending_q = pending_q.join(BotUser, BotUser.id == Payment.user_id).where(
-            BotUser.reseller_id == rid
-        )
-        tickets_q = tickets_q.join(BotUser, BotUser.id == Ticket.user_id).where(
-            BotUser.reseller_id == rid
-        )
-        fail_q = fail_q.where(DeliveryFailure.reseller_id == rid)
+        fail_q = fail_q.where(DeliveryFailure.reseller_id == int(reseller_id))
 
     pending = int((await session.execute(pending_q)).scalar() or 0)
     tickets = int((await session.execute(tickets_q)).scalar() or 0)
@@ -197,15 +221,14 @@ async def build_action_center(
                 select(UserService.created_at, Plan.duration_days)
                 .select_from(UserService)
                 .join(Plan, Plan.id == UserService.plan_id)
-                .join(BotUser, BotUser.id == UserService.bot_user_id)
                 .where(
                     UserService.plan_id.is_not(None),
                     Plan.duration_days.is_not(None),
                     UserService.created_at.is_not(None),
                     UserService.created_at >= scan_since,
-                    BotUser.reseller_id.is_(None)
-                    if reseller_id is None
-                    else BotUser.reseller_id == int(reseller_id),
+                    UserService.quota_synced_at.is_(None),
+                    UserService.is_cancelled.is_(False),
+                    shop_services_clause(reseller_id),
                 )
             )
         ).all()
@@ -221,6 +244,20 @@ async def build_action_center(
                 continue
             if now <= exp <= cutoff:
                 expiring += 1
+
+    synced_q = (
+        select(func.count())
+        .select_from(UserService)
+        .where(
+            UserService.quota_synced_at.is_not(None),
+            UserService.quota_expire_at.is_not(None),
+            UserService.quota_expire_at >= now,
+            UserService.quota_expire_at <= cutoff,
+            UserService.is_cancelled.is_(False),
+            shop_services_clause(reseller_id),
+        )
+    )
+    expiring += int((await session.execute(synced_q)).scalar() or 0)
 
     items: list[dict[str, Any]] = []
     if pending:
@@ -266,17 +303,31 @@ async def build_action_center(
             }
         )
 
+    if reseller_id is None:
+        from app.services.service_shop_review import count_services_under_review
+
+        waiting = await count_services_under_review(session)
+        if waiting:
+            items.append(
+                {
+                    "key": "shop_review",
+                    "title": f"{waiting} سرویس در انتظار تعیین فروشگاه",
+                    "detail": "تا تعیین نشود برای هیچ فروشگاهی نمایش داده نمی‌شود",
+                    "href": "/service-shop-review",
+                    "tone": "warn",
+                }
+            )
+
     # Low volume: services still flagged by the alert scheduler (clears on renew).
     low_q = (
         select(func.count())
         .select_from(UserService)
-        .join(BotUser, BotUser.id == UserService.bot_user_id)
-        .where(UserService.notified_traffic.is_(True))
+        .where(
+            UserService.notified_traffic.is_(True),
+            UserService.is_cancelled.is_(False),
+            shop_services_clause(reseller_id),
+        )
     )
-    if reseller_id is None:
-        low_q = low_q.where(BotUser.reseller_id.is_(None))
-    else:
-        low_q = low_q.where(BotUser.reseller_id == int(reseller_id))
     low_volume = int((await session.execute(low_q)).scalar() or 0)
     if low_volume:
         from app.services.users_ops import users_list_href
@@ -427,17 +478,38 @@ async def count_stuck_paid_orders(
 async def list_open_delivery_failures(
     session: AsyncSession, *, reseller_id: int | None = None, limit: int = 100
 ) -> list[DeliveryFailure]:
+    """Open failures, one row per order (the newest), newest attempt first."""
+    newest = select(func.max(DeliveryFailure.id)).where(DeliveryFailure.resolved_at.is_(None))
+    if reseller_id is None:
+        newest = newest.where(DeliveryFailure.reseller_id.is_(None))
+    else:
+        newest = newest.where(DeliveryFailure.reseller_id == int(reseller_id))
     q = (
         select(DeliveryFailure)
-        .where(DeliveryFailure.resolved_at.is_(None))
+        .where(DeliveryFailure.id.in_(newest.group_by(DeliveryFailure.order_id).scalar_subquery()))
         .order_by(DeliveryFailure.last_attempt_at.desc())
         .limit(limit)
     )
-    if reseller_id is None:
-        q = q.where(DeliveryFailure.reseller_id.is_(None))
-    else:
-        q = q.where(DeliveryFailure.reseller_id == int(reseller_id))
     return list((await session.execute(q)).scalars().all())
+
+
+class DeliveryNotRetryable(ValueError):
+    """The order can never be delivered again from the failure queue; the admin may dismiss it."""
+
+
+def _assert_retryable(order: Order) -> None:
+    if order.status == OrderStatus.DELIVERED.value:
+        if not order.service_id:
+            raise DeliveryNotRetryable(
+                "سرویس این سفارش دیگر وجود ندارد و چیزی برای ارسال نمانده؛ از «حذف از لیست» استفاده کنید"
+            )
+        return
+    if order.status not in {
+        OrderStatus.PAID.value,
+        OrderStatus.DELIVERING.value,
+        OrderStatus.AWAITING_APPROVAL.value,
+    }:
+        raise DeliveryNotRetryable("این سفارش برای تلاش مجدد آماده نیست؛ در صورت نیاز از «حذف از لیست» استفاده کنید")
 
 
 async def retry_delivery(session: AsyncSession, order_id: int) -> Order:
@@ -455,6 +527,9 @@ async def retry_delivery(session: AsyncSession, order_id: int) -> Order:
     ).scalar_one_or_none()
     if not order:
         raise ValueError("سفارش پیدا نشد")
+    # Checked before the try below: an order that can never be retried must not be
+    # recorded as one more failed attempt every time somebody presses the button.
+    _assert_retryable(order)
 
     async def _resend() -> None:
         user = order.__dict__.get("user") or await session.get(BotUser, order.user_id)
@@ -468,7 +543,7 @@ async def retry_delivery(session: AsyncSession, order_id: int) -> Order:
                 .limit(1)
             )
         ).scalar_one_or_none()
-        bot, should_close = await open_notify_bot_for_user(session, user)
+        bot, should_close = await open_notify_bot_for_user(session, user, shop_id=order.reseller_id)
         try:
             await send_delivery_to_user(
                 bot, user.telegram_id, session, pay, order
@@ -484,11 +559,7 @@ async def retry_delivery(session: AsyncSession, order_id: int) -> Order:
         if order.status == OrderStatus.DELIVERED.value and order.service_id:
             # Resend Telegram delivery only
             await _resend()
-        elif order.status in {
-            OrderStatus.PAID.value,
-            OrderStatus.DELIVERING.value,
-            OrderStatus.AWAITING_APPROVAL.value,
-        }:
+        else:
             if order.status != OrderStatus.PAID.value:
                 order.status = OrderStatus.PAID.value
                 await session.commit()
@@ -501,8 +572,6 @@ async def retry_delivery(session: AsyncSession, order_id: int) -> Order:
                 await record_delivery_failure(session, order=order, error=str(send_exc))
                 await session.commit()
                 raise
-        else:
-            raise ValueError("این سفارش برای تلاش مجدد آماده نیست")
         await resolve_delivery_failure(session, int(order.id))
         await session.commit()
         return order
@@ -520,10 +589,10 @@ async def clone_plan(session: AsyncSession, plan_id: int, *, owner_reseller_id: 
         raise ValueError("پلن پیدا نشد")
     if owner_reseller_id is None:
         if src.owner_reseller_id is not None:
-            raise ValueError("دسترسی ندارید")
+            raise ValueError(feedback.NO_ACCESS)
     else:
         if int(src.owner_reseller_id or 0) != int(owner_reseller_id):
-            raise ValueError("دسترسی ندارید")
+            raise ValueError(feedback.NO_ACCESS)
     copy = Plan(
         name=f"{src.name} (کپی)",
         description=src.description,
@@ -759,17 +828,7 @@ async def suggest_receipt_matches(
         )
         .order_by(Payment.created_at.desc())
     )
-    if reseller_id is None:
-        # Platform scope: only payers with no shop membership at all.
-        q = q.where(BotUser.reseller_id.is_(None))
-    else:
-        rid = int(reseller_id)
-        q = q.join(Order, Order.id == Payment.order_id, isouter=True).where(
-            or_(
-                and_(Payment.is_wallet_topup.is_(True), BotUser.reseller_id == rid),
-                and_(Payment.is_wallet_topup.is_(False), Order.reseller_id == rid),
-            )
-        )
+    q = q.join(Order, Order.id == Payment.order_id, isouter=True).where(payment_shop_clause(reseller_id))
     rows = list((await session.execute(q.limit(5))).scalars().all())
     out = []
     for p in rows:
@@ -900,7 +959,7 @@ async def export_shop_bundle(
 
     values = await get_all_settings(session, reseller_id=reseller_id)
     # Keep operator-facing keys; drop secrets-ish if any sneak in
-    skip = {"bot_token", "webhook_secret"}
+    skip = {"bot_token", "webhook_secret", "backup_telegram_bot_token"}
     settings = {k: v for k, v in values.items() if k not in skip}
     pq = select(Plan).order_by(Plan.sort_order.asc(), Plan.id.asc())
     if reseller_id is None:
@@ -1049,6 +1108,11 @@ async def import_shop_bundle(
         for k, v in settings.items()
         if str(k) in DEFAULT_SETTINGS and str(k) in allowed_keys
     }
+    if "connection_guides" in clean:
+        # Media files live on the exporting server; an import keeps only this shop's own media.
+        clean["connection_guides"] = await serialize_submitted_guides(
+            session, clean["connection_guides"], reseller_id=reseller_id
+        )
     if clean:
         await set_settings_bulk(session, clean, reseller_id=reseller_id)
     plans_in = payload.get("plans") or []
@@ -1150,36 +1214,7 @@ async def maybe_warn_reseller_capacity(
     except Exception:
         logger.debug("capacity_warned_at commit failed", exc_info=True)
         return False
-    # Best-effort Telegram nudge to shop owner (optional)
-    try:
-        from app.db.models import BotUser
-        from app.services.reseller_bots import open_notify_bot_for_reseller
-
-        owner = await session.get(BotUser, int(profile.user_id))
-        if not owner:
-            return True
-        bot, should_close = await open_notify_bot_for_reseller(session, int(profile.user_id))
-        if bot is None:
-            return True
-        try:
-            hot = []
-            for key, label in (("users", "کاربر"), ("traffic", "حجم")):
-                m = pg_limits.get(key) or {}
-                pct = capacity_used_pct(m)
-                if pct is not None and pct >= float(threshold):
-                    hot.append(f"{label}: {pct:.0f}٪")
-            detail = "، ".join(hot) if hot else f"≥{threshold:.0f}٪"
-            await bot.send_message(
-                int(owner.telegram_id),
-                f"⚠️ ظرفیت پنل پاسارگارد نزدیک پر شدن است ({detail}).\n"
-                "از وب‌پنل → خانه وضعیت سهمیه را بررسی کنید.",
-                parse_mode="HTML",
-            )
-        finally:
-            if should_close:
-                await bot.session.close()
-    except Exception:
-        logger.debug("capacity warn telegram failed", exc_info=True)
+    # The Telegram message is sent by the panel alert job (panel_alert_notifications).
     return True
 
 

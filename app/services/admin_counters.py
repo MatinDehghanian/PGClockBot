@@ -13,7 +13,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import BotUser, Order, Payment, PaymentStatus, Ticket, TicketStatus
 from app.services.demo_users import non_demo_customer
 from app.services.numbers import to_fa_digits
+from app.services.ticket_scope import ticket_shop_clause
 from app.services.service_cancellations import pending_cancellation_count
+from app.services.ux20 import count_stuck_paid_orders
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,10 +25,12 @@ class PendingCounts:
     payments: int = 0
     tickets: int = 0
     cancellations: int = 0
+    # Paid orders still without a service: delivery failed or is waiting for a retry.
+    deliveries: int = 0
 
     @property
     def total(self) -> int:
-        return int(self.payments) + int(self.tickets) + int(self.cancellations)
+        return int(self.payments) + int(self.tickets) + int(self.cancellations) + int(self.deliveries)
 
 
 def _payment_scope(shop_id: int | None):
@@ -69,16 +73,7 @@ async def count_open_tickets(session: AsyncSession, *, shop_id: int | None) -> i
         .outerjoin(BotUser, BotUser.id == Ticket.user_id)
         .where(base, or_(BotUser.id.is_(None), BotUser.is_demo.is_(False)))
     )
-    if shop_id is None:
-        q = q.where(Ticket.reseller_id.is_(None), BotUser.reseller_id.is_(None))
-    else:
-        rid = int(shop_id)
-        q = q.where(
-            or_(
-                Ticket.reseller_id == rid,
-                and_(Ticket.reseller_id.is_(None), BotUser.reseller_id == rid),
-            )
-        )
+    q = q.where(ticket_shop_clause(shop_id))
     return int((await session.execute(q)).scalar() or 0)
 
 
@@ -89,8 +84,9 @@ async def pending_counts(
     payments = await count_pending_payments(session, shop_id=shop_id)
     tickets = await count_open_tickets(session, shop_id=shop_id)
     cancellations = await pending_cancellation_count(session, shop_id)
+    deliveries = await count_stuck_paid_orders(session, reseller_id=shop_id)
     return PendingCounts(
-        payments=payments, tickets=tickets, cancellations=cancellations
+        payments=payments, tickets=tickets, cancellations=cancellations, deliveries=deliveries
     )
 
 
@@ -115,4 +111,6 @@ def format_queue_summary(counts: PendingCounts) -> str | None:
         f"تیکت {to_fa_digits(counts.tickets)}",
         f"لغو {to_fa_digits(counts.cancellations)}",
     ]
+    if counts.deliveries:
+        parts.append(f"تحویل ناموفق {to_fa_digits(counts.deliveries)}")
     return "⏳ صف: " + " · ".join(parts)

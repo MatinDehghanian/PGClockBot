@@ -97,6 +97,11 @@
               <span class="guide-nav-text">تنظیمات وب پنل</span>
             </a>
             
+            <a class="guide-nav-link" href="../telegram-alerts/index.html">
+              <span class="guide-nav-icon" aria-hidden="true"><svg class="guide-ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4a5 5 0 0 1 5 5v2.2l1.8 3.3H5.2L7 11.2V9a5 5 0 0 1 5-5z"/><path d="M10 18a2 2 0 0 0 4 0"/></svg></span>
+              <span class="guide-nav-text">هشدارهای پنل در تلگرام</span>
+            </a>
+            
           </div>
           
           <div class="guide-nav-group guide-nav-group--bot">
@@ -165,6 +170,26 @@
               <span class="guide-nav-text">رفتار کاربر</span>
             </a>
             
+            <a class="guide-nav-link" href="../shop-isolation/index.html">
+              <span class="guide-nav-icon" aria-hidden="true"><svg class="guide-ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 5 6v5c0 4.2 2.8 7.2 7 8.5 4.2-1.3 7-4.3 7-8.5V6l-7-3z"/></svg></span>
+              <span class="guide-nav-text">جداسازی فروشگاه‌ها</span>
+            </a>
+            
+            <a class="guide-nav-link" href="../discounts/index.html">
+              <span class="guide-nav-icon" aria-hidden="true"><svg class="guide-ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h13l-1.2 9.2a2 2 0 0 1-2 1.8H9.4a2 2 0 0 1-2-1.7L6 4H3"/><circle cx="10" cy="20" r="1.2"/><circle cx="17" cy="20" r="1.2"/></svg></span>
+              <span class="guide-nav-text">تخفیف‌ها</span>
+            </a>
+            
+            <a class="guide-nav-link" href="../gift-codes/index.html">
+              <span class="guide-nav-icon" aria-hidden="true"><svg class="guide-ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.2 4.5 5 .7-3.6 3.5.9 5L12 14.8 7.5 16.7l.9-5L4.8 8.2l5-.7L12 3z"/></svg></span>
+              <span class="guide-nav-text">کد هدیه</span>
+            </a>
+            
+            <a class="guide-nav-link" href="../service-import/index.html">
+              <span class="guide-nav-icon" aria-hidden="true"><svg class="guide-ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V6M8.5 9.5 12 6l3.5 3.5"/><path d="M5 18h14"/></svg></span>
+              <span class="guide-nav-text">افزودن سرویس قبلی</span>
+            </a>
+            
           </div>
           
           <div class="guide-nav-group guide-nav-group--pg">
@@ -172,6 +197,11 @@
               <svg class="guide-ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="7" height="7" rx="1.5"/><rect x="14" y="4" width="7" height="7" rx="1.5"/><rect x="8.5" y="13" width="7" height="7" rx="1.5"/></svg>
               <span>پاسارگارد</span>
             </div>
+            
+            <a class="guide-nav-link" href="../connection-status/index.html">
+              <span class="guide-nav-icon" aria-hidden="true"><svg class="guide-ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4.5 6.5v5.2c0 4.7 3.2 8 7.5 9.3 4.3-1.3 7.5-4.6 7.5-9.3V6.5L12 3z"/><path d="M9 12l2 2 4-4"/></svg></span>
+              <span class="guide-nav-text">وضعیت اتصال</span>
+            </a>
             
             <a class="guide-nav-link" href="../pg-overview/index.html">
               <span class="guide-nav-icon" aria-hidden="true"><svg class="guide-ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="7" height="7" rx="1.5"/><rect x="14" y="4" width="7" height="7" rx="1.5"/><rect x="8.5" y="13" width="7" height="7" rx="1.5"/></svg></span>
@@ -295,7 +325,10 @@ curl http://127.0.0.1:9000/health
 sudo ufw allow 9000/tcp</code></pre></div>
 <div class="guide-callout guide-callout--error"><strong class="guide-callout-label">خطای رایج</strong><p><strong>مشکل:</strong> ویزارد می‌گوید فقط با لینک یک‌بارمصرف.</p>
 <p><strong>علت رایج:</strong> از اینترنت بدون توکن gate باز کرده‌اید.</p>
-<p><strong>راه حل:</strong> روی سرور <code>bash pgclock.sh status</code> بزنید و لینک کامل را کپی کنید، یا از خود سرور با <code>127.0.0.1</code> باز کنید.</p></div>
+<p><strong>راه حل:</strong> روی سرور اول وارد پوشهٔ نصب شوید، بعد وضعیت را بگیرید:</p>
+<pre><code class="language-bash">cd &quot;$(cat /usr/local/lib/pgclockbot/install_root)&quot;
+bash pgclock.sh status</code></pre>
+<p>یا از هر جا: <code>pgclock status</code>. لینک کامل را کپی کنید، یا از خود سرور با <code>127.0.0.1</code> باز کنید.</p></div>
 <div class="guide-callout guide-callout--tip"><strong class="guide-callout-label">نکته</strong><p>قبل از هر آپدیت بزرگ، از <a href="../settings-panel/index.html">تنظیمات وب پنل</a> بکاپ بگیرید. بکاپ/آپدیت/SSL فقط برای مالک در تب‌های <code>/settings</code> است؛ نقش‌های دیگر برای رمز حساب از <code>/security</code> استفاده می‌کنند.</p></div>
           </div>
 

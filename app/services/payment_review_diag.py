@@ -35,6 +35,7 @@ from app.services.orders import (
     _wallet_topup_already_credited,
     is_mutation_order_note,
 )
+from app.services import bot_feedback_texts as feedback
 
 logger = logging.getLogger(__name__)
 
@@ -266,7 +267,7 @@ async def diagnose_payment_review(
             kind="missing",
             payment=None,
             order=order,
-            label_fa="یافت نشد",
+            label_fa=feedback.NOT_FOUND,
             alert_fa="پرداخت یافت نشد",
             detail_fa="ردیف پرداخت در دیتابیس نیست.",
             log_code="payrev.missing",

@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from app.db.models import BotUser, Order, ServiceAutomation, ServiceCancellation, ShopWallet, UserService
 from app.services.pasarguard import get_pg, get_pg_for_reseller
 from app.services.service_automation import service_shop_id
+from app.services.service_import import is_external_service
 from app.services.wallet import credit_wallet
 
 STATUS_LABELS = {"pending": "در انتظار بررسی", "processing": "در حال غیرفعال‌سازی", "review": "نیازمند بررسی و تلاش مجدد", "approved": "لغو شد؛ اعتبار به کیف پول همین فروشگاه برگشت", "rejected": "درخواست رد شد", "withdrawn": "درخواست پس گرفته شد"}
@@ -31,7 +32,7 @@ async def owned_cancellation_service(session, user, service_id, shop_id):
     service = await session.get(UserService, service_id)
     if not service or service.bot_user_id != user.id or user.is_blocked:
         raise ValueError("سرویس یافت نشد")
-    if not service.pg_user_id or (service.remark or "").strip() == "linked":
+    if not service.pg_user_id or is_external_service(service):
         raise ValueError("لغو این سرویس از این مسیر ممکن نیست")
     if await service_shop_id(session, service) != shop_id:
         raise ValueError("درخواست را از فروشگاه خود سرویس ثبت کنید")

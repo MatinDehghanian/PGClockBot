@@ -17,7 +17,7 @@
 {% if is_panel_settings %}
 {{ panel_settings_tabs(tab) }}
 {% elif tabs %}
-{{ settings_tabs(tab, tabs) }}
+{{ settings_tabs(tab, tabs, tab_nav|default(none)) }}
 {% endif %}
 
 <div class="settings-layout {% if tab in ['menu','welcome','messages','buttons','qr','appearance','daily_report'] %}can-preview{% endif %}" id="settings-layout">
@@ -36,6 +36,8 @@
   {% elif tab == 'colors' %}
     {% set settings_action = '/settings?tab=colors' %}
     {% include "_settings_colors.html" %}
+    {% set reset_action = '/settings?tab=colors' %}
+    {% include "_settings_reset_defaults.html" %}
   {% elif tab == 'notifications' %}
     {% include "_settings_notifications.html" %}
   {% elif tab == 'daily_report' %}
@@ -48,15 +50,10 @@
   {% elif tab == 'limits' %}
     <form method="post" action="/settings?tab=limits" enctype="multipart/form-data" class="settings-form" id="settings-form">
       {% for group_name in tab_groups %}
-      {% if group_name == 'کانال اجباری' %}
-        {% include "_forcejoin_admin_notice.html" %}
-      {% endif %}
-      {% if group_name == 'قوانین ورود به ربات' %}
-        {% include "_terms_admin_notice.html" %}
-      {% endif %}
       {% set fields = groups[group_name] %}
       <div class="card settings-card">
         <h2>{{ group_name }}</h2>
+        {% include "_settings_group_notice.html" %}
         <div class="settings-grid">
         {% for field in fields %}
           {% include "_settings_field.html" %}
@@ -86,12 +83,12 @@
       </div>
     </form>
   {% elif tab == 'terms' %}
-    {% include "_terms_admin_notice.html" %}
     <form method="post" action="/settings?tab=terms" enctype="multipart/form-data" class="settings-form" id="settings-form">
       {% for group_name in tab_groups %}
       {% set fields = groups[group_name] %}
       <div class="card settings-card">
         <h2>{{ group_name }}</h2>
+        {% include "_settings_group_notice.html" %}
         <div class="settings-grid">
         {% for field in fields %}
           {% include "_settings_field.html" %}
@@ -104,12 +101,12 @@
       </div>
     </form>
   {% elif tab == 'forcejoin' %}
-    {% include "_forcejoin_admin_notice.html" %}
     <form method="post" action="/settings?tab=forcejoin" enctype="multipart/form-data" class="settings-form" id="settings-form">
       {% for group_name in tab_groups %}
       {% set fields = groups[group_name] %}
       <div class="card settings-card">
         <h2>{{ group_name }}</h2>
+        {% include "_settings_group_notice.html" %}
         <div class="settings-grid">
         {% for field in fields %}
           {% include "_settings_field.html" %}
@@ -126,6 +123,9 @@
     {% include "_settings_appearance.html" %}
   {% elif tab == 'menu' %}
     {% include "_settings_menu.html" %}
+    {% set reset_action = '/settings?tab=menu' %}
+    {% set reset_confirm = 'ترتیب و چیدمان دکمه‌های منو به حالت اولیهٔ ربات برمی‌گردد. ادامه می‌دهید؟' %}
+    {% include "_settings_reset_defaults.html" %}
   {% elif tab == 'naming' %}
     {% include "_settings_naming.html" %}
     <form method="post" action="/settings?tab=naming" enctype="multipart/form-data" class="settings-form" id="settings-form">
@@ -145,6 +145,9 @@
       </div>
     </form>
   {% else %}
+    {% if tab == 'service_import' %}
+      {% include "_settings_service_import.html" %}
+    {% endif %}
     <form method="post" action="/settings?tab={{ tab }}" enctype="multipart/form-data" class="settings-form" id="settings-form">
       {% for group_name in tab_groups %}
       {% set fields = groups[group_name] %}
@@ -161,6 +164,8 @@
         <button class="btn" type="submit">ذخیره تنظیمات</button>
       </div>
     </form>
+    {% set reset_action = '/settings?tab=' ~ tab %}
+    {% include "_settings_reset_defaults.html" %}
   {% endif %}
 
   </div>

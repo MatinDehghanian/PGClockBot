@@ -9,17 +9,15 @@ from fastapi import Depends, File, Form, Request, UploadFile
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
-from app.db.models import BotUser, ChargeCode, DeliveryFailure, Order
+from app.db.models import BotUser, ChargeCode, Order
 from app.services.authz import authz_from_staff, can_shop
 from app.services.shop_scope import is_platform_admin, shop_owner_id, ShopScopeError, assert_order_retry_in_scope, assert_bot_user_in_scope
-from app.services.users import get_all_settings, get_setting, on, set_setting
+from app.services.users import set_setting
 from app.services.ux20 import (
     create_charge_code,
     export_shop_bundle,
     import_shop_bundle,
-    list_open_delivery_failures,
     retry_delivery,
     shop_bundle_to_json,
 )
@@ -206,13 +204,13 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
                 code=str(form.get("code") or "") or None, **_gift_rules(form),
             )
             return RedirectResponse(
-                f"/plans?gifts=1&ok={quote('کد ساخته شد: ' + row.code)}",
+                f"/gift-codes?ok={quote('کد ساخته شد: ' + row.code)}",
                 status_code=303,
             )
         except Exception as exc:
             await session.rollback()
             return RedirectResponse(
-                f"/plans?gifts=1&err={quote(str(exc) or 'خطا')}",
+                f"/gift-codes?err={quote(str(exc) or 'خطا')}",
                 status_code=303,
             )
 
@@ -237,7 +235,7 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
                 ChargeCode.reseller_id == rid if rid else ChargeCode.reseller_id.is_(None),
             ).with_for_update())).scalar_one_or_none()
             if not row:
-                return RedirectResponse("/plans?gifts=1", status_code=303)
+                return RedirectResponse("/gift-codes", status_code=303)
             form = await request.form()
             rules = validate_rules(**_gift_rules(form))
             if rules["kind"] != row.kind:
@@ -246,10 +244,10 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
                 setattr(row, name, value)
             row.note = str(form.get("note") or "").strip()[:255] or None
             await session.commit()
-            return RedirectResponse(f"/plans?gifts=1&ok={quote('تنظیمات کد ذخیره شد')}", status_code=303)
+            return RedirectResponse(f"/gift-codes?ok={quote('تنظیمات کد ذخیره شد')}", status_code=303)
         except Exception as exc:
             await session.rollback()
-            return RedirectResponse(f"/plans?gifts=1&err={quote(str(exc) or 'خطا')}", status_code=303)
+            return RedirectResponse(f"/gift-codes?err={quote(str(exc) or 'خطا')}", status_code=303)
 
     @app.post("/plans/gift-codes/{code_id}/toggle")
     async def gift_codes_toggle(
@@ -272,14 +270,14 @@ def register_ux20_pages(app, *, render, require_staff, require_admin, get_db):
             await session.execute(select(ChargeCode).where(ChargeCode.id == int(code_id)))
         ).scalar_one_or_none()
         if not row:
-            return RedirectResponse("/plans?gifts=1", status_code=303)
+            return RedirectResponse("/gift-codes", status_code=303)
         if rid is None and row.reseller_id is not None:
-            return RedirectResponse("/plans?gifts=1", status_code=303)
+            return RedirectResponse("/gift-codes", status_code=303)
         if rid is not None and int(row.reseller_id or 0) != int(rid):
-            return RedirectResponse("/plans?gifts=1", status_code=303)
+            return RedirectResponse("/gift-codes", status_code=303)
         row.is_active = not bool(row.is_active)
         await session.commit()
-        return RedirectResponse("/plans?gifts=1&ok=1", status_code=303)
+        return RedirectResponse("/gift-codes?ok=1", status_code=303)
 
     @app.get("/settings/shop-export")
     async def shop_export(

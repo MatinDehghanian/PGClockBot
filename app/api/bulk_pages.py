@@ -188,6 +188,16 @@ def register_bulk_pages(
         )
         if not ids:
             return redirect_bulk(return_to, err="هیچ سفارشی انتخاب نشده")
+        if action == "dismiss":
+            from app.services.delivery_failure_queue import dismiss_delivery_failures
+            from app.services.stuck_order_resolution import count_still_stuck
+
+            ok, fail = await dismiss_delivery_failures(session, staff, ids)
+            still = await count_still_stuck(session, ids) if ok else 0
+            done = "ردیف خطا از لیست حذف شد"
+            if still:
+                done += f"؛ {still} سفارش هنوز بدون سرویس است و در لیست «گیرکرده» می‌ماند"
+            return _bulk_result(return_to, ok, fail, done=done, none="هیچ موردی حذف نشد")
         if action != "retry":
             return redirect_bulk(return_to, err="عملیات نامعتبر")
         ok, fail = await bulk_retry_delivery(session, staff, ids)
@@ -410,8 +420,8 @@ def register_bulk_pages(
         action = str(form.get("action") or "").strip()
         ids = parse_bulk_ids(form.getlist("ids"))
         return_to = sanitize_return_to(
-            str(form.get("return_to") or "/plans?gifts=1"),
-            default="/plans?gifts=1",
+            str(form.get("return_to") or "/gift-codes"),
+            default="/gift-codes",
         )
         if not ids:
             return redirect_bulk(return_to, err="هیچ کدی انتخاب نشده")

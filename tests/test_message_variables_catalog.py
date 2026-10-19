@@ -37,10 +37,11 @@ class MessageVariablesCatalogTests(unittest.TestCase):
         self.assertNotIn("prefix", keys)
         self.assertNotIn("random", keys)
 
-    def test_sidebar_before_settings(self):
+    def test_sidebar_has_no_standalone_entry(self):
         src = (ROOT / "app/web/templates/base.html").read_text(encoding="utf-8")
         bot = src.split("nav-section-bot", 1)[1].split("nav-section-pg", 1)[0]
-        self.assertLess(bot.find("/message-variables"), bot.find(">تنظیمات</span>"))
+        self.assertNotIn('href="/message-variables"', bot)
+        self.assertNotIn(">متغیرهای پیام</span>", bot)
 
     def test_page_template_panel_aligned(self):
         html = (ROOT / "app/web/templates/message_variables.html").read_text(encoding="utf-8")

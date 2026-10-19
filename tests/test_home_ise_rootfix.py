@@ -114,15 +114,43 @@ class SafeHelpersRollbackTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(out["shop_open"], 0)
         session.rollback.assert_awaited()
 
-    async def test_finance_behavior_uses_safe_funnel(self):
+    async def test_finance_page_keeps_fail_soft_delivery_failures(self):
         src = Path("app/api/finance_pages.py").read_text(encoding="utf-8")
-        self.assertIn("_safe_funnel", src)
-        self.assertNotIn(
-            "ctx[\"funnel\"] = await funnel_summary",
-            src,
-        )
         self.assertIn("rollback_quiet", src)
         self.assertIn("list_open_delivery_failures", src)
+
+    async def test_funnel_page_renders_when_the_funnel_query_fails(self):
+        import httpx
+        from fastapi import FastAPI
+
+        from app.api.app import render
+        from app.api.funnel_pages import register_funnel_pages
+
+        session = AsyncMock()
+        owner = {
+            "role": "admin",
+            "permissions": [],
+            "org_principal_id": 1,
+            "org_depth": 0,
+            "org_parent_id": None,
+            "org_status": "active",
+        }
+
+        async def get_db():
+            yield session
+
+        app = FastAPI()
+        register_funnel_pages(app, render=render, require_staff=lambda: owner, get_db=get_db)
+        client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test")
+        self.addAsyncCleanup(client.aclose)
+        with patch("app.services.db_safe.recover_session", AsyncMock()), patch(
+            "app.services.ux20.funnel_summary",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError("missing table"),
+        ):
+            response = await client.get("/funnel")
+        self.assertEqual(response.status_code, 200)
+        session.rollback.assert_awaited()
 
     async def test_funnel_page_uses_shared_panel(self):
         page = Path("app/web/templates/funnel.html").read_text(encoding="utf-8")

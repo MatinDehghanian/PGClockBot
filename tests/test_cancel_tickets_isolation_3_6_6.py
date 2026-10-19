@@ -137,8 +137,10 @@ class TicketNotifyAuthorityTests(unittest.TestCase):
         self.assertIn("reseller_id=0", chunk)
 
     def test_panel_admin_tg_filters_ticket_reseller(self):
-        src = (ROOT / "app/api/panel_tickets_pages.py").read_text(encoding="utf-8")
-        self.assertIn("Ticket.reseller_id.is_(None)", src)
+        from app.services.ticket_scope import ticket_shop_clause
+
+        self.assertIn("tickets.reseller_id IS NULL", str(ticket_shop_clause(None)))
+        self.assertIn("tickets.reseller_id =", str(ticket_shop_clause(5)))
 
     def test_no_main_bot_ticket_notify_fallback(self):
         src = (ROOT / "app/services/reseller_bots.py").read_text(encoding="utf-8")

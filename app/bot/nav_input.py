@@ -14,16 +14,22 @@ from typing import Any
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
+from aiogram.exceptions import TelegramAPIError
 from aiogram.fsm.state import State
 from aiogram.types import (
     CallbackQuery,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     Message,
+    User,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.bot.chat_cleanup import note_throwaway, sweep_above
+from app.bot.nav_inline import NAV_PANEL_CHAT_KEY, NAV_PANEL_MSG_KEY, is_bot_panel_message, panel_is_still_live
+from app.bot.screen_replay import replay_screen
 from app.db.models import BotUser
+from app.services import bot_feedback_texts as feedback
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +38,8 @@ router = Router(name="nav_input")
 PROMPT_MSG_ID = "_nav_input_prompt_msg_id"
 PROMPT_CHAT_ID = "_nav_input_prompt_chat_id"
 CANCEL_CODE_KEY = "_nav_input_cancel_code"
+# Callback data of the screen a prompt was opened from; cancel replays it (one step back).
+RETURN_TO_KEY = "_nav_input_return_to"
 
 CancelReopen = Callable[..., Awaitable[Any]]
 
@@ -88,9 +96,14 @@ async def ask_text(
     fsm_state: State,
     extra_inline: InlineKeyboardMarkup | None = None,
     edit: bool = False,
+    return_to: str | None = None,
     **send_kw: Any,
 ) -> Message | None:
-    """Prompt for free text with an inline cancel button; main ReplyKeyboard untouched."""
+    """Prompt for free text with an inline cancel button; main ReplyKeyboard untouched.
+
+    ``return_to`` is the callback data of the screen the prompt was opened from: cancel, typed
+    or tapped, reopens exactly that screen. Without it the cancel code's reopen runs.
+    """
     if cancel_code not in CANCEL_REGISTRY:
         # Staff codes live in staff_cancel; import lazily for direct handler tests.
         try:
@@ -129,9 +142,33 @@ async def ask_text(
                 PROMPT_MSG_ID: int(msg.message_id),
                 PROMPT_CHAT_ID: int(msg.chat.id),
                 CANCEL_CODE_KEY: cancel_code,
+                RETURN_TO_KEY: return_to,
             }
         )
+        await _tidy_after_step(target.message if isinstance(target, CallbackQuery) else target, msg)
     return msg
+
+
+async def _tidy_after_step(trigger: Message | None, shown: Message) -> None:
+    """The prompt or result now on screen stays; the typed reply and earlier panels go.
+
+    A prompt or result sent as a new message is throwaway itself; one edited into an
+    existing message keeps that message's standing.
+    """
+    if trigger is not None and not is_bot_panel_message(trigger):
+        note_throwaway(trigger)
+    if shown is not trigger:
+        note_throwaway(shown)
+    await sweep_above(shown)
+
+
+async def form_origin(state: FSMContext) -> str | None:
+    """For a later step of a multi-step form: where its first prompt was opened from.
+
+    Cancel anywhere in a form returns to the screen the form started from, not to the form's
+    previous step.
+    """
+    return (await state.get_data()).get(RETURN_TO_KEY)
 
 
 async def finish_text_step(
@@ -140,14 +177,19 @@ async def finish_text_step(
     *,
     text: str,
     inline: InlineKeyboardMarkup | None = None,
+    keep_input: bool = False,
     **send_kw: Any,
 ) -> Message | None:
-    """Turn the stored prompt into the next panel (edit), or send one new message."""
+    """Turn the stored prompt into the next panel (edit), or send one new message.
+
+    ``keep_input`` leaves the person's typed message in the chat, for text they will
+    want to see again, such as a ticket they wrote.
+    """
     data = await state.get_data()
     prompt_id = data.get(PROMPT_MSG_ID)
     chat_id = data.get(PROMPT_CHAT_ID)
     await state.update_data(
-        **{PROMPT_MSG_ID: None, PROMPT_CHAT_ID: None, CANCEL_CODE_KEY: None}
+        **{PROMPT_MSG_ID: None, PROMPT_CHAT_ID: None, CANCEL_CODE_KEY: None, RETURN_TO_KEY: None}
     )
     if prompt_id and chat_id and int(chat_id) == int(message.chat.id):
         try:
@@ -158,13 +200,18 @@ async def finish_text_step(
                 reply_markup=inline,
                 **send_kw,
             )
+            if not keep_input:
+                note_throwaway(message)
+            await sweep_above(message, panel_id=int(prompt_id))
             return None
         except Exception:
             logger.debug(
                 "finish_text_step edit failed; falling back to answer",
                 exc_info=True,
             )
-    return await message.answer(text, reply_markup=inline, **send_kw)
+    sent = await message.answer(text, reply_markup=inline, **send_kw)
+    await _tidy_after_step(None if keep_input else message, sent)
+    return sent
 
 
 async def remember_prompt(
@@ -190,6 +237,28 @@ async def remember_prompt(
     await state.update_data(**payload)
 
 
+async def delete_user_message(message: Message) -> None:
+    """Remove the operator's typed reply so the edited panel stays the only bubble."""
+    try:
+        await message.delete()
+    except TelegramAPIError:
+        logger.debug("could not delete typed input message", exc_info=True)
+
+
+async def adopt_prompt_as_panel(message: Message, state: FSMContext) -> None:
+    """Let the next panel edit the prompt bubble when the reply came right after it."""
+    data = await state.get_data()
+    prompt_id = data.get(PROMPT_MSG_ID)
+    chat_id = data.get(PROMPT_CHAT_ID)
+    if not prompt_id or not chat_id or int(chat_id) != int(message.chat.id):
+        return
+    if not panel_is_still_live(message, int(prompt_id)):
+        return
+    await state.update_data(
+        **{NAV_PANEL_CHAT_KEY: int(chat_id), NAV_PANEL_MSG_KEY: int(prompt_id)}
+    )
+
+
 async def try_legacy_cancel(
     message: Message,
     state: FSMContext,
@@ -209,6 +278,10 @@ async def try_legacy_cancel(
     entry = CANCEL_REGISTRY.get(str(code)) if code else None
     if entry is None:
         return False
+    if await _replay_return(message, state, data, user=message.from_user, message_id=data.get(PROMPT_MSG_ID)):
+        await delete_user_message(message)
+        return True
+    await adopt_prompt_as_panel(message, state)
     try:
         await state.set_state(None)
     except Exception:
@@ -223,6 +296,7 @@ async def try_legacy_cancel(
         await entry.reopen(message, session, db_user, state, **kw)
     except TypeError:
         await entry.reopen(message, session, db_user, state)
+    await delete_user_message(message)
     return True
 
 
@@ -232,6 +306,28 @@ def with_cancel_row(
 ) -> InlineKeyboardMarkup:
     """Append an inline «انصراف» row to an existing markup (or build one)."""
     return _merge_inline(cancel_code, markup)
+
+
+async def _replay_return(
+    event: Message,
+    state: FSMContext,
+    data: dict[str, Any],
+    *,
+    user: User | None,
+    message: Message | None = None,
+    message_id: int | None = None,
+) -> bool:
+    """Cancel by reopening the screen the prompt came from; False when it has none."""
+    target = data.get(RETURN_TO_KEY)
+    if not target or user is None or event.bot is None:
+        return False
+    await state.set_state(None)
+    await state.update_data(
+        **{PROMPT_MSG_ID: None, PROMPT_CHAT_ID: None, CANCEL_CODE_KEY: None, RETURN_TO_KEY: None}
+    )
+    return await replay_screen(
+        event.bot, user=user, chat_id=int(event.chat.id), data=str(target), message=message, message_id=message_id
+    )
 
 
 @router.callback_query(F.data.startswith("nv:cancel:"))
@@ -247,9 +343,13 @@ async def nv_cancel_input(
     code = raw.split(":", 2)[-1] if raw.startswith("nv:cancel:") else ""
     entry = CANCEL_REGISTRY.get(code)
     if entry is None:
-        await callback.answer("نامعتبر", show_alert=True)
+        await callback.answer(feedback.INVALID, show_alert=True)
         return
     await callback.answer()
+    if callback.message and await _replay_return(
+        callback.message, state, await state.get_data(), user=callback.from_user, message=callback.message
+    ):
+        return
     # Clear typed-input FSM; preserve nav stack keys via clear of state only.
     try:
         await state.set_state(None)

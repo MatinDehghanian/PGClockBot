@@ -29,14 +29,15 @@ class TestAdminHubSettingsLabels(unittest.TestCase):
             "btn_adm_hub_ops": "AAA ops",
             "btn_adm_hub_people": "BBB people",
             "btn_adm_hub_product": "CCC product",
+            "btn_adm_hub_marketing": "EEE marketing",
             "btn_adm_hub_system": "DDD system",
         }
         labels = [
             b.text for row in admin_groups_hub_keyboard(ui).inline_keyboard for b in row
         ]
         self.assertEqual(
-            labels[:4],
-            ["AAA ops", "BBB people", "CCC product", "DDD system"],
+            labels[:5],
+            ["AAA ops", "BBB people", "CCC product", "EEE marketing", "DDD system"],
         )
 
 
@@ -117,10 +118,77 @@ class TestResellerThinReply(unittest.TestCase):
             "btn_reseller": "مدیریت من",
             "btn_adm_preview": "پیش‌نمایش من",
         }
-        markup = reseller_hub_main_keyboard(None, ui)
+        markup = reseller_hub_main_keyboard(None, {**ui, "show_restart_button": "0"})
         labels = [btn.text for row in markup.keyboard for btn in row]
         self.assertEqual(set(labels), {"مدیریت من", "پیش‌نمایش من"})
         self.assertEqual(len(labels), 2)
+
+    def test_thin_hub_adds_only_restart_footer_when_enabled(self):
+        ui = {"btn_reseller": "مدیریت من", "btn_adm_preview": "پیش‌نمایش من"}
+        markup = reseller_hub_main_keyboard(None, {**ui, "show_restart_button": "1"})
+        rows = [[btn.text for btn in row] for row in markup.keyboard]
+        self.assertEqual(rows[0], ["مدیریت من", "پیش‌نمایش من"])
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(len(rows[1]), 1)
+
+
+class TestStickyUserPreviewFlag(unittest.IsolatedAsyncioTestCase):
+    async def test_preview_flag_survives_nested_level_change(self):
+        from unittest.mock import AsyncMock
+
+        from app.bot import menu_nav as nav
+
+        state = AsyncMock()
+        store: dict = {}
+
+        async def _get():
+            return dict(store)
+
+        async def _update(**kw):
+            store.update(kw)
+
+        state.get_data = _get
+        state.update_data = _update
+
+        await nav.set_nav_level(state, nav.NAV_USER_PREVIEW, push=True)
+        await nav.set_user_preview_active(state, True)
+        self.assertTrue(await nav.is_user_preview_active(state))
+
+        # Nested shop tap inside preview changes level but must keep sticky flag.
+        await nav.set_nav_level(state, nav.NAV_SHOP, push=True)
+        self.assertEqual(await nav.get_nav_level(state), nav.NAV_SHOP)
+        self.assertTrue(await nav.is_user_preview_active(state))
+
+        await nav.set_user_preview_active(state, False)
+        self.assertFalse(await nav.is_user_preview_active(state))
+
+    def test_admin_exit_uses_sticky_preview_flag(self):
+        import inspect
+
+        from app.bot.handlers import reply_nav as rn
+
+        src = inspect.getsource(rn)
+        self.assertIn("is_user_preview_active", src)
+        self.assertIn("set_user_preview_active", src)
+
+
+class TestGiftExpiresWidthCss(unittest.TestCase):
+    def test_gift_expires_uses_plain_text_input(self):
+        """datetime-local crushed on mobile WebViews — use text like siblings."""
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parents[1]
+        css = (root / "app/web/static/panel.css").read_text(encoding="utf-8")
+        gift = (root / "app/web/templates/_gift_code_fields.html").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('name="expires_at"', gift)
+        self.assertRegex(gift, r'name="expires_at"[\s\S]*?type="text"')
+        self.assertNotIn('type="datetime-local"', gift)
+        self.assertNotIn("gift-expires-input-wrap", gift)
+        self.assertNotIn("datetime-local", css)
+        self.assertIn("gift-expires-field", css)
+        self.assertIn("<small class=\"muted\">", gift)
 
 
 class TestStickyUserPreviewFlag(unittest.IsolatedAsyncioTestCase):

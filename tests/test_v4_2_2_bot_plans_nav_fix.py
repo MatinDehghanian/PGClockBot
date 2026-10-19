@@ -15,16 +15,18 @@ ADMIN = (ROOT / "app/bot/handlers/admin.py").read_text(encoding="utf-8")
 
 class PlansLabelCollisionTests(unittest.TestCase):
     def test_audience_labels_distinct_from_admin_users_resellers(self):
-        aud_block = REPLY_KB[
-            REPLY_KB.find("def _admin_plans_audience_entries")
-            : REPLY_KB.find("def _admin_plans_list_entries")
-        ]
-        self.assertIn("📦 پلن‌های کاربران", aud_block)
-        self.assertIn("🤝 پلن‌های نمایندگان", aud_block)
-        self.assertIn("برچسب دسته", aud_block)
-        self.assertIn("بسته حجم/زمان", aud_block)
-        self.assertNotIn('"👥 کاربران"', aud_block)
-        self.assertNotIn('("🤝 نمایندگان")', aud_block.split("REPLY_ACTION_ADM_PLANS")[0])
+        # Labels come from settings now; check the buttons the audience step builds.
+        from app.bot.keyboards import _t
+        from app.bot.reply_keyboards import _admin_plans_audience_entries
+        from app.services.users import DEFAULT_SETTINGS
+
+        ui = dict(DEFAULT_SETTINGS)
+        labels = [text for _action, text in _admin_plans_audience_entries(ui)]
+        self.assertEqual(
+            labels, ["📦 پلن‌های کاربران", "🤝 پلن‌های نمایندگان", "🏷 برچسب دسته", "⏱ بسته حجم و زمان"]
+        )
+        for hub_label in (_t(ui, "btn_adm_users"), _t(ui, "btn_adm_resellers")):
+            self.assertNotIn(hub_label, labels)
 
     def test_reply_nav_resolves_plans_nav_levels(self):
         self.assertIn("NAV_ADMIN_PLANS_AUDIENCE", REPLY_NAV)

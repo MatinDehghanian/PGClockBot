@@ -7,6 +7,7 @@ from typing import Optional
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    CheckConstraint,
     DateTime,
     Float,
     ForeignKey,
@@ -47,6 +48,7 @@ class PaymentMethod(str, Enum):
     CRYPTO = "crypto"
     STARS = "stars"
     PSP = "psp"  # Iranian/online PSP with request→verify (additive)
+    BBC = "bbc"  # BezanBeCard card-to-card match (per-shop API key)
 
 
 class PaymentStatus(str, Enum):
@@ -178,9 +180,10 @@ class Plan(Base):
 class ServiceAddonPack(Base):
     """Customer add-on packs: extra volume (GB) or duration (days) on an existing service.
 
-    ``category_id`` scopes pricing to the same plan category as the service's
-    sales plan — VIP and economy packs can differ. NULL matches only
-    uncategorized services (strict equality).
+    ``is_general`` packs apply to every plan category of the shop. Otherwise
+    ``category_id`` ties the pack to the plan category of the service's sales
+    plan, so VIP and economy packs can be priced differently. A pack that is
+    neither general nor tied to a category matches nothing.
     """
 
     __tablename__ = "service_addon_packs"
@@ -201,6 +204,7 @@ class ServiceAddonPack(Base):
         nullable=True,
         index=True,
     )
+    is_general: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -210,6 +214,7 @@ class Order(Base):
     __tablename__ = "orders"
     __table_args__ = (
         Index("uq_orders_renewal_request_key", "renewal_request_key", unique=True),
+        Index("ix_orders_created_at", "created_at"),
         Index(
             "uq_orders_service_quota_mutation", "service_id", unique=True,
             sqlite_where=text("service_mutation_pending = true"),
@@ -344,8 +349,8 @@ class PaymentSettlement(Base):
     )
     # 0 = platform; else reseller user id — for UNIQUE indexes (NULL-safe).
     tenant_key: Mapped[int] = mapped_column(Integer, default=0, index=True)
-    channel: Mapped[str] = mapped_column(String(32), index=True)  # psp | card_auto
-    provider: Mapped[str] = mapped_column(String(32), index=True)  # mock | zarinpal | generic
+    channel: Mapped[str] = mapped_column(String(32), index=True)  # psp | card_auto | bbc
+    provider: Mapped[str] = mapped_column(String(32), index=True)  # mock | zarinpal | generic | bezanbecard
     status: Mapped[str] = mapped_column(
         String(32), default=SettlementStatus.CREATED.value, index=True
     )
@@ -359,6 +364,8 @@ class PaymentSettlement(Base):
     provider_payload: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     settled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Set by the one caller that sends the delivery of a settled payment (claim, then send).
+    notified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -369,6 +376,15 @@ class PaymentSettlement(Base):
 
 class UserService(Base):
     __tablename__ = "user_services"
+    __table_args__ = (
+        Index("ix_user_services_pg_username_lower", text("lower(pg_username)")),
+        # A panel user can be imported into «سرویس‌های من» by one customer only.
+        Index(
+            "uq_user_services_imported_pg_user", "pg_user_id", unique=True,
+            sqlite_where=text("remark = 'imported'"),
+            postgresql_where=text("remark = 'imported'"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     bot_user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id"), index=True)
@@ -400,12 +416,121 @@ class UserService(Base):
     renew_nudge_sent_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Shop that sold the service (NULL = platform), written when the service is created.
+    # A service whose shop could not be derived when this column was introduced keeps
+    # shop_needs_review and is hidden from every shop until the owner assigns it.
+    shop_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("bot_users.id"), nullable=True, index=True
+    )
+    shop_needs_review: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false"), index=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     owner: Mapped["BotUser"] = relationship(
         back_populates="services", foreign_keys=[bot_user_id]
     )
     plan: Mapped[Optional["Plan"]] = relationship()
+
+
+class BotUserShop(Base):
+    """A person is a customer of a shop (shop_id NULL = the platform).
+
+    One person can buy from several shops; BotUser.reseller_id only records the
+    shop that attributed them first. Rows are written idempotently on first contact
+    with a bot and whenever an order or a service is created.
+    """
+
+    __tablename__ = "bot_user_shops"
+    __table_args__ = (
+        Index(
+            "uq_bot_user_shops_shop", "bot_user_id", "shop_id", unique=True,
+            sqlite_where=text("shop_id IS NOT NULL"),
+            postgresql_where=text("shop_id IS NOT NULL"),
+        ),
+        Index(
+            "uq_bot_user_shops_platform", "bot_user_id", unique=True,
+            sqlite_where=text("shop_id IS NULL"),
+            postgresql_where=text("shop_id IS NULL"),
+        ),
+        Index("ix_bot_user_shops_shop_user", "shop_id", "bot_user_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    bot_user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id", ondelete="CASCADE"))
+    shop_id: Mapped[Optional[int]] = mapped_column(ForeignKey("bot_users.id", ondelete="CASCADE"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ServiceImportAttempt(Base):
+    """One try to add an existing service by its subscription link (rate limit and audit).
+
+    Only a hash of the token is kept; the link itself is a bearer secret.
+    """
+
+    __tablename__ = "service_import_attempts"
+    __table_args__ = (Index("ix_service_import_attempts_user_time", "bot_user_id", "created_at"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    bot_user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id", ondelete="CASCADE"))
+    token_hash: Mapped[str] = mapped_column(String(64))
+    outcome: Mapped[str] = mapped_column(String(24))
+    # Operator-facing cause of a refusal (service_import.Reason); never shown to customers.
+    reason: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ServiceImportRequest(Base):
+    """A customer's request to add an existing service while admin approval is on.
+
+    The subscription token is never stored: approval re-reads the panel user and derives the
+    link from the panel's own record.
+    """
+
+    __tablename__ = "service_import_requests"
+    __table_args__ = (
+        Index(
+            "uq_service_import_requests_open",
+            "bot_user_id",
+            "panel_user_id",
+            unique=True,
+            sqlite_where=text("status = 'pending'"),
+            postgresql_where=text("status = 'pending'"),
+        ),
+        Index("ix_service_import_requests_shop_status", "shop_id", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    bot_user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id", ondelete="CASCADE"))
+    # Owning shop (None = the platform's own customers); fixed when the request is made.
+    shop_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    panel_user_id: Mapped[int] = mapped_column(Integer)
+    panel_username: Mapped[str] = mapped_column(String(128))
+    status: Mapped[str] = mapped_column(String(16), server_default="pending")
+    reason: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    decided_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class PanelAlertState(Base):
+    """Last state of a panel alert that is pushed to Telegram, so each change is announced once.
+
+    ``scope_key`` is ``platform`` or ``shop:<id>``; ``alert`` is the kind of alert.
+    """
+
+    __tablename__ = "panel_alert_states"
+    __table_args__ = (Index("uq_panel_alert_states_scope_alert", "scope_key", "alert", unique=True),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    scope_key: Mapped[str] = mapped_column(String(32))
+    alert: Mapped[str] = mapped_column(String(32))
+    active: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    last_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    fingerprint: Mapped[str] = mapped_column(String(64), default="", server_default="")
+    notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class ServiceAutomation(Base):
@@ -592,6 +717,10 @@ class ResellerProfile(Base):
     billing_low_warned_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Deepest low-balance level already announced (toman); NULL while above every level.
+    billing_low_warned_level: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # Last billing problem announced to the owner (see billing_alerts.TickIssue); NULL when healthy.
+    billing_tick_issue: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     # PAYG empty-balance suspension (admin + users cut until topup)
     billing_suspended_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -1038,7 +1167,25 @@ class PointsTransaction(Base):
         ForeignKey("points_transactions.id"), nullable=True
     )
     created_by: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    # Shop whose balance the entry moved (NULL = the platform's BotUser.points_balance).
+    reseller_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("bot_users.id"), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ShopPoints(Base):
+    """A customer's loyalty points in one shop; the platform's stay on ``BotUser.points_balance``."""
+
+    __tablename__ = "shop_points"
+    __table_args__ = (
+        UniqueConstraint("user_id", "reseller_id", name="uq_shop_points_user_reseller"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id", ondelete="CASCADE"), index=True)
+    reseller_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id", ondelete="CASCADE"), index=True)
+    balance: Mapped[int] = mapped_column(Integer, default=0)
 
 
 class PointsRule(Base):
@@ -1280,6 +1427,7 @@ class PanelInboxDismissal(Base):
     alert_key: Mapped[str] = mapped_column(String(64))
     entity_id: Mapped[str] = mapped_column(String(64), default="")
     mode: Mapped[str] = mapped_column(String(16))  # 24h | forever
+    seen_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     dismissed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -1366,11 +1514,20 @@ class LuckyWheelSpin(Base):
 
 
 class LuckyWheelUserState(Base):
-    """Per-user wheel counters for cooldown / daily / free-spin UX."""
+    """Wheel counters (cooldown, daily limit, free spins) of one customer in one shop's wheel."""
 
     __tablename__ = "lucky_wheel_user_state"
     __table_args__ = (
-        UniqueConstraint("user_id", name="uq_lucky_wheel_user_state_user"),
+        Index(
+            "uq_lucky_wheel_state_shop", "user_id", "reseller_id", unique=True,
+            sqlite_where=text("reseller_id IS NOT NULL"),
+            postgresql_where=text("reseller_id IS NOT NULL"),
+        ),
+        Index(
+            "uq_lucky_wheel_state_platform", "user_id", unique=True,
+            sqlite_where=text("reseller_id IS NULL"),
+            postgresql_where=text("reseller_id IS NULL"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -1472,3 +1629,125 @@ class MarketingPreference(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("bot_users.id", ondelete="CASCADE"), primary_key=True)
     shop_key: Mapped[int] = mapped_column(Integer, primary_key=True)  # 0 = platform
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class CatalogDiscount(Base):
+    """Shop price adjustments, with a deduplicated announcement campaign."""
+
+    __tablename__ = "catalog_discounts"
+    __table_args__ = (
+        UniqueConstraint("shop_key", "request_key", name="uq_catalog_discount_request"),
+        UniqueConstraint("shop_key", "active_slot", name="uq_catalog_discount_slot"),
+        Index("ix_catalog_discounts_shop_active", "shop_key", "is_active", "ends_at"),
+        Index("ix_catalog_discounts_shop_history", "shop_key", "id"),
+        Index("ix_catalog_discounts_campaign", "campaign_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    shop_key: Mapped[int] = mapped_column(Integer)
+    reseller_id: Mapped[Optional[int]] = mapped_column(ForeignKey("bot_users.id"), nullable=True)
+    active_slot: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    title: Mapped[str] = mapped_column(String(128))
+    scope: Mapped[str] = mapped_column(String(16))
+    plan_id: Mapped[Optional[int]] = mapped_column(ForeignKey("plans.id", ondelete="SET NULL"), nullable=True)
+    category_id: Mapped[Optional[int]] = mapped_column(ForeignKey("plan_categories.id", ondelete="SET NULL"), nullable=True)
+    mode: Mapped[str] = mapped_column(String(16))
+    reduction_kind: Mapped[str] = mapped_column(String(16))
+    reduction_value: Mapped[int] = mapped_column(Integer)
+    ends_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
+    request_key: Mapped[str] = mapped_column(String(32))
+    campaign_id: Mapped[Optional[int]] = mapped_column(ForeignKey("targeted_campaigns.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ConnectionMonitorState(Base):
+    """Scoped account configuration and the shared local probe lease."""
+
+    __tablename__ = "connection_monitor_states"
+    __table_args__ = (
+        UniqueConstraint("reseller_id", "probe_id", name="uq_monitor_state_shop_probe"),
+        Index("uq_monitor_state_main_probe", "probe_id", unique=True,
+              sqlite_where=text("reseller_id IS NULL"), postgresql_where=text("reseller_id IS NULL")),
+        Index("ix_monitor_state_lease", "probe_id", "cycle_lease_until"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    reseller_id: Mapped[int | None] = mapped_column(ForeignKey("bot_users.id"), nullable=True)
+    probe_id: Mapped[str] = mapped_column(String(16), server_default="local")
+    enabled: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    pg_user_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    pg_username: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    subscription_token_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
+    account_revision: Mapped[str] = mapped_column(String(64), server_default="")
+    cycle_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    cycle_lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    catalog_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ConnectionMonitorTarget(Base):
+    """A selected subscription config with private-by-default publication settings."""
+
+    __tablename__ = "connection_monitor_targets"
+    __table_args__ = (
+        UniqueConstraint("reseller_id", "pg_host_id", name="uq_monitor_target_shop_host"),
+        Index("uq_monitor_target_shop_config", "reseller_id", "subscription_key", unique=True),
+        Index("uq_monitor_target_main_config", "subscription_key", unique=True,
+              sqlite_where=text("reseller_id IS NULL AND subscription_key IS NOT NULL"),
+              postgresql_where=text("reseller_id IS NULL AND subscription_key IS NOT NULL")),
+        Index("uq_monitor_target_main_host", "pg_host_id", unique=True,
+              sqlite_where=text("reseller_id IS NULL"), postgresql_where=text("reseller_id IS NULL")),
+        Index("ix_monitor_target_due", "reseller_id", "test_enabled", "next_check_at", "id"),
+        Index("ix_monitor_target_public", "reseller_id", "test_enabled", "is_public", "display_order", "id"),
+        Index("ix_monitor_target_lease", "reseller_id", "claim_until"),
+        CheckConstraint("display_order >= 0 AND display_order <= 2147483647", name="ck_monitor_target_order"),
+        CheckConstraint("endpoint_count >= 0 AND endpoint_count <= 12", name="ck_monitor_target_endpoints"),
+        CheckConstraint("NOT is_public OR (test_enabled AND length(trim(public_name)) > 0)", name="ck_monitor_target_public"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    reseller_id: Mapped[int | None] = mapped_column(ForeignKey("bot_users.id"), nullable=True)
+    pg_host_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    subscription_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    config_name: Mapped[str] = mapped_column(String(128), server_default="")
+    test_enabled: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    is_public: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    public_name: Mapped[str] = mapped_column(String(64), server_default="")
+    display_order: Mapped[int] = mapped_column(Integer, server_default="0")
+    generation: Mapped[str] = mapped_column(String(64), server_default="")
+    endpoint_count: Mapped[int] = mapped_column(Integer, server_default="0")
+    next_check_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    claim_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    claim_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    manual_available_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    manual_pending: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+
+
+class ConnectionMonitorSnapshot(Base):
+    """Bounded latest endpoint evidence; raw configs and credentials never belong here."""
+
+    __tablename__ = "connection_monitor_snapshots"
+    __table_args__ = (
+        UniqueConstraint("target_id", "endpoint_key", "probe_id", name="uq_monitor_snapshot_endpoint"),
+        Index("ix_monitor_snapshot_scope_target", "reseller_id", "target_id", "probe_id"),
+        CheckConstraint("delay_ms IS NULL OR delay_ms >= 0", name="ck_monitor_snapshot_delay"),
+        CheckConstraint("success_streak >= 0 AND failure_streak >= 0", name="ck_monitor_snapshot_streaks"),
+        CheckConstraint("status IN ('healthy', 'degraded', 'down', 'unknown', 'not_ready', 'paused')", name="ck_monitor_snapshot_status"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    reseller_id: Mapped[int | None] = mapped_column(ForeignKey("bot_users.id"), nullable=True)
+    target_id: Mapped[int] = mapped_column(ForeignKey("connection_monitor_targets.id", ondelete="CASCADE"))
+    endpoint_key: Mapped[str] = mapped_column(String(64))
+    probe_id: Mapped[str] = mapped_column(String(16), server_default="local")
+    generation: Mapped[str] = mapped_column(String(64), server_default="")
+    status: Mapped[str] = mapped_column(String(16), server_default="unknown")
+    reason: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    destination: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    delay_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    success_streak: Mapped[int] = mapped_column(Integer, server_default="0")
+    failure_streak: Mapped[int] = mapped_column(Integer, server_default="0")
+    has_observation: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    recovery_required: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    samples_json: Mapped[str] = mapped_column(Text, server_default="[]")

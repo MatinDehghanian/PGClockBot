@@ -27,6 +27,7 @@
       tokens.set(token, {
         token: token,
         valid: !!match && has(allowed, match[1]),
+        used: true,
         malformed: !match,
         title: match && allowed[match[1]],
       });
@@ -44,24 +45,39 @@
       }
     }
     if (depth > 0) add(text.slice(start));
+    Object.entries(allowed).forEach(([name, title]) => {
+      const token = '{' + name + '}';
+      if (!tokens.has(token)) tokens.set(token, { token: token, valid: true, used: false, title: title });
+    });
     return Array.from(tokens.values());
+  }
+
+  function tokenBadge(item) {
+    const badge = document.createElement('button');
+    const status = !item.valid ? 'is-invalid' : (item.used ? 'is-valid' : 'is-unused');
+    const label = !item.valid ? 'نامعتبر' : (item.used ? 'معتبر' : 'استفاده‌نشده');
+    badge.type = 'button';
+    badge.className = 'template-variable-token ' + status;
+    badge.dir = 'ltr';
+    badge.textContent = shortToken(item.token);
+    badge.disabled = !item.valid;
+    badge.title = item.token + ': ' + (item.valid
+      ? item.title + ' — برای کپی کلیک کنید'
+      : (item.malformed ? 'قالب متغیر نادرست است' : 'در این بخش پشتیبانی نمی‌شود'));
+    badge.setAttribute('aria-label', item.token + ': ' + label + (item.valid ? '؛ کپی متغیر' : ''));
+    if (item.valid) {
+      badge.setAttribute('data-copy', item.token);
+      badge.setAttribute('aria-live', 'polite');
+      badge.setAttribute('aria-atomic', 'true');
+    } else badge.setAttribute('aria-disabled', 'true');
+    return badge;
   }
 
   function render(control, state) {
     const tokens = tokensIn(control.value || '', specs[state.key]);
     const invalid = tokens.filter((item) => !item.valid);
     state.tokens.replaceChildren();
-    tokens.forEach((item) => {
-      const badge = document.createElement('code');
-      badge.className = 'template-variable-token ' + (item.valid ? 'is-valid' : 'is-invalid');
-      badge.dir = 'ltr';
-      badge.textContent = shortToken(item.token);
-      badge.title = item.valid
-        ? item.token + ': ' + item.title
-        : item.token + ': ' + (item.malformed ? 'قالب متغیر نادرست است' : 'در این بخش پشتیبانی نمی‌شود');
-      badge.setAttribute('aria-label', item.token + ': ' + (item.valid ? 'معتبر' : 'نامعتبر'));
-      state.tokens.appendChild(badge);
-    });
+    tokens.forEach((item) => state.tokens.appendChild(tokenBadge(item)));
 
     const unsupported = invalid.filter((item) => !item.malformed);
     const messages = [];

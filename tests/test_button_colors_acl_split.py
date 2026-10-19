@@ -73,21 +73,44 @@ class ButtonColorsAclTests(unittest.TestCase):
         self.assertNotIn("btn_style_plan_res_payg", shop)
         self.assertTrue(shop.issubset(owner))
 
-    def test_shop_settings_save_filters_colors_acl(self):
-        src = (ROOT / "app/api/shop_settings.py").read_text(encoding="utf-8")
-        self.assertIn("allowed_style_setting_keys(for_reseller=True)", src)
-        self.assertIn('tab == "colors"', src)
-        self.assertIn('startswith("btn_style_") and k not in allowed_btn', src)
-        self.assertIn("sectioned_catalog(for_reseller=True)", src)
+    def test_shop_colors_page_lists_only_reseller_allowed_keys(self):
+        from app.services.button_styles import (
+            allowed_style_setting_keys,
+            colors_page_grouped_sections,
+        )
 
-    def test_admin_settings_uses_sectioned_catalog(self):
-        src = (ROOT / "app/api/app.py").read_text(encoding="utf-8")
-        self.assertIn("sectioned_catalog()", src)
-        html = (ROOT / "app/web/templates/_settings_colors.html").read_text(encoding="utf-8")
-        self.assertIn("colors_page_sections", html)
-        self.assertIn("btn-color-section-head", html)
-        self.assertNotIn("btn-color-section[", html)
-        self.assertIn("زیرمنوی همان نوع", html)
+        shop = colors_page_grouped_sections(for_reseller=True)
+        self.assertEqual([s[0] for s in shop], ["shop"])
+        group_names = {g for _, _, _, groups in shop for g, _ in groups}
+        self.assertNotIn("منوی ادمین", group_names)
+        self.assertIn("منوی نماینده", group_names)
+        shown_keys = {
+            item["key"] for _, _, _, groups in shop for _, items in groups for item in items
+        }
+        self.assertTrue(shown_keys)
+        self.assertTrue(shown_keys <= allowed_style_setting_keys(for_reseller=True))
+
+    def test_admin_colors_page_renders_every_section_tab(self):
+        from jinja2 import Environment, FileSystemLoader, select_autoescape
+
+        from app.services.button_styles import STYLE_OPTIONS, colors_page_grouped_sections
+
+        sections = colors_page_grouped_sections()
+        self.assertEqual([s[0] for s in sections], ["user", "payment", "admin", "reseller"])
+        env = Environment(
+            loader=FileSystemLoader(str(ROOT / "app/web/templates")),
+            autoescape=select_autoescape(["html"]),
+        )
+        html = env.get_template("_settings_colors.html").render(
+            colors_page_sections=sections,
+            values={},
+            style_options=STYLE_OPTIONS,
+        )
+        for tab_id, tab_label, _caption, _groups in sections:
+            self.assertIn(f'data-colors-tab="{tab_id}"', html)
+            self.assertIn(tab_label, html)
+        self.assertIn('name="s_btn_style_adm_dash"', html)
+        self.assertIn('name="s_btn_style_res_orders"', html)
 
 
 class PlanKindInheritanceTests(unittest.TestCase):

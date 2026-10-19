@@ -19,6 +19,8 @@ from app.services.support_contacts import (
 )
 from app.services.tickets import create_ticket, get_ticket, list_user_tickets, reply_ticket
 from app.services.users import get_all_settings
+from app.services import bot_feedback_texts as feedback
+from app.services.screen_titles import screen_title_raw
 
 router = Router(name="support")
 
@@ -41,7 +43,7 @@ async def support_home(callback: CallbackQuery, session: AsyncSession):
     default_support = "تیکت جدید بسازید یا تیکت‌های قبلی را ببینید."
     text, send_kw = outbound_setting_text(
         ui.get("support_text") or default_support,
-        title="🎧 پشتیبانی",
+        title_raw=screen_title_raw(ui, "c.support"),
     )
     if callback.message:
         from app.bot.nav_inline import support_hub_keyboard
@@ -109,8 +111,18 @@ async def support_subject(
     reseller_owner_id: int | None = None,
 ):
     if kb.is_cancel_text(message.text):
+        from app.bot.nav_input import try_legacy_cancel
         from app.bot.tg_utils import clear_fsm_with_reply
 
+        if await try_legacy_cancel(
+            message,
+            state,
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        ):
+            return
         await clear_fsm_with_reply(
             message,
             state,
@@ -145,8 +157,18 @@ async def support_body(
     reseller_owner_id: int | None = None,
 ):
     if kb.is_cancel_text(message.text):
+        from app.bot.nav_input import try_legacy_cancel
         from app.bot.tg_utils import clear_fsm_with_reply
 
+        if await try_legacy_cancel(
+            message,
+            state,
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        ):
+            return
         await clear_fsm_with_reply(
             message,
             state,
@@ -224,7 +246,7 @@ async def support_list(callback: CallbackQuery, session: AsyncSession, db_user: 
     tickets = await list_user_tickets(session, db_user.id)
     ui = await get_all_settings(session)
     if not tickets:
-        text = "تیکتی ندارید."
+        text = feedback.NO_TICKETS
         if callback.message:
             await safe_edit_text(
                 callback.message,
@@ -243,10 +265,7 @@ async def support_list(callback: CallbackQuery, session: AsyncSession, db_user: 
     ]
     rows.append(
         [
-            InlineKeyboardButton(
-                text=ui.get("btn_back") or "⬅️ بازگشت",
-                callback_data="nv:s:home",
-            )
+            kb.back_button(ui, "nv:s:home")
         ]
     )
     text = "📋 تیکت‌های شما:"
@@ -266,16 +285,16 @@ async def support_view(
     ticket_id = int(callback.data.split(":")[-1])
     ticket = await get_ticket(session, ticket_id)
     if not ticket or ticket.user_id != db_user.id:
-        await callback.answer("یافت نشد", show_alert=True)
+        await callback.answer(feedback.NOT_FOUND, show_alert=True)
         return
     # Shop isolation: only show tickets belonging to this bot's scope
     shop_rid = int(reseller_owner_id) if reseller_owner_id else None
     if shop_rid:
         if int(ticket.reseller_id or 0) != shop_rid:
-            await callback.answer("یافت نشد", show_alert=True)
+            await callback.answer(feedback.NOT_FOUND, show_alert=True)
             return
     elif ticket.reseller_id:
-        await callback.answer("یافت نشد", show_alert=True)
+        await callback.answer(feedback.NOT_FOUND, show_alert=True)
         return
     await callback.answer()
     lines = [
@@ -338,7 +357,7 @@ async def support_reply(
             message,
             session,
             db_user,
-            text="تیکت نامعتبر",
+            text="این تیکت پیدا نشد",
             state=state,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
@@ -349,7 +368,7 @@ async def support_reply(
             message,
             session,
             db_user,
-            text="تیکت قبلاً بسته شده است.",
+            text=feedback.TICKET_ALREADY_CLOSED,
             state=state,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
@@ -377,7 +396,8 @@ async def support_reply(
         message,
         state,
         text="پاسخ ثبت شد.",
-        inline=None,
+        inline=InlineKeyboardMarkup(inline_keyboard=[[kb.back_button(None, "support:list")]]),
+        keep_input=True,
     )
 
 

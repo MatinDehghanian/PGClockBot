@@ -7,6 +7,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
+from aiogram.types import InlineKeyboardMarkup
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -68,34 +70,119 @@ class AdminSearchRestoresUsersKeyboardTests(unittest.TestCase):
         self.assertNotIn("seed_persistent_reply_kb", fn)
         self.assertLess(fn.index("نتیجه جستجو"), fn.index("_render_user_card"))
 
-    def test_wallet_credit_and_block_restore_users_kb(self):
-        src = (ROOT / "app/bot/handlers/admin.py").read_text(encoding="utf-8")
-        credit = src.split("async def adm_users_wallet_credit_save(", 1)[1].split(
-            "\n@router.", 1
-        )[0]
-        self.assertIn("reply_markup=kb.admin_users_reply_keyboard()", credit)
-        block = src.split("async def adm_users_block_reason(", 1)[1].split(
-            "\n@router.", 1
-        )[0]
-        self.assertIn("reply_markup=kb.admin_users_reply_keyboard()", block)
+class AdminFsmFinishKeepsReplyKeyboardTests(unittest.IsolatedAsyncioTestCase):
+    """Finishing an admin FSM text step re-attaches the lasting reply keyboard."""
 
-    def test_adjust_gb_restores_users_kb_before_inline(self):
-        src = (ROOT / "app/bot/handlers/admin.py").read_text(encoding="utf-8")
-        fn = src.split("async def adm_svc_adjust_gb_entered(", 1)[1].split(
-            "\n@router.", 1
-        )[0]
-        self.assertIn(
-            'await message.answer("لغو شد.", reply_markup=kb.admin_users_reply_keyboard())',
-            fn,
+    def _handler_context(self, text: str):
+        message = MagicMock()
+        message.text = text
+        message.answer = AsyncMock()
+        state = AsyncMock()
+        db_user = MagicMock()
+        db_user.role = "admin"
+        session = AsyncMock()
+        return message, state, db_user, session
+
+    def _patches(self, stack, lasting_markup):
+        from unittest.mock import patch
+
+        for target, replacement in (
+            ("app.bot.auth.require_bot_owner", AsyncMock(return_value=True)),
+            ("app.bot.handlers.admin._is_admin", MagicMock(return_value=True)),
+            (
+                "app.bot.handlers.admin._staff_reply",
+                AsyncMock(return_value=lasting_markup),
+            ),
+            ("app.bot.handlers.admin._render_user_card", AsyncMock()),
+        ):
+            stack.enter_context(patch(target, replacement))
+
+    async def test_wallet_credit_save_attaches_lasting_reply_keyboard(self):
+        from contextlib import ExitStack
+        from unittest.mock import patch
+
+        from app.bot.handlers.admin import adm_users_wallet_credit_save
+
+        lasting = object()
+        message, state, db_user, session = self._handler_context("5000")
+        state.get_data = AsyncMock(
+            return_value={"admin_credit_user_id": 5, "admin_wallet_mode": "credit"}
         )
-        self.assertIn(
-            'await message.answer("👥 کاربران", reply_markup=kb.admin_users_reply_keyboard())',
-            fn,
-        )
-        self.assertLess(
-            fn.index("👥 کاربران"),
-            fn.index("admin_user_service_adjust_keyboard"),
-        )
+        user = MagicMock()
+        user.wallet_balance = 5000
+        with ExitStack() as stack:
+            self._patches(stack, lasting)
+            stack.enter_context(
+                patch(
+                    "app.bot.handlers.admin._platform_shop_user",
+                    AsyncMock(return_value=(user, None)),
+                )
+            )
+            adjust = stack.enter_context(
+                patch(
+                    "app.services.bot_user_admin.admin_adjust_user_wallet",
+                    AsyncMock(),
+                )
+            )
+            await adm_users_wallet_credit_save(
+                message, state, session=session, db_user=db_user
+            )
+
+        adjust.assert_awaited_once()
+        message.answer.assert_awaited_once()
+        self.assertIs(message.answer.await_args.kwargs["reply_markup"], lasting)
+
+    async def test_block_reason_attaches_lasting_reply_keyboard(self):
+        from contextlib import ExitStack
+        from unittest.mock import patch
+
+        from app.bot.handlers.admin import adm_users_block_reason
+
+        lasting = object()
+        message, state, db_user, session = self._handler_context("spam account")
+        state.get_data = AsyncMock(return_value={"block_user_id": 5})
+        user = MagicMock()
+        with ExitStack() as stack:
+            self._patches(stack, lasting)
+            stack.enter_context(
+                patch(
+                    "app.bot.handlers.admin._platform_shop_user",
+                    AsyncMock(return_value=(user, None)),
+                )
+            )
+            stack.enter_context(
+                patch("app.services.users.is_protected_admin", return_value=False)
+            )
+            stack.enter_context(
+                patch("app.services.notifications.notify_account_edit", AsyncMock())
+            )
+            await adm_users_block_reason(
+                message, state, session=session, db_user=db_user
+            )
+
+        self.assertTrue(user.is_blocked)
+        message.answer.assert_awaited_once()
+        self.assertIs(message.answer.await_args.kwargs["reply_markup"], lasting)
+
+    async def test_adjust_gb_restores_reply_kb_before_inline_adjuster(self):
+        from contextlib import ExitStack
+
+        from app.bot.handlers.admin import adm_svc_adjust_gb_entered
+
+        lasting = object()
+        message, state, db_user, session = self._handler_context("2")
+        state.get_data = AsyncMock(return_value={"svcadj_uid": 5, "svcadj_sid": 7})
+        with ExitStack() as stack:
+            self._patches(stack, lasting)
+            await adm_svc_adjust_gb_entered(
+                message, state, session=session, db_user=db_user
+            )
+
+        first, second = message.answer.await_args_list
+        self.assertIs(first.kwargs["reply_markup"], lasting)
+        inline = second.kwargs["reply_markup"]
+        self.assertIsInstance(inline, InlineKeyboardMarkup)
+        self.assertIsNot(inline, lasting)
 
 
 class SourceContractTests(unittest.TestCase):

@@ -4,7 +4,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
-const {groupMoneyDigits, formatMoneyInput} = require("../app/web/static/money-inputs.js");
+const {groupMoneyDigits, formatMoneyInput, syncMoneyMode} = require("../app/web/static/money-inputs.js");
 
 for (const [raw, expected] of [
   ["", ""], ["0", "0"], ["999", "999"], ["1000", "1,000"],
@@ -52,11 +52,48 @@ const empty = field("", 0);
 formatMoneyInput(empty, normalize);
 assert.equal(empty.value, "");
 
+for (const [name, value] of [["reduction_kind", "amount"], ["reward_type", "wallet_credit"], ["prize_type", "wallet_credit"]]) {
+  const kind = {value};
+  const input = Object.assign(field("1250000", 7), {
+    dataset: {moneyKind: name, moneyValue: value},
+    form: {elements: {namedItem: (key) => key === name ? kind : null}},
+    toggleAttribute(_name, enabled) {this.isMoney = enabled;},
+  });
+  syncMoneyMode(input, normalize);
+  assert.equal(input.value, "1,250,000");
+  assert.equal(input.isMoney, true);
+  assert.equal(input.selectionStart, 9);
+  kind.value = "percent";
+  syncMoneyMode(input, normalize);
+  assert.equal(input.value, "1250000");
+  assert.equal(input.isMoney, false);
+  input.value = "۲۰";
+  syncMoneyMode(input, normalize);
+  assert.equal(input.value, "20");
+  kind.value = value;
+  syncMoneyMode(input, normalize);
+  assert.equal(input.isMoney, true);
+  assert.equal(input.value, "20");
+  kind.value = "percent";
+  input.value = "1250000";
+  const changedSelect = {value, tagName: "SELECT", name: "", dataset: {uiSelectName: name}};
+  Object.assign(input.form.elements, {0: changedSelect, length: 1});
+  syncMoneyMode(input, normalize);
+  assert.equal(input.isMoney, true);
+  assert.equal(input.value, "1,250,000");
+  kind.value = value;
+  changedSelect.value = "percent";
+  syncMoneyMode(input, normalize);
+  assert.equal(input.isMoney, false);
+  assert.equal(input.value, "1250000");
+}
+
 const source = fs.readFileSync(path.join(__dirname, "../app/web/static/miniapp.js"), "utf8");
 const context = vm.createContext({
   window: {addEventListener() {}}, location: {hash: ""},
   document: {getElementById: () => ({}), querySelectorAll: () => []},
 });
+vm.runInContext(fs.readFileSync(path.join(__dirname, "../app/web/static/catalog_price.js"), "utf8"), context);
 vm.runInContext(source.replace(/  load\(\);\s*\}\)\(\);\s*$/, `
   globalThis.testUI = {money, plansHtml, activityHtml, setCurrency: (value) => {currency = value;}};
 })();`), context);

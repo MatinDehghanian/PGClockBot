@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import html
+import logging
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
@@ -12,9 +13,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
+from app.bot.reseller_hub_groups import back_callback_for
 from app.bot.tg_utils import safe_edit_text
+from app.services.db_safe import rollback_quiet
 from app.config import get_settings
-from app.db.models import BotUser, LoyaltyReward, LoyaltyTier, PointsRule, Role, UserService
+from app.db.models import BotUser, LoyaltyReward, LoyaltyTier, PointsRule, Role
 from app.services.formatting import format_message, format_toman, kv_line
 from app.services.loyalty import (
     EVENT_LABELS,
@@ -27,6 +30,7 @@ from app.services.loyalty import (
     list_available_discounts,
     list_points_history,
     loyalty_enabled,
+    points_balance,
     month_earned_points,
     overview_metrics,
     redeem_reward,
@@ -40,11 +44,24 @@ from app.services.lucky_wheel import (
     spin as wheel_spin,
     wheel_feature_enabled,
 )
-from app.services.message_variables import DOMAIN_REFERRAL, render_message_template
-from app.services.users import get_all_settings, get_setting, on, set_setting
+from app.services.message_variables import DOMAIN_REFERRAL
+from app.services.service_scope import list_customer_services
+from app.services.users import current_shop_reseller_id, get_all_settings, get_setting, on, set_setting
 from app.services.redact import user_safe_error
+from app.services import bot_feedback_texts as feedback
+from app.services.button_color_editor import PLATFORM_SCOPE
+from app.services.screen_titles import screen_caption, screen_heading, screen_title_html, with_caption
+
+# The club home every club screen backs up to.
+CLUB_HOME = "nv:loy:home"
+logger = logging.getLogger(__name__)
 
 router = Router(name="loyalty")
+
+
+async def _points(session: AsyncSession, user: BotUser) -> int:
+    """The customer's points in the shop of the bot in use."""
+    return await points_balance(session, user, current_shop_reseller_id())
 
 class LoyaltyManageStates(StatesGroup):
     edit_wallet_rate = State()
@@ -66,6 +83,7 @@ def _ref_actions_keyboard(*, share_url: str | None = None) -> InlineKeyboardMark
     rows.append(
         [InlineKeyboardButton(text="📊 آمار دعوت", callback_data="ref:stats")]
     )
+    rows.append([kb.back_button(None, CLUB_HOME)])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 def _points_extras_keyboard() -> InlineKeyboardMarkup:
@@ -91,7 +109,7 @@ def _rewards_redeem_keyboard(
     ]
     if include_back:
         rows.append(
-            [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="loy:home")]
+            [kb.back_button(None, "loy:home")]
         )
     if not rows:
         return None
@@ -114,7 +132,7 @@ def _hist_page_keyboard(
         rows.append(nav_btns)
     if include_back:
         rows.append(
-            [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="loy:home")]
+            [kb.back_button(None, "loy:home")]
         )
     if not rows:
         return None
@@ -137,7 +155,7 @@ async def build_referral_text(
     ui = await get_all_settings(session)
     link = referral_link(uname, db_user.referral_code)
     try:
-        await ensure_loyalty_defaults(session, reseller_id=db_user.reseller_id)
+        await ensure_loyalty_defaults(session, reseller_id=current_shop_reseller_id())
     except Exception:
         pass
     stats = await referral_stats(session, db_user.id)
@@ -181,14 +199,15 @@ async def build_referral_text(
 async def build_loyalty_text(session: AsyncSession, db_user: BotUser) -> str:
     await session.refresh(db_user)
     try:
-        await ensure_loyalty_defaults(session, reseller_id=db_user.reseller_id)
+        await ensure_loyalty_defaults(session, reseller_id=current_shop_reseller_id())
     except Exception:
         pass
-    tier = await get_tier_for_points(session, int(db_user.points_balance or 0))
+    tier = await get_tier_for_points(session, await _points(session, db_user))
     stats = await referral_stats(session, db_user.id)
-    month = await month_earned_points(session, db_user.id)
+    month = await month_earned_points(session, db_user.id, shop_id=current_shop_reseller_id())
+    ui = await get_all_settings(session)
     lines = [
-        kv_line("⭐", "امتیاز شما", f"<b>{int(db_user.points_balance or 0)}</b>"),
+        kv_line("⭐", "امتیاز شما", f"<b>{await _points(session, db_user)}</b>"),
         kv_line("🏅", "سطح", tier.name),
     ]
     if tier.points_to_next is not None:
@@ -199,7 +218,7 @@ async def build_loyalty_text(session: AsyncSession, db_user: BotUser) -> str:
             kv_line("📅", "امتیاز این ماه", str(month)),
         ]
     )
-    return format_message("⭐ باشگاه مشتریان", "\n".join(lines))
+    return format_message(screen_title_html(ui, "c.loyalty"), with_caption("\n".join(lines), screen_caption(ui, "c.loyalty")))
 
 # ---------------------------------------------------------------------------
 # Staff ACL — fail closed; never use Owner PG from reseller path
@@ -265,8 +284,8 @@ async def open_loyalty_home_message(
     from app.bot.nav_inline import loyalty_hub_keyboard, present_inline_only
 
     ui = await get_all_settings(session)
-    if not await loyalty_enabled(session, reseller_id=db_user.reseller_id):
-        disabled = format_message("⭐ باشگاه مشتریان", "این بخش فعلاً غیرفعال است.")
+    if not await loyalty_enabled(session, reseller_id=current_shop_reseller_id()):
+        disabled = format_message(screen_title_html(ui, "c.loyalty"), "این بخش فعلاً غیرفعال است.")
         if state is not None:
             await nav.set_nav_level(state, nav.NAV_LOYALTY, push=push)
         await present_inline_only(
@@ -298,7 +317,6 @@ async def open_loyalty_referral_message(
     text, link, send_kw = await build_referral_text(session, db_user, uname)
     share = f"https://t.me/share/url?url={link}&text="
     from app.bot.nav_inline import present_inline_only
-    ui = await get_all_settings(session)
     await nav.set_loy_step(state, "referral")
     ref_kb = _ref_actions_keyboard(share_url=share)
     if state is not None:
@@ -314,17 +332,15 @@ async def open_loyalty_points_message(
     ui = await get_all_settings(session)
     from app.bot.nav_inline import present_inline_only
 
-    if not await loyalty_enabled(session, reseller_id=db_user.reseller_id):
-        disabled = format_message("⭐ باشگاه مشتریان", "این بخش فعلاً غیرفعال است.")
+    if not await loyalty_enabled(session, reseller_id=current_shop_reseller_id()):
+        disabled = format_message(screen_title_html(ui, "c.loyalty"), "این بخش فعلاً غیرفعال است.")
         await present_inline_only(
             message,
             text=disabled,
             inline=InlineKeyboardMarkup(
                 inline_keyboard=[
                     [
-                        InlineKeyboardButton(
-                            text="⬅️ بازگشت", callback_data="nv:loy:home"
-                        )
+                        kb.back_button(ui, "nv:loy:home")
                     ]
                 ]
             ),
@@ -334,7 +350,7 @@ async def open_loyalty_points_message(
     extras = _points_extras_keyboard()
     rows = list(extras.inline_keyboard)
     rows.append(
-        [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="nv:loy:home")]
+        [kb.back_button(ui, "nv:loy:home")]
     )
     await present_inline_only(
         message,
@@ -351,8 +367,8 @@ async def open_loyalty_rewards_message(
     from app.bot.nav_inline import present_inline_only
 
     await session.refresh(db_user)
-    rewards = await list_active_rewards(session, reseller_id=db_user.reseller_id)
-    lines = [kv_line("⭐", "امتیاز فعلی", f"<b>{int(db_user.points_balance or 0)}</b>"), ""]
+    rewards = await list_active_rewards(session, reseller_id=current_shop_reseller_id())
+    lines = [kv_line("⭐", "امتیاز فعلی", f"<b>{await _points(session, db_user)}</b>"), ""]
     if not rewards:
         lines.append("هنوز جایزه‌ای تعریف نشده است.")
     else:
@@ -372,9 +388,7 @@ async def open_loyalty_rewards_message(
         redeem_kb = InlineKeyboardMarkup(
             inline_keyboard=[
                 [
-                    InlineKeyboardButton(
-                        text="⬅️ بازگشت", callback_data="nv:loy:home"
-                    )
+                    kb.back_button(ui, "nv:loy:home")
                 ]
             ]
         )
@@ -403,13 +417,14 @@ def _wheel_spin_keyboard(*, can_spin: bool) -> InlineKeyboardMarkup:
     rows.append(
         [InlineKeyboardButton(text="🔄 به‌روزرسانی", callback_data="loy:wheel:hub")]
     )
+    rows.append([kb.back_button(None, CLUB_HOME)])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 async def _build_wheel_hub_text(session: AsyncSession, db_user: BotUser) -> tuple[str, bool]:
     status = await get_user_wheel_status(session, db_user)
     if not status.enabled:
         return "چرخ شانس فعلاً غیرفعال است.", False
-    pool = await list_active_pool(session, reseller_id=db_user.reseller_id)
+    pool = await list_active_pool(session, reseller_id=current_shop_reseller_id())
     lines = [
         kv_line("⭐", "امتیاز شما", str(status.points_balance)),
         kv_line("🎟", "هزینه هر چرخش", f"{status.spin_cost} امتیاز" if status.spin_cost else "رایگان"),
@@ -447,32 +462,25 @@ async def open_loyalty_wheel_message(
     ui = await get_all_settings(session)
     from app.bot.nav_inline import present_inline_only
 
-    if not await loyalty_enabled(session, reseller_id=db_user.reseller_id):
-        disabled = format_message("⭐ باشگاه مشتریان", "این بخش فعلاً غیرفعال است.")
+    if not await loyalty_enabled(session, reseller_id=current_shop_reseller_id()):
+        disabled = format_message(screen_title_html(ui, "c.loyalty"), "این بخش فعلاً غیرفعال است.")
         await present_inline_only(
             message,
             text=disabled,
             inline=InlineKeyboardMarkup(
                 inline_keyboard=[
                     [
-                        InlineKeyboardButton(
-                            text="⬅️ بازگشت", callback_data="nv:loy:home"
-                        )
+                        kb.back_button(ui, "nv:loy:home")
                     ]
                 ]
             ),
         )
         return
     body, can_spin = await _build_wheel_hub_text(session, db_user)
-    spin_kb = _wheel_spin_keyboard(can_spin=can_spin)
-    rows = list(spin_kb.inline_keyboard)
-    rows.append(
-        [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="nv:loy:home")]
-    )
     await present_inline_only(
         message,
         text=format_message("🎡 چرخ شانس", body),
-        inline=InlineKeyboardMarkup(inline_keyboard=rows),
+        inline=_wheel_spin_keyboard(can_spin=can_spin),
     )
     return
 
@@ -483,7 +491,7 @@ async def open_loyalty_history_message(
     ui = await get_all_settings(session)
     from app.bot.nav_inline import present_inline_only
 
-    rows = await list_points_history(session, db_user.id, limit=8, offset=0)
+    rows = await list_points_history(session, db_user.id, shop_id=current_shop_reseller_id(), limit=8, offset=0)
     await session.refresh(db_user)
     if not rows:
         body = "تاریخچه‌ای نیست."
@@ -493,7 +501,7 @@ async def open_loyalty_history_message(
             sign = "+" if t.amount >= 0 else ""
             lines.append(f"{sign}{t.amount} — {t.description or t.tx_type}")
         body = "\n".join(lines)
-    body += f"\n\nموجودی فعلی: <b>{int(db_user.points_balance or 0)}</b>"
+    body += f"\n\nموجودی فعلی: <b>{await _points(session, db_user)}</b>"
     title_body = format_message("📜 تاریخچه امتیاز", body)
     page_kb = _hist_page_keyboard(
         page=0, has_more=len(rows) >= 8, include_back=False
@@ -502,7 +510,7 @@ async def open_loyalty_history_message(
     if page_kb is not None:
         rows_kb.extend(page_kb.inline_keyboard)
     rows_kb.append(
-        [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="nv:loy:home")]
+        [kb.back_button(ui, "nv:loy:home")]
     )
     await present_inline_only(
         message,
@@ -549,7 +557,7 @@ async def _staff_loyalty_answer(
     from app.services.users import get_all_settings
 
     ui = await get_all_settings(session)
-    hub_back = "nv:res:home" if is_reseller_bot else "nv:adm:people"
+    hub_back = back_callback_for("res_loyalty") if is_reseller_bot else "nv:adm:marketing"
     leaf_back = "nv:adm:loy"
     if content_inline is not None:
         inline = with_inline_back(content_inline, ui, leaf_back)
@@ -563,7 +571,7 @@ async def _staff_loyalty_answer(
             message,
             session,
             db_user,
-            text="کیبورد اصلی بازیابی شد.",
+            text=feedback.MAIN_KEYBOARD_RESTORED,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
             ui=ui,
@@ -610,9 +618,7 @@ async def open_admin_loyalty_hub(
 
     ui = await get_all_settings(session)
     body = (
-        f"⭐ <b>باشگاه مشتریان</b> ({who})\n"
-        f"وضعیت: <b>{status}</b>\n"
-        + "یک بخش را از دکمه‌های زیر انتخاب کنید."
+        with_caption(f"{screen_heading(ui, 'a.loyalty')} ({who})", f"وضعیت: <b>{status}</b>", screen_caption(ui, "a.loyalty"))
         + f"{extra}"
     )
     if state is not None:
@@ -624,7 +630,7 @@ async def open_admin_loyalty_hub(
             ui,
             include_tiers=can_tiers,
             back_callback=(
-                "nv:res:home" if is_reseller_bot else "nv:adm:people"
+                back_callback_for("res_loyalty") if is_reseller_bot else "nv:adm:marketing"
             ),
         ),
     )
@@ -645,7 +651,7 @@ async def open_admin_loyalty_overview(
         reseller_owner_id=reseller_owner_id,
     )
     if scope_info is None:
-        await message.answer("دسترسی ندارید.")
+        await message.answer(feedback.NO_ACCESS_REPLY)
         return
     scope, can_tiers = scope_info
     await ensure_loyalty_defaults(session, reseller_id=scope)
@@ -711,7 +717,7 @@ def _staff_rules_markup(rules: list[PointsRule]) -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="🔄 تازه‌سازی", callback_data="loyadm:rules")]
     )
     rows.append(
-        [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="nv:adm:loy")]
+        [kb.back_button(None, "nv:adm:loy")]
     )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -733,7 +739,7 @@ def _staff_rewards_markup(rewards: list[LoyaltyReward]) -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="🔄 تازه‌سازی", callback_data="loyadm:rewards")]
     )
     rows.append(
-        [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="nv:adm:loy")]
+        [kb.back_button(None, "nv:adm:loy")]
     )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -752,7 +758,7 @@ async def open_admin_loyalty_rules(
         reseller_owner_id=reseller_owner_id,
     )
     if scope_info is None:
-        await message.answer("دسترسی ندارید.")
+        await message.answer(feedback.NO_ACCESS_REPLY)
         return
     scope, can_tiers = scope_info
     await ensure_loyalty_defaults(session, reseller_id=scope)
@@ -797,7 +803,7 @@ async def open_admin_loyalty_rewards(
         reseller_owner_id=reseller_owner_id,
     )
     if scope_info is None:
-        await message.answer("دسترسی ندارید.")
+        await message.answer(feedback.NO_ACCESS_REPLY)
         return
     scope, can_tiers = scope_info
     await ensure_loyalty_defaults(session, reseller_id=scope)
@@ -844,7 +850,7 @@ async def open_admin_loyalty_tiers(
         reseller_owner_id=reseller_owner_id,
     )
     if scope_info is None:
-        await message.answer("دسترسی ندارید.")
+        await message.answer(feedback.NO_ACCESS_REPLY)
         return
     scope, can_tiers = scope_info
     if not can_tiers:
@@ -907,7 +913,7 @@ def _staff_settings_markup(*, enabled: bool) -> InlineKeyboardMarkup:
                 )
             ],
             [InlineKeyboardButton(text="🔄 تازه‌سازی", callback_data="loyadm:settings")],
-            [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="nv:adm:loy")],
+            [kb.back_button(None, "nv:adm:loy")],
         ]
     )
 
@@ -926,7 +932,7 @@ async def open_admin_loyalty_settings(
         reseller_owner_id=reseller_owner_id,
     )
     if scope_info is None:
-        await message.answer("دسترسی ندارید.")
+        await message.answer(feedback.NO_ACCESS_REPLY)
         return
     scope, can_tiers = scope_info
     await ensure_loyalty_defaults(session, reseller_id=scope)
@@ -970,7 +976,7 @@ async def open_admin_loyalty_ref_text(
         reseller_owner_id=reseller_owner_id,
     )
     if scope_info is None:
-        await message.answer("دسترسی ندارید.")
+        await message.answer(feedback.NO_ACCESS_REPLY)
         return
     scope, can_tiers = scope_info
     # Reseller may edit referral text only with shop_settings (same as web panel)
@@ -1058,7 +1064,7 @@ async def referral_stats_cb(callback: CallbackQuery, session: AsyncSession, db_u
     )
     markup = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="ref:home")],
+            [kb.back_button(None, "ref:home")],
         ]
     )
     if callback.message:
@@ -1072,28 +1078,30 @@ async def referral_stats_cb(callback: CallbackQuery, session: AsyncSession, db_u
 async def loyalty_home(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     """Legacy/deep-link entry — content + discounts extra only (nav = reply KB)."""
     await callback.answer()
-    if not await loyalty_enabled(session, reseller_id=db_user.reseller_id):
+    if not await loyalty_enabled(session, reseller_id=current_shop_reseller_id()):
+        ui = await get_all_settings(session)
         if callback.message:
             await safe_edit_text(
                 callback.message,
-                format_message("⭐ باشگاه مشتریان", "این بخش فعلاً غیرفعال است."),
-                reply_markup=None,
+                format_message(screen_title_html(ui, "c.loyalty"), "این بخش فعلاً غیرفعال است."),
+                reply_markup=kb.back_home(ui),
             )
         return
     text = await build_loyalty_text(session, db_user)
     if callback.message:
+        extras = _points_extras_keyboard()
         await safe_edit_text(
             callback.message,
             text,
-            reply_markup=_points_extras_keyboard(),
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[*extras.inline_keyboard, [kb.home_button(None)]]),
         )
 
 @router.callback_query(F.data == "loy:rewards")
 async def loyalty_rewards(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     await callback.answer()
     await session.refresh(db_user)
-    rewards = await list_active_rewards(session, reseller_id=db_user.reseller_id)
-    lines = [kv_line("⭐", "امتیاز فعلی", f"<b>{int(db_user.points_balance or 0)}</b>"), ""]
+    rewards = await list_active_rewards(session, reseller_id=current_shop_reseller_id())
+    lines = [kv_line("⭐", "امتیاز فعلی", f"<b>{await _points(session, db_user)}</b>"), ""]
     if not rewards:
         lines.append("هنوز جایزه‌ای تعریف نشده است.")
     else:
@@ -1117,7 +1125,7 @@ async def loyalty_redeem(callback: CallbackQuery, session: AsyncSession, db_user
     try:
         reward_id = int(callback.data.split(":")[-1])
     except (TypeError, ValueError):
-        await callback.answer("نامعتبر", show_alert=True)
+        await callback.answer(feedback.INVALID, show_alert=True)
         return
 
     reward = await session.get(LoyaltyReward, reward_id)
@@ -1126,16 +1134,7 @@ async def loyalty_redeem(callback: CallbackQuery, session: AsyncSession, db_user
         return
 
     if reward.reward_type in ("traffic_gb", "time_days"):
-        services = list(
-            (
-                await session.execute(
-                    select(UserService)
-                    .where(UserService.bot_user_id == db_user.id)
-                    .order_by(UserService.id.desc())
-                    .limit(10)
-                )
-            ).scalars().all()
-        )
+        services = await list_customer_services(session, db_user.id, current_shop_reseller_id(), limit=10)
         if not services:
             await callback.answer("سرویس فعالی ندارید", show_alert=True)
             return
@@ -1170,7 +1169,7 @@ async def loyalty_redeem_svc(callback: CallbackQuery, session: AsyncSession, db_
         reward_id = int(parts[2])
         service_id = int(parts[3])
     except (IndexError, TypeError, ValueError):
-        await callback.answer("نامعتبر", show_alert=True)
+        await callback.answer(feedback.INVALID, show_alert=True)
         return
     await _do_redeem(callback, session, db_user, reward_id, service_id)
 
@@ -1222,7 +1221,7 @@ async def _do_redeem(
         "جایزه اعمال شد.",
         kv_line("🎁", "نوع", type_label),
         kv_line("📦", "مقدار", str(red.reward_value)),
-        kv_line("⭐", "امتیاز باقی‌مانده", str(int(db_user.points_balance or 0))),
+        kv_line("⭐", "امتیاز باقی‌مانده", str(await _points(session, db_user))),
     ]
     if red.reward_type == "discount_percent" and red.discount_code:
         lines.extend(
@@ -1239,10 +1238,7 @@ async def _do_redeem(
             reply_markup=InlineKeyboardMarkup(
                 inline_keyboard=[
                     [
-                        InlineKeyboardButton(
-                            text="⬅️ بازگشت به جوایز",
-                            callback_data="loy:rewards",
-                        )
+                        kb.back_button(None, "loy:rewards")
                     ],
                 ]
             ),
@@ -1251,12 +1247,12 @@ async def _do_redeem(
 @router.callback_query(F.data == "loy:wheel:hub")
 async def loyalty_wheel_hub(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     await callback.answer()
-    if not await wheel_feature_enabled(session, reseller_id=db_user.reseller_id):
+    if not await wheel_feature_enabled(session, reseller_id=current_shop_reseller_id()):
         if callback.message:
             await safe_edit_text(
                 callback.message,
                 format_message("🎡 چرخ شانس", "چرخ شانس فعلاً غیرفعال است."),
-                reply_markup=None,
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[[kb.back_button(None, CLUB_HOME)]]),
             )
         return
     body, can_spin = await _build_wheel_hub_text(session, db_user)
@@ -1270,7 +1266,7 @@ async def loyalty_wheel_hub(callback: CallbackQuery, session: AsyncSession, db_u
 @router.callback_query(F.data == "loy:wheel:spin")
 async def loyalty_wheel_spin(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     """Server-side spin — stable slot key (not callback.id) prevents double-tap."""
-    if not await wheel_feature_enabled(session, reseller_id=db_user.reseller_id):
+    if not await wheel_feature_enabled(session, reseller_id=current_shop_reseller_id()):
         await callback.answer("چرخ شانس غیرفعال است", show_alert=True)
         return
     from sqlalchemy import func, select
@@ -1307,7 +1303,17 @@ async def loyalty_wheel_spin(callback: CallbackQuery, session: AsyncSession, db_
             )
         return
     except Exception:
+        # The spin key makes a retry safe: an applied spin is found again, never repeated.
+        logger.warning("wheel spin failed user=%s", db_user.id, exc_info=True)
+        await rollback_quiet(session)
         await callback.answer("خطا در چرخش. دوباره تلاش کنید.", show_alert=True)
+        body, can_spin = await _build_wheel_hub_text(session, db_user)
+        if callback.message:
+            await safe_edit_text(
+                callback.message,
+                format_message("🎡 چرخ شانس", body),
+                reply_markup=_wheel_spin_keyboard(can_spin=can_spin),
+            )
         return
 
     await callback.answer("نتیجه آماده است ✅")
@@ -1326,7 +1332,7 @@ async def loyalty_wheel_spin(callback: CallbackQuery, session: AsyncSession, db_
         lines.append(kv_line("🎟", "هزینه", f"{result.cost_points} امتیاز"))
     else:
         lines.append(kv_line("🎟", "هزینه", "رایگان"))
-    lines.append(kv_line("⭐", "امتیاز باقی‌مانده", str(int(db_user.points_balance or 0))))
+    lines.append(kv_line("⭐", "امتیاز باقی‌مانده", str(await _points(session, db_user))))
     if result.discount_code:
         lines.extend(
             [
@@ -1346,7 +1352,7 @@ async def loyalty_wheel_spin(callback: CallbackQuery, session: AsyncSession, db_
 @router.callback_query(F.data == "loy:discounts")
 async def loyalty_discounts(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     await callback.answer()
-    ents = await list_available_discounts(session, db_user.id)
+    ents = await list_available_discounts(session, db_user.id, shop_id=current_shop_reseller_id())
     if not ents:
         body = "تخفیف فعالی ندارید.\nاز بخش جوایز یک تخفیف بازخرید کنید."
     else:
@@ -1382,7 +1388,7 @@ async def loyalty_discounts(callback: CallbackQuery, session: AsyncSession, db_u
             format_message("🏷 تخفیف‌های من", body),
             reply_markup=InlineKeyboardMarkup(
                 inline_keyboard=[
-                    [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="loy:home")],
+                    [kb.back_button(None, "loy:home")],
                 ]
             ),
         )
@@ -1396,7 +1402,9 @@ async def loyalty_history(callback: CallbackQuery, session: AsyncSession, db_use
         page = 0
     page = max(0, page)
     limit = 8
-    rows = await list_points_history(session, db_user.id, limit=limit, offset=page * limit)
+    rows = await list_points_history(
+        session, db_user.id, shop_id=current_shop_reseller_id(), limit=limit, offset=page * limit
+    )
     await session.refresh(db_user)
     if not rows:
         body = "تاریخچه‌ای نیست."
@@ -1406,7 +1414,7 @@ async def loyalty_history(callback: CallbackQuery, session: AsyncSession, db_use
             sign = "+" if t.amount >= 0 else ""
             lines.append(f"{sign}{t.amount} — {t.description or t.tx_type}")
         body = "\n".join(lines)
-    body += f"\n\nموجودی فعلی: <b>{int(db_user.points_balance or 0)}</b>"
+    body += f"\n\nموجودی فعلی: <b>{await _points(session, db_user)}</b>"
     page_kb = _hist_page_keyboard(
         page=page, has_more=len(rows) >= limit, include_back=True
     )
@@ -1450,13 +1458,13 @@ async def staff_tog_enabled(
         reseller_owner_id=reseller_owner_id,
     )
     if scope_info is None:
-        await callback.answer("دسترسی ندارید", show_alert=True)
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     scope, _ = scope_info
     cur = await get_setting(session, SETTING_LOYALTY_ENABLED, "1", reseller_id=scope)
     new_val = "0" if on(cur) else "1"
     await set_setting(session, SETTING_LOYALTY_ENABLED, new_val, reseller_id=scope)
-    await callback.answer("ذخیره شد")
+    await callback.answer(feedback.SAVED)
     if callback.message:
         await safe_edit_text(
             callback.message,
@@ -1514,7 +1522,7 @@ async def staff_edit_rate_start(
         reseller_owner_id=reseller_owner_id,
     )
     if scope_info is None:
-        await callback.answer("دسترسی ندارید", show_alert=True)
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     scope, _ = scope_info
     cur = await get_setting(
@@ -1535,6 +1543,7 @@ async def staff_edit_rate_start(
         state,
         prompt=f"نرخ فعلی: <code>{cur}</code>\nعدد جدید (تومان به‌ازای ۱ امتیاز) را بفرستید:",
         cancel_code="loy_stf",
+        return_to="loyadm:settings",
         fsm_state=LoyaltyManageStates.edit_wallet_rate,
         edit=True,
     )
@@ -1554,13 +1563,13 @@ async def staff_rule_toggle(
         reseller_owner_id=reseller_owner_id,
     )
     if scope_info is None:
-        await callback.answer("دسترسی ندارید", show_alert=True)
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     scope, _ = scope_info
     try:
         rid = int((callback.data or "").split(":")[-1])
     except ValueError:
-        await callback.answer("نامعتبر", show_alert=True)
+        await callback.answer(feedback.INVALID, show_alert=True)
         return
     rule = await session.get(PointsRule, rid)
     if not rule or not _rule_in_scope(rule, scope):
@@ -1568,7 +1577,7 @@ async def staff_rule_toggle(
         return
     rule.enabled = not bool(rule.enabled)
     await session.commit()
-    await callback.answer("ذخیره شد")
+    await callback.answer(feedback.SAVED)
     rules = await _scoped_rules(session, scope)
     if callback.message:
         await safe_edit_text(
@@ -1592,13 +1601,13 @@ async def staff_reward_toggle(
         reseller_owner_id=reseller_owner_id,
     )
     if scope_info is None:
-        await callback.answer("دسترسی ندارید", show_alert=True)
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     scope, _ = scope_info
     try:
         rid = int((callback.data or "").split(":")[-1])
     except ValueError:
-        await callback.answer("نامعتبر", show_alert=True)
+        await callback.answer(feedback.INVALID, show_alert=True)
         return
     reward = await session.get(LoyaltyReward, rid)
     if not reward or not _reward_in_scope(reward, scope):
@@ -1606,7 +1615,7 @@ async def staff_reward_toggle(
         return
     reward.enabled = not bool(reward.enabled)
     await session.commit()
-    await callback.answer("ذخیره شد")
+    await callback.answer(feedback.SAVED)
     rewards = await _scoped_rewards(session, scope)
     if callback.message:
         await safe_edit_text(
@@ -1687,7 +1696,7 @@ async def staff_save_wallet_rate(
     )
     if scope_info is None:
         await state.clear()
-        await message.answer("دسترسی ندارید.")
+        await message.answer(feedback.NO_ACCESS_REPLY)
         return
     live_scope, can_tiers = scope_info
     if live_scope != scope:
@@ -1735,7 +1744,7 @@ async def staff_save_wallet_rate(
         if rate < 0:
             raise ValueError("neg")
     except ValueError:
-        await message.answer("عدد معتبر بفرستید.")
+        await message.answer(feedback.ENTER_VALID_NUMBER)
         return
     await set_setting(
         session, SETTING_POINTS_TO_WALLET_RATE, str(rate), reseller_id=scope
@@ -1778,9 +1787,10 @@ async def staff_save_referral_text(
     )
     if scope_info is None:
         await state.clear()
-        await message.answer("دسترسی ندارید.")
+        await message.answer(feedback.NO_ACCESS_REPLY)
         return
     live_scope, can_tiers = scope_info
+    ui = await get_all_settings(session, reseller_id=live_scope or PLATFORM_SCOPE)
     if live_scope != scope:
         await state.clear()
         await message.answer("محدوده تنظیمات نامعتبر است.")
@@ -1797,7 +1807,7 @@ async def staff_save_referral_text(
         )
         if not profile or not has_bot_perm(profile, "shop_settings"):
             await state.clear()
-            await message.answer("دسترسی تنظیمات فروشگاه ندارید.")
+            await message.answer(feedback.NO_SHOP_SETTINGS_ACCESS)
             return
     if kb.is_cancel_text(text):
         from app.bot.nav_input import try_legacy_cancel
@@ -1816,7 +1826,7 @@ async def staff_save_referral_text(
             message,
             session,
             db_user,
-            format_message("⭐ باشگاه مشتریان", "لغو شد — به هاب مدیریت برگشتید."),
+            format_message(screen_title_html(ui, "a.loyalty"), feedback.CANCELLED_BACK_TO_HUB),
             can_tiers=can_tiers,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
@@ -1835,7 +1845,7 @@ async def staff_save_referral_text(
         message,
         session,
         db_user,
-        format_message("⭐ باشگاه مشتریان", "متن دعوت ذخیره شد ✅"),
+        format_message(screen_title_html(ui, "a.loyalty"), "متن دعوت ذخیره شد ✅"),
         can_tiers=can_tiers,
         is_reseller_bot=is_reseller_bot,
         reseller_owner_id=reseller_owner_id,

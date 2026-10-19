@@ -135,6 +135,7 @@ def main() -> None:
             logger.exception("Background scheduler failed to start")
 
         poll_task = None
+        pg_warmup_task = None
         reseller_mgr = None
         panel_only = bot is None or dp is None
 
@@ -183,7 +184,7 @@ def main() -> None:
                             "(use https://host only, no path)"
                         )
 
-                asyncio.create_task(_pg_warmup())
+                pg_warmup_task = asyncio.create_task(_pg_warmup())
 
                 from app.services.setup_wizard import (
                     normalize_webhook_base_url,
@@ -280,6 +281,12 @@ def main() -> None:
                 poll_task.cancel()
                 try:
                     await poll_task
+                except asyncio.CancelledError:
+                    pass
+            if pg_warmup_task:
+                pg_warmup_task.cancel()
+                try:
+                    await pg_warmup_task
                 except asyncio.CancelledError:
                     pass
             if bot is not None and settings.webhook_url.strip():

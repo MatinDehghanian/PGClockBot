@@ -8,24 +8,24 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
+from app.bot.chat_cleanup import note_throwaway, replace_home
+from app.bot.nav_input import delete_user_message
+from app.bot.reply_keyboard_state import take_keyboard_folded
 from app.bot.tg_utils import safe_edit_text
-from app.config import get_settings
 from app.db.models import BotUser, UserService
 from app.services.formatting import service_card
-from app.services.pasarguard import (
-    absolutize_subscription_url,
-    extract_sub_token,
-    get_pg,
-    user_subscription_url,
-)
-from app.services.users import get_all_settings, on
+from app.services.service_scope import customer_may_use_service, list_customer_services, shop_services_clause
+from app.services.users import current_shop_reseller_id, get_all_settings, on
 from app.services.message_variables import DOMAIN_USER
+from app.services import bot_feedback_texts as feedback
 
 router = Router(name="start")
 
 async def _has_services(session: AsyncSession, user_id: int) -> bool:
     result = await session.execute(
-        select(UserService.id).where(UserService.bot_user_id == user_id).limit(1)
+        select(UserService.id)
+        .where(UserService.bot_user_id == user_id, shop_services_clause(current_shop_reseller_id()))
+        .limit(1)
     )
     return result.scalar_one_or_none() is not None
 
@@ -139,7 +139,8 @@ async def render_home(
             except Exception:
                 pass
 
-    await message.answer(text, reply_markup=reply_kb, **home_send_kw)
+    home = await message.answer(text, reply_markup=reply_kb, **home_send_kw)
+    await replace_home(home, sweep=True)
     _ = seed_reply_kb
 
 
@@ -151,7 +152,7 @@ async def seed_main_reply_kb(message: Message, reply_kb, *, tip: str = "·") -> 
     body = (tip or "").strip()
     if is_filler_chrome_text(body) or body.startswith("⌨️"):
         body = "منوی اصلی"
-    await attach_reply_keyboard(message, reply_kb, text=body)
+    await replace_home(await attach_reply_keyboard(message, reply_kb, text=body))
 
 @router.message(F.text.func(kb.is_restart_text))
 async def cmd_restart(
@@ -184,6 +185,8 @@ async def cmd_start(
     reseller_owner_id: int | None = None,
 ):
     await state.clear()
+    # The typed /start goes with the next home, like a menu tap.
+    note_throwaway(message)
     args = (command.args or "").strip()
     if args.startswith("ref_"):
         await message.answer(
@@ -418,14 +421,8 @@ async def _deeplink_renew(
     )
     if svc_id is None:
         # Pick latest service when payload is bare "renew"
-        row = (
-            await session.execute(
-                select(UserService)
-                .where(UserService.bot_user_id == db_user.id)
-                .order_by(UserService.id.desc())
-                .limit(1)
-            )
-        ).scalar_one_or_none()
+        latest = await list_customer_services(session, db_user.id, current_shop_reseller_id(), limit=1)
+        row = latest[0] if latest else None
         if not row:
             await open_services_list(
                 message,
@@ -438,7 +435,7 @@ async def _deeplink_renew(
             return
         svc_id = int(row.id)
     svc = await session.get(UserService, int(svc_id))
-    if not svc or svc.bot_user_id != db_user.id:
+    if not await customer_may_use_service(session, svc, db_user.id, current_shop_reseller_id()):
         await open_services_list(
             message,
             session,
@@ -493,14 +490,8 @@ async def _deeplink_config(
         effective_role=effective_role,
     )
     if svc_id is None:
-        row = (
-            await session.execute(
-                select(UserService)
-                .where(UserService.bot_user_id == db_user.id)
-                .order_by(UserService.id.desc())
-                .limit(1)
-            )
-        ).scalar_one_or_none()
+        latest = await list_customer_services(session, db_user.id, current_shop_reseller_id(), limit=1)
+        row = latest[0] if latest else None
         if not row:
             await open_services_list(
                 message,
@@ -513,7 +504,7 @@ async def _deeplink_config(
             return
         svc_id = int(row.id)
     svc = await session.get(UserService, int(svc_id))
-    if not svc or svc.bot_user_id != db_user.id:
+    if not await customer_may_use_service(session, svc, db_user.id, current_shop_reseller_id()):
         await open_services_list(
             message,
             session,
@@ -607,7 +598,7 @@ async def cb_force_join_check(
             raw_fj, ui=ui, channels=channels
         )
         alert = (
-            "عضویت تأیید نشد — ربات باید ادمین کانال باشد"
+            feedback.JOIN_NOT_CONFIRMED
             if unverified and not missing
             else "هنوز عضو کانال‌ها نشده‌اید — چند ثانیه بعد دوباره بزنید"
         )
@@ -660,13 +651,18 @@ async def cb_home(
     reseller_owner_id: int | None = None,
 ):
     await callback.answer()
+    # Editing cannot unfold a folded reply keyboard; a new menu message does.
+    keyboard_folded = await take_keyboard_folded(state)
     await state.clear()
     if callback.message:
+        if keyboard_folded:
+            # The old panel goes, so the new menu message is the only one.
+            await delete_user_message(callback.message)
         await render_home(
             callback.message,
             session,
             db_user,
-            edit=True,
+            edit=not keyboard_folded,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
         )
@@ -714,6 +710,7 @@ async def cmd_menu(
     reseller_owner_id: int | None = None,
 ):
     await state.clear()
+    note_throwaway(message)
     await render_home(
         message,
         session,
@@ -739,8 +736,7 @@ async def cmd_help(
     raw = ui.get("guide_text")
     if not rich_plain_text(raw).strip():
         raw = (
-            "متنی برای راهنما تنظیم نشده. از وب‌پنل → تنظیمات ربات → متن‌ها، "
-            "فیلد «متن راهنما» را پر کنید."
+            feedback.GUIDE_TEXT_NOT_SET
         )
     text, send_kw = outbound_setting_text(raw, title="📘 راهنما")
     main_kb, _, _ = await build_main_reply_keyboard(
@@ -787,8 +783,7 @@ async def help_guide(callback: CallbackQuery, session: AsyncSession):
     raw = ui.get("guide_text")
     if not rich_plain_text(raw).strip():
         raw = (
-            "متنی برای راهنما تنظیم نشده. از وب‌پنل → تنظیمات ربات → متن‌ها، "
-            "فیلد «متن راهنما» را پر کنید."
+            feedback.GUIDE_TEXT_NOT_SET
         )
     text, send_kw = outbound_setting_text(raw, title="📘 راهنما")
     if callback.message:
@@ -825,31 +820,26 @@ async def _link_subscription(
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ):
+    from app.bot.service_import_ui import announce_new_request, import_enabled
     from app.services.formatting import format_message
-    from app.services.pasarguard import get_pg_for_reseller
+    from app.services.service_import import (
+        PENDING_NOTICE,
+        ImportOutcome,
+        ServiceImportError,
+        import_existing_service,
+    )
 
+    await delete_user_message(message)  # the link is a bearer secret, keep it out of the chat
     ui = await get_all_settings(session)
-    # Shop bots must resolve subscription via the shop's PG credentials —
-    # never the platform owner token (avoids cross-tenant link/read).
-    if is_reseller_bot and reseller_owner_id:
-        try:
-            pg = await get_pg_for_reseller(session, int(reseller_owner_id))
-        except Exception:
-            await message.answer("اتصال به پنل فروشگاه ممکن نیست.")
-            await render_home(
-                message,
-                session,
-                db_user,
-                is_reseller_bot=is_reseller_bot,
-                reseller_owner_id=reseller_owner_id,
-            )
-            return
-    else:
-        pg = get_pg()
+    # Same checks as the in-bot flow: the service must belong to this shop's panel admin and to
+    # nobody else. Without «افزودن سرویس قبلی» the attachment stays view-only, as before.
+    shop_id = int(reseller_owner_id) if is_reseller_bot and reseller_owner_id else None
     try:
-        info = await pg.subscription_info(token)
-    except Exception:
-        await message.answer("لینک نامعتبر است یا سرویس پیدا نشد.")
+        result = await import_existing_service(
+            session, user=db_user, raw_link=token, shop_id=shop_id, renewable=import_enabled(ui)
+        )
+    except ServiceImportError as exc:
+        await message.answer(str(exc))
         await render_home(
             message,
             session,
@@ -858,62 +848,13 @@ async def _link_subscription(
             reseller_owner_id=reseller_owner_id,
         )
         return
-
-    existing = await session.execute(
-        select(UserService).where(
-            UserService.bot_user_id == db_user.id,
-            UserService.subscription_token == token,
-        )
-    )
-    svc = existing.scalar_one_or_none()
-    if not svc:
-        claimed = await session.execute(
-            select(UserService).where(
-                UserService.subscription_token == token,
-                UserService.bot_user_id != db_user.id,
-            ).limit(1)
-        )
-        if claimed.scalar_one_or_none() is not None:
-            await message.answer("این اشتراک قبلاً به حساب دیگری وصل شده است.")
-            await render_home(
-                message,
-                session,
-                db_user,
-                is_reseller_bot=is_reseller_bot,
-                reseller_owner_id=reseller_owner_id,
-            )
-            return
-        sub_url = user_subscription_url(info if isinstance(info, dict) else None) or (
-            absolutize_subscription_url(f"{get_settings().pg_subscription_path}/{token}")
-        )
-        svc = UserService(
-            bot_user_id=db_user.id,
-            pg_user_id=info.get("id"),
-            pg_username=info.get("username", "unknown"),
-            subscription_url=sub_url,
-            subscription_token=token or extract_sub_token(sub_url),
-            remark="linked",
-        )
-        session.add(svc)
-        await session.commit()
-
+    if result.outcome == ImportOutcome.PENDING_APPROVAL:
+        await message.answer(format_message("⏳ در انتظار تأیید", PENDING_NOTICE))
+        await announce_new_request(message, session, db_user, result)
+        return
     from app.bot.nav_inline import service_card_keyboard
-    from app.bot.menu_nav import build_main_reply_keyboard
 
-    if getattr(svc, "id", None):
-        await message.answer(
-            format_message("✅ اتصال سرویس", service_card(info)),
-            reply_markup=service_card_keyboard(int(svc.id), ui),
-        )
-    else:
-        main_kb, _, _ = await build_main_reply_keyboard(
-            session,
-            db_user,
-            is_reseller_bot=is_reseller_bot,
-            reseller_owner_id=reseller_owner_id,
-            ui=ui,
-        )
-        await message.answer(
-            format_message("✅ اتصال سرویس", service_card(info)),
-            reply_markup=main_kb,
-        )
+    await message.answer(
+        format_message("✅ اتصال سرویس", service_card(result.info)),
+        reply_markup=service_card_keyboard(int(result.service.id), ui),
+    )

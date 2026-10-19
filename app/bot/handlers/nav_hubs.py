@@ -11,8 +11,11 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.bot.list_pages import page_number
 from app.db.models import BotUser
 from app.services.users import get_all_settings
+from app.services import bot_feedback_texts as feedback
+from app.services.screen_titles import screen_caption, screen_title_html
 
 router = Router(name="nav_hubs")
 
@@ -46,7 +49,6 @@ async def nv_wallet_amount(
     reseller_owner_id: int | None = None,
 ):
     """Preset amount or custom free-text prompt (Wave C)."""
-    from app.bot import keyboards as kb
     from app.bot.handlers.wallet import WalletStates, present_topup_methods
     from app.bot.nav_inline import present_inline_only, wallet_topup_presets_keyboard
     from app.services.formatting import format_message
@@ -125,7 +127,7 @@ async def nv_wallet_home(
     ui = await get_all_settings(session)
     bal = await wallet_balance_for_context(session, db_user)
     text = format_message(
-        "👛 کیف پول",
+        screen_title_html(ui, "c.wallet"),
         "\n".join(
             [
                 kv_line(
@@ -134,7 +136,7 @@ async def nv_wallet_home(
                     f"<b>{format_toman(bal, get_settings().currency)}</b>",
                 ),
                 "",
-                "یک گزینه را از دکمه‌های زیر انتخاب کنید.",
+                screen_caption(ui, "c.wallet"),
             ]
         ),
     )
@@ -300,7 +302,7 @@ async def nv_svc_guide(callback: CallbackQuery, session: AsyncSession, db_user: 
     try:
         svc_id = int(raw.rsplit(":", 1)[-1])
     except (TypeError, ValueError):
-        await callback.answer("نامعتبر", show_alert=True)
+        await callback.answer(feedback.INVALID, show_alert=True)
         return
     callback.data = f"guide:svc:{svc_id}"
     await svc_guide(callback, session, db_user)
@@ -416,7 +418,7 @@ async def nv_res_close(
     )
     if not owner_id or not profile:
         await safe_edit_inline(
-            callback.message, "دسترسی نماینده یافت نشد.", reply_markup=None
+            callback.message, feedback.RESELLER_ACCESS_NOT_FOUND, reply_markup=None
         )
         await clear_nav_panel(state)
         return
@@ -808,7 +810,7 @@ async def nv_res_ra(
     if action in {kb.REPLY_ACTION_RES_PREVIEW, "res_preview"}:
         if not is_reseller_bot:
             await callback.message.answer(
-                "پیش‌نمایش فقط روی ربات فروشگاه شما فعال است."
+                feedback.PREVIEW_ONLY_ON_SHOP_BOT
             )
             return
         await open_user_preview(
@@ -843,9 +845,11 @@ async def nv_adm_plans_aud(
         present_admin_plans_audience,
     )
 
-    aud = (callback.data or "").split(":")[-1]
+    # nv:adm:plans:aud:<audience>[:p:<page>]
+    parts = (callback.data or "").split(":")
+    aud = parts[4] if len(parts) > 4 else ""
     if aud not in {"users", "resellers"}:
-        await callback.answer("نامعتبر", show_alert=True)
+        await callback.answer(feedback.INVALID, show_alert=True)
         return
     await callback.answer()
     if not callback.message:
@@ -862,7 +866,40 @@ async def nv_adm_plans_aud(
         state,
         audience=aud,
         is_reseller_bot=is_reseller_bot,
+        page_index=page_number(callback.data),
     )
+
+@router.callback_query(F.data.startswith("nv:adm:plans:list:"))
+async def nv_adm_plans_list(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+    is_reseller_bot: bool = False,
+):
+    """«مشاهده پلن‌ها» on older audience hubs: the same one-screen plans view."""
+    from app.bot.handlers.admin_plans import (
+        send_resellers_plans_overview,
+        send_users_plans_overview,
+    )
+    from app.bot.handlers.reply_nav import _deny_unless_owner
+
+    aud = (callback.data or "").split(":")[-1]
+    if aud not in {"users", "resellers"}:
+        await callback.answer(feedback.INVALID, show_alert=True)
+        return
+    await callback.answer()
+    if not callback.message:
+        return
+    if not await _deny_unless_owner(
+        callback.message, session, db_user, is_reseller_bot=is_reseller_bot
+    ):
+        return
+    await state.update_data(_adm_plans_aud=aud, _adm_plans_kind=None)
+    if aud == "users":
+        await send_users_plans_overview(callback.message, session, state)
+    else:
+        await send_resellers_plans_overview(callback.message, session, state)
 
 @router.callback_query(F.data.startswith("nv:adm:ra:"))
 async def nv_adm_ra(

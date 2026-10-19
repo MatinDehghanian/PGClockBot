@@ -8,10 +8,16 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 class ServiceCardKeyboardTests(unittest.TestCase):
     def test_callbacks_reuse_svc_prefix(self):
-        from app.bot.nav_inline import service_card_keyboard
+        from app.bot.nav_inline import service_card_keyboard, service_more_keyboard
 
-        kb = service_card_keyboard(42, {"btn_renew": "تمدید", "btn_sub_link": "لینک"})
-        data = [b.callback_data for row in kb.inline_keyboard for b in row]
+        ui = {"btn_renew": "تمدید", "btn_sub_link": "لینک"}
+        # The card and its «⚙️ بیشتر» screen together.
+        data = [
+            b.callback_data
+            for kb in (service_card_keyboard(42, ui), service_more_keyboard(42, ui))
+            for row in kb.inline_keyboard
+            for b in row
+        ]
         self.assertIn("svc:renew:42", data)
         self.assertIn("svc:addon:42", data)
         self.assertIn("svc:link:42", data)
@@ -57,6 +63,7 @@ class SvcViewInlineTests(unittest.IsolatedAsyncioTestCase):
         state.update_data = AsyncMock()
 
         with (
+            patch("app.bot.handlers.services.customer_may_use_service", AsyncMock(return_value=True)),
             patch(
                 "app.bot.handlers.services.get_all_settings",
                 AsyncMock(return_value={"nav_mode": "inline"}),
@@ -104,6 +111,7 @@ class SvcViewInlineTests(unittest.IsolatedAsyncioTestCase):
         db_user.id = 1
 
         with (
+            patch("app.bot.handlers.services.customer_may_use_service", AsyncMock(return_value=True)),
             patch(
                 "app.bot.handlers.services.get_all_settings",
                 AsyncMock(return_value={"nav_mode": "classic"}),
@@ -170,6 +178,7 @@ class OpenServicesSingleShortcutTests(unittest.IsolatedAsyncioTestCase):
         session.execute = AsyncMock(return_value=result)
 
         with (
+            patch("app.bot.handlers.reply_nav.list_customer_services", AsyncMock(return_value=[svc])),
             patch(
                 "app.bot.handlers.reply_nav.get_all_settings",
                 AsyncMock(return_value={"nav_mode": "inline"}),

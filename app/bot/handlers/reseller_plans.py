@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
+from app.bot.list_pages import page_number
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser, Plan, ResellerProfile
 from app.services.plans_catalog import (
@@ -18,6 +19,10 @@ from app.services.plans_catalog import (
     template_allowed_for_staff,
 )
 from app.services.resellers import has_bot_perm
+from app.services import bot_feedback_texts as feedback
+
+# The shop plans screen: add / catalog actions and the plan list.
+PLANS_SCREEN = "res:plans"
 
 router = Router(name="reseller_plans")
 
@@ -81,16 +86,17 @@ async def _staff_ctx(profile: ResellerProfile, session: AsyncSession) -> dict:
 async def _plans_kb(
     session: AsyncSession, plans: list[Plan], *, reseller_id: int | None = None
 ) -> InlineKeyboardMarkup:
-    """Dynamic plan rows only — static «پلن جدید» lives on reply keyboard."""
+    """The shop's plan rows, with «بازگشت» to the plans screen (add / catalog actions)."""
     from app.bot.keyboards import reseller_plans_list_keyboard
+    from app.bot.nav_inline import with_inline_back
     from app.services.users import get_all_settings
 
     ui = await get_all_settings(session, reseller_id=reseller_id)
-    return reseller_plans_list_keyboard(plans, ui)
+    return with_inline_back(reseller_plans_list_keyboard(plans, ui), ui, PLANS_SCREEN)
 
 
 def _plan_item_kb(plan: Plan) -> InlineKeyboardMarkup:
-    """Plan actions only (no list-back chrome — use reply Back)."""
+    """One plan's actions; «بازگشت» returns to the plans screen."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -106,6 +112,7 @@ def _plan_item_kb(plan: Plan) -> InlineKeyboardMarkup:
                     callback_data=f"res:plan:catpick:{plan.id}",
                 )
             ],
+            [kb.back_button(None, PLANS_SCREEN)],
         ]
     )
 
@@ -120,7 +127,7 @@ async def _list_plans(session: AsyncSession, owner_id: int) -> list[Plan]:
 
 
 def _plan_text(plan: Plan, *, category_name: str | None = None) -> str:
-    gb = f"{plan.data_limit_gb:g} گیگ" if plan.data_limit_gb is not None else "نامحدود"
+    gb = f"{plan.data_limit_gb:g} گیگابایت" if plan.data_limit_gb is not None else "نامحدود"
     src = (
         f"تمپلیت #{plan.pg_template_id}"
         if plan.pg_template_id
@@ -150,7 +157,25 @@ async def _plan_text_for(session: AsyncSession, plan: Plan) -> str:
     return _plan_text(plan, category_name=cat_name)
 
 
-@router.callback_query(F.data == "res:plans")
+async def _cancel_to_plans(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    db_user: BotUser,
+    *,
+    is_reseller_bot: bool,
+    reseller_owner_id: int | None,
+) -> None:
+    """Typed cancel inside the new-plan form: back to the plans screen the form started from."""
+    from app.bot.handlers.reply_nav import open_reseller_plans_hub  # reply_nav imports this module
+
+    await state.clear()
+    await open_reseller_plans_hub(
+        message, session, db_user, state, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id, push=False
+    )
+
+
+@router.callback_query((F.data == "res:plans") | F.data.startswith("res:plans:p:"))
 async def res_plans(callback: CallbackQuery, session: AsyncSession, db_user: BotUser,
     state: FSMContext,
     is_reseller_bot: bool = False,
@@ -160,21 +185,27 @@ async def res_plans(callback: CallbackQuery, session: AsyncSession, db_user: Bot
         session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
     )
     if not owner_id or not profile:
-        await callback.answer("نماینده نیستید", show_alert=True)
+        await callback.answer(feedback.NOT_RESELLER, show_alert=True)
         return
     if not has_bot_perm(profile, "plans"):
-        await callback.answer("دسترسی پلن ندارید", show_alert=True)
+        await callback.answer("به بخش پلن‌ها دسترسی ندارید", show_alert=True)
         return
     await state.clear()
     await callback.answer()
-    plans = await _list_plans(session, owner_id)
-    text = "💎 <b>پلن‌های فروش فروشگاه شما</b>\n"
-    if not plans:
-        text += "هنوز پلنی نساخته‌اید. از کیبورد «پلن جدید» بسازید یا در وب‌پنل کامل‌تر تنظیم کنید."
-    else:
-        text += f"تعداد: {len(plans)}"
     if callback.message:
-        await safe_edit_text(callback.message, text, reply_markup=await _plans_kb(session, plans, reseller_id=owner_id))
+        # The plans screen with its add/catalog buttons, the list page and «بازگشت».
+        from app.bot.handlers.reply_nav import open_reseller_plans_hub  # reply_nav imports this module
+
+        await open_reseller_plans_hub(
+            callback.message,
+            session,
+            db_user,
+            state,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+            push=False,
+            page_index=page_number(callback.data),
+        )
 
 
 @router.callback_query(F.data == "res:plan:webhint")
@@ -189,7 +220,7 @@ async def res_plan_webhint(
         session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
     )
     if not owner_id or not profile:
-        await callback.answer("نماینده نیستید", show_alert=True)
+        await callback.answer(feedback.NOT_RESELLER, show_alert=True)
         return
     await callback.answer()
     if callback.message:
@@ -208,14 +239,14 @@ async def res_plan_view(callback: CallbackQuery, session: AsyncSession, db_user:
         session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
     )
     if not owner_id or not profile:
-        await callback.answer("نماینده نیستید", show_alert=True)
+        await callback.answer(feedback.NOT_RESELLER, show_alert=True)
         return
     if not has_bot_perm(profile, "plans"):
-        await callback.answer("دسترسی ندارید", show_alert=True)
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     plan = await session.get(Plan, int(callback.data.split(":")[-1]))
     if not plan or plan.owner_reseller_id != owner_id:
-        await callback.answer("یافت نشد", show_alert=True)
+        await callback.answer(feedback.NOT_FOUND, show_alert=True)
         return
     await callback.answer()
     if callback.message:
@@ -235,18 +266,18 @@ async def res_plan_toggle(callback: CallbackQuery, session: AsyncSession, db_use
         session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
     )
     if not owner_id or not profile:
-        await callback.answer("نماینده نیستید", show_alert=True)
+        await callback.answer(feedback.NOT_RESELLER, show_alert=True)
         return
     if not has_bot_perm(profile, "plans"):
-        await callback.answer("دسترسی ندارید", show_alert=True)
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     plan = await session.get(Plan, int(callback.data.split(":")[-1]))
     if not plan or plan.owner_reseller_id != owner_id or plan.is_trial:
-        await callback.answer("یافت نشد", show_alert=True)
+        await callback.answer(feedback.NOT_FOUND, show_alert=True)
         return
     plan.is_active = not plan.is_active
     await session.commit()
-    await callback.answer("ذخیره شد")
+    await callback.answer(feedback.SAVED)
     if callback.message:
         await safe_edit_text(
             callback.message,
@@ -264,16 +295,16 @@ async def res_plan_delete(callback: CallbackQuery, session: AsyncSession, db_use
         session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
     )
     if not owner_id or not profile:
-        await callback.answer("نماینده نیستید", show_alert=True)
+        await callback.answer(feedback.NOT_RESELLER, show_alert=True)
         return
     if not has_bot_perm(profile, "plans"):
-        await callback.answer("دسترسی ندارید", show_alert=True)
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     from app.services.plans_catalog import PlanDeleteBlocked, delete_shop_plan
 
     plan = await session.get(Plan, int(callback.data.split(":")[-1]))
     if not plan or plan.owner_reseller_id != owner_id or plan.is_trial:
-        await callback.answer("یافت نشد", show_alert=True)
+        await callback.answer(feedback.NOT_FOUND, show_alert=True)
         return
     try:
         await delete_shop_plan(session, plan)
@@ -286,7 +317,7 @@ async def res_plan_delete(callback: CallbackQuery, session: AsyncSession, db_use
         msg = e.message if len(e.message) <= 180 else e.message[:177] + "…"
         await callback.answer(msg, show_alert=True)
         return
-    await callback.answer("حذف شد")
+    await callback.answer(feedback.DELETED)
     plans = await _list_plans(session, owner_id)
     if callback.message:
         await safe_edit_text(
@@ -305,10 +336,10 @@ async def res_plan_add(callback: CallbackQuery, state: FSMContext, session: Asyn
         session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
     )
     if not owner_id or not profile:
-        await callback.answer("نماینده نیستید", show_alert=True)
+        await callback.answer(feedback.NOT_RESELLER, show_alert=True)
         return
     if not has_bot_perm(profile, "plans"):
-        await callback.answer("دسترسی ندارید", show_alert=True)
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     await callback.answer()
     from app.bot.nav_input import ask_text
@@ -316,7 +347,7 @@ async def res_plan_add(callback: CallbackQuery, state: FSMContext, session: Asyn
     await ask_text(
         callback,
         state,
-        prompt="نام پلن را بفرستید:",
+        prompt=feedback.ENTER_PLAN_NAME,
         cancel_code="rs_pln",
         fsm_state=ResellerPlanStates.name,
         edit=True,
@@ -350,10 +381,8 @@ async def res_plan_name(
             reseller_owner_id=reseller_owner_id,
         ):
             return
-        await state.clear()
-        await message.answer(
-            "لغو شد.",
-            reply_markup=kb.reseller_plans_reply_keyboard(),
+        await _cancel_to_plans(
+            message, state, session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
         )
         return
     await state.update_data(name=(message.text or "").strip(), owner_id=owner_id)
@@ -362,7 +391,7 @@ async def res_plan_name(
     await ask_text(
         message,
         state,
-        prompt="قیمت به تومان را بفرستید:",
+        prompt=feedback.ENTER_PRICE_TOMAN,
         cancel_code="rs_pln",
         fsm_state=ResellerPlanStates.price,
         edit=False,
@@ -390,16 +419,14 @@ async def res_plan_price(
             reseller_owner_id=reseller_owner_id,
         ):
             return
-        await state.clear()
-        await message.answer(
-            "لغو شد.",
-            reply_markup=kb.reseller_plans_reply_keyboard(),
+        await _cancel_to_plans(
+            message, state, session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
         )
         return
     try:
         price = int((message.text or "").replace(",", "").replace("٬", ""))
     except ValueError:
-        await message.answer("یک عدد معتبر بفرستید.")
+        await message.answer(feedback.ENTER_ONE_VALID_NUMBER)
         return
     await state.update_data(price=price)
     from app.bot.nav_input import ask_text
@@ -407,7 +434,7 @@ async def res_plan_price(
     await ask_text(
         message,
         state,
-        prompt="مدت اعتبار به روز را بفرستید:",
+        prompt="مدت اعتبار را به روز بفرستید؛ مثلاً 30.",
         cancel_code="rs_pln",
         fsm_state=ResellerPlanStates.days,
         edit=False,
@@ -435,16 +462,14 @@ async def res_plan_days(
             reseller_owner_id=reseller_owner_id,
         ):
             return
-        await state.clear()
-        await message.answer(
-            "لغو شد.",
-            reply_markup=kb.reseller_plans_reply_keyboard(),
+        await _cancel_to_plans(
+            message, state, session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
         )
         return
     try:
         days = max(1, int(message.text or "30"))
     except ValueError:
-        await message.answer("یک عدد معتبر بفرستید.")
+        await message.answer(feedback.ENTER_ONE_VALID_NUMBER)
         return
     await state.update_data(days=days)
     from app.bot.nav_input import ask_text
@@ -452,7 +477,7 @@ async def res_plan_days(
     await ask_text(
         message,
         state,
-        prompt="حجم به گیگ را بفرستید:\n<code>0</code> = نامحدود",
+        prompt=feedback.ENTER_VOLUME_GB,
         cancel_code="rs_pln",
         fsm_state=ResellerPlanStates.gb,
         edit=False,
@@ -476,24 +501,22 @@ async def res_plan_gb(message: Message, state: FSMContext, session: AsyncSession
             reseller_owner_id=reseller_owner_id,
         ):
             return
-        await state.clear()
-        await message.answer(
-            "لغو شد.",
-            reply_markup=kb.reseller_plans_reply_keyboard(),
+        await _cancel_to_plans(
+            message, state, session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
         )
         return
     raw = (message.text or "").strip().replace(",", ".")
     try:
         gb_val = float(raw)
     except ValueError:
-        await message.answer("عدد معتبر بفرستید")
+        await message.answer(feedback.ENTER_VALID_NUMBER_SHORT)
         return
     gb = None if gb_val <= 0 else gb_val
     await state.update_data(gb=gb)
     owner_id, profile = await _actor(session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id)
     if not owner_id or not profile:
         await state.clear()
-        await message.answer("نماینده نیستید.")
+        await message.answer("این بخش فقط برای نماینده است.")
         return
     staff = await _staff_ctx(profile, session)
     from app.services.plan_categories import list_categories
@@ -510,15 +533,13 @@ async def res_plan_gb(message: Message, state: FSMContext, session: AsyncSession
                 InlineKeyboardButton(
                     text=c.name[:48],
                     callback_data=f"res:plan:newcat:{c.id}",
+                    icon_custom_emoji_id=getattr(c, "icon_custom_emoji_id", None),
                 )
             ]
         )
+    rows.append([InlineKeyboardButton(text="❌ انصراف", callback_data=PLANS_SCREEN)])
     await message.answer(
         "🏷 برچسب دسته را انتخاب کنید (اختیاری):",
-        reply_markup=kb.reseller_plans_reply_keyboard(),
-    )
-    await message.answer(
-        "برچسب دسته:",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
     )
 
@@ -556,30 +577,32 @@ async def _reseller_continue_pg_mode(
             await target_msg.answer(
                 "گروه یا تمپلیت مجازی در نقش پاسارگارد شما نیست.\n"
                 "از وب‌پنل → پاسارگارد دسترسی‌ها را بررسی کنید یا از ادمین بخواهید نقش را باز کند."
-                + note
+                + note,
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[[kb.back_button(None, PLANS_SCREEN)]]),
             )
         return
     if target_msg:
         await target_msg.answer(
             "منبع ساخت سرویس در پاسارگارد را انتخاب کنید:" + note,
-            reply_markup=kb.reseller_plans_reply_keyboard(),
-        )
-        await target_msg.answer(
-            "یکی از گزینه‌های زیر را انتخاب کنید:",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
         )
 
 
 @router.message(ResellerPlanStates.category)
-async def res_plan_category_cancel(message: Message, state: FSMContext):
+async def res_plan_category_cancel(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+) -> None:
     if kb.is_cancel_text(message.text):
-        await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.reseller_plans_reply_keyboard())
+        await _cancel_to_plans(
+            message, state, session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
+        )
         return
-    await message.answer(
-        "دسته را از دکمه‌های زیر پیام انتخاب کنید، یا انصراف بزنید.",
-        reply_markup=kb.reseller_plans_reply_keyboard(),
-    )
+    await message.answer("دسته را از دکمه‌های زیر پیام انتخاب کنید، یا انصراف بزنید.")
 
 
 @router.callback_query(F.data.startswith("res:plan:newcat:"), ResellerPlanStates.category)
@@ -599,7 +622,7 @@ async def res_plan_new_category(
         session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
     )
     if not owner_id or not profile:
-        await callback.answer("نماینده نیستید", show_alert=True)
+        await callback.answer(feedback.NOT_RESELLER, show_alert=True)
         return
     staff = await _staff_ctx(profile, session)
     raw = callback.data.rsplit(":", 1)[-1]
@@ -617,15 +640,20 @@ async def res_plan_new_category(
 
 
 @router.message(ResellerPlanStates.mode)
-async def res_plan_mode_cancel(message: Message, state: FSMContext):
+async def res_plan_mode_cancel(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    db_user: BotUser,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+) -> None:
     if kb.is_cancel_text(message.text):
-        await state.clear()
-        await message.answer("لغو شد.", reply_markup=kb.reseller_plans_reply_keyboard())
+        await _cancel_to_plans(
+            message, state, session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
+        )
         return
-    await message.answer(
-        "منبع را از دکمه‌های زیر پیام انتخاب کنید، یا انصراف بزنید.",
-        reply_markup=kb.reseller_plans_reply_keyboard(),
-    )
+    await message.answer("منبع را از دکمه‌های زیر پیام انتخاب کنید، یا انصراف بزنید.")
 
 
 @router.callback_query(F.data == "res:plan:mode:groups", ResellerPlanStates.mode)
@@ -633,7 +661,7 @@ async def res_plan_pick_groups(callback: CallbackQuery, state: FSMContext, sessi
     data = await state.get_data()
     groups = data.get("groups") or []
     if not groups:
-        await callback.answer("گروهی نیست", show_alert=True)
+        await callback.answer(feedback.NO_GROUPS, show_alert=True)
         return
     await callback.answer()
     # Multi-select via toggling; start with empty then save
@@ -689,10 +717,10 @@ async def res_plan_save_groups(callback: CallbackQuery, state: FSMContext, sessi
 ):
     owner_id, profile = await _actor(session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id)
     if not owner_id or not profile:
-        await callback.answer("نماینده نیستید", show_alert=True)
+        await callback.answer(feedback.NOT_RESELLER, show_alert=True)
         return
     if not has_bot_perm(profile, "plans"):
-        await callback.answer("دسترسی ندارید", show_alert=True)
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     data = await state.get_data()
     selected = [int(x) for x in (data.get("selected_groups") or [])]
@@ -716,7 +744,7 @@ async def res_plan_save_groups(callback: CallbackQuery, state: FSMContext, sessi
     session.add(plan)
     await session.commit()
     await state.clear()
-    await callback.answer("ذخیره شد")
+    await callback.answer(feedback.SAVED)
     plans = await _list_plans(session, owner_id)
     if callback.message:
         await safe_edit_text(
@@ -731,7 +759,7 @@ async def res_plan_pick_tpl(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     templates = data.get("templates") or []
     if not templates:
-        await callback.answer("تمپلیتی نیست", show_alert=True)
+        await callback.answer(feedback.NO_TEMPLATES, show_alert=True)
         return
     await callback.answer()
     rows = []
@@ -744,7 +772,7 @@ async def res_plan_pick_tpl(callback: CallbackQuery, state: FSMContext):
     rows.append([InlineKeyboardButton(text="⬅️ انصراف", callback_data="res:plans")])
     if callback.message:
         await callback.message.edit_text(
-            "تمپلیت را انتخاب کنید:",
+            feedback.PICK_TEMPLATE,
             reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
         )
 
@@ -756,10 +784,10 @@ async def res_plan_save_tpl(callback: CallbackQuery, state: FSMContext, session:
 ):
     owner_id, profile = await _actor(session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id)
     if not owner_id or not profile:
-        await callback.answer("نماینده نیستید", show_alert=True)
+        await callback.answer(feedback.NOT_RESELLER, show_alert=True)
         return
     if not has_bot_perm(profile, "plans"):
-        await callback.answer("دسترسی ندارید", show_alert=True)
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     tid = int(callback.data.split(":")[-1])
     staff = await _staff_ctx(profile, session)
@@ -783,7 +811,7 @@ async def res_plan_save_tpl(callback: CallbackQuery, state: FSMContext, session:
     session.add(plan)
     await session.commit()
     await state.clear()
-    await callback.answer("ذخیره شد")
+    await callback.answer(feedback.SAVED)
     plans = await _list_plans(session, owner_id)
     if callback.message:
         await safe_edit_text(
@@ -807,14 +835,14 @@ async def res_plan_cat_pick(
         session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
     )
     if not owner_id or not profile:
-        await callback.answer("نماینده نیستید", show_alert=True)
+        await callback.answer(feedback.NOT_RESELLER, show_alert=True)
         return
     if not has_bot_perm(profile, "plans"):
-        await callback.answer("دسترسی ندارید", show_alert=True)
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     plan = await session.get(Plan, int(callback.data.split(":")[-1]))
     if not plan or plan.owner_reseller_id != owner_id or plan.is_trial:
-        await callback.answer("یافت نشد", show_alert=True)
+        await callback.answer(feedback.NOT_FOUND, show_alert=True)
         return
     staff = await _staff_ctx(profile, session)
     cats = await list_categories(session, staff, active_only=False)
@@ -841,11 +869,12 @@ async def res_plan_cat_pick(
                 InlineKeyboardButton(
                     text=f"{mark}{c.name}{suffix}"[:48],
                     callback_data=f"res:plan:setcat:{plan.id}:{c.id}",
+                    icon_custom_emoji_id=getattr(c, "icon_custom_emoji_id", None),
                 )
             ]
         )
     rows.append(
-        [InlineKeyboardButton(text="⬅️ بازگشت", callback_data=f"res:plan:view:{plan.id}")]
+        [kb.back_button(None, f"res:plan:view:{plan.id}")]
     )
     await callback.answer()
     if callback.message:
@@ -872,19 +901,19 @@ async def res_plan_set_cat(
         session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
     )
     if not owner_id or not profile:
-        await callback.answer("نماینده نیستید", show_alert=True)
+        await callback.answer(feedback.NOT_RESELLER, show_alert=True)
         return
     if not has_bot_perm(profile, "plans"):
-        await callback.answer("دسترسی ندارید", show_alert=True)
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     parts = callback.data.split(":")
     # res:plan:setcat:{pid}:{cid}
     if len(parts) < 5:
-        await callback.answer("نامعتبر", show_alert=True)
+        await callback.answer(feedback.INVALID, show_alert=True)
         return
     plan = await session.get(Plan, int(parts[3]))
     if not plan or plan.owner_reseller_id != owner_id or plan.is_trial:
-        await callback.answer("یافت نشد", show_alert=True)
+        await callback.answer(feedback.NOT_FOUND, show_alert=True)
         return
     staff = await _staff_ctx(profile, session)
     raw = parts[4]
@@ -902,7 +931,7 @@ async def res_plan_set_cat(
     except (ShopScopeError, ValueError) as e:
         await callback.answer(user_safe_error(e, limit=160), show_alert=True)
         return
-    await callback.answer("ذخیره شد")
+    await callback.answer(feedback.SAVED)
     if callback.message:
         await safe_edit_text(
             callback.message,

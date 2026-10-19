@@ -6,6 +6,10 @@ import unittest
 from pathlib import Path
 
 
+def _version_key(version: str) -> tuple[int, ...]:
+    return tuple(int(part) for part in version.split("."))
+
+
 class ReleaseNotesTests(unittest.TestCase):
     def test_demo_customer_notes_explain_previous_transactions_and_reversibility(self) -> None:
         from app.services.release_notes import latest_notes_block, notes_for_version
@@ -82,8 +86,16 @@ class ReleaseNotesTests(unittest.TestCase):
 
         src = Path("app/services/release_notes.py").read_text(encoding="utf-8")
         parsed = parse_release_notes_source(src)
-        self.assertEqual(list(parsed.keys())[0], "0.2.21")
+        from app.version import __version__
+
+        versions = list(parsed)
+        self.assertEqual(versions[0], __version__)
         self.assertIn("0.1.0", parsed)
+        self.assertEqual(versions, sorted(versions, key=_version_key, reverse=True))
+        for version, notes in parsed.items():
+            self.assertRegex(version, r"^\d+\.\d+\.\d+$")
+            self.assertTrue(notes, version)
+            self.assertTrue(all(isinstance(n, str) and n.strip() for n in notes), version)
         self.assertTrue(parsed["0.2.21"])
         self.assertTrue(
             any("اشتراک" in n or "پاسارگارد" in n or "کیف پول" in n for n in parsed["0.2.21"])
@@ -183,7 +195,7 @@ class ReleaseNotesTests(unittest.TestCase):
     def test_update_template_simplified(self):
         src = Path("app/web/templates/_settings_update.html").read_text(encoding="utf-8")
         self.assertIn("update-changelog", src)
-        self.assertIn("rollback-version", src)
+        self.assertNotIn("rollback", src)
         self.assertIn("settings-card", src)
         self.assertIn("upd-start", src)
         self.assertNotIn("update-details", src)
@@ -198,48 +210,14 @@ class ReleaseNotesTests(unittest.TestCase):
 
         src = Path("app/services/release_notes.py").read_text(encoding="utf-8")
         parsed = parse_release_notes_source(src)
-        self.assertEqual(
-            set(parsed),
-            {
-                "0.2.21",
-                "0.2.20",
-                "0.2.19",
-                "0.2.18",
-                "0.2.17",
-                "0.2.16",
-                "0.2.15",
-                "0.2.14",
-                "0.2.13",
-                "0.2.12",
-                "0.2.11",
-                "0.2.10",
-                "0.2.9",
-                "0.2.8",
-                "0.2.7",
-                "0.2.6",
-                "0.2.5",
-                "0.2.4",
-                "0.2.3",
-                "0.2.2",
-                "0.2.1",
-                "0.2.0",
-                "0.1.14",
-                "0.1.13",
-                "0.1.12",
-                "0.1.11",
-                "0.1.10",
-                "0.1.9",
-                "0.1.8",
-                "0.1.7",
-                "0.1.6",
-                "0.1.5",
-                "0.1.4",
-                "0.1.3",
-                "0.1.2",
-                "0.1.1",
-                "0.1.0",
-            },
-        )
+        from app.services.release_notes import RELEASE_NOTES_FA
+        from app.version import __version__
+
+        self.assertEqual(parsed, RELEASE_NOTES_FA)
+        self.assertIn(__version__, parsed)
+        # Notes of shipped versions are never dropped; new releases only add keys.
+        shipped = {f"0.2.{n}" for n in range(22)} | {f"0.1.{n}" for n in range(15)}
+        self.assertLessEqual(shipped, set(parsed))
         self.assertTrue(
             any("هدر" in n or "topbar" in n or "سایدبار" in n or "اکاردئون" in n or "مودال" in n for n in parsed["0.2.18"])
         )
@@ -318,12 +296,6 @@ class ReleaseNotesTests(unittest.TestCase):
         src = Path("app/web/templates/pg_home.html").read_text(encoding="utf-8")
         self.assertNotIn(">بروزرسانی</a>", src)
         self.assertNotIn('href="/pg">بروزرسانی', src)
-
-    def test_pg_home_stats_uses_home_panel(self):
-        src = Path("app/web/templates/_pg_dash_body.html").read_text(encoding="utf-8")
-        self.assertIn("home-panel home-panel-pg", src)
-        self.assertIn("home-panel-grid", src)
-        self.assertIn("آمار پنل", src)
 
     def test_sidebar_web_panel_label(self):
         src = Path("app/web/templates/base.html").read_text(encoding="utf-8")

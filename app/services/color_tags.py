@@ -121,6 +121,18 @@ def apply_color_tag(user: Any, raw: str | None) -> str:
     return value
 
 
+def risk_mark(user: Any, *, shop_id: int | None) -> str:
+    """The colored circle of the person's risk tag, for Telegram lists and cards.
+
+    The tag is private to the shop that attributed the person (the platform for an unattributed
+    one), so any other viewer gets an empty string.
+    """
+    owner = getattr(user, "reseller_id", None)
+    if (int(owner) if owner is not None else None) != (int(shop_id) if shop_id is not None else None):
+        return ""
+    return color_tag_meta(effective_color_tag(user)).emoji
+
+
 def bot_tag_button_label(key: str | None) -> str:
     meta = color_tag_meta(key)
     return f"{meta.emoji} {meta.title_fa}"

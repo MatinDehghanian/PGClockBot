@@ -1,4 +1,5 @@
 {# Live PG account limits as panel stat boxes — never a top-of-page warning flash. #}
+{% from "macros.html" import card_title %}
 {% macro pg_limit_stat(label, value, caption='') -%}
 <div class="stat">
   <div class="stat-top">
@@ -16,7 +17,7 @@
 {% if cards %}
 <section class="card pg-limit-board" aria-label="{{ heading }}">
   <header class="home-periods-head">
-    <h2>{{ heading }}</h2>
+    {{ card_title('limits', heading) }}
     {% if caption %}<p class="muted">{{ caption }}</p>{% endif %}
   </header>
   <div class="home-panel-grid">
@@ -33,7 +34,7 @@
 {% from "_pg_quota_gauges.html" import pg_quota_gauge %}
 <section class="card pg-limit-board pg-quota-top home-quota-card" aria-label="سقف حساب پاسارگارد">
   <header class="home-periods-head">
-    <h2>سقف حساب پاسارگارد</h2>
+    {{ card_title('limits', 'سقف حساب پاسارگارد') }}
     <p class="muted">
       {% if ov.username %}<span dir="ltr">{{ ov.username }}</span>{% endif %}
       {% if ov.status_label %}

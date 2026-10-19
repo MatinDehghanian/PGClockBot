@@ -242,7 +242,7 @@ async def resolve_platform_pg_capabilities(
             )
             if base_url:
                 try:
-                    client.base_url = assert_safe_pg_base_url(str(base_url).rstrip("/"))
+                    client.base_url = assert_safe_pg_base_url(str(base_url).rstrip("/"), resolve_dns=False)
                 except UnsafePgUrlError as exc:
                     empty["error"] = str(exc)
                     return empty

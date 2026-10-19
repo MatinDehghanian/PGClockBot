@@ -6,11 +6,13 @@ import asyncio
 import tempfile
 from pathlib import Path
 
-from aiogram import F, Router
+from aiogram import Bot, F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from sqlalchemy.ext.asyncio import AsyncSession
 from aiogram.types import (
     CallbackQuery,
+    Document,
     FSInputFile,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
@@ -20,6 +22,7 @@ from aiogram.types import (
 from app.bot import keyboards as kb
 from app.bot.auth import is_platform_admin as _is_admin
 from app.bot.auth import require_bot_owner_handler
+from app.bot.nav_inline import admin_backup_hub_keyboard, with_inline_back
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser
 from app.services.redact import user_safe_error
@@ -32,6 +35,9 @@ from app.services.backup import (
     save_uploaded_backup,
 )
 from app.services.updates import local_version
+from app.services import bot_feedback_texts as feedback
+from app.services.screen_titles import screen_caption, screen_heading
+from app.services.users import get_all_settings
 
 
 async def _lasting_kb(session, db_user, classic):
@@ -53,13 +59,16 @@ def _kb(rows: list[list[InlineKeyboardButton]]) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def _hub_keyboard(backups: list[dict] | None = None) -> InlineKeyboardMarkup:
-    """Dynamic backup file rows only — static actions live on reply keyboard."""
-    return kb.backup_files_keyboard(backups)
+def backup_hub_markup(backups: list[dict] | None, ui: dict | None) -> InlineKeyboardMarkup:
+    """The backup panel: create / upload actions, the backup files, «بازگشت» to the system hub."""
+    hub = admin_backup_hub_keyboard(ui)
+    actions = [list(row) for row in hub.inline_keyboard[:-1]]  # its own «بازگشت» comes after the files
+    files = with_inline_back(kb.backup_files_keyboard(backups), ui, "nv:adm:system")
+    return InlineKeyboardMarkup(inline_keyboard=actions + [list(row) for row in files.inline_keyboard])
 
 
 def _item_keyboard(backup_id: str) -> InlineKeyboardMarkup:
-    """Per-file actions only — hub/list nav via reply keyboard."""
+    """One backup file's actions; «بازگشت» returns to the backup panel."""
     return _kb(
         [
             [InlineKeyboardButton(text="⬇️ دریافت فایل", callback_data=f"adm:backup:dl:{backup_id}")],
@@ -76,24 +85,22 @@ def _item_keyboard(backup_id: str) -> InlineKeyboardMarkup:
                 )
             ],
             [InlineKeyboardButton(text="🗑 حذف", callback_data=f"adm:backup:del:{backup_id}")],
+            [kb.back_button(None, "nv:adm:backup")],
         ]
     )
 
 
-def _hub_text(backups: list[dict]) -> str:
+def _hub_text(backups: list[dict], ui: dict[str, str] | None = None) -> str:
     lines = [
-        "💾 <b>بکاپ / ریستور</b>",
+        screen_heading(ui, "a.backup"),
         f"نسخه: <code>{local_version()}</code>",
         "",
-        "بکاپ کامل = دیتابیس کل پلتفرم (همه فروشگاه‌ها) + آپلودها + یوزر وب.",
-        "پیش‌فرض <b>بدون</b> <code>.env</code> است (مثل زمان‌بندی).",
-        "بکاپ با .env فقط بعد از تأیید امنیتی جداگانه — توکن/اسرار داخل فایل می‌رود.",
-        "حتی بدون .env، فایل ورود وب‌پنل در بکاپ هست.",
-        "قبل از ریستور، بکاپ ایمنی خودکار (با .env) ساخته می‌شود.",
-        "",
     ]
+    caption = screen_caption(ui, "a.backup")
+    if caption:
+        lines.extend([caption, ""])
     if not backups:
-        lines.append("هنوز بکاپی نیست.")
+        lines.append("هنوز بکاپی ساخته نشده است.")
     else:
         lines.append(f"تعداد: <b>{len(backups)}</b> (نمایش ۸ مورد اخیر)")
         for b in backups[:8]:
@@ -106,9 +113,9 @@ def _hub_text(backups: list[dict]) -> str:
 
 @router.callback_query(F.data == "adm:backup")
 @require_bot_owner_handler
-async def backup_hub(callback: CallbackQuery, db_user: BotUser, state: FSMContext):
+async def backup_hub(callback: CallbackQuery, db_user: BotUser, state: FSMContext, session: AsyncSession):
     if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+        await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
     await state.clear()
     await callback.answer()
@@ -116,8 +123,8 @@ async def backup_hub(callback: CallbackQuery, db_user: BotUser, state: FSMContex
     if callback.message:
         await safe_edit_text(
             callback.message,
-            _hub_text(backups),
-            reply_markup=_hub_keyboard(backups),
+            _hub_text(backups, ui := await get_all_settings(session)),
+            reply_markup=backup_hub_markup(backups, ui),
         )
 
 
@@ -145,7 +152,7 @@ def _env_confirm_keyboard() -> InlineKeyboardMarkup:
 async def backup_create_env_ask(callback: CallbackQuery, db_user: BotUser):
     """Phase 2: with-.env path requires an explicit second confirm."""
     if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+        await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
     await callback.answer()
     text = (
@@ -162,9 +169,9 @@ async def backup_create_env_ask(callback: CallbackQuery, db_user: BotUser):
 
 @router.callback_query(F.data.startswith("adm:backup:create"))
 @require_bot_owner_handler
-async def backup_create(callback: CallbackQuery, db_user: BotUser):
+async def backup_create(callback: CallbackQuery, db_user: BotUser, session: AsyncSession):
     if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+        await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
     data = callback.data or ""
     # Phase 2 defaults: plain create / :noenv → without .env.
@@ -185,7 +192,7 @@ async def backup_create(callback: CallbackQuery, db_user: BotUser):
         )
     except Exception as e:
         if callback.message:
-            await callback.message.answer(f"❌ ساخت بکاپ ناموفق:\n{user_safe_error(e)}")
+            await callback.message.answer(f"❌ ساخت بکاپ انجام نشد:\n{user_safe_error(e)}")
         return
     path = Path(result["path"])
     caption = (
@@ -207,8 +214,8 @@ async def backup_create(callback: CallbackQuery, db_user: BotUser):
             )
         backups = await asyncio.to_thread(list_backups)
         await callback.message.answer(
-            _hub_text(backups),
-            reply_markup=_hub_keyboard(backups),
+            _hub_text(backups, ui := await get_all_settings(session)),
+            reply_markup=backup_hub_markup(backups, ui),
         )
 
 
@@ -216,12 +223,12 @@ async def backup_create(callback: CallbackQuery, db_user: BotUser):
 @require_bot_owner_handler
 async def backup_item(callback: CallbackQuery, db_user: BotUser):
     if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+        await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
     backup_id = callback.data.split(":", 3)[-1]
     path = get_backup_path(backup_id)
     if not path:
-        await callback.answer("یافت نشد", show_alert=True)
+        await callback.answer(feedback.NOT_FOUND, show_alert=True)
         return
     await callback.answer()
     backups = {b["id"]: b for b in await asyncio.to_thread(list_backups)}
@@ -243,12 +250,12 @@ async def backup_item(callback: CallbackQuery, db_user: BotUser):
 @require_bot_owner_handler
 async def backup_download(callback: CallbackQuery, db_user: BotUser):
     if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+        await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
     backup_id = callback.data.split(":", 3)[-1]
     path = get_backup_path(backup_id)
     if not path:
-        await callback.answer("یافت نشد", show_alert=True)
+        await callback.answer(feedback.NOT_FOUND, show_alert=True)
         return
     await callback.answer("ارسال فایل…")
     if callback.message:
@@ -265,19 +272,19 @@ async def backup_download(callback: CallbackQuery, db_user: BotUser):
 
 @router.callback_query(F.data.startswith("adm:backup:del:"))
 @require_bot_owner_handler
-async def backup_delete(callback: CallbackQuery, db_user: BotUser):
+async def backup_delete(callback: CallbackQuery, db_user: BotUser, session: AsyncSession):
     if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+        await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
     backup_id = callback.data.split(":", 3)[-1]
     ok = await asyncio.to_thread(delete_backup, backup_id)
-    await callback.answer("حذف شد" if ok else "ناموفق", show_alert=not ok)
+    await callback.answer(feedback.DELETED if ok else "ناموفق", show_alert=not ok)
     backups = await asyncio.to_thread(list_backups)
     if callback.message:
         await safe_edit_text(
             callback.message,
-            _hub_text(backups),
-            reply_markup=_hub_keyboard(backups),
+            _hub_text(backups, ui := await get_all_settings(session)),
+            reply_markup=backup_hub_markup(backups, ui),
         )
 
 
@@ -285,7 +292,7 @@ async def backup_delete(callback: CallbackQuery, db_user: BotUser):
 @require_bot_owner_handler
 async def backup_restore_ask(callback: CallbackQuery, db_user: BotUser, state: FSMContext):
     if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+        await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
     # adm:backup:restore:{id}:{0|1}
     parts = callback.data.split(":")
@@ -293,7 +300,7 @@ async def backup_restore_ask(callback: CallbackQuery, db_user: BotUser, state: F
     restore_env = parts[4] == "1" if len(parts) > 4 else True
     path = get_backup_path(backup_id)
     if not path:
-        await callback.answer("یافت نشد", show_alert=True)
+        await callback.answer(feedback.NOT_FOUND, show_alert=True)
         return
     await callback.answer()
     await state.update_data(backup_id=backup_id, restore_env=restore_env)
@@ -311,6 +318,7 @@ async def backup_restore_ask(callback: CallbackQuery, db_user: BotUser, state: F
         state,
         prompt=prompt,
         cancel_code="adm_bak",
+        return_to=f"adm:backup:item:{backup_id}",
         fsm_state=BackupStates.confirm_restore,
         edit=False,
     )
@@ -329,7 +337,7 @@ async def backup_restore_confirm(message: Message, session, db_user: BotUser, st
         if await try_legacy_cancel(message, state, session, db_user):
             return
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=await _lasting_kb(session, db_user, kb.admin_system_reply_keyboard()))
+        await message.answer(feedback.CANCELLED, reply_markup=await _lasting_kb(session, db_user, kb.admin_system_reply_keyboard()))
         return
     if text != "RESTORE":
         await message.answer(
@@ -357,7 +365,7 @@ async def backup_restore_confirm(message: Message, session, db_user: BotUser, st
         actor=f"tg:{db_user.telegram_id}",
     )
     if not result.get("ok"):
-        await message.answer(f"❌ ریستور ناموفق:\n{result.get('error')}")
+        await message.answer(f"❌ ریستور انجام نشد:\n{result.get('error')}")
         return
     msg = "✅ ریستور انجام شد."
     if result.get("safety_id"):
@@ -371,7 +379,7 @@ async def backup_restore_confirm(message: Message, session, db_user: BotUser, st
 @require_bot_owner_handler
 async def backup_upload_ask(callback: CallbackQuery, db_user: BotUser, state: FSMContext):
     if not _is_admin(db_user):
-        await callback.answer("ادمین نیستید", show_alert=True)
+        await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         return
     await callback.answer()
     from app.bot.nav_input import ask_text
@@ -381,9 +389,28 @@ async def backup_upload_ask(callback: CallbackQuery, db_user: BotUser, state: FS
         state,
         prompt="فایل ZIP بکاپ را در همین گفتگو بفرستید.",
         cancel_code="adm_bak",
+        return_to="adm:backup",
         fsm_state=BackupStates.waiting_upload,
         edit=True,
     )
+
+
+async def _download_upload_bytes(bot: Bot, doc: Document) -> bytes:
+    """Download an uploaded backup via a temp file that is always removed.
+
+    File I/O runs in a thread so a large archive does not stall the event loop.
+    """
+    tmp_path = Path(await asyncio.to_thread(_new_temp_zip_path))
+    try:
+        await bot.download(doc, destination=tmp_path)
+        return await asyncio.to_thread(tmp_path.read_bytes)
+    finally:
+        await asyncio.to_thread(tmp_path.unlink, missing_ok=True)
+
+
+def _new_temp_zip_path() -> str:
+    with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as buf:
+        return buf.name
 
 
 @router.message(BackupStates.waiting_upload, F.document)
@@ -401,12 +428,7 @@ async def backup_upload_file(message: Message, db_user: BotUser, state: FSMConte
         return
     await message.answer("⏳ در حال دریافت و بررسی…")
     try:
-        buf = tempfile.NamedTemporaryFile(suffix=".zip", delete=False)
-        tmp_path = Path(buf.name)
-        buf.close()
-        await message.bot.download(doc, destination=tmp_path)
-        content = tmp_path.read_bytes()
-        tmp_path.unlink(missing_ok=True)
+        content = await _download_upload_bytes(message.bot, doc)
         result = await asyncio.to_thread(
             save_uploaded_backup,
             content,
@@ -414,7 +436,7 @@ async def backup_upload_file(message: Message, db_user: BotUser, state: FSMConte
         )
     except Exception as e:
         await state.clear()
-        await message.answer(f"❌ آپلود ناموفق:\n{user_safe_error(e)}")
+        await message.answer(f"❌ آپلود انجام نشد:\n{user_safe_error(e)}")
         return
     await state.clear()
     if not result.get("ok"):
@@ -436,6 +458,6 @@ async def backup_upload_cancel(message: Message, session, db_user: BotUser, stat
         if await try_legacy_cancel(message, state, session, db_user):
             return
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=await _lasting_kb(session, db_user, kb.admin_system_reply_keyboard()))
+        await message.answer(feedback.CANCELLED, reply_markup=await _lasting_kb(session, db_user, kb.admin_system_reply_keyboard()))
         return
     await message.answer("یک فایل ZIP بفرستید یا انصراف.")

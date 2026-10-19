@@ -22,7 +22,7 @@ from app.services.list_query import (
     normalize_search_q,
     parse_list_page,
 )
-from app.services.shop_scope import is_platform_admin, shop_owner_id
+from app.services.shop_scope import is_platform_admin, payment_shop_id, shop_owner_id
 from app.services.users import SETTING_GROUPS, TAB_SETTING_GROUPS, get_all_settings
 from app.services.secret_box import reveal_bot_token
 
@@ -167,33 +167,26 @@ async def _authorize_receipt_access(
     staff: dict,
     payment: Payment,
 ) -> tuple[Order | None, int | None] | None:
-    """Return (order, payer_reseller_id) if staff may view this receipt, else None.
+    """Return (order, payment shop id) if staff may view this receipt, else None.
 
-    Platform admins: only platform-scoped payments (no reseller order / no reseller payer).
-    Shop staff: only payments for their shop (order.reseller_id or payer.reseller_id).
+    The shop of a payment is its own: a top-up's wallet shop or its order's shop, never the payer's
+    attribution. Platform admins see platform payments only; shop staff only their shop's.
     """
     order: Order | None = None
     if payment.order_id:
         order = await session.get(Order, int(payment.order_id))
 
-    payer_reseller_id: int | None = None
-    if payment.user_id:
-        payer = await session.get(BotUser, int(payment.user_id))
-        if payer and payer.reseller_id:
-            payer_reseller_id = int(payer.reseller_id)
-
-    order_rid = int(order.reseller_id) if order and order.reseller_id else None
-    tenant_rid = order_rid or payer_reseller_id
+    tenant_rid = payment_shop_id(payment, order)
 
     if is_platform_admin(staff):
         if tenant_rid:
             return None
-        return order, payer_reseller_id
+        return order, None
 
     rid = shop_owner_id(staff)
     if not rid or not tenant_rid or int(tenant_rid) != int(rid):
         return None
-    return order, payer_reseller_id
+    return order, int(tenant_rid)
 
 
 def _groups_for_tab(tab: str) -> tuple[list[str], dict]:
@@ -219,11 +212,12 @@ def register_finance_pages(app, *, render, require_staff, get_db):
         can_billing_settings = staff.get("role") == "admin"
 
         tab = (request.query_params.get("tab") or "").strip()
-        if tab not in {"reports", "behavior", "orders", "payments", "delivery", "cancellations"}:
+        if tab == "behavior":
+            # The customer-behaviour panel moved to the marketing section.
+            return RedirectResponse("/funnel", status_code=303)
+        if tab not in {"reports", "orders", "payments", "delivery", "cancellations"}:
             tab = "reports" if (can_orders or can_payments) else "payments"
         if tab == "reports" and not (can_orders or can_payments):
-            tab = "payments"
-        if tab == "behavior" and not (can_orders or can_payments):
             tab = "payments"
         if tab == "orders" and not can_orders:
             tab = "reports" if can_payments else "payments"
@@ -281,13 +275,6 @@ def register_finance_pages(app, *, render, require_staff, get_db):
             "billing_settings_action": "",
             "finance_pending_action": "",
             "receipt_matches": {},
-            "funnel": {
-                "shop_open": 0,
-                "plan_view": 0,
-                "pay_start": 0,
-                "receipt": 0,
-                "delivered": 0,
-            },
             "report": {},
             "report_period": report_period,
             "cancel_requests": [],
@@ -355,22 +342,6 @@ def register_finance_pages(app, *, render, require_staff, get_db):
                 session, reseller_id=rid, period=report_period
             )
             ctx["report_period"] = report_period
-
-        elif tab == "behavior" and (can_orders or can_payments):
-            from app.api.home_pages import _EMPTY_FUNNEL, _safe_funnel
-            from app.services.db_safe import recover_session
-
-            await recover_session(session)
-            if is_platform_admin(staff):
-                rid = None
-            else:
-                rid = shop_owner_id(staff)
-                if not rid:
-                    ctx["flash_err"] = ctx["flash_err"] or "محدوده فروشگاه مشخص نیست"
-                    return render(request, "finance.html", ctx)
-            ctx["funnel"] = await _safe_funnel(session, reseller_id=rid) or dict(
-                _EMPTY_FUNNEL
-            )
 
         elif tab == "orders" and can_orders:
             base_filters = []
@@ -458,7 +429,7 @@ def register_finance_pages(app, *, render, require_staff, get_db):
                 scope = or_(
                     and_(
                         Payment.is_wallet_topup.is_(True),
-                        BotUser.reseller_id.is_(None),
+                        Payment.wallet_shop_id.is_(None),
                     ),
                     and_(
                         Payment.is_wallet_topup.is_(False),

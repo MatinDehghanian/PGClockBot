@@ -8,17 +8,23 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.bot import bbc_checkout_view as bbc_view
 from app.bot import keyboards as kb
+from app.bot.chat_cleanup import keep_message
 from app.bot.tg_utils import safe_edit_text
 from app.config import get_settings
-from app.db.models import BotUser, Payment, PaymentMethod, PaymentStatus
+from app.db.models import BotUser, Order, Payment, PaymentMethod, PaymentStatus
+from app.services.bbc_settlement import reusable_bbc_topup, start_bbc_checkout
 from app.services.redact import user_safe_error
 from app.services.formatting import format_message, format_toman, kv_line
 from app.services.orders import create_wallet_topup
 from app.services.receipts import submit_receipt
-from app.services.users import get_all_settings, on
+from app.services.ux20 import payment_shop_clause
+from app.services.users import current_shop_reseller_id, get_all_settings, on
 from app.services.wallet import list_activity
 from app.services.message_variables import DOMAIN_PAYMENT, render_message_template
+from app.services import bot_feedback_texts as feedback
+from app.services.screen_titles import screen_caption, screen_title_html
 
 router = Router(name="wallet")
 
@@ -26,6 +32,7 @@ _TOPUP_METHODS = {
     "card": ("pay_card_enabled", PaymentMethod.CARD.value),
     "gateway": ("pay_gateway_enabled", PaymentMethod.GATEWAY.value),
     "psp": ("pay_psp_enabled", PaymentMethod.PSP.value),
+    "bbc": ("pay_bbc_enabled", PaymentMethod.BBC.value),
     "crypto": ("pay_crypto_enabled", PaymentMethod.CRYPTO.value),
 }
 
@@ -151,7 +158,7 @@ async def wallet_gift_code(
             message,
             session,
             db_user,
-            text="لغو شد.",
+            text=feedback.CANCELLED,
             state=state,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
@@ -179,7 +186,7 @@ async def wallet_home(callback: CallbackQuery, session: AsyncSession, db_user: B
 
     bal = await wallet_balance_for_context(session, db_user)
     text = format_message(
-        "👛 کیف پول",
+        screen_title_html(ui, "c.wallet"),
         "\n".join(
             [
                 kv_line(
@@ -187,6 +194,8 @@ async def wallet_home(callback: CallbackQuery, session: AsyncSession, db_user: B
                     "موجودی",
                     f"<b>{format_toman(bal, get_settings().currency)}</b>",
                 ),
+                "",
+                screen_caption(ui, "c.wallet"),
             ]
         ),
     )
@@ -230,6 +239,7 @@ async def wallet_topup(callback: CallbackQuery, state: FSMContext, session: Asyn
             "pay_card_enabled",
             "pay_gateway_enabled",
             "pay_psp_enabled",
+            "pay_bbc_enabled",
             "pay_crypto_enabled",
         )
     )
@@ -246,7 +256,7 @@ async def wallet_topup(callback: CallbackQuery, state: FSMContext, session: Asyn
         callback.message,
         text=format_message(
             "➕ شارژ کیف پول",
-            "مبلغ را انتخاب کنید یا «مبلغ دیگر» را بزنید:",
+            feedback.PICK_AMOUNT,
         ),
         inline=wallet_topup_presets_keyboard(ui),
     )
@@ -305,16 +315,24 @@ async def present_topup_methods(
 async def wallet_topup_amount(message: Message, state: FSMContext, session: AsyncSession, db_user: BotUser,
     is_reseller_bot: bool = False, reseller_owner_id: int | None = None):
     from app.bot.menu_nav import restore_main_reply
-    from app.bot.nav_input import finish_text_step
+    from app.bot.nav_input import finish_text_step, try_legacy_cancel
 
     ui = await get_all_settings(session)
     if kb.is_cancel_text(message.text) or kb.is_home_text(message.text, ui):
-        # Legacy reply-label انصراف (stale cancel_reply keyboards).
+        if kb.is_cancel_text(message.text) and await try_legacy_cancel(
+            message,
+            state,
+            session,
+            db_user,
+            is_reseller_bot=is_reseller_bot,
+            reseller_owner_id=reseller_owner_id,
+        ):
+            return
         await restore_main_reply(
             message,
             session,
             db_user,
-            text="لغو شد.",
+            text=feedback.CANCELLED,
             state=state,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
@@ -438,8 +456,45 @@ async def _topup_instructions(
     except Exception:
         text = format_message(title, fallback + append)
         send_kw = {}
-    rows.append([InlineKeyboardButton(text=ui.get("btn_back") or "بازگشت", callback_data="wallet:home")])
+    rows.append([kb.back_button(ui, "wallet:home")])
     return text, InlineKeyboardMarkup(inline_keyboard=rows), send_kw
+
+async def _show_bbc_topup(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    state: FSMContext,
+    db_user: BotUser,
+    ui: dict,
+    *,
+    amount: int,
+    method: str,
+) -> None:
+    """Wallet top-up through «بزن به کارت»; an unused top-up of the same amount is reused."""
+    payment = await reusable_bbc_topup(
+        session, int(db_user.id), amount, shop_id=current_shop_reseller_id()
+    ) or await create_wallet_topup(session, db_user.id, amount, method=method)
+    try:
+        checkout = await start_bbc_checkout(session, payment, description=f"شارژ کیف پول #{payment.id}")
+    except ValueError as exc:
+        await callback.answer(user_safe_error(exc), show_alert=True)
+        return
+    await callback.answer()
+    await state.clear()
+    if callback.message is None:
+        return
+    rows = [*bbc_view.checkout_rows(checkout), [kb.back_button(ui, "wallet:home")]]
+    text = bbc_view.checkout_text(
+        ui,
+        checkout,
+        amount_toman=amount,
+        currency=get_settings().currency,
+        order_id=0,
+        payment_id=int(payment.id),
+    )
+    await safe_edit_text(callback.message, text, reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
+    # The link and the exact amount must stay while the person pays elsewhere.
+    keep_message(callback.message)
+
 
 @router.callback_query(
     # Picker buttons are wtop:card:0:<dest_id> (order_id placeholder 0), matching shop pay:* shape.
@@ -457,6 +512,8 @@ async def wtop_choose_method(
         enabled_gateways,
         gateway_by_id,
         inline_picker_markup,
+        pick_card,
+        random_card_enabled,
     )
 
     ui = await get_all_settings(session)
@@ -504,7 +561,7 @@ async def wtop_choose_method(
         if link.startswith("http://") or link.startswith("https://"):
             rows.append([InlineKeyboardButton(text="🏦 ورود به درگاه", url=link)])
         rows.append(
-            [InlineKeyboardButton(text=ui.get("btn_back") or "بازگشت", callback_data="wallet:home")]
+            [kb.back_button(ui, "wallet:home")]
         )
         await state.clear()
         if callback.message:
@@ -515,25 +572,32 @@ async def wtop_choose_method(
             )
         return
 
+    if key == "bbc":
+        await _show_bbc_topup(callback, session, state, db_user, ui, amount=amount, method=method)
+        return
+
     card = gateway = wallet = None
     if key == "card":
         items = enabled_cards(ui)
         if not items:
             await callback.answer("کارت تنظیم نشده", show_alert=True)
             return
-        if len(items) > 1 and not dest_id:
+        if len(items) > 1 and not dest_id and not random_card_enabled(ui):
             await callback.answer()
             markup = inline_picker_markup("card", items, order_id=0, prefix="wtop", ui=ui)
             if callback.message and markup:
                 await safe_edit_text(
                     callback.message,
-                    format_message("💳 کارت", "یکی از کارت‌ها را انتخاب کنید:"),
+                    format_message("💳 کارت", feedback.PICK_CARD),
                     reply_markup=markup,
                 )
             return
-        card = card_by_id(ui, dest_id) if dest_id else items[0]
+        if dest_id:
+            card = card_by_id(ui, dest_id)
+        else:
+            card = pick_card(items, f"topup:{db_user.id}:{amount}") if len(items) > 1 else items[0]
         if not card:
-            await callback.answer("کارت نامعتبر", show_alert=True)
+            await callback.answer("این کارت دیگر فعال نیست", show_alert=True)
             return
     elif key == "gateway":
         items = enabled_gateways(ui)
@@ -546,13 +610,13 @@ async def wtop_choose_method(
             if callback.message and markup:
                 await safe_edit_text(
                     callback.message,
-                    format_message("🌐 درگاه", "یکی از درگاه‌ها را انتخاب کنید:"),
+                    format_message("🌐 درگاه", feedback.PICK_GATEWAY),
                     reply_markup=markup,
                 )
             return
         gateway = gateway_by_id(ui, dest_id) if dest_id else items[0]
         if not gateway:
-            await callback.answer("درگاه نامعتبر", show_alert=True)
+            await callback.answer("این درگاه دیگر فعال نیست", show_alert=True)
             return
     else:
         items = enabled_crypto_wallets(ui)
@@ -571,7 +635,7 @@ async def wtop_choose_method(
             return
         wallet = crypto_by_id(ui, dest_id) if dest_id else items[0]
         if not wallet:
-            await callback.answer("ولت نامعتبر", show_alert=True)
+            await callback.answer("این کیف پول ارز دیجیتال دیگر فعال نیست", show_alert=True)
             return
 
     payment = await create_wallet_topup(session, db_user.id, amount, method=method)
@@ -606,6 +670,8 @@ async def wtop_choose_method(
             **send_kw,
         )
         await remember_prompt(state, callback.message, cancel_code="w_rcpt")
+        # The card number or address must stay while the person pays elsewhere.
+        keep_message(callback.message)
 
 @router.message(WalletStates.choose_method)
 async def wallet_choose_method_cancel(
@@ -634,7 +700,7 @@ async def wallet_choose_method_cancel(
             message,
             session,
             db_user,
-            text="لغو شد.",
+            text=feedback.CANCELLED,
             state=state,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
@@ -719,7 +785,7 @@ async def wallet_receipt_cancel(
             message,
             session,
             db_user,
-            text="لغو شد.",
+            text=feedback.CANCELLED,
             state=state,
             is_reseller_bot=is_reseller_bot,
             reseller_owner_id=reseller_owner_id,
@@ -744,10 +810,13 @@ async def generic_receipt(
         return
     result = await session.execute(
         select(Payment)
+        .outerjoin(Order, Order.id == Payment.order_id)
         .where(
             Payment.user_id == db_user.id,
             Payment.status == PaymentStatus.PENDING.value,
             Payment.receipt_file_id.is_(None),
+            # Only a payment of the shop whose bot received the photo.
+            payment_shop_clause(current_shop_reseller_id()),
         )
         .order_by(Payment.id.desc())
         .limit(1)

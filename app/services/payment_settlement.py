@@ -3,6 +3,7 @@
 Channels:
   - psp: Iranian/online gateway (mock gated by env / zarinpal / …)
   - card_auto: signed webhook from card-confirm providers (per-tenant secret)
+  - bbc: BezanBeCard card-to-card match (see ``bbc_settlement``)
 
 Existing wallet / card+receipt / gateway-link / crypto / stars paths are untouched.
 Success always ends in ``approve_payment`` — settlement becomes SETTLED only after approve.
@@ -33,6 +34,7 @@ from app.db.models import (
     SettlementStatus,
 )
 from app.services.orders import approve_payment
+from app.services.shop_scope import payment_shop_id
 from app.services.payment_providers import get_psp_adapter
 from app.services.payment_providers.base import CheckoutRequest
 from app.services.payment_providers.card_auto import (
@@ -45,6 +47,8 @@ logger = logging.getLogger(__name__)
 
 CHANNEL_PSP = "psp"
 CHANNEL_CARD_AUTO = "card_auto"
+CHANNEL_BBC = "bbc"
+BBC_PROVIDER = "bezanbecard"
 
 _OPEN_STATUSES = (
     SettlementStatus.CREATED.value,
@@ -84,6 +88,10 @@ def idem_key_psp(payment_id: int) -> str:
 
 def idem_key_card_auto(payment_id: int) -> str:
     return f"cardauto:{int(payment_id)}"
+
+
+def idem_key_bbc(payment_id: int) -> str:
+    return f"bbc:{int(payment_id)}"
 
 
 async def resolve_payment_shop_owner_id(
@@ -997,7 +1005,9 @@ async def notify_after_settlement(
     user = await session.get(BotUser, payment.user_id)
     if not user:
         return
-    bot, should_close = await open_notify_bot_for_user(session, user)
+    bot, should_close = await open_notify_bot_for_user(
+        session, user, shop_id=payment_shop_id(payment, order)
+    )
     try:
         try:
             await send_delivery_to_user(bot, user.telegram_id, session, payment, order)

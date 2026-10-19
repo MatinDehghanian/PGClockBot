@@ -20,9 +20,11 @@ from app.db.models import (
     Ticket,
     TicketStatus,
 )
+from app.services.color_tags import risk_mark
 from app.services.home_overview import reseller_shop_summary
 from app.services.formatting import format_message, format_toman, order_status_fa
 from app.services.reseller_access import load_reseller_actor
+from app.services.shop_membership import is_shop_customer
 from app.services.resellers import (
     create_application,
     format_reseller_plan_apply_detail,
@@ -32,9 +34,19 @@ from app.services.resellers import (
     reseller_billing_mode_label,
     reseller_plan_mode_of,
 )
+from app.bot.reseller_hub_groups import back_callback_for
 from app.bot.tg_utils import safe_edit_text
 from app.services.users import get_all_settings
 from app.services.redact import user_safe_error
+from app.services import bot_feedback_texts as feedback
+
+def _user_card_back(user_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[[kb.back_button(None, f"res:user:{int(user_id)}")]])
+
+
+def _group_back(action: str) -> InlineKeyboardMarkup:
+    """«بازگشت» from a shop panel screen to the group it was opened from."""
+    return InlineKeyboardMarkup(inline_keyboard=[[kb.back_button(None, back_callback_for(action))]])
 
 router = Router(name="reseller")
 
@@ -135,7 +147,7 @@ async def _resapply_home_keyboard(session: AsyncSession, ui: dict) -> InlineKeyb
                 callback_data="menu:home",
                 ui=ui,
                 label_key="btn_back",
-                style=kb._style(ui, "back"),
+                style_id="back",
             )
         ]
     )
@@ -161,7 +173,7 @@ async def _resapply_plan_list_keyboard(
         price = format_toman(p.price, get_settings().currency) if p.price else "رایگان"
         if reseller_plan_mode_of(p) == "payg":
             rate = int(getattr(p, "price_per_gb", 0) or 0)
-            extra = f" · {format_toman(rate, get_settings().currency)}/گیگ" if rate else ""
+            extra = f" · {format_toman(rate, get_settings().currency)}/گیگابایت" if rate else ""
         else:
             extra = ""
         cid = getattr(p, "category_id", None)
@@ -175,6 +187,7 @@ async def _resapply_plan_list_keyboard(
                         ui, p, kind=reseller_plan_mode_of(p), audience="resellers",
                         category=cat_obj,
                     ),
+                    icon_custom_emoji_id=kb.category_icon_for(p, cat_objs),
                 )
             ]
         )
@@ -186,7 +199,7 @@ async def _resapply_plan_list_keyboard(
                 callback_data=back_callback,
                 ui=ui,
                 label_key="btn_back",
-                style=kb._style(ui, "back"),
+                style_id="back",
             )
         ]
     )
@@ -218,44 +231,27 @@ async def res_creds(
                 await safe_edit_text(
                     callback.message,
                     format_message("🤝 پنل نماینده", "دسترسی‌ها با وب‌پنل یکسان است."),
-                    reply_markup=None,
+                    reply_markup=InlineKeyboardMarkup(inline_keyboard=[[kb.back_button(None, "nv:res:home")]]),
                 )
             return
     if db_user.role != Role.RESELLER.value:
-        await callback.answer("فقط نمایندگان", show_alert=True)
+        await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
         return
     profile = await get_reseller_profile(session, db_user.id)
     if not profile or not profile.is_active:
-        await callback.answer("پروفایل نماینده یافت نشد", show_alert=True)
+        await callback.answer("حساب نمایندگی شما پیدا نشد؛ با پشتیبانی تماس بگیرید", show_alert=True)
         return
     await callback.answer()
-    text = await format_reseller_access_card(session, profile)
-    # URL / renew buttons are allowed (not a shop-panel menu); nav via reply KB
-    rows: list[list[InlineKeyboardButton]] = []
-    if profile.bot_username:
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=f"باز کردن @{profile.bot_username}",
-                    url=f"https://t.me/{profile.bot_username}",
-                )
-            ]
-        )
-    try:
-        from app.services.pg_admin_subscription import is_subscription_plan
+    from app.bot.nav_inline import reseller_access_card_keyboard
 
-        plan = getattr(profile, "plan", None)
-        if plan is not None and is_subscription_plan(plan):
-            rows.append(
-                [InlineKeyboardButton(text="🔄 تمدید سرویس", callback_data="res:renew")]
-            )
-    except Exception:
-        pass
+    text = await format_reseller_access_card(session, profile)
     if callback.message:
         await safe_edit_text(
             callback.message,
             text,
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows) if rows else None,
+            reply_markup=reseller_access_card_keyboard(
+                profile, await get_all_settings(session)
+            ),
         )
 
 
@@ -311,10 +307,10 @@ async def res_dash(
         session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
     )
     if not owner_id or not profile:
-        await callback.answer("فقط نمایندگان", show_alert=True)
+        await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
         return
     if not has_bot_perm(profile, "dashboard"):
-        await callback.answer("دسترسی ندارید", show_alert=True)
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     await callback.answer()
     summary = await reseller_shop_summary(
@@ -326,11 +322,11 @@ async def res_dash(
         "🏠 <b>خانه نماینده</b>\n\n"
         f"👥 مشتریان: {users_n}\n"
         f"🛒 سفارش‌ها: {orders_n}\n"
-        f"🧾 رسید معلق: {pending_pay}\n"
+        f"🧾 رسید در انتظار: {pending_pay}\n"
         f"🎫 تیکت باز: {open_tickets}"
     )
     if callback.message:
-        await safe_edit_text(callback.message, text, reply_markup=None)
+        await safe_edit_text(callback.message, text, reply_markup=_group_back("res_dash"))
 
 
 RES_USERS_PAGE = 10
@@ -348,10 +344,10 @@ async def res_users_list(
         session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
     )
     if not owner_id or not profile:
-        await callback.answer("فقط نمایندگان", show_alert=True)
+        await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
         return
     if not has_bot_perm(profile, "dashboard"):
-        await callback.answer("دسترسی ندارید", show_alert=True)
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     try:
         page = int((callback.data or "").rsplit(":", 1)[-1])
@@ -382,12 +378,12 @@ async def res_users_list(
         .limit(RES_USERS_PAGE)
     )
     users = list(result.scalars().all())
-    by_svc = await load_services_by_user_ids(session, [int(u.id) for u in users])
+    by_svc = await load_services_by_user_ids(session, [int(u.id) for u in users], shop_id=int(owner_id))
     buttons: list[InlineKeyboardButton] = []
     for u in users:
         ops = build_user_ops_row(u, by_svc.get(int(u.id), []))
         name = (u.full_name or u.username or str(u.telegram_id))[:16]
-        flag = bot_user_alert_flags(ops)
+        flag = risk_mark(u, shop_id=int(owner_id)) + bot_user_alert_flags(ops)
         buttons.append(
             InlineKeyboardButton(
                 text=f"{flag} {name}",
@@ -402,6 +398,7 @@ async def res_users_list(
         nav.append(InlineKeyboardButton(text="بعد ▶️", callback_data=f"res:users:{page + 1}"))
     if nav:
         rows.append(nav)
+    rows.extend(_group_back("res_users").inline_keyboard)
     text = (
         f"👥 <b>مشتریان من</b>\n"
         f"صفحه {page + 1} از {max(1, (total + RES_USERS_PAGE - 1) // RES_USERS_PAGE)}"
@@ -409,12 +406,12 @@ async def res_users_list(
         f"<i>🔔 اعلان · ⏰ انقضا · 📉 حجم — جزئیات در وب‌پنل /users</i>"
     )
     if not users:
-        text += "\n\nهنوز مشتری ثبت‌شده‌ای ندارید."
+        text += "\n\nهنوز مشتری ثبت‌شده‌ای ندارید. لینک ربات فروشگاه را برای مشتری‌ها بفرستید."
     if callback.message:
         await safe_edit_text(
             callback.message,
             text,
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows) if rows else None,
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
         )
 
 
@@ -430,19 +427,19 @@ async def res_user_view(
         session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
     )
     if not owner_id or not profile:
-        await callback.answer("فقط نمایندگان", show_alert=True)
+        await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
         return
     if not has_bot_perm(profile, "dashboard"):
-        await callback.answer("دسترسی ندارید", show_alert=True)
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     try:
         uid = int((callback.data or "").rsplit(":", 1)[-1])
     except ValueError:
-        await callback.answer("نامعتبر", show_alert=True)
+        await callback.answer(feedback.INVALID, show_alert=True)
         return
     user = await session.get(BotUser, uid)
-    if not user or int(user.reseller_id or 0) != int(owner_id):
-        await callback.answer("دسترسی ندارید", show_alert=True)
+    if not user or not await is_shop_customer(session, user, int(owner_id)):
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     await callback.answer()
     from app.services.formatting import copyable
@@ -454,9 +451,9 @@ async def res_user_view(
 
     from app.services.wallet import get_wallet_balance
 
-    by = await load_services_by_user_ids(session, [int(user.id)])
+    by = await load_services_by_user_ids(session, [int(user.id)], shop_id=int(owner_id))
     ops = build_user_ops_row(user, by.get(int(user.id), []))
-    flags = bot_user_alert_flags(ops)
+    flags = risk_mark(user, shop_id=int(owner_id)) + bot_user_alert_flags(ops)
     blocked = "بله" if user.is_blocked else "خیر"
     display = html.escape(user.full_name or user.username or "—")
     alert_line = ""
@@ -492,9 +489,9 @@ async def res_user_view(
                 )
             ]
         )
-    markup = InlineKeyboardMarkup(inline_keyboard=rows_kb) if rows_kb else None
+    rows_kb.append([kb.back_button(None, "res:users:0")])
     if callback.message:
-        await safe_edit_text(callback.message, text, reply_markup=markup)
+        await safe_edit_text(callback.message, text, reply_markup=InlineKeyboardMarkup(inline_keyboard=rows_kb))
 
 
 @router.callback_query(F.data.startswith("res:usermsg:"))
@@ -510,19 +507,19 @@ async def res_user_message_start(
         session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
     )
     if not owner_id or not profile:
-        await callback.answer("فقط نمایندگان", show_alert=True)
+        await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
         return
     if not has_bot_perm(profile, "dashboard"):
-        await callback.answer("دسترسی ندارید", show_alert=True)
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     try:
         uid = int((callback.data or "").rsplit(":", 1)[-1])
     except ValueError:
-        await callback.answer("نامعتبر", show_alert=True)
+        await callback.answer(feedback.INVALID, show_alert=True)
         return
     user = await session.get(BotUser, uid)
-    if not user or int(user.reseller_id or 0) != int(owner_id):
-        await callback.answer("دسترسی ندارید", show_alert=True)
+    if not user or not await is_shop_customer(session, user, int(owner_id)):
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     await callback.answer()
     await state.update_data(msg_user_id=int(user.id))
@@ -535,6 +532,7 @@ async def res_user_message_start(
             f"✉️ متن پیام برای <b>{html.escape(user.full_name or user.username or str(user.telegram_id))}</b>:"
         ),
         cancel_code="rs_msg",
+        return_to=f"res:user:{uid}",
         fsm_state=ResellerStates.user_message,
         edit=True,
     )
@@ -557,7 +555,7 @@ async def res_user_message_send(
         return
     if not has_bot_perm(profile, "dashboard"):
         await state.clear()
-        await message.answer("دسترسی ندارید.")
+        await message.answer(feedback.NO_ACCESS_REPLY)
         return
     if kb.is_cancel_text(message.text):
         from app.bot.nav_input import try_legacy_cancel
@@ -572,14 +570,14 @@ async def res_user_message_send(
         ):
             return
         await state.clear()
-        await message.answer("لغو شد.")
+        await message.answer(feedback.CANCELLED)
         return
     data = await state.get_data()
     uid = int(data.get("msg_user_id") or 0)
     user = await session.get(BotUser, uid) if uid else None
     await state.clear()
-    if not user or int(user.reseller_id or 0) != int(owner_id):
-        await message.answer("دسترسی ندارید.")
+    if not user or not await is_shop_customer(session, user, int(owner_id)):
+        await message.answer(feedback.NO_ACCESS_REPLY)
         return
     from app.services.users_quick import send_staff_dm
 
@@ -588,14 +586,15 @@ async def res_user_message_send(
             session,
             user,
             message.text or "",
+            shop_id=int(owner_id),
             actor=str(db_user.telegram_id or owner_id),
         )
         await session.commit()
-        await message.answer("پیام ارسال شد ✅")
+        await message.answer(feedback.MESSAGE_SENT, reply_markup=_user_card_back(uid))
     except ValueError as e:
-        await message.answer(user_safe_error(e))
+        await message.answer(user_safe_error(e), reply_markup=_user_card_back(uid))
     except Exception as e:
-        await message.answer(f"خطا: {user_safe_error(e)}")
+        await message.answer(f"خطا: {user_safe_error(e)}", reply_markup=_user_card_back(uid))
 
 
 @router.callback_query(F.data.startswith("res:userrenew:"))
@@ -610,24 +609,24 @@ async def res_user_quick_renew(
         session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
     )
     if not owner_id or not profile:
-        await callback.answer("فقط نمایندگان", show_alert=True)
+        await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
         return
     if not has_bot_perm(profile, "dashboard"):
-        await callback.answer("دسترسی ندارید", show_alert=True)
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     try:
         uid = int((callback.data or "").rsplit(":", 1)[-1])
     except ValueError:
-        await callback.answer("نامعتبر", show_alert=True)
+        await callback.answer(feedback.INVALID, show_alert=True)
         return
     user = await session.get(BotUser, uid)
-    if not user or int(user.reseller_id or 0) != int(owner_id):
-        await callback.answer("دسترسی ندارید", show_alert=True)
+    if not user or not await is_shop_customer(session, user, int(owner_id)):
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     from app.services.users_quick import quick_renew_user
 
     try:
-        _svc, label = await quick_renew_user(session, user)
+        _svc, label = await quick_renew_user(session, user, shop_id=int(owner_id))
         await session.commit()
         await callback.answer(f"تمدید شد: {label}"[:180], show_alert=True)
     except ValueError as e:
@@ -649,12 +648,12 @@ async def res_reports(
         session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
     )
     if not owner_id or not profile:
-        await callback.answer("فقط نمایندگان", show_alert=True)
+        await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
         return
     if not (
         has_bot_perm(profile, "orders") or has_bot_perm(profile, "payments")
     ):
-        await callback.answer("دسترسی ندارید", show_alert=True)
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     raw = (callback.data or "res:reports:week").split(":")
     period = raw[-1] if len(raw) >= 3 else "week"
@@ -685,6 +684,7 @@ async def res_reports(
             )
         )
     rows.append(period_row)
+    rows.extend(_group_back("res_reports").inline_keyboard)
     if callback.message:
         await safe_edit_text(
             callback.message,
@@ -705,10 +705,10 @@ async def res_stats(
         session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
     )
     if not owner_id or not profile:
-        await callback.answer("فقط نمایندگان", show_alert=True)
+        await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
         return
     if not has_bot_perm(profile, "stats"):
-        await callback.answer("دسترسی ندارید", show_alert=True)
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     await callback.answer()
     text = (
@@ -716,10 +716,10 @@ async def res_stats(
         f"تأیید رسید: {'بله' if has_bot_perm(profile, 'payments') else 'خیر'}\n"
         f"وب‌پنل: <code>{profile.web_username or '—'}</code>\n"
         f"ربات: <code>{('@' + profile.bot_username) if profile.bot_username else '—'}</code>\n"
-        f"ادمین PG: <code>{profile.pg_admin_username or '—'}</code>"
+        f"ادمین پاسارگارد: <code>{profile.pg_admin_username or '—'}</code>"
     )
     if callback.message:
-        await safe_edit_text(callback.message, text, reply_markup=None)
+        await safe_edit_text(callback.message, text, reply_markup=_group_back("res_stats"))
 
 
 @router.callback_query(F.data == "res:billing")
@@ -743,7 +743,7 @@ async def res_billing(
         session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
     )
     if not owner_id or not profile:
-        await callback.answer("فقط نمایندگان", show_alert=True)
+        await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
         return
     if not is_payg(profile):
         await callback.answer("این فروشگاه PAYG نیست", show_alert=True)
@@ -760,11 +760,11 @@ async def res_billing(
         "💰 <b>کیف پول (PAYG)</b>",
         "",
         f"موجودی: <b>{format_toman(int(bal), get_settings().currency)}</b>",
-        f"نرخ پلن: {format_toman(rate, get_settings().currency)} / گیگ",
+        f"نرخ پلن: {format_toman(rate, get_settings().currency)} / گیگابایت",
         f"وضعیت سیستم: {'فعال' if enabled else 'غیرفعال'}",
         "",
         "مصرف ترافیک از همین کیف پول (همان موجودی منوی کیف پول) کسر می‌شود.",
-        "برای شارژ از منوی کیف پول یا با ادمین اصلی هماهنگ کنید.",
+        "برای افزایش موجودی از منوی «کیف پول» اقدام کنید یا با ادمین هماهنگ کنید.",
     ]
     if profile.billing_suspended_at is not None:
         lines.insert(3, "⚠️ <b>حساب به‌خاطر موجودی صفر مسدود است</b>")
@@ -777,7 +777,9 @@ async def res_billing(
                 f"• {tx.kind}: {sign}{format_toman(tx.amount, get_settings().currency)}"
             )
     if callback.message:
-        await safe_edit_text(callback.message, "\n".join(lines), reply_markup=None)
+        await safe_edit_text(
+            callback.message, "\n".join(lines), reply_markup=_group_back("res_billing")
+        )
 
 
 @router.callback_query(F.data == "res:orders")
@@ -792,10 +794,10 @@ async def res_orders(
         session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
     )
     if not owner_id or not profile:
-        await callback.answer("فقط نمایندگان", show_alert=True)
+        await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
         return
     if not has_bot_perm(profile, "orders"):
-        await callback.answer("دسترسی ندارید", show_alert=True)
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     await callback.answer()
     result = await session.execute(
@@ -809,8 +811,8 @@ async def res_orders(
         if callback.message:
             await safe_edit_text(
                 callback.message,
-                "سفارشی برای مشتریان شما ثبت نشده.",
-                reply_markup=None,
+                "هنوز سفارشی از مشتریان شما ثبت نشده است.",
+                reply_markup=_group_back("res_orders"),
             )
         return
     lines = ["🛒 <b>آخرین سفارش‌های مشتریان</b>\n"]
@@ -823,7 +825,7 @@ async def res_orders(
         await safe_edit_text(
             callback.message,
             "\n".join(lines),
-            reply_markup=None,
+            reply_markup=_group_back("res_orders"),
         )
 
 
@@ -853,10 +855,7 @@ async def present_reseller_tickets_list(
         .join(BotUser, BotUser.id == Ticket.user_id)
         .where(
             Ticket.status.in_([TicketStatus.OPEN.value, TicketStatus.ANSWERED.value]),
-            or_(
-                Ticket.reseller_id == owner_id,
-                (Ticket.reseller_id.is_(None)) & (BotUser.reseller_id == owner_id),
-            ),
+            Ticket.reseller_id == owner_id,
         )
         .order_by(Ticket.id.desc())
         .limit(15)
@@ -864,8 +863,8 @@ async def present_reseller_tickets_list(
     rows = result.all()
     ui = await get_all_settings(session)
     if not rows:
-        markup = with_inline_back(None, ui, "nv:res:home")
-        text = "تیکت بازی از مشتریان نیست."
+        markup = with_inline_back(None, ui, back_callback_for("res_tickets"))
+        text = "تیکت بازی از مشتریان ندارید."
     else:
         lines = ["🎫 <b>تیکت‌های مشتریان</b>\n"]
         rows_kb: list[list[InlineKeyboardButton]] = []
@@ -887,7 +886,7 @@ async def present_reseller_tickets_list(
         lines.append("\nروی دکمه پاسخ بزنید یا تیکت را ببندید.")
         text = "\n".join(lines)
         markup = with_inline_back(
-            InlineKeyboardMarkup(inline_keyboard=rows_kb), ui, "nv:res:home"
+            InlineKeyboardMarkup(inline_keyboard=rows_kb), ui, back_callback_for("res_tickets")
         )
     if edit:
         await safe_edit_text(message, text, reply_markup=markup)
@@ -910,10 +909,10 @@ async def res_tickets(
         session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
     )
     if not owner_id or not profile:
-        await callback.answer("فقط نمایندگان", show_alert=True)
+        await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
         return
     if not has_bot_perm(profile, "tickets"):
-        await callback.answer("دسترسی ندارید", show_alert=True)
+        await callback.answer(feedback.NO_ACCESS, show_alert=True)
         return
     await callback.answer()
     if callback.message:
@@ -926,7 +925,7 @@ async def res_tickets(
             edit=True,
         )
         if not ok:
-            await callback.answer("دسترسی ندارید", show_alert=True)
+            await callback.answer(feedback.NO_ACCESS, show_alert=True)
 
 
 @router.callback_query(F.data == "res:cancellations")
@@ -941,7 +940,7 @@ async def res_cancellations(
         session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
     )
     if not owner_id or not profile:
-        await callback.answer("فقط نمایندگان", show_alert=True)
+        await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
         return
     await callback.answer()
     from app.bot.nav_inline import with_inline_back
@@ -955,10 +954,10 @@ async def res_cancellations(
     rows = [(r, u) for r, u in rows if r.status in OPEN_OPERATOR_STATUSES][:20]
     ui = await get_all_settings(session)
     if not rows:
-        markup = with_inline_back(None, ui, "nv:res:home")
+        markup = with_inline_back(None, ui, back_callback_for("res_cancellations"))
         if callback.message:
             await safe_edit_text(
-                callback.message, "درخواست لغو معلقی نیست.", reply_markup=markup
+                callback.message, feedback.NO_PENDING_CANCELLATION, reply_markup=markup
             )
         return
     lines = ["📝 <b>درخواست‌های لغو</b>\n"]
@@ -977,7 +976,7 @@ async def res_cancellations(
         )
     lines.append("\n<i>تأیید/رد در وب‌پنل: /finance?tab=cancellations</i>")
     markup = with_inline_back(
-        InlineKeyboardMarkup(inline_keyboard=kb_rows), ui, "nv:res:home"
+        InlineKeyboardMarkup(inline_keyboard=kb_rows), ui, back_callback_for("res_cancellations")
     )
     if callback.message:
         await safe_edit_text(callback.message, "\n".join(lines), reply_markup=markup)
@@ -995,12 +994,12 @@ async def res_cancellation_view(
         session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
     )
     if not owner_id or not profile:
-        await callback.answer("فقط نمایندگان", show_alert=True)
+        await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
         return
     try:
         rid = int((callback.data or "").rsplit(":", 1)[-1])
     except ValueError:
-        await callback.answer("نامعتبر", show_alert=True)
+        await callback.answer(feedback.INVALID, show_alert=True)
         return
     from app.bot.nav_inline import with_inline_back
     from app.db.models import ServiceCancellation
@@ -1008,7 +1007,7 @@ async def res_cancellation_view(
 
     row = await session.get(ServiceCancellation, rid)
     if not row or int(row.reseller_id or -1) != int(owner_id):
-        await callback.answer("یافت نشد", show_alert=True)
+        await callback.answer(feedback.NOT_FOUND, show_alert=True)
         return
     await callback.answer()
     ui = await get_all_settings(session)
@@ -1037,17 +1036,22 @@ async def res_payments(
         session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
     )
     if not owner_id or not profile:
-        await callback.answer("فقط نمایندگان", show_alert=True)
+        await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
         return
     if not has_bot_perm(profile, "payments"):
-        await callback.answer("اجازه تأیید ندارید", show_alert=True)
+        await callback.answer("اجازهٔ تأیید رسید را ندارید", show_alert=True)
         return
     await callback.answer()
     result = await session.execute(
         select(Payment, BotUser)
         .join(BotUser, BotUser.id == Payment.user_id)
+        .outerjoin(Order, Order.id == Payment.order_id)
         .where(
-            BotUser.reseller_id == owner_id,
+            # The payment's own shop: a wallet top-up's purse or the order's shop, not the payer's attribution.
+            or_(
+                (Payment.is_wallet_topup.is_(True)) & (Payment.wallet_shop_id == owner_id),
+                (Payment.is_wallet_topup.is_(False)) & (Order.reseller_id == owner_id),
+            ),
             Payment.status == PaymentStatus.PENDING.value,
             Payment.receipt_file_id.is_not(None),
         )
@@ -1057,7 +1061,7 @@ async def res_payments(
     rows = result.all()
     if not rows:
         if callback.message:
-            await safe_edit_text(callback.message, "رسید معلقی نیست.", reply_markup=None)
+            await safe_edit_text(callback.message, feedback.NO_PENDING_RECEIPT, reply_markup=_group_back("res_payments"))
         return
     for payment, user in rows:
         caption = (
@@ -1081,7 +1085,37 @@ async def res_payments(
         except Exception:
             pass
     if callback.message:
-        await safe_edit_text(callback.message, "رسیدهای باز ارسال شد.", reply_markup=None)
+        await safe_edit_text(callback.message, "✅ رسیدهای در انتظار برایتان فرستاده شد. هر کدام را تأیید یا رد کنید.", reply_markup=_group_back("res_payments"))
+
+
+def _resapply_list_back_for_plan(plan) -> str:
+    """Back from plan detail → category list when linked, else billing-mode list."""
+    cid = getattr(plan, "category_id", None)
+    if cid is not None:
+        return f"resapply:cat:{int(cid)}"
+    mode = reseller_plan_mode_of(plan)
+    return f"resapply:mode:{mode}"
+
+
+async def _resapply_picker_copy(session: AsyncSession) -> tuple[str, str, bool]:
+    """(title, body_html, use_categories) for the apply home step."""
+    from app.services.plan_categories import reseller_categories_for_menu
+
+    plans = await list_active_reseller_plans(session)
+    cats = await reseller_categories_for_menu(session, reseller_plans=plans)
+    if cats:
+        return (
+            "درخواست نمایندگی",
+            feedback.PICK_CATEGORY_BELOW,
+            True,
+        )
+    return (
+        "درخواست نمایندگی",
+        "ابتدا <b>نوع پلن</b> را انتخاب کنید:\n"
+        "• <b>ثابت</b> — اشتراک با قیمت ثابت\n"
+        "• <b>PAYG</b> — پرداخت بر اساس مصرف ترافیک",
+        False,
+    )
 
 
 def _resapply_list_back_for_plan(plan) -> str:
@@ -1142,7 +1176,7 @@ async def resapply_home(
                 callback.message,
                 format_message(
                     "نمایندگی",
-                    "در حال حاضر پلن نمایندگی فعالی تعریف نشده است.\nبعداً دوباره بررسی کنید.",
+                    feedback.NO_RESELLER_PLANS,
                 ),
                 reply_markup=kb.back_home(ui),
             )
@@ -1188,19 +1222,19 @@ async def resapply_category(
         try:
             cat_id = int(raw)
         except ValueError:
-            await callback.answer("دسته نامعتبر است.", show_alert=True)
+            await callback.answer(feedback.CATEGORY_INVALID, show_alert=True)
             return
         cats = await list_shop_categories(
             session, reseller_id=None, active_only=True, audience=AUDIENCE_RESELLERS
         )
         cat = next((c for c in cats if int(c.id) == cat_id), None)
         if not cat:
-            await callback.answer("دسته یافت نشد.", show_alert=True)
+            await callback.answer(feedback.CATEGORY_NOT_FOUND, show_alert=True)
             return
         title = kb._category_button_label(cat)
         plans = reseller_plans_in_category(all_plans, cat_id)
     if not plans:
-        await callback.answer("پلنی در این دسته نیست.", show_alert=True)
+        await callback.answer(feedback.NO_PLANS_IN_CATEGORY, show_alert=True)
         return
     cats_all = await list_shop_categories(
         session, reseller_id=None, active_only=True, audience=AUDIENCE_RESELLERS
@@ -1291,7 +1325,7 @@ async def resapply_plan(
     plans = {p.id: p for p in await list_active_reseller_plans(session)}
     plan = plans.get(plan_id)
     if not plan:
-        await callback.answer("پلن یافت نشد", show_alert=True)
+        await callback.answer("این پلن پیدا نشد", show_alert=True)
         return
     mode = reseller_plan_mode_of(plan)
     body = format_reseller_plan_apply_detail(plan, currency=get_settings().currency)
@@ -1317,7 +1351,7 @@ async def resapply_plan(
                 callback_data=back_cb,
                 ui=ui,
                 label_key="btn_back",
-                style=kb._style(ui, "back"),
+                style_id="back",
             )
         ],
     ]
@@ -1363,7 +1397,7 @@ async def resapply_buy(
     plans = {p.id: p for p in await list_active_reseller_plans(session)}
     plan = plans.get(plan_id)
     if not plan:
-        await callback.answer("پلن یافت نشد", show_alert=True)
+        await callback.answer("این پلن پیدا نشد", show_alert=True)
         return
     try:
         app, order = await create_application(session, user=db_user, plan=plan)
@@ -1464,7 +1498,7 @@ async def res_renew(
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ):
-    from app.services.reseller_capacity import plan_renew_price, renew_reseller_capacity
+    from app.services.reseller_capacity import plan_renew_price
     from app.services.pg_admin_subscription import (
         compute_renew_invoice,
         format_renew_invoice_html,
@@ -1478,7 +1512,7 @@ async def res_renew(
         reseller_owner_id=reseller_owner_id,
     )
     if not owner_id or not profile or not plan or not owner:
-        await callback.answer("فقط نمایندگان", show_alert=True)
+        await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
         return
     uname = (profile.pg_admin_username or "").strip()
     sub = await get_subscription(session, uname) if uname else None
@@ -1491,7 +1525,7 @@ async def res_renew(
                 callback_data="res:renew:go",
             )
         ],
-        [InlineKeyboardButton(text="انصراف", callback_data="menu:home")],
+        [kb.back_button(None, back_callback_for("res_renew"))],
     ]
     detail = format_renew_invoice_html(invoice, currency=get_settings().currency)
     exp = invoice.get("expires_at")
@@ -1509,8 +1543,8 @@ async def res_renew(
                 "🔄 تمدید سرویس نماینده",
                 f"پلن: <b>{plan.name}</b>\n"
                 f"{detail}{exp_line}\n\n"
-                "با تمدید، دسترسی در صورت انقضا باز می‌شود و مصرف ترافیک کاربران ریست می‌شود.\n"
-                "هزینه از کیف پول فروشگاهی کسر می‌شود.",
+                "با تمدید، دسترسی در صورت انقضا باز می‌شود و مصرف ترافیک کاربران صفر می‌شود.\n"
+                "هزینه از کیف پول فروشگاه کسر می‌شود.",
             ),
             reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
         )
@@ -1533,7 +1567,7 @@ async def res_renew_go(
         reseller_owner_id=reseller_owner_id,
     )
     if not owner_id or not profile or not plan or not owner:
-        await callback.answer("فقط نمایندگان", show_alert=True)
+        await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
         return
     try:
         result = await renew_reseller_capacity(
@@ -1542,7 +1576,7 @@ async def res_renew_go(
     except ValueError as e:
         await callback.answer(user_safe_error(e, limit=180), show_alert=True)
         return
-    await callback.answer("تمدید شد")
+    await callback.answer(feedback.RENEWED)
     if callback.message:
         exp = result.get("expires_at")
         exp_line = ""
@@ -1556,11 +1590,11 @@ async def res_renew_go(
             format_message(
                 "✅ تمدید انجام شد",
                 f"مبلغ: {format_toman(result['amount'], get_settings().currency)}\n"
-                f"ریست مصرف کاربران: {result['reset_ok']}"
+                f"صفر شدن مصرف کاربران: {result['reset_ok']}"
                 + (f" (خطا: {result['reset_err']})" if result.get("reset_err") else "")
                 + exp_line,
             ),
-            reply_markup=None,
+            reply_markup=_group_back("res_renew"),
         )
 
 
@@ -1581,7 +1615,7 @@ async def res_buy_gb(
         reseller_owner_id=reseller_owner_id,
     )
     if not owner_id or not profile or not plan:
-        await callback.answer("فقط نمایندگان", show_alert=True)
+        await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
         return
     if not plan_allows_buy_extra(plan):
         await callback.answer("این پلن خرید حجم اضافه ندارد", show_alert=True)
@@ -1592,21 +1626,21 @@ async def res_buy_gb(
         rows.append(
             [
                 InlineKeyboardButton(
-                    text=f"{gb} گیگ — {format_toman(price * gb, get_settings().currency)}",
+                    text=f"{gb} گیگابایت — {format_toman(price * gb, get_settings().currency)}",
                     callback_data=f"res:buy_gb:{gb}",
                 )
             ]
         )
-    rows.append([InlineKeyboardButton(text="انصراف", callback_data="menu:home")])
+    rows.append([kb.back_button(None, "res:addons")])
     await callback.answer()
     if callback.message:
         await safe_edit_text(
             callback.message,
             format_message(
                 "📦 خرید حجم اضافه",
-                f"نرخ: <b>{format_toman(price, get_settings().currency)}</b> / گیگ\n"
+                f"نرخ: <b>{format_toman(price, get_settings().currency)}</b> / گیگابایت\n"
                 "سقف حجم ادمین پاسارگارد شما افزایش می‌یابد.\n"
-                "هزینه از کیف پول فروشگاهی کسر می‌شود.",
+                "هزینه از کیف پول فروشگاه کسر می‌شود.",
             ),
             reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
         )
@@ -1629,14 +1663,14 @@ async def res_buy_gb_go(
         reseller_owner_id=reseller_owner_id,
     )
     if not owner_id or not profile or not plan or not owner:
-        await callback.answer("فقط نمایندگان", show_alert=True)
+        await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
         return
     from app.services.reseller_capacity import ALLOWED_EXTRA_GB
 
     try:
         gb = int(callback.data.split(":")[-1])
     except ValueError:
-        await callback.answer("مقدار نامعتبر", show_alert=True)
+        await callback.answer("این مقدار مجاز نیست", show_alert=True)
         return
     if gb not in ALLOWED_EXTRA_GB:
         await callback.answer("مقدار مجاز نیست", show_alert=True)
@@ -1654,10 +1688,10 @@ async def res_buy_gb_go(
             callback.message,
             format_message(
                 "✅ حجم اضافه خریداری شد",
-                f"مقدار: {result['gb']} گیگ\n"
+                f"مقدار: {result['gb']} گیگابایت\n"
                 f"مبلغ: {format_toman(result['amount'], get_settings().currency)}",
             ),
-            reply_markup=None,
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[kb.back_button(None, "res:addons")]]),
         )
 
 
@@ -1678,7 +1712,7 @@ async def res_buy_users(
         reseller_owner_id=reseller_owner_id,
     )
     if not owner_id or not profile or not plan:
-        await callback.answer("فقط نمایندگان", show_alert=True)
+        await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
         return
     if not plan_allows_buy_extra(plan):
         await callback.answer("این پلن خرید کاربر اضافه ندارد", show_alert=True)
@@ -1694,7 +1728,7 @@ async def res_buy_users(
                 )
             ]
         )
-    rows.append([InlineKeyboardButton(text="انصراف", callback_data="menu:home")])
+    rows.append([kb.back_button(None, "res:addons")])
     await callback.answer()
     if callback.message:
         await safe_edit_text(
@@ -1703,7 +1737,7 @@ async def res_buy_users(
                 "👤 خرید کاربر اضافه",
                 f"نرخ: <b>{format_toman(price, get_settings().currency)}</b> / کاربر\n"
                 "سقف تعداد کاربران ادمین شما افزایش می‌یابد.\n"
-                "هزینه از کیف پول فروشگاهی کسر می‌شود.",
+                "هزینه از کیف پول فروشگاه کسر می‌شود.",
             ),
             reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
         )
@@ -1726,14 +1760,14 @@ async def res_buy_users_go(
         reseller_owner_id=reseller_owner_id,
     )
     if not owner_id or not profile or not plan or not owner:
-        await callback.answer("فقط نمایندگان", show_alert=True)
+        await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
         return
     from app.services.reseller_capacity import ALLOWED_EXTRA_USERS
 
     try:
         n = int(callback.data.split(":")[-1])
     except ValueError:
-        await callback.answer("مقدار نامعتبر", show_alert=True)
+        await callback.answer("این مقدار مجاز نیست", show_alert=True)
         return
     if n not in ALLOWED_EXTRA_USERS:
         await callback.answer("مقدار مجاز نیست", show_alert=True)
@@ -1755,7 +1789,7 @@ async def res_buy_users_go(
                 f"سقف جدید: {result['max_users']}\n"
                 f"مبلغ: {format_toman(result['amount'], get_settings().currency)}",
             ),
-            reply_markup=None,
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[kb.back_button(None, "res:addons")]]),
         )
 
 
@@ -1786,17 +1820,17 @@ async def res_addons(
         reseller_owner_id=reseller_owner_id,
     )
     if not owner_id or not profile or not owner:
-        await callback.answer("فقط نمایندگان", show_alert=True)
+        await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
         return
     if plan is None or not is_subscription_plan(plan):
         await callback.answer(
-            "ابتدا باید پلن نمایندگی (اشتراک) خریده باشید",
+            "اول یک پلن نمایندگی (اشتراک) بخرید",
             show_alert=True,
         )
         return
     uname = (profile.pg_admin_username or "").strip()
     if not uname:
-        await callback.answer("ادمین پاسارگارد تنظیم نشده", show_alert=True)
+        await callback.answer(feedback.PG_ADMIN_NOT_SET, show_alert=True)
         return
     try:
         sub = await get_or_create_subscription(session, uname)
@@ -1804,7 +1838,7 @@ async def res_addons(
         sub = None
     if sub is None or str(getattr(sub, "access_status", "") or "") != "active":
         await callback.answer(
-            "اشتراک فعال ندارید — ابتدا تمدید کنید",
+            "اشتراک فعال ندارید؛ اول آن را تمدید کنید",
             show_alert=True,
         )
         return
@@ -1817,7 +1851,7 @@ async def res_addons(
         kind = str(getattr(p, "plan_kind", "") or "")
         if kind == "addon_volume":
             label = (
-                f"{p.name} — +{int(p.addon_gb or 0)} گیگ — "
+                f"{p.name} — +{int(p.addon_gb or 0)} گیگابایت — "
                 f"{format_toman(p.price, get_settings().currency)}"
             )
         else:
@@ -1842,7 +1876,7 @@ async def res_addons(
                 InlineKeyboardButton(
                     text=(
                         f"📦 حجم واحدی — "
-                        f"{format_toman(gb_price, get_settings().currency)}/گیگ"
+                        f"{format_toman(gb_price, get_settings().currency)}/گیگابایت"
                     ),
                     callback_data="res:buy_gb",
                 )
@@ -1861,10 +1895,10 @@ async def res_addons(
         )
 
     if not rows:
-        await callback.answer("بستهٔ اضافه فعالی تعریف نشده", show_alert=True)
+        await callback.answer("هنوز بستهٔ فعالی تعریف نشده است", show_alert=True)
         return
 
-    rows.append([InlineKeyboardButton(text="انصراف", callback_data="menu:home")])
+    rows.append([kb.back_button(None, back_callback_for("res_addon_packs"))])
     body = (
         "بستهٔ آماده از کاتالوگ، یا خرید واحدی (اگر پلن اجازه دهد).\n"
         "با خرید بستهٔ آماده فقط ظرفیت اضافه می‌شود و تاریخ انقضا عوض نمی‌شود."
@@ -1872,7 +1906,7 @@ async def res_addons(
     if allow_extra and not addons:
         body = (
             "هنوز بستهٔ آماده‌ای در کاتالوگ نیست — می‌توانید از خرید واحدی استفاده کنید.\n"
-            f"نرخ حجم: <b>{format_toman(plan_extra_gb_price(plan), get_settings().currency)}</b> / گیگ\n"
+            f"نرخ حجم: <b>{format_toman(plan_extra_gb_price(plan), get_settings().currency)}</b> / گیگابایت\n"
             f"نرخ کاربر: <b>{format_toman(plan_extra_user_price(plan), get_settings().currency)}</b> / کاربر"
         )
     await callback.answer()
@@ -1907,26 +1941,26 @@ async def res_addon_buy(
         reseller_owner_id=reseller_owner_id,
     )
     if not owner_id or not profile or not owner:
-        await callback.answer("فقط نمایندگان", show_alert=True)
+        await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
         return
     if plan is None or not is_subscription_plan(plan):
         await callback.answer(
-            "ابتدا باید پلن نمایندگی (اشتراک) خریده باشید",
+            "اول یک پلن نمایندگی (اشتراک) بخرید",
             show_alert=True,
         )
         return
     try:
         plan_id = int(callback.data.split(":")[-1])
     except ValueError:
-        await callback.answer("پلن نامعتبر", show_alert=True)
+        await callback.answer("این پلن پیدا نشد", show_alert=True)
         return
     addon = await session.get(ResellerPlan, plan_id)
     if not addon or not addon.is_active or not is_addon_plan(addon):
-        await callback.answer("بسته یافت نشد", show_alert=True)
+        await callback.answer("این بسته پیدا نشد", show_alert=True)
         return
     uname = (profile.pg_admin_username or "").strip()
     if not uname:
-        await callback.answer("ادمین پاسارگارد تنظیم نشده", show_alert=True)
+        await callback.answer(feedback.PG_ADMIN_NOT_SET, show_alert=True)
         return
     try:
         sub = await get_or_create_subscription(session, uname)
@@ -1942,10 +1976,10 @@ async def res_addon_buy(
             callback.message,
             format_message(
                 "✅ بسته اعمال شد",
-                f"حجم اضافه کل: {result['extra_gb']} گیگ\n"
+                f"حجم اضافه کل: {result['extra_gb']} گیگابایت\n"
                 f"کاربر اضافه کل: {result['extra_users']}\n"
                 f"مبلغ: {format_toman(result['amount'], get_settings().currency)}\n"
                 "تاریخ انقضا تغییر نکرد.",
             ),
-            reply_markup=None,
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[kb.back_button(None, "res:addons")]]),
         )

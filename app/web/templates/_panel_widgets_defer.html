@@ -1,9 +1,7 @@
 {# Progressive widget fill — shell already passed server authz.
    Body URL re-runs the same Depends authz; shell permission does not grant body.
    redirect:manual avoids injecting login HTML into #home-dash / #pg-dash.
-   Uses #panel-nav-clock (not the deleted page-load veil) while /body loads.
-   Flag data-panel-widgets-pending so panel.js pageshow cannot hide the clock
-   before the fragment swap paints. #}
+   Widget loading stays inside the dashboard; #panel-nav-clock is navigation-only. #}
 {% set body_url = widgets_body_url or '/home/body' %}
 <noscript>
   <div class="flash warn home-update-banner">
@@ -14,6 +12,9 @@
     <a class="btn btn-sm btn-ghost" href="?full=1">نمایش کامل</a>
   </div>
 </noscript>
+<div class="flash home-update-banner" id="panel-widget-status" role="status" aria-live="polite">
+  <span>در حال دریافت آمار؛ می‌توانید از سایر بخش‌های وب‌پنل استفاده کنید.</span>
+</div>
 <script{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}>
 (function () {
   var url = {{ body_url|tojson }};
@@ -31,75 +32,73 @@
     else document.documentElement.removeAttribute('data-panel-widgets-pending');
   }
 
-  function armClock() {
+  function beginLoading() {
     markPending(true);
     document.dispatchEvent(new CustomEvent('panel-widgets-loading'));
-    var clock = document.getElementById('panel-nav-clock');
-    if (!clock) return;
-    clock.hidden = false;
-    clock.setAttribute('aria-hidden', 'false');
   }
-  function disarmClock() {
+  function finishLoading() {
     markPending(false);
     document.dispatchEvent(new CustomEvent('panel-widgets-ready', { detail: { id: '' } }));
-    var clock = document.getElementById('panel-nav-clock');
-    if (!clock) return;
-    requestAnimationFrame(function () {
-      requestAnimationFrame(function () {
-        if (document.documentElement.getAttribute('data-panel-widgets-pending') === '1') return;
-        clock.hidden = true;
-        clock.setAttribute('aria-hidden', 'true');
-      });
-    });
   }
 
   function swap(htmlText) {
-    if (!htmlText) { disarmClock(); return; }
+    if (!htmlText) throw new Error('widget-empty');
     var root = document.getElementById('home-dash') || document.getElementById('pg-dash');
-    if (!root) { disarmClock(); return; }
+    if (!root) { finishLoading(); return; }
     var tmp = document.createElement('div');
     tmp.innerHTML = String(htmlText).trim();
     var next = tmp.firstElementChild;
-    if (next && root.parentNode) {
+    if (next && next.id === root.id && !next.nextElementSibling && root.parentNode) {
       root.parentNode.replaceChild(next, root);
+      var status = document.getElementById('panel-widget-status');
+      if (status) status.remove();
       markPending(false);
       document.dispatchEvent(new CustomEvent('panel-widgets-ready', {
         detail: { id: next.id || '' }
       }));
-      var clock = document.getElementById('panel-nav-clock');
-      if (clock) {
-        requestAnimationFrame(function () {
-          requestAnimationFrame(function () {
-            if (document.documentElement.getAttribute('data-panel-widgets-pending') === '1') return;
-            clock.hidden = true;
-            clock.setAttribute('aria-hidden', 'true');
-          });
-        });
-      }
     } else {
-      disarmClock();
+      throw new Error('widget-invalid');
     }
   }
 
-  armClock();
-  fetch(url, fetchOpts).then(function (r) {
-    if (r.type === 'opaqueredirect' || r.status === 301 || r.status === 302 || r.status === 303) {
-      window.location.href = '/login';
-      return null;
+  function showFailure(error) {
+    finishLoading();
+    var status = document.getElementById('panel-widget-status');
+    if (!status) return;
+    status.classList.add('warn');
+    status.replaceChildren();
+    var message = document.createElement('span');
+    message.textContent = error.message === 'widget-auth'
+      ? 'نشست یا دسترسی شما نیاز به بررسی دارد. برای ادامه دوباره وارد شوید.'
+      : 'دریافت آمار کامل نشد. سایر بخش‌های وب‌پنل در دسترس هستند.';
+    status.appendChild(message);
+    var retry = document.createElement(error.message === 'widget-auth' ? 'a' : 'button');
+    retry.className = 'btn btn-sm btn-ghost';
+    retry.textContent = error.message === 'widget-auth' ? 'ورود دوباره' : 'تلاش دوباره';
+    if (error.message === 'widget-auth') retry.href = '/login';
+    else {
+      retry.type = 'button';
+      retry.addEventListener('click', function () { retry.disabled = true; load(); });
     }
-    if (r.status === 401 || r.status === 403) {
-      window.location.href = '/login';
-      return null;
-    }
-    if (!r.ok) throw new Error('widgets body ' + r.status);
-    return r.text();
-  }).then(function (htmlText) {
-    if (!htmlText) { disarmClock(); return; }
+    status.appendChild(retry);
+  }
+
+  function afterReady(action) {
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', function () { swap(htmlText); }, { once: true });
-      return;
-    }
-    swap(htmlText);
-  }).catch(function () { disarmClock(); });
+      document.addEventListener('DOMContentLoaded', action, { once: true });
+    } else action();
+  }
+
+  function load() {
+    beginLoading();
+    Promise.resolve().then(function () {
+      return PGClockPanelWidgetRequest.fetchBody(url, fetchOpts);
+    }).then(function (htmlText) {
+      afterReady(function () {
+        try { swap(htmlText); } catch (error) { showFailure(error); }
+      });
+    }).catch(function (error) { afterReady(function () { showFailure(error); }); });
+  }
+  load();
 })();
 </script>

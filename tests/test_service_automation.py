@@ -599,6 +599,7 @@ class AutomationTests(unittest.IsolatedAsyncioTestCase):
             user.reseller_id = owner.id
             plan = await session.get(Plan, self.plan_id)
             plan.owner_reseller_id = owner.id
+            (await session.get(UserService, self.service_id)).shop_id = owner.id
             await session.commit()
             owner_id = owner.id
         token = set_shop_reseller_id(owner_id)

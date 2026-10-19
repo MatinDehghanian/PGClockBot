@@ -9,9 +9,10 @@ from typing import Any, Awaitable, Callable
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, OrgPrincipal
+from app.services import bot_feedback_texts as feedback
 
 # Single Owner-only denial copy (Web-equivalent explicit Owner Principal).
-OWNER_REQUIRED_MESSAGE = "دسترسی مالک سیستم لازم است"
+OWNER_REQUIRED_MESSAGE = feedback.SYSTEM_OWNER_REQUIRED
 
 # Migrated 4B–4E families L1 may use on Bot (never overview/admins/backup).
 MIGRATED_PG_PAGES = frozenset(
@@ -515,7 +516,7 @@ def require_platform_rep_mgmt(fn: Callable[..., Awaitable[Any]]):
                     callback = value
                 elif message is None and isinstance(value, Message):
                     message = value
-            text = "قابلیت ساخت نماینده برای این حساب فعال نیست"
+            text = feedback.REPRESENTATIVES_DISABLED
             if callback is not None:
                 try:
                     await callback.answer(text, show_alert=True)

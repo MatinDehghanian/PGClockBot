@@ -1,0 +1,13 @@
+{# «پاک‌سازی خودکار صفحهٔ ربات»; posts with the menu form it sits beside. #}
+<div class="setting-item full">
+  <label class="toggle-row ui-switch-row">
+    <span class="ui-switch-copy">
+      <strong>پاک‌سازی خودکار صفحهٔ ربات</strong>
+      <small class="muted">با باز شدن هر منوی تازه، منوهای قبلی و دکمه‌هایی که کاربر از کیبورد زده پاک می‌شوند تا صفحه شلوغ نشود. پیام‌های تحویل سرویس، لینک و کانفیگ، رسید پرداخت، پاسخ تیکت و اطلاعیه‌ها هیچ‌وقت پاک نمی‌شوند. تلگرام فقط پیام‌های کمتر از ۴۸ ساعت را پاک می‌کند.</small>
+    </span>
+    <span class="ui-switch">
+      <input type="checkbox" name="chat_cleanup_enabled" value="1" form="menu-form" {% if values.get('chat_cleanup_enabled', '1') in ['1','true','yes','on'] %}checked{% endif %} />
+      <span class="ui-switch-track" aria-hidden="true"></span>
+    </span>
+  </label>
+</div>

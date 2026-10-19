@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+import subprocess
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
@@ -43,19 +44,13 @@ class LoginAtmosphereTests(unittest.TestCase):
 
 
 class NavClockWidgetsPendingTests(unittest.TestCase):
-    def test_pageshow_keeps_clock_while_widgets_pending(self):
-        js = (ROOT / "app/web/static/panel.js").read_text(encoding="utf-8")
-        defer = (ROOT / "app/web/templates/_panel_widgets_defer.html").read_text(
-            encoding="utf-8"
+    def test_pageshow_restores_usable_dashboard_while_widgets_pending(self) -> None:
+        result = subprocess.run(
+            ["node", "--test", "--test-name-pattern=widget reads never hold the navigation clock",
+             str(ROOT / "tests/panel_widget_request.test.cjs")],
+            capture_output=True, text=True, check=False,
         )
-        self.assertIn("data-panel-widgets-pending", js)
-        self.assertIn("shellWidgetsPending", js)
-        self.assertIn("widgetsPending", js)
-        self.assertIn("disarmAfterPaint", js)
-        # Must not blindly disarm on every pageshow anymore.
-        self.assertNotIn("window.addEventListener('pageshow', disarm);", js)
-        self.assertIn("data-panel-widgets-pending", defer)
-        self.assertIn("requestAnimationFrame", defer)
+        self.assertEqual(result.returncode, 0, msg=result.stdout + result.stderr)
 
     def test_deferred_homes_still_use_nav_clock(self):
         for rel in (

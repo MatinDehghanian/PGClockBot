@@ -41,8 +41,8 @@ class ReceiptSourceGuardsTests(unittest.TestCase):
             "async def _safe_telegram_file_path", 1
         )[0]
         self.assertNotIn("or platform", token_fn.lower())
-        # Platform payments list excludes reseller tenants.
-        self.assertIn("BotUser.reseller_id.is_(None)", src)
+        # Platform payments list excludes reseller tenants (top-ups by the wallet's shop).
+        self.assertIn("Payment.wallet_shop_id.is_(None)", src)
 
 
 if __name__ == "__main__":

@@ -86,6 +86,7 @@ class AdminProvisionServiceTests(unittest.IsolatedAsyncioTestCase):
                 AsyncMock(),
                 self._user(),
                 self._plan(is_trial=True),
+                shop_id=None,
             )
 
     async def test_rejects_shop_mismatch(self):
@@ -94,7 +95,7 @@ class AdminProvisionServiceTests(unittest.IsolatedAsyncioTestCase):
         user = self._user(reseller_id=7)
         plan = self._plan(owner_reseller_id=None)
         with self.assertRaisesRegex(ValueError, "فروشگاه"):
-            await admin_provision_service(AsyncMock(), user, plan)
+            await admin_provision_service(AsyncMock(), user, plan, shop_id=7)
 
     async def test_rejects_staff_plan_access(self):
         from app.services.bot_user_admin import admin_provision_service
@@ -104,7 +105,7 @@ class AdminProvisionServiceTests(unittest.IsolatedAsyncioTestCase):
         plan = self._plan(owner_reseller_id=99)
         with self.assertRaisesRegex(ValueError, "فروشگاه"):
             await admin_provision_service(
-                AsyncMock(), user, plan, staff=staff
+                AsyncMock(), user, plan, shop_id=None, staff=staff
             )
 
     async def test_provisions_platform_user(self):
@@ -133,7 +134,7 @@ class AdminProvisionServiceTests(unittest.IsolatedAsyncioTestCase):
             AsyncMock(return_value=(None, None)),
         ):
             svc = await admin_provision_service(
-                session, user, plan, staff=None, actor="owner"
+                session, user, plan, shop_id=None, staff=None, actor="owner"
             )
         self.assertEqual(svc.pg_user_id, 42)
         self.assertEqual(svc.plan_id, 5)
@@ -291,7 +292,7 @@ class ShopPgAclGateTests(unittest.IsolatedAsyncioTestCase):
         ):
             with self.assertRaisesRegex(ValueError, "پاسارگارد"):
                 await admin_provision_service(
-                    AsyncMock(), user, plan, staff=staff, actor="r"
+                    AsyncMock(), user, plan, shop_id=7, staff=staff, actor="r"
                 )
 
     async def test_delete_denied_without_pg_delete(self):

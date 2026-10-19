@@ -62,7 +62,7 @@ class DomainModalTemplateTests(unittest.TestCase):
     def test_loyalty_settings_modal_not_page_tab(self):
         html = (TEMPLATES / "loyalty.html").read_text(encoding="utf-8")
         self.assertIn('data-modal-open="modal-loyalty-settings"', html)
-        self.assertIn("section-tabs", html)
+        self.assertIn("marketing_tabs(", html)
         self.assertIn("باشگاه مشتریان", html)
         self.assertIn("home-panel-grid", html)
         self.assertIn("home-panel-neutral", html)
@@ -88,37 +88,16 @@ class DomainModalTemplateTests(unittest.TestCase):
     def test_bot_settings_nav_is_last(self):
         src = (TEMPLATES / "base.html").read_text(encoding="utf-8")
         bot = src.split("nav-section-bot", 1)[1].split("nav-section-pg", 1)[0]
-        loyalty_i = bot.find("باشگاه مشتریان")
-        vars_i = bot.find("متغیرهای پیام")
+        loyalty_i = bot.find("بازاریابی و وفاداری")
         settings_i = bot.find(">تنظیمات</span>")
         self.assertGreater(loyalty_i, 0)
-        self.assertGreater(vars_i, loyalty_i)
-        self.assertGreater(settings_i, vars_i)
-        self.assertIn("/message-variables", bot)
+        self.assertGreater(settings_i, loyalty_i)
 
     def test_settings_html_no_supports_or_payment_branches(self):
         html = (TEMPLATES / "settings.html").read_text(encoding="utf-8")
         self.assertNotIn("tab == 'supports'", html)
         self.assertNotIn("tab == 'payment'", html)
         self.assertNotIn("tab == 'reseller'", html)
-
-    def test_limits_notices_sit_above_related_groups(self):
-        html = (TEMPLATES / "settings.html").read_text(encoding="utf-8")
-        limits = html.split("tab == 'limits'", 1)[1].split("tab == 'guides'", 1)[0]
-        # Notices are injected next to their groups, not dumped before the form.
-        self.assertIn("group_name == 'کانال اجباری'", limits)
-        self.assertIn("group_name == 'قوانین ورود به ربات'", limits)
-        self.assertIn("_forcejoin_admin_notice.html", limits)
-        self.assertIn("_terms_admin_notice.html", limits)
-        force_i = limits.find("group_name == 'کانال اجباری'")
-        terms_i = limits.find("group_name == 'قوانین ورود به ربات'")
-        self.assertGreater(force_i, 0)
-        self.assertGreater(terms_i, force_i)
-        shop = (TEMPLATES / "shop_settings.html").read_text(encoding="utf-8")
-        self.assertIn("tab == 'limits' and group_name == 'کانال اجباری'", shop)
-        self.assertIn("tab == 'limits' and group_name == 'قوانین ورود به ربات'", shop)
-        css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")
-        self.assertIn(".guides-editor .pay-dest-color .plan-color-card", css)
 
     def test_reseller_settings_live_on_resellers_page(self):
         html = (TEMPLATES / "resellers.html").read_text(encoding="utf-8")
@@ -252,7 +231,7 @@ class PanelSettingsNavPolishTests(unittest.TestCase):
         self.assertNotIn("•••• یا توکن جدید", bot)
         self.assertNotIn("•••• یا رمز جدید", bot)
         self.assertIn('placeholder="توکن جدید"', bot)
-        self.assertIn('placeholder="رمز جدید"', bot)
+        self.assertIn('placeholder="خالی بماند تا رمز فعلی حفظ شود"', bot)
         self.assertIn("خالی بماند تا توکن فعلی حفظ شود", bot)
         self.assertIn("خالی بماند تا رمز فعلی حفظ شود", bot)
         css = (ROOT / "app/web/static/panel.css").read_text(encoding="utf-8")

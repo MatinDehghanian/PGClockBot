@@ -25,6 +25,8 @@ from app.db.models import (
     ServiceAutomation,
     UserService,
 )
+from app.services.catalog_pricing import annotate_prices, displayed_quote, sale_price
+from app.services.service_scope import service_shop_id
 from app.services.formatting import format_toman, parse_expire
 from app.services.users import (
     current_shop_reseller_id,
@@ -46,24 +48,6 @@ CHOICE_FIELDS = {
     "duration": "duration_pack_id",
     "volume": "volume_pack_id",
 }
-
-
-async def service_shop_id(session: AsyncSession, service: UserService) -> int | None:
-    """Use the fulfilling order's shop before first-touch user attribution."""
-    remark = (service.remark or "").strip()
-    if remark.startswith("order:"):
-        try:
-            order_id = int(remark.split(":", 1)[1].split()[0])
-        except (ValueError, IndexError):
-            raise ValueError("مالکیت فروشگاه سرویس مشخص نیست")
-        order = await session.get(Order, order_id)
-        if not order or order.user_id != service.bot_user_id:
-            raise ValueError("مالکیت فروشگاه سرویس مشخص نیست")
-        return order.reseller_id
-    user = await session.get(BotUser, service.bot_user_id)
-    if not user:
-        raise ValueError("کاربر یافت نشد")
-    return user.reseller_id
 
 
 async def owned_automation_service(
@@ -146,7 +130,7 @@ async def automation_settings(
                 "unavailable": bool(enabled or choice_id)
                 and await selected_choice(session, row, action) is None,
                 "choices": [
-                    {"id": c.id, "name": c.name, "price": c.price}
+                    {"id": c.id, "name": c.name, **displayed_quote(c).payload()}
                     for c in choices[action]
                 ],
             }
@@ -455,6 +439,7 @@ async def _process_locked(session, row, service, user, bot) -> None:
     sync_service_quota_cache(service, info)
     await session.commit()
     time_done, volume_done = exhausted_dimensions(info, datetime.now(timezone.utc))
+    await annotate_prices(session, list(choices.values()), shop_id=row.shop_id)
     for action in actions_for_exhaustion(row, time_done, volume_done):
         choice = choices.get(action)
         if choice is None:
@@ -463,7 +448,7 @@ async def _process_locked(session, row, service, user, bot) -> None:
         await session.refresh(user)
         if user.is_blocked:
             return
-        if await get_wallet_balance(session, user, shop_id=row.shop_id) < choice.price:
+        if await get_wallet_balance(session, user, shop_id=row.shop_id) < sale_price(choice):
             await notify_once(
                 session,
                 row,
@@ -472,7 +457,7 @@ async def _process_locked(session, row, service, user, bot) -> None:
                 bot,
                 action,
                 "low_wallet",
-                f"موجودی کیف پول کافی نیست. هزینه فعلی: <b>{format_toman(choice.price)}</b>. "
+                f"موجودی کیف پول کافی نیست. هزینه فعلی: <b>{format_toman(sale_price(choice))}</b>. "
                 "کیف پول همین فروشگاه را شارژ کنید؛ اجرای خودکار دوباره تلاش می‌کند.",
             )
             continue

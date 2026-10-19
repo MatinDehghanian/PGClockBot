@@ -13,6 +13,7 @@
   'btn_pay_card', 'btn_pay_gateway', 'btn_pay_crypto', 'btn_pay_stars',
   'stars_toman_per_star', 'stars_title', 'stars_description',
   'psp_provider', 'psp_merchant_id',
+  'bbc_api_key', 'btn_pay_bbc',
   'btn_force_join', 'btn_force_join_check',
   'btn_guides', 'btn_guide_open_link',
   'terms_entry_btn', 'terms_buy_user_btn', 'terms_buy_reseller_btn',
@@ -72,7 +73,8 @@
     <div class="force-channels-list" data-force-channels-list></div>
   </div>
   {% elif kind == 'connection_guides' %}
-  <div class="pay-dest-list guides-editor" data-guides-editor>
+  <div class="pay-dest-list guides-editor" data-guides-editor
+       {% if guides_media_base %}data-guides-media-base="{{ guides_media_base }}" data-guides-media='{{ (guides_media or {})|tojson }}'{% endif %}>
     <div class="pay-dest-head">
       <strong class="pay-dest-title">{{ label }}</strong>
       {% if help %}<p class="muted pay-dest-help">{{ help }}</p>{% endif %}
@@ -80,6 +82,7 @@
     <input type="hidden" name="s_{{ key }}" value="{{ val }}" data-guides-json />
     <div class="pay-dest-rows" data-guides-list></div>
   </div>
+  {% if guides_media_base %}<script src="/static/guide-media.js?v={{ app_version }}" defer{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>{% endif %}
   {% elif kind == 'payment_cards' %}
   <div class="pay-dest-list" data-pay-dest="cards" data-style-inherit-label="ارث از کارت به کارت">
     <div class="pay-dest-head">
@@ -108,7 +111,7 @@
     <div class="pay-dest-rows" data-pay-dest-list></div>
   </div>
   {% elif kind == 'list' %}
-  {{ list_input('s_' ~ key, label, val, kind='money' if key == 'wallet_topup_presets' else 'text', help=help, placeholder='50000' if key == 'wallet_topup_presets' else '') }}
+  {{ list_input('s_' ~ key, label, val, kind='money' if key == 'wallet_topup_presets' else 'text', help=help, placeholder={'wallet_topup_presets': '50000', 'service_import_paths': '/sub', 'service_import_admins': 'admin'}.get(key, '')) }}
   {% elif kind == 'textarea' %}
   <label>{{ label }}
     <textarea name="s_{{ key }}" rows="5">{{ val }}</textarea>
