@@ -7,6 +7,7 @@ from typing import Any
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import InlineKeyboardMarkup, Message, ReplyKeyboardMarkup
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.bot.chat_cleanup import replace_home
 from app.services import bot_feedback_texts as feedback
 
 logger = logging.getLogger("pgclock.bot")
@@ -174,8 +175,8 @@ async def seed_persistent_reply_kb(message: Message) -> None:
     """Seed home reply keyboard on a lasting chrome message (safe after FSM)."""
     from app.bot import keyboards as kb
 
-    await attach_reply_keyboard(
-        message, kb.persistent_reply_keyboard(), text="🏠 منوی اصلی"
+    await replace_home(
+        await attach_reply_keyboard(message, kb.persistent_reply_keyboard(), text="🏠 منوی اصلی")
     )
 
 

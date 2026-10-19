@@ -6,6 +6,10 @@ receipts, ticket replies, staff notices, and the message carrying the menu keybo
 (deleting that one drops the menu on iOS). A panel that turns into something worth
 keeping, such as a payment confirmation, is taken off the list with ``keep_message``.
 
+Home messages (the welcome and «منوی اصلی» carrying the main menu keyboard) are the one
+exception to the keyboard rule: a new home replaces the older ones, because the new one
+now carries the keyboard. Only the newest home is ever left on screen.
+
 The list lives in memory and is bounded; after a restart older messages simply stay.
 """
 
@@ -32,6 +36,8 @@ from app.services.users import get_all_settings
 logger = logging.getLogger(__name__)
 
 TRACKED_PER_CHAT = 30
+# Homes are replaced as soon as a new one is sent, so only a few are ever outstanding.
+TRACKED_HOMES_PER_CHAT = 5
 TRACKED_CHATS = 20_000
 # Telegram refuses to delete a message older than 48 hours; stay clear of the edge.
 DELETE_WINDOW_SECONDS = 47 * 3600
@@ -104,6 +110,7 @@ class ThrowawayLog:
 
 
 _log = ThrowawayLog()
+_homes = ThrowawayLog(per_chat=TRACKED_HOMES_PER_CHAT)
 
 
 def is_cleanup_on() -> bool:
@@ -151,6 +158,29 @@ async def sweep_above(message: Message | None, *, panel_id: int | None = None) -
     keep = panel_id if panel_id is not None else getattr(message, "message_id", None)
     stale = _log.take_except(key, keep, time.monotonic())
     await delete_messages(message.bot, key[1], stale)
+
+
+async def replace_home(home: Message | None, *, sweep: bool = False) -> None:
+    """A new home is on screen: delete the older homes, and with ``sweep`` the throwaway
+    messages above it too.
+
+    Call only after the new home was sent, so a message carrying the menu keyboard is
+    always left in the chat. Sweep only when the home is the whole screen, not a keyboard
+    attached under a panel that was just sent.
+    """
+    if home is None or not is_cleanup_on():
+        return
+    key = chat_key(home)
+    home_id = getattr(home, "message_id", None)
+    if key is None or home_id is None:
+        return
+    now = time.monotonic()
+    stale = set(_homes.take_except(key, None, now))
+    if sweep:
+        stale |= set(_log.take_except(key, None, now))
+    stale.discard(int(home_id))
+    _homes.add(key, int(home_id), now)
+    await delete_messages(home.bot, key[1], sorted(stale))
 
 
 async def delete_messages(bot: Bot, chat_id: int, message_ids: list[int]) -> None:
