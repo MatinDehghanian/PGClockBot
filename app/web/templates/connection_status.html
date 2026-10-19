@@ -130,12 +130,30 @@
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <button class="btn btn-danger" type="submit">توقف کانفیگ</button>
     </form>
+    <form method="post" action="/connection-status/targets/{{ target.id }}/delete"
+          data-confirm="این کانفیگ از فهرست تست حذف شود؟ تست و نمایش عمومی آن متوقف می‌شود."
+          data-confirm-title="تأیید حذف کانفیگ"
+          data-confirm-danger="1"
+          data-confirm-label="حذف کانفیگ">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button class="btn btn-danger" type="submit">حذف</button>
+    </form>
   </div>
   {% else %}
-  {% if target.config_key %}<div class="actions"><form method="post" action="/connection-status/configs/{{ target.config_key }}">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <button class="btn btn-ghost" type="submit">فعال‌سازی دوبارهٔ کانفیگ</button>
-  </form></div>{% else %}<small class="muted">این مورد از فهرست قدیمی هاست‌ها مانده است؛ کانفیگ را دوباره از اشتراک انتخاب کنید. نام نمایشی قبلی حفظ شده است.</small>{% endif %}
+  <div class="actions connection-actions">
+    {% if target.config_key %}<form method="post" action="/connection-status/configs/{{ target.config_key }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button class="btn btn-ghost" type="submit">فعال‌سازی دوبارهٔ کانفیگ</button>
+    </form>{% else %}<small class="muted">این مورد از فهرست قدیمی هاست‌ها مانده است؛ کانفیگ را دوباره از اشتراک انتخاب کنید. نام نمایشی قبلی حفظ شده است.</small>{% endif %}
+    <form method="post" action="/connection-status/targets/{{ target.id }}/delete"
+          data-confirm="این کانفیگ از فهرست تست حذف شود؟"
+          data-confirm-title="تأیید حذف کانفیگ"
+          data-confirm-danger="1"
+          data-confirm-label="حذف کانفیگ">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button class="btn btn-danger" type="submit">حذف</button>
+    </form>
+  </div>
   {% endif %}
 </section>
 {% else %}<div class="card"><p class="muted">هنوز کانفیگی برای تست انتخاب نشده است. از بخش «انتخاب کانفیگ‌های اشتراک» شروع کنید.</p></div>{% endfor %}

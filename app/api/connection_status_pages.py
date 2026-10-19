@@ -21,7 +21,7 @@ from app.services.connection_monitor_access import MonitorAccess, require_monito
 from app.services.connection_monitor_actions import MonitorTargetEdit, select_monitor_config, update_monitor_target
 from app.services.connection_monitor_admin import monitor_config_choices, set_monitor_enabled
 from app.services.connection_monitor_errors import monitor_error_message
-from app.services.connection_monitor_preferences import pause_monitor_target
+from app.services.connection_monitor_preferences import delete_monitor_target, pause_monitor_target
 from app.services.connection_monitor_queue import queue_manual_check
 from app.services.connection_monitor_settings import set_monitor_account
 from app.services.connection_monitor_views import monitor_admin_page
@@ -104,8 +104,12 @@ def register_connection_status_pages(app: FastAPI, *, render: Callable, require_
         return await _action_result(session, update_monitor_target(session, access, target_id=target_id, changes=changes))
 
     @app.post(STATUS_PATH + "/targets/{target_id}/{action}")
-    async def connection_target_action(target_id: int, action: Literal["pause", "check"],
+    async def connection_target_action(target_id: int, action: Literal["pause", "check", "delete"],
                                        access: MonitorAccess = Depends(require_access), session: AsyncSession = Depends(get_db)) -> Response:
-        operation = (pause_monitor_target(session, access, target_id=target_id) if action == "pause" else
-                     queue_manual_check(session, access, target_id=target_id, now=datetime.now(timezone.utc)))
+        if action == "pause":
+            operation = pause_monitor_target(session, access, target_id=target_id)
+        elif action == "delete":
+            operation = delete_monitor_target(session, access, target_id=target_id)
+        else:
+            operation = queue_manual_check(session, access, target_id=target_id, now=datetime.now(timezone.utc))
         return await _action_result(session, operation)

@@ -8,7 +8,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 from pydantic import ValidationError
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from connection_monitor_support import MonitorDatabaseCase, monitor_access, subscription_fixture_key
 
@@ -18,7 +18,7 @@ from app.services.connection_monitor_actions import edit_monitor_target, select_
 from app.services.connection_monitor_admin import monitor_config_choices, set_monitor_enabled
 from app.services.connection_monitor_subscription import subscription_entries
 from app.services.connection_monitor_panel import MonitorCatalog
-from app.services.connection_monitor_preferences import MonitorPreferences, pause_monitor_target
+from app.services.connection_monitor_preferences import MonitorPreferences, delete_monitor_target, pause_monitor_target
 from app.services.connection_monitor_views import monitor_admin_page, monitor_target_view
 from app.services.users import DEFAULT_SETTINGS
 
@@ -138,6 +138,23 @@ class MonitorAdminTests(MonitorDatabaseCase):
             self.assertFalse(view.is_public)
             self.assertEqual(view.public_name, "عمومی")
 
+    async def test_delete_removes_local_target_and_snapshots_without_panel_io(self) -> None:
+        target_id = await self.select_host()
+        async with self.Session() as session:
+            await set_monitor_enabled(session, self.access, enabled=True)
+            await edit_monitor_target(session, self.access, target_id=target_id, field="public_name", value="عمومی")
+            await edit_monitor_target(session, self.access, target_id=target_id, field="is_public", value=True)
+            self.assertGreater(await session.scalar(select(func.count()).select_from(ConnectionMonitorSnapshot)), 0)
+            self.catalog_reader.reset_mock()
+            await delete_monitor_target(session, self.access, target_id=target_id)
+            self.catalog_reader.assert_not_called()
+            self.assertIsNone(await session.get(ConnectionMonitorTarget, target_id))
+            self.assertEqual(await session.scalar(select(func.count()).select_from(ConnectionMonitorSnapshot)), 0)
+            with self.assertRaises(ValueError):
+                await monitor_target_view(session, self.access, target_id=target_id, now=self.now)
+            with self.assertRaises(ValueError):
+                await delete_monitor_target(session, self.access, target_id=target_id)
+
     async def test_wrong_shop_and_customer_cannot_read_or_mutate_private_targets(self) -> None:
         target_id = await self.select_host()
         async with self.Session() as session:
@@ -146,11 +163,17 @@ class MonitorAdminTests(MonitorDatabaseCase):
             for invalid_id in (999, True, -1):
                 with self.subTest(target_id=invalid_id), self.assertRaises(ValueError):
                     await pause_monitor_target(session, self.access, target_id=invalid_id)
+                with self.subTest(delete_id=invalid_id), self.assertRaises(ValueError):
+                    await delete_monitor_target(session, self.access, target_id=invalid_id)
             customer = monitor_access(role="customer", org_principal_id=None)
             with self.assertRaises(ValueError):
                 await monitor_target_view(session, customer, target_id=target_id, now=self.now)
             with self.assertRaises(ValueError):
                 await edit_monitor_target(session, customer, target_id=target_id, field="public_name", value="other")
+            with self.assertRaises(ValueError):
+                await delete_monitor_target(session, customer, target_id=target_id)
+            self.assertIsNotNone(await session.get(ConnectionMonitorTarget, target_id))
+            self.assertIsNotNone(await session.get(ConnectionMonitorTarget, 999))
 
     async def test_runtime_pause_unpublishes_and_invalidates_evidence_and_repeated_start_is_idempotent(self) -> None:
         target_id = await self.select_host()
