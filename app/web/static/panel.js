@@ -1232,25 +1232,20 @@
       } catch (e) {
         scroll = Array.from(panel.children).find((c) => c.classList && c.classList.contains('ui-modal-scroll')) || null;
       }
-      /* User-edit only: keep title/close outside the scrollport so the thumb
-         never paints over chrome. Every other modal wraps all children (pre-#586). */
-      const userEditOnly = modal && modal.id === 'modal-user-edit';
+      /* Keep title/close outside the scrollport so chrome stays fixed while
+         the body scrolls and the thumb never paints over the header. */
       const keepOutsideScroll = (node) => {
-        if (!userEditOnly || !node || !node.classList) return false;
+        if (!node || !node.classList) return false;
         return node.classList.contains('ui-modal-head');
       };
       if (!scroll) {
         scroll = document.createElement('div');
         scroll.className = 'ui-modal-scroll';
-        if (userEditOnly) {
-          const toMove = [];
-          Array.from(panel.children).forEach((child) => {
-            if (!keepOutsideScroll(child)) toMove.push(child);
-          });
-          toMove.forEach((child) => scroll.appendChild(child));
-        } else {
-          while (panel.firstChild) scroll.appendChild(panel.firstChild);
-        }
+        const toMove = [];
+        Array.from(panel.children).forEach((child) => {
+          if (!keepOutsideScroll(child)) toMove.push(child);
+        });
+        toMove.forEach((child) => scroll.appendChild(child));
         panel.appendChild(scroll);
       }
       /* Marks panel so CSS can put padding/gap on .ui-modal-scroll while the

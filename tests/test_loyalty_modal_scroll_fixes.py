@@ -118,29 +118,33 @@ class ModalScrollLockTests(unittest.TestCase):
         # Global room stays 8px — #586's 14px narrowed every modal
         self.assertIn("--modal-scrollbar-room: 8px;", css)
         self.assertNotIn("--modal-scrollbar-room: 14px;", css)
-        # User-edit body must match shared shell padding (no extra 14px inset)
+        # Body must match shared shell padding (no extra 14px inset)
         self.assertNotIn(
             "#modal-user-edit .ui-modal-panel[data-scroll-shell=\"1\"] > .ui-modal-scroll {",
             css,
         )
         self.assertNotIn("padding-inline: calc(var(--space-3) + 14px);", css)
-        # Head-outside-scroll is scoped to user-edit only (not all modals)
+        # Sticky head chrome: title/close outside scroll for every modal panel
+        head_sel = '.ui-modal-panel[data-scroll-shell="1"] > .ui-modal-head {'
+        self.assertIn(head_sel, css)
+        head_block = css.split(head_sel, 1)[1].split("}", 1)[0]
+        self.assertIn("padding-bottom: var(--space-2);", head_block)
         self.assertIn(
-            "#modal-user-edit .ui-modal-panel[data-scroll-shell=\"1\"] > .ui-modal-head {",
-            css,
-        )
-        self.assertNotIn(
-            '.settings-modal-panel[data-scroll-shell="1"] > .ui-modal-head {',
-            css,
+            "padding: calc(var(--space-3) + var(--modal-scrollbar-room, 8px));",
+            head_block,
         )
         js = JS.read_text(encoding="utf-8")
         self.assertIn('panel.dataset.scrollShell = \'1\'', js)
         self.assertIn("corner clip", js)
-        self.assertIn("keepOutsideScroll", js)
-        self.assertIn("modal-user-edit", js)
-        self.assertIn("userEditOnly", js)
-        # Must not keep settings chrome outside scroll for every modal
-        self.assertNotIn("settings-modal-flash", js.split("ensureModalScrollShell")[1].split("function canScrollInside")[0])
+        shell_fn = js.split("ensureModalScrollShell")[1].split("function canScrollInside")[0]
+        self.assertIn("keepOutsideScroll", shell_fn)
+        self.assertIn("ui-modal-head", shell_fn)
+        # Sticky head is universal — no per-modal allow-list
+        self.assertNotIn("userEditOnly", shell_fn)
+        self.assertNotIn("modal-user-edit", shell_fn)
+        # Must not keep settings flash/tabs outside scroll (only the head)
+        self.assertNotIn("settings-modal-flash", shell_fn)
+        self.assertNotIn("modal-section-tabs", shell_fn)
 
 
 class ModalLayoutPolishTests(unittest.TestCase):
