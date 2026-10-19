@@ -11,7 +11,7 @@ from sqlalchemy import Connection, event, select
 
 from connection_monitor_support import MonitorDatabaseCase
 
-from app.bot.connection_status_public_ui import public_status_text
+from app.bot.connection_status_public_ui import CATALOG_STALE_NOTICE, public_status_text
 from app.db.models import ConnectionMonitorSnapshot, ConnectionMonitorState, ConnectionMonitorTarget, OrgPrincipal, UserService
 from app.services.connection_status import PublicConnectionPage, public_connection_page
 from app.services.users import DEFAULT_SETTINGS, reset_shop_reseller_id, set_shop_reseller_id
@@ -55,7 +55,9 @@ class PublicConnectionTests(MonitorDatabaseCase):
         self.assertIn("بررسی از سرور ربات", text)
         for secret in ("encrypted-sensitive-token", "internal-endpoint-key", "123", "gstatic", "private", "paused", "فروشگاه دوم"):
             self.assertNotIn(secret, text)
-        self.assertEqual(set(asdict(page.entries[0])), {"public_name", "status", "checked_at", "probe_label"})
+        self.assertEqual(set(asdict(page.entries[0])), {"public_name", "status", "checked_at", "probe_label", "is_catalog_stale"})
+        self.assertFalse(page.entries[0].is_catalog_stale)
+        self.assertNotIn(CATALOG_STALE_NOTICE, text)
 
     async def test_second_shop_and_second_customer_never_fall_back_to_main_status(self) -> None:
         second = await self.page(2)
@@ -78,7 +80,10 @@ class PublicConnectionTests(MonitorDatabaseCase):
         page = await self.page()
         self.assertEqual(page.entries[0].status, "unknown")
         self.assertIsNotNone(page.entries[0].checked_at)
-        self.assertIn("نتیجه قدیمی", public_status_text(page, dict(DEFAULT_SETTINGS), now=self.now))
+        text = public_status_text(page, dict(DEFAULT_SETTINGS), now=self.now)
+        self.assertIn("نتیجه قدیمی", text)
+        self.assertNotIn(CATALOG_STALE_NOTICE, text)
+        self.assertFalse(page.entries[0].is_catalog_stale)
         async with self.Session() as session:
             row = await session.scalar(select(ConnectionMonitorSnapshot).where(ConnectionMonitorSnapshot.target_id == 10))
             self.assertEqual((row.status, row.success_streak), ("healthy", 1))
@@ -128,7 +133,12 @@ class PublicConnectionTests(MonitorDatabaseCase):
             await session.commit()
         page = await self.page()
         self.assertEqual(page.entries[0].status, "unknown")
+        self.assertTrue(page.entries[0].is_catalog_stale)
         self.assertNotIn("sensitive", repr(page))
+        text = public_status_text(page, dict(DEFAULT_SETTINGS), now=self.now)
+        self.assertIn(CATALOG_STALE_NOTICE, text)
+        self.assertNotIn("sensitive", text)
+        self.assertNotIn("catalog_unavailable", text)
 
     async def test_first_result_is_unknown_and_wrong_scope_snapshot_is_not_used(self) -> None:
         async with self.Session() as session:

@@ -13,10 +13,12 @@ from app.bot.connection_status_ui import STATUS_LABELS, button, checked_time, mo
 from app.services.connection_status import PROBE_LABEL, PublicConnectionPage
 from app.services.connection_status_policy import is_fresh
 from app.services.connection_status_texts import LEGACY_MONITOR_TEXTS, MONITOR_TEXT_DEFAULTS
+from app.services.connection_status_types import ConnectionStatus
 from app.services.users import get_all_settings
 
 
 PUBLIC_SCOPE_NOTICE = "این وضعیت فقط دسترسی از سرور ربات را نشان می‌دهد و اتصال شما یا دسترسی از داخل ایران را تأیید نمی‌کند."
+CATALOG_STALE_NOTICE = "بررسی موقتاً به‌روز نیست؛ وضعیت فعلی نامشخص است."
 
 
 class MonitorPublicLabel(BaseFilter):
@@ -38,7 +40,9 @@ def public_status_text(page: PublicConnectionPage, ui: dict[str, str], *, now: d
     for entry in page.entries:
         lines.extend(["", f"<b>{html.escape(entry.public_name)}</b>", STATUS_LABELS[entry.status],
                       f"آخرین بررسی: {checked_time(entry.checked_at)}"])
-        if entry.checked_at is not None and not is_fresh(entry.checked_at, now=now):
+        if entry.is_catalog_stale and entry.status == ConnectionStatus.UNKNOWN:
+            lines.append(CATALOG_STALE_NOTICE)
+        elif entry.checked_at is not None and not is_fresh(entry.checked_at, now=now):
             lines.append("نتیجه قدیمی است؛ وضعیت فعلی نامشخص است.")
     return "\n".join(lines)
 

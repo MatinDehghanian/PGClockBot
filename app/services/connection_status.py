@@ -31,6 +31,7 @@ class PublicConnectionStatus:
     status: ConnectionStatus
     checked_at: datetime | None
     probe_label: str = PROBE_LABEL
+    is_catalog_stale: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,7 +55,7 @@ def _public_entry(target: ConnectionMonitorTarget, rows: tuple[ConnectionMonitor
                    ready: bool, now: datetime) -> PublicConnectionStatus:
     health = target_health(target, rows, runtime_ready=ready, now=now)
     status = health.status if health.status in (ConnectionStatus.HEALTHY, ConnectionStatus.DEGRADED, ConnectionStatus.DOWN) else ConnectionStatus.UNKNOWN
-    return PublicConnectionStatus(target.public_name, status, health.checked_at)
+    return PublicConnectionStatus(target.public_name, status, health.checked_at, is_catalog_stale=not ready)
 
 
 async def public_connection_page(session: AsyncSession, *, now: datetime, after_id: int = 0) -> PublicConnectionPage:
