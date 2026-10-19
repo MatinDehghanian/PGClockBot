@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import re
@@ -13,9 +12,9 @@ import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from app.py_compat import file_digest
 from app.services.connection_monitor_config import MonitorBinding, build_monitor_config
 from app.services.connection_monitor_types import MAX_MONITOR_ENDPOINTS, MonitorEndpoint
-
 
 XRAY_VERSION = "26.3.27"
 MAX_BINARY_BYTES = 100 * 1024 * 1024
@@ -42,7 +41,7 @@ class XrayBinary:
             if info.st_size > MAX_BINARY_BYTES or not re.fullmatch(r"[0-9a-f]{64}", self.sha256):
                 raise XrayProbeError("core_checksum")
             with self.path.open("rb") as source:
-                actual = hashlib.file_digest(source, "sha256").hexdigest()
+                actual = file_digest(source, "sha256").hexdigest()
         except OSError:
             raise XrayProbeError("core_binary") from None
         if not secrets.compare_digest(actual, self.sha256):

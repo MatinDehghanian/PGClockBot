@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-import hashlib
 from pathlib import Path
+
+from app.py_compat import file_digest
 
 _STATIC_DIR = Path(__file__).resolve().parent.parent / "web" / "static"
 _SCRIPT_NAMES = ("panel.js", "panel_widget_request.js", "money-inputs.js", "list-inputs.js", "sales-chart.js")
@@ -11,7 +12,7 @@ _SCRIPT_NAMES = ("panel.js", "panel_widget_request.js", "money-inputs.js", "list
 
 def build_asset_cache_key(path: Path) -> str:
     with path.open("rb") as source:
-        return hashlib.file_digest(source, "sha256").hexdigest()[:16]
+        return file_digest(source, "sha256").hexdigest()[:16]
 
 
 # Startup computation avoids filesystem work on menu/refresh requests.
