@@ -40,6 +40,7 @@ from app.services.payment_settlement import (
     settle_and_approve,
     tenant_key_for,
 )
+from app.services.ssl_certs import https_is_active, public_panel_base_url
 from app.services.users import get_all_settings
 
 logger = logging.getLogger(__name__)
@@ -55,9 +56,23 @@ class BbcNotReady(ValueError):
     """The gateway cannot be used until its setup is fixed; customers only see ``CUSTOMER_UNAVAILABLE``."""
 
 
+def https_base() -> str:
+    """The https origin for BezanBeCard callbacks, or an empty string when there is none.
+
+    TLS enabled from the panel is stored with the certificate, not in ``.env``, so the live
+    panel address wins over ``PUBLIC_BASE_URL`` / ``WEBHOOK_URL``.
+    """
+    if https_is_active():
+        live = public_panel_base_url().strip().rstrip("/")
+        if live.startswith("https://"):
+            return live
+    configured = _public_base()
+    return configured if configured.startswith("https://") else ""
+
+
 def https_base_ready() -> bool:
     """BezanBeCard calls back and returns over https only."""
-    return _public_base().startswith("https://")
+    return bool(https_base())
 
 
 async def bbc_enable_error(session: AsyncSession, payload: dict[str, str], *, reseller_id: int | None) -> str | None:
@@ -282,8 +297,8 @@ async def _swap_attempt(session: AsyncSession, settlement: PaymentSettlement, ne
 def _new_request(
     settlement: PaymentSettlement, payment: Payment, description: str, data: dict[str, Any]
 ) -> bbc.BbcOrderRequest:
-    base = _public_base()
-    if not base.startswith("https://"):
+    base = https_base()
+    if not base:
         raise BbcNotReady(HTTPS_REQUIRED)
     link_token = secrets.token_urlsafe(24)
     data["link_token"] = link_token

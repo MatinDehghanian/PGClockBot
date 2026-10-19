@@ -73,6 +73,40 @@ class HttpsRequirementTests(_Db):
             self.assertIsNone(await flow.bbc_enable_error(session, {"pay_bbc_enabled": "1"}, reseller_id=5))
 
 
+class LiveHttpsAddressTests(_Db):
+    """TLS switched on in the panel lives in the certificate meta, not in ``.env``."""
+
+    def panel_with_tls(self, *, env_base: str) -> None:
+        for target, value in (
+            (flow, {"_public_base": env_base}),
+            (flow, {"https_is_active": True}),
+            (flow, {"public_panel_base_url": "https://panel.example.com:9000"}),
+        ):
+            name, result = next(iter(value.items()))
+            patcher = patch.object(target, name, return_value=result)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    async def test_panel_tls_is_enough_when_env_still_has_a_plain_http_address(self) -> None:
+        self.panel_with_tls(env_base="http://203.0.113.5:9000")
+        self.assertTrue(flow.https_base_ready())
+        async with self.Session() as session:
+            await flow.ensure_gateway_ready(session, None)
+            self.assertIsNone(await flow.bbc_enable_error(session, {"pay_bbc_enabled": "1"}, reseller_id=None))
+
+    def test_callbacks_use_the_live_https_address(self) -> None:
+        self.panel_with_tls(env_base="http://203.0.113.5:9000")
+        settlement = MagicMock(id=7, tenant_key=0)
+        request = flow._new_request(settlement, MagicMock(id=3, amount=1000), "test", {})
+        self.assertTrue(request.callback_url.startswith("https://panel.example.com:9000/payments/settlement/bbc/"))
+        self.assertTrue(request.return_url.startswith("https://panel.example.com:9000/"))
+
+    def test_without_panel_tls_a_plain_http_env_address_is_not_ready(self) -> None:
+        with patch.object(flow, "https_is_active", return_value=False), \
+                patch.object(flow, "_public_base", return_value="http://203.0.113.5:9000"):
+            self.assertFalse(flow.https_base_ready())
+
+
 class SecretFieldTests(unittest.TestCase):
     def render(self, value: str) -> str:
         from app.api.app import templates
