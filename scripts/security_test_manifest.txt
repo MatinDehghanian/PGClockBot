@@ -219,3 +219,4 @@ tests/test_risk_mark.py
 tests/test_overview_redesign.py
 tests/test_backup_retention_telegram.py
 tests/test_py_compat.py
+tests/test_bbc_https_requirement.py
