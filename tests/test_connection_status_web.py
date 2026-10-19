@@ -27,7 +27,7 @@ from app.services.connection_monitor_preferences import MonitorPreferences
 from app.services.connection_status import public_connection_page
 from app.services.connection_status_texts import (
     LATIN_MIXED_MONITOR_TEXTS, LEGACY_HOST_PROMPTS, LEGACY_HOST_STATUS_TEXTS, LEGACY_MONITOR_TEXTS,
-    MONITOR_TEXT_DEFAULTS, readable_monitor_texts,
+    MONITOR_TEXT_DEFAULTS, REASON_LABELS, readable_monitor_texts,
 )
 from app.services.users import clear_settings_cache, get_all_settings, set_settings_bulk
 from app.services.pasarguard import PasarGuardError
@@ -458,3 +458,9 @@ class MonitorTextDefaultsTests(unittest.TestCase):
         for value in MONITOR_TEXT_DEFAULTS.values():
             for latin in ("Test user", "Username", "PasarGuard", "password", "token", "Real delay"):
                 self.assertNotIn(latin, value)
+
+    def test_invalid_catalog_reason_names_subscription_configs_not_hosts(self) -> None:
+        label = REASON_LABELS["invalid_catalog"]
+        self.assertEqual(label, "اطلاعات کانفیگ‌های اشتراک معتبر نیست.")
+        self.assertNotIn("هاست", label)
+

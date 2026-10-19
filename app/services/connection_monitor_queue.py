@@ -17,7 +17,7 @@ from app.services.connection_status_types import FRESHNESS, require_aware
 
 MANUAL_COOLDOWN = timedelta(seconds=60)
 QUEUE_UNAVAILABLE = "تست هنوز آماده نیست یا درخواست قبلی در صف است. تست خودکار را روشن کنید و کمی بعد دوباره تلاش کنید."
-QUEUE_RUNTIME_PENDING = "تست‌ها تازه روشن شده‌اند؛ تا یک دقیقه دیگر پس از اولین بررسی دوباره تلاش کنید."
+QUEUE_RUNTIME_PENDING = "هنوز اولین بررسی کامل نشده یا اطلاعات پنل به‌روز نیست؛ کمی بعد دوباره تلاش کنید."
 
 
 def _target_queue_filters(access: MonitorAccess, *, target_id: int, now: datetime) -> tuple[object, ...]:

@@ -72,6 +72,9 @@ class MonitorQueueTests(MonitorDatabaseCase):
             with self.assertRaises(ValueError) as ctx:
                 await queue_manual_check(session, self.access, target_id=10, now=self.now)
             self.assertEqual(str(ctx.exception), QUEUE_RUNTIME_PENDING)
+            # Catalog freshness covers first sync and later stale panels; do not claim tests just turned on.
+            self.assertNotIn("تازه روشن", str(ctx.exception))
+            self.assertIn("به‌روز نیست", str(ctx.exception))
 
     async def test_cooldown_or_missing_target_keeps_generic_queue_unavailable(self) -> None:
         async with self.Session() as session:
