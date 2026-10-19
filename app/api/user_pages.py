@@ -13,7 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import BotUser, Plan
 from app.services.authz import authz_from_staff, can_shop
 from app.services.demo_users import DEMO_USERS_PERMISSION, set_demo_user
-from app.services.shop_scope import ShopScopeError, assert_bot_user_in_scope
+from app.services.shop_membership import assert_customer_in_staff_scope
+from app.services.shop_scope import ShopScopeError, assert_bot_user_in_scope, resolve_shop_scope_id
 
 
 def _q(msg: str) -> str:
@@ -81,7 +82,7 @@ async def _require_scoped_user(
             )
         return RedirectResponse(f"/users?err={_q('کاربر یافت نشد')}", status_code=303)
     try:
-        assert_bot_user_in_scope(staff, user)
+        await assert_customer_in_staff_scope(session, staff, user)
     except ShopScopeError as e:
         if fragment:
             return HTMLResponse(
@@ -196,6 +197,7 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
                 session,
                 user,
                 plan,
+                shop_id=resolve_shop_scope_id(staff),
                 staff=staff,
                 actor=actor_label_from_staff(staff),
             )
@@ -239,7 +241,7 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
             session, user, shop_id=shop_scope
         )
 
-        snaps = await list_service_snapshots(session, int(user_id))
+        snaps = await list_service_snapshots(session, int(user_id), shop_id=shop_scope)
         # Same shop scope as display_wallet — never mix other purses' ledger rows.
         wallet_txs = await list_wallet_txs(
             session, int(user_id), limit=20, shop_id=shop_scope
@@ -251,9 +253,18 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
         can_pg_delete = bool(pg_acts.get("delete"))
         from app.services.color_tags import color_tag_meta, color_tags_for_ui
 
+        # The staff note and risk tag are one record on the person; only the shop that attributed
+        # them (the platform for an unattributed person) may read them, a member shop may not.
+        try:
+            assert_bot_user_in_scope(staff, user)
+            show_private_marks = True
+        except ShopScopeError:
+            show_private_marks = False
+
         ctx = {
             "staff": staff,
             "user": user,
+            "show_private_marks": show_private_marks,
             "display_wallet": display_wallet,
             "services": snaps,
             "wallet_txs": wallet_txs,
@@ -338,7 +349,7 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
         body = str(form.get("body") or form.get("text") or "")
         try:
             await send_staff_dm(
-                session, user, body, actor=actor_label_from_staff(staff)
+                session, user, body, shop_id=resolve_shop_scope_id(staff), actor=actor_label_from_staff(staff)
             )
             await session.commit()
         except ValueError as e:
@@ -370,7 +381,9 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
         sid_raw = str(form.get("service_id") or "").strip()
         service_id = int(sid_raw) if sid_raw.isdigit() else None
         try:
-            svc, label = await quick_renew_user(session, user, service_id=service_id, staff=staff)
+            svc, label = await quick_renew_user(
+                session, user, service_id=service_id, staff=staff, shop_id=resolve_shop_scope_id(staff)
+            )
             await session.commit()
         except ValueError as e:
             return _redirect_list_form(form, err=str(e), uid=user_id)
@@ -428,7 +441,7 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
             return _redirect_list_form(form, err="گیرنده‌ای در این فیلتر نیست")
         try:
             stats = await bulk_staff_dm(
-                session, targets, body, actor=actor_label_from_staff(staff)
+                session, targets, body, shop_id=resolve_shop_scope_id(staff), actor=actor_label_from_staff(staff)
             )
             await session.commit()
         except ValueError as e:
@@ -457,7 +470,8 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
         form = await request.form()
         try:
             svc = await get_owned_service(
-                session, bot_user_id=user_id, service_id=service_id
+                session, bot_user_id=user_id, service_id=service_id,
+                shop_id=resolve_shop_scope_id(staff),
             )
         except ValueError as e:
             return _redirect_user(user_id, err=str(e))
@@ -508,7 +522,8 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
         form = await request.form()
         try:
             svc = await get_owned_service(
-                session, bot_user_id=user_id, service_id=service_id
+                session, bot_user_id=user_id, service_id=service_id,
+                shop_id=resolve_shop_scope_id(staff),
             )
         except ValueError as e:
             return _redirect_user(user_id, err=str(e))
@@ -551,20 +566,27 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
 
         try:
             svc = await get_owned_service(
-                session, bot_user_id=user_id, service_id=service_id
+                session, bot_user_id=user_id, service_id=service_id,
+                shop_id=resolve_shop_scope_id(staff),
             )
         except ValueError as e:
             return _redirect_user(user_id, err=str(e))
 
 
+        from app.services.service_import import admin_delete_pg_flag, is_external_service
+
+        form = await request.form()
+        delete_pg = admin_delete_pg_flag(svc, explicit=form.get("delete_pg") == "1")
         try:
             info = await admin_delete_service(
-                session, svc, delete_pg=True, staff=staff
+                session, svc, delete_pg=delete_pg, staff=staff
             )
         except ValueError as e:
             return _redirect_user(user_id, err=str(e))
         except Exception as e:
             return _redirect_user(user_id, err=_op_err(e, prefix="حذف سرویس ناموفق"))
+        if is_external_service(svc) and not delete_pg:
+            return _redirect_user(user_id, ok=f"سرویس #{service_id} از لیست مشتری جدا شد؛ حساب پاسارگارد حفظ شد")
         note = " (پاسارگارد حذف شد)" if info.get("pg_deleted") else (
             " (پاسارگارد غیرفعال شد)" if info.get("pg_disabled") else ""
         )
@@ -585,13 +607,14 @@ def register_user_pages(app, *, render, require_admin, get_db, require_perm=None
         if not user:
             return JSONResponse({"ok": False, "error": "کاربر یافت نشد"}, status_code=404)
         try:
-            assert_bot_user_in_scope(staff, user)
+            await assert_customer_in_staff_scope(session, staff, user)
         except ShopScopeError as e:
             return JSONResponse({"ok": False, "error": e.message}, status_code=403)
 
         try:
             svc = await get_owned_service(
-                session, bot_user_id=user_id, service_id=service_id
+                session, bot_user_id=user_id, service_id=service_id,
+                shop_id=resolve_shop_scope_id(staff),
             )
             snap = await service_snapshot(session, svc)
             await session.commit()

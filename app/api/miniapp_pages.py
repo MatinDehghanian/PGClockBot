@@ -24,9 +24,11 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.catalog_pricing import annotate_prices, displayed_quote, quote_product, sale_price
 from app.config import get_settings
 from app.db.models import BotUser, Plan, ResellerProfile, UserService
 from app.services.db_safe import rollback_quiet
+from app.services.service_scope import customer_may_use_service, list_customer_services
 from app.services.formatting import (
     expire_remaining_days,
     format_bytes_ratio,
@@ -95,25 +97,24 @@ async def _require_commerce_ready(session: AsyncSession, user: BotUser) -> str:
     return persona
 
 
-def _owned_service_or_404(svc: UserService | None, user: BotUser) -> UserService:
-    """Fail closed: service must belong to the authenticated Mini App user."""
-    if not svc or int(svc.bot_user_id) != int(user.id):
+async def _owned_service_or_404(
+    session: AsyncSession, svc: UserService | None, user: BotUser
+) -> UserService:
+    """Fail closed: the service must be the Mini App user's and platform-sold."""
+    if not await customer_may_use_service(session, svc, int(user.id), None):
         raise HTTPException(404)
     return svc
 
 
 def _addons_allowed(user: BotUser, svc: UserService) -> bool:
-    return (
-        user.reseller_id is None
-        and bool(svc.pg_user_id)
-        and (svc.remark or "").strip() != "linked"
-    )
+    """Packs for a platform-sold, panel-linked service (shop-sold ones never reach this check)."""
+    return bool(svc.pg_user_id) and (svc.remark or "").strip() != "linked"
 
 
 async def _addon_service(
     session: AsyncSession, user: BotUser, service_id: int
 ) -> UserService:
-    svc = _owned_service_or_404(await session.get(UserService, service_id), user)
+    svc = await _owned_service_or_404(session, await session.get(UserService, service_id), user)
     if not _addons_allowed(user, svc):
         raise HTTPException(400, "خرید بسته برای این سرویس در مینی‌اپ ممکن نیست")
     return svc
@@ -288,12 +289,7 @@ async def _user_shop_payload(session: AsyncSession, user: BotUser) -> dict:
     """
     from app.services.wallet import list_activity
 
-    svc_result = await session.execute(
-        select(UserService)
-        .where(UserService.bot_user_id == user.id)
-        .order_by(UserService.id.desc())
-    )
-    services = list(svc_result.scalars().all())
+    services = await list_customer_services(session, user.id, None)
     plans_q = (
         select(Plan)
         .where(
@@ -304,6 +300,7 @@ async def _user_shop_payload(session: AsyncSession, user: BotUser) -> dict:
         .order_by(Plan.sort_order, Plan.id)
     )
     plans = list((await session.execute(plans_q)).scalars().all())
+    await annotate_prices(session, plans, shop_id=None)
     trial = (
         await session.execute(
             select(Plan)
@@ -341,7 +338,7 @@ async def _user_shop_payload(session: AsyncSession, user: BotUser) -> dict:
             {
                 "id": p.id,
                 "name": p.name,
-                "price": int(p.price or 0),
+                **displayed_quote(p).payload(),
                 "days": p.duration_days,
                 "gb": p.data_limit_gb,
                 "is_trial": bool(p.is_trial),
@@ -448,7 +445,7 @@ async def _reseller_ops_payload(
     }
     if profile is not None:
         try:
-            stats = await _reseller_shop_stats(session, int(profile.id))
+            stats = await _reseller_shop_stats(session, int(profile.user_id))
         except Exception:
             await rollback_quiet(session)
     base = (await get_reseller_panel_base_url(session) or "").rstrip("/") or _mini_panel_base()
@@ -483,7 +480,7 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
         from app.services.service_cancellations import cancellation_status
         user = await load_mini_user(session, request)
         await _require_commerce_ready(session, user)
-        _owned_service_or_404(await session.get(UserService, service_id), user)
+        await _owned_service_or_404(session, await session.get(UserService, service_id), user)
         try:
             return _no_store({"request": await cancellation_status(session, user, service_id, shop_id=None)})
         except ValueError as exc:
@@ -494,7 +491,7 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
         from app.services.service_cancellations import request_cancellation
         user = await load_mini_user(session, request)
         await _require_commerce_ready(session, user)
-        _owned_service_or_404(await session.get(UserService, service_id), user)
+        await _owned_service_or_404(session, await session.get(UserService, service_id), user)
         try:
             data = await request.json()
             if not isinstance(data, dict) or not isinstance(data.get("reason"), str):
@@ -555,7 +552,7 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
     ):
         user = await load_mini_user(session, request)
         _require_commerce(user)
-        svc = _owned_service_or_404(await session.get(UserService, service_id), user)
+        svc = await _owned_service_or_404(session, await session.get(UserService, service_id), user)
         info = await _fetch_pg_info(_service_sub_token(svc), subscription_url=svc.subscription_url, service_id=svc.id, expected_pg_user_id=svc.pg_user_id)
         if info.get("status") and "expire" in info:
             from app.services.bot_user_admin import sync_service_quota_cache
@@ -573,7 +570,7 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
 
         user = await load_mini_user(session, request)
         _require_commerce(user)
-        svc = _owned_service_or_404(await session.get(UserService, service_id), user)
+        svc = await _owned_service_or_404(session, await session.get(UserService, service_id), user)
         url = absolutize_subscription_url(svc.subscription_url) or (
             (svc.subscription_url or "").strip()
         )
@@ -624,7 +621,7 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
                         "kind": p.kind,
                         "amount_label": amount_label(p),
                         "description": p.description or "",
-                        "price": int(p.price or 0),
+                        **displayed_quote(p).payload(),
                     }
                     for p in packs
                 ]
@@ -668,11 +665,12 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
         if not pack_matches_service_category(pack, svc_cat):
             raise HTTPException(400, "این بسته برای دستهٔ پلن این سرویس نیست")
         await session.refresh(user)
-        if int(pack.price or 0) > int(user.wallet_balance or 0):
+        quote = await quote_product(session, pack, shop_id=None)
+        if quote.price > int(user.wallet_balance or 0):
             raise HTTPException(400, "موجودی کیف پول کافی نیست")
         try:
             order = await create_addon_order(
-                session, user_id=user.id, service=svc, pack=pack
+                session, user_id=user.id, service=svc, pack=pack, expected_price=body.get("price")
             )
             order = await pay_with_wallet(session, order, user)
             await session.refresh(user)
@@ -699,7 +697,7 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
             from app.services.notifications import notify_new_subscription
             from app.services.reseller_bots import open_notify_bot_for_user
 
-            bot, should_close = await open_notify_bot_for_user(session, user)
+            bot, should_close = await open_notify_bot_for_user(session, user, shop_id=None)
             try:
                 await notify_new_subscription(
                     bot, session, order=order, user_tg_id=user.telegram_id
@@ -734,10 +732,10 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
         if not plan or not plan.is_active or plan.owner_reseller_id is not None:
             raise HTTPException(400, "پلن یافت نشد")
         await session.refresh(user)
-        if int(plan.price or 0) > int(user.wallet_balance or 0):
+        if sale_price(plan) > int(user.wallet_balance or 0):
             raise HTTPException(400, "موجودی کیف پول کافی نیست")
         try:
-            order = await create_order(session, user_id=user.id, plan_id=plan_id)
+            order = await create_order(session, user_id=user.id, plan_id=plan_id, expected_price=body.get("price"))
             await session.refresh(user)
             order = await pay_with_wallet(session, order, user)
             await session.refresh(user)
@@ -765,7 +763,7 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
 
         user = await load_mini_user(session, request)
         await _require_commerce_ready(session, user)
-        _owned_service_or_404(await session.get(UserService, service_id), user)
+        await _owned_service_or_404(session, await session.get(UserService, service_id), user)
         try:
             return _no_store(await automation_settings(session, user, service_id))
         except ValueError as exc:
@@ -777,7 +775,7 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
 
         user = await load_mini_user(session, request)
         await _require_commerce_ready(session, user)
-        _owned_service_or_404(await session.get(UserService, service_id), user)
+        await _owned_service_or_404(session, await session.get(UserService, service_id), user)
         try:
             body = await request.json()
             if not isinstance(body, dict) or type(body.get("enabled")) is not bool:
@@ -797,7 +795,7 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
 
         user = await load_mini_user(session, request)
         await _require_commerce_ready(session, user)
-        svc = _owned_service_or_404(await session.get(UserService, service_id), user)
+        svc = await _owned_service_or_404(session, await session.get(UserService, service_id), user)
         plan = await get_catalog_plan(session, plan_id)
         try:
             return _no_store(await preview_renewal(session, user_id=user.id, service=svc, plan=plan))
@@ -827,7 +825,7 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
         ui = await get_all_settings(session)
         if not on(ui.get("pay_wallet_enabled")):
             raise HTTPException(403, "پرداخت با کیف پول غیرفعال است")
-        svc = _owned_service_or_404(await session.get(UserService, service_id), user)
+        svc = await _owned_service_or_404(session, await session.get(UserService, service_id), user)
         if (svc.remark or "").strip() == "linked":
             raise HTTPException(
                 400,
@@ -842,16 +840,16 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
         ):
             raise HTTPException(400, "پلن تمدید نامعتبر است")
         await session.refresh(user)
-        if int(plan.price or 0) > int(user.wallet_balance or 0):
+        if sale_price(plan) > int(user.wallet_balance or 0):
             raise HTTPException(400, "موجودی کیف پول کافی نیست")
         try:
             from app.services.service_renewals import renewal_terms
 
             quote = body.get("preview")
-            if not isinstance(quote, dict) or quote.get("terms") != renewal_terms(plan) or quote.get("price") != plan.price or not quote.get("request_key"):
+            if not isinstance(quote, dict) or quote.get("terms") != renewal_terms(plan) or quote.get("price") != sale_price(plan) or not quote.get("request_key"):
                 raise ValueError("پیش‌نمایش تمدید معتبر نیست یا پلن تغییر کرده؛ دوباره پلن را انتخاب کنید")
             order = await renew_service_with_plan(
-                session, user_id=user.id, service=svc, plan=plan, request_key=quote["request_key"],
+                session, user_id=user.id, service=svc, plan=plan, request_key=quote["request_key"], expected_price=quote["price"],
             )
             await session.refresh(user)
             order = await pay_with_wallet(session, order, user)

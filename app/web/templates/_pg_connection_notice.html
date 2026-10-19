@@ -1,0 +1,9 @@
+{% if request is defined and request.state is defined and request.state.pg_read_budget is defined and request.state.pg_read_budget.failure %}
+<div class="flash warn home-update-banner" role="status">
+  <div class="home-update-copy">
+    <strong>اطلاعات پاسارگارد در دسترس نیست</strong>
+    <span class="muted">ارتباط با پاسارگارد کند یا قطع است. بقیهٔ بخش‌های پنل کار می‌کنند؛ کمی بعد دوباره تلاش کنید.</span>
+  </div>
+  <a class="btn btn-sm btn-ghost" href="{{ request.url.path.removesuffix('/body') }}">تلاش دوباره</a>
+</div>
+{% endif %}

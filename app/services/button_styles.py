@@ -88,7 +88,12 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "svc_link", "label": "لینک و QR", "group": "زیرمنوها", "default": ""},
     {"id": "svc_addon", "label": "حجم / زمان سرویس", "group": "زیرمنوها", "default": "primary"},
     {"id": "svc_refresh", "label": "رفرش وضعیت سرویس", "group": "زیرمنوها", "default": ""},
+    {"id": "svc_wireguard", "label": "فایل WireGuard سرویس", "group": "زیرمنوها", "default": ""},
+    {"id": "svc_auto", "label": "تنظیمات خودکار سرویس", "group": "زیرمنوها", "default": ""},
+    {"id": "svc_more", "label": "بیشتر (کارت سرویس)", "group": "زیرمنوها", "default": ""},
+    {"id": "svc_cancel", "label": "درخواست لغو سرویس", "group": "زیرمنوها", "default": ""},
     {"id": "svc_delete", "label": "حذف سرویس", "group": "زیرمنوها", "default": "danger"},
+    {"id": "svc_add_existing", "label": "افزودن سرویس قبلی", "group": "زیرمنوها", "default": ""},
     {"id": "wallet_tx", "label": "تراکنش‌های کیف پول", "group": "زیرمنوها", "default": ""},
     {"id": "support_list", "label": "تیکت‌های من", "group": "زیرمنوها", "default": ""},
     # Shop flow (inline) — submenu plan rows inherit the matching kind color
@@ -154,12 +159,14 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "pay_card", "label": "کارت به کارت", "group": "پرداخت", "default": "primary"},
     {"id": "pay_gateway", "label": "درگاه پرداخت", "group": "پرداخت", "default": "primary"},
     {"id": "pay_psp", "label": "درگاه آنلاین API", "group": "پرداخت", "default": "primary"},
+    {"id": "pay_bbc", "label": "بزن به کارت", "group": "پرداخت", "default": "primary"},
     {"id": "pay_crypto", "label": "رمزارز", "group": "پرداخت", "default": "primary"},
     {"id": "pay_stars", "label": "استارز تلگرام", "group": "پرداخت", "default": "primary"},
     {"id": "pay_discount", "label": "کد تخفیف", "group": "پرداخت", "default": ""},
     {"id": "topup_card", "label": "شارژ — کارت", "group": "پرداخت", "default": "primary"},
     {"id": "topup_gateway", "label": "شارژ — درگاه", "group": "پرداخت", "default": "primary"},
     {"id": "topup_psp", "label": "شارژ — درگاه آنلاین API", "group": "پرداخت", "default": "primary"},
+    {"id": "topup_bbc", "label": "شارژ — بزن به کارت", "group": "پرداخت", "default": "primary"},
     {"id": "topup_crypto", "label": "شارژ — رمزارز", "group": "پرداخت", "default": "primary"},
     # Customer loyalty sub
     {"id": "loy_referral", "label": "دعوت دوستان", "group": "باشگاه مشتریان", "default": "primary"},
@@ -171,9 +178,11 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "adm_hub_ops", "label": "عملیات روزانه", "group": "منوی ادمین", "default": "success"},
     {"id": "adm_hub_people", "label": "افراد", "group": "منوی ادمین", "default": "success"},
     {"id": "adm_hub_product", "label": "محصول و پاسارگارد", "group": "منوی ادمین", "default": "success"},
+    {"id": "adm_hub_marketing", "label": "بازاریابی", "group": "منوی ادمین", "default": "success"},
     {"id": "adm_hub_system", "label": "سیستم", "group": "منوی ادمین", "default": ""},
+    {"id": "adm_edit_mode", "label": "حالت ویرایش منوها", "group": "منوی ادمین", "default": ""},
     {"id": "adm_dash", "label": "داشبورد ادمین", "group": "منوی ادمین", "default": "success"},
-    {"id": "adm_reports", "label": "گزارشات (ادمین)", "group": "منوی ادمین", "default": "success"},
+    {"id": "adm_reports", "label": "گزارش‌ها (ادمین)", "group": "منوی ادمین", "default": "success"},
     {"id": "adm_orders", "label": "سفارش‌ها (ادمین)", "group": "منوی ادمین", "default": "success"},
     {"id": "adm_payments", "label": "رسیدها (ادمین)", "group": "منوی ادمین", "default": "success"},
     {"id": "adm_tickets", "label": "تیکت‌ها (ادمین)", "group": "منوی ادمین", "default": "success"},
@@ -184,6 +193,8 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "adm_pg", "label": "پاسارگارد (ادمین)", "group": "منوی ادمین", "default": "success"},
     {"id": "adm_settings", "label": "تنظیمات (ادمین)", "group": "منوی ادمین", "default": ""},
     {"id": "adm_broadcast", "label": "پیام همگانی (ادمین)", "group": "منوی ادمین", "default": ""},
+    {"id": "adm_gift_codes", "label": "کدهای هدیه (ادمین)", "group": "منوی ادمین", "default": ""},
+    {"id": "adm_campaigns", "label": "کمپین‌ها (ادمین)", "group": "منوی ادمین", "default": ""},
     {"id": "adm_backup", "label": "بکاپ / ریستور (ادمین)", "group": "منوی ادمین", "default": ""},
     {"id": "adm_preview", "label": "پیش‌نمایش منوی کاربر (ادمین)", "group": "منوی ادمین", "default": ""},
     {"id": "adm_users_list", "label": "لیست کاربران", "group": "منوی ادمین", "default": ""},
@@ -195,8 +206,9 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "adm_plans_aud_users", "label": "پلن‌های کاربران", "group": "منوی ادمین", "default": "primary"},
     {"id": "adm_plans_aud_resellers", "label": "پلن‌های نمایندگان", "group": "منوی ادمین", "default": "primary"},
     {"id": "adm_plans_add", "label": "افزودن پلن", "group": "منوی ادمین", "default": "primary"},
+    {"id": "adm_plans_view", "label": "مشاهده پلن‌ها", "group": "منوی ادمین", "default": "primary"},
     {"id": "adm_plans_categories", "label": "برچسب دسته (ادمین)", "group": "منوی ادمین", "default": ""},
-    {"id": "adm_plans_addons", "label": "بسته حجم/زمان (ادمین)", "group": "منوی ادمین", "default": "primary"},
+    {"id": "adm_plans_addons", "label": "بسته حجم و زمان (ادمین)", "group": "منوی ادمین", "default": "primary"},
     # Admin loyalty sub
     {"id": "adm_loy_overview", "label": "نمای کلی باشگاه", "group": "باشگاه ادمین", "default": "success"},
     {"id": "adm_loy_rules", "label": "قوانین امتیاز", "group": "باشگاه ادمین", "default": ""},
@@ -205,6 +217,7 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "adm_loy_settings", "label": "تنظیمات باشگاه", "group": "باشگاه ادمین", "default": ""},
     {"id": "adm_loy_ref_text", "label": "متن دعوت باشگاه", "group": "باشگاه ادمین", "default": ""},
     # PasarGuard sub
+    {"id": "connection_status_admin", "label": "تست و وضعیت اتصال", "group": "پاسارگارد", "default": "primary"},
     {"id": "pg_stats", "label": "نمای کلی پاسارگارد", "group": "پاسارگارد", "default": "success"},
     {"id": "pg_users", "label": "کاربران پاسارگارد", "group": "پاسارگارد", "default": ""},
     {"id": "pg_create", "label": "ساخت کاربر پاسارگارد", "group": "پاسارگارد", "default": "primary"},
@@ -213,12 +226,17 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "pg_group", "label": "ساخت گروه پاسارگارد", "group": "پاسارگارد", "default": "primary"},
     {"id": "pg_template", "label": "ساخت تمپلیت پاسارگارد", "group": "پاسارگارد", "default": "primary"},
     # Admin settings sub (reply hub — ids must match adm_st_* / adm_st_panel actions)
-    {"id": "adm_st_shop", "label": "تنظیمات: فروشگاه", "group": "تنظیمات ادمین", "default": ""},
-    {"id": "adm_st_menu", "label": "تنظیمات: منو", "group": "تنظیمات ادمین", "default": ""},
+    {"id": "adm_st_shop", "label": "تنظیمات: نام و متن‌ها", "group": "تنظیمات ادمین", "default": ""},
+    {"id": "adm_st_menu", "label": "تنظیمات: ظاهر منو", "group": "تنظیمات ادمین", "default": ""},
+    {"id": "adm_st_labels", "label": "تنظیمات: متن دکمه‌ها", "group": "تنظیمات ادمین", "default": ""},
     {"id": "adm_st_pay", "label": "تنظیمات: پرداخت", "group": "تنظیمات ادمین", "default": ""},
     {"id": "adm_st_support", "label": "تنظیمات: پشتیبان‌ها", "group": "تنظیمات ادمین", "default": ""},
-    {"id": "adm_st_access", "label": "تنظیمات: دسترسی", "group": "تنظیمات ادمین", "default": ""},
+    {"id": "adm_st_access", "label": "تنظیمات: تحویل سرویس", "group": "تنظیمات ادمین", "default": ""},
+    {"id": "adm_st_limits", "label": "تنظیمات: ورود و عضویت", "group": "تنظیمات ادمین", "default": ""},
+    {"id": "adm_st_buy", "label": "تنظیمات: قوانین خرید", "group": "تنظیمات ادمین", "default": ""},
+    {"id": "adm_st_guides", "label": "تنظیمات: آموزش اتصال", "group": "تنظیمات ادمین", "default": ""},
     {"id": "adm_st_notify", "label": "تنظیمات: اعلان‌ها", "group": "تنظیمات ادمین", "default": ""},
+    {"id": "adm_st_find", "label": "تنظیمات: جستجو", "group": "تنظیمات ادمین", "default": ""},
     {"id": "adm_st_panel", "label": "تنظیمات: وب‌پنل", "group": "تنظیمات ادمین", "default": "primary"},
     # Backup sub
     {"id": "backup_create", "label": "ساخت بکاپ (بدون .env)", "group": "بکاپ", "default": "primary"},
@@ -232,11 +250,15 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "bc_aud_resellers", "label": "همگانی: نمایندگان", "group": "پیام همگانی", "default": ""},
     {"id": "bc_aud_admins", "label": "همگانی: ادمین‌ها", "group": "پیام همگانی", "default": ""},
     # ── Reseller hub (shop bot / reseller panel) ────────────────────────────
+    {"id": "res_grp_daily", "label": "گروه کارهای روزانه", "group": "منوی نماینده", "default": "success"},
+    {"id": "res_grp_customers", "label": "گروه مشتریان", "group": "منوی نماینده", "default": "success"},
+    {"id": "res_grp_shop", "label": "گروه فروشگاه من", "group": "منوی نماینده", "default": "primary"},
+    {"id": "res_grp_account", "label": "گروه حساب من", "group": "منوی نماینده", "default": "primary"},
     {"id": "res_dash", "label": "خانه نماینده", "group": "منوی نماینده", "default": "success"},
     {"id": "res_users", "label": "مشتریان نماینده", "group": "منوی نماینده", "default": "success"},
     {"id": "res_add_rep", "label": "افزودن نماینده", "group": "منوی نماینده", "default": "primary"},
     {"id": "res_billing", "label": "کیف پول PAYG", "group": "منوی نماینده", "default": "success"},
-    {"id": "res_reports", "label": "گزارشات (نماینده)", "group": "منوی نماینده", "default": "success"},
+    {"id": "res_reports", "label": "گزارش‌ها (نماینده)", "group": "منوی نماینده", "default": "success"},
     {"id": "res_stats", "label": "آمار", "group": "منوی نماینده", "default": "success"},
     {"id": "res_orders", "label": "سفارش‌ها (نماینده)", "group": "منوی نماینده", "default": "success"},
     {"id": "res_payments", "label": "رسیدها (نماینده)", "group": "منوی نماینده", "default": "success"},
@@ -253,11 +275,15 @@ BUTTON_STYLE_CATALOG: list[dict[str, str]] = [
     {"id": "res_settings", "label": "تنظیمات فروشگاه", "group": "منوی نماینده", "default": ""},
     {"id": "res_preview", "label": "پیش‌نمایش منوی کاربر", "group": "منوی نماینده", "default": ""},
     # Reseller settings sub (reply hub — ids must match res_st_* / res_st_panel)
-    {"id": "res_st_shop", "label": "تنظیمات نماینده: فروشگاه", "group": "تنظیمات نماینده", "default": ""},
-    {"id": "res_st_menu", "label": "تنظیمات نماینده: منو", "group": "تنظیمات نماینده", "default": ""},
+    {"id": "res_st_shop", "label": "تنظیمات نماینده: نام و متن‌ها", "group": "تنظیمات نماینده", "default": ""},
+    {"id": "res_st_menu", "label": "تنظیمات نماینده: ظاهر منو", "group": "تنظیمات نماینده", "default": ""},
+    {"id": "res_st_labels", "label": "تنظیمات نماینده: متن دکمه‌ها", "group": "تنظیمات نماینده", "default": ""},
     {"id": "res_st_pay", "label": "تنظیمات نماینده: پرداخت", "group": "تنظیمات نماینده", "default": ""},
     {"id": "res_st_support", "label": "تنظیمات نماینده: پشتیبان‌ها", "group": "تنظیمات نماینده", "default": ""},
-    {"id": "res_st_access", "label": "تنظیمات نماینده: دسترسی", "group": "تنظیمات نماینده", "default": ""},
+    {"id": "res_st_access", "label": "تنظیمات نماینده: تحویل سرویس", "group": "تنظیمات نماینده", "default": ""},
+    {"id": "res_st_limits", "label": "تنظیمات نماینده: ورود و عضویت", "group": "تنظیمات نماینده", "default": ""},
+    {"id": "res_st_buy", "label": "تنظیمات نماینده: قوانین خرید", "group": "تنظیمات نماینده", "default": ""},
+    {"id": "res_st_guides", "label": "تنظیمات نماینده: آموزش اتصال", "group": "تنظیمات نماینده", "default": ""},
     {"id": "res_st_notify", "label": "تنظیمات نماینده: اعلان‌ها", "group": "تنظیمات نماینده", "default": ""},
     {"id": "res_st_bot", "label": "تنظیمات نماینده: ربات", "group": "تنظیمات نماینده", "default": ""},
     {"id": "res_st_panel", "label": "تنظیمات نماینده: وب‌پنل", "group": "تنظیمات نماینده", "default": "primary"},
@@ -275,6 +301,13 @@ def resolve_style_id(button_id: str) -> str:
 
 def setting_key(button_id: str) -> str:
     return f"btn_style_{resolve_style_id(button_id)}"
+
+
+def style_ids_sharing_setting(style_id: str) -> tuple[str, ...]:
+    """Every button id whose color is stored in the same setting as *style_id*."""
+    target = resolve_style_id(style_id)
+    sharing = {target} | {alias for alias, canonical in STYLE_ALIASES.items() if canonical == target}
+    return tuple(sorted(sharing))
 
 
 def normalize_style(raw: str | None) -> str:
@@ -307,6 +340,7 @@ PAY_METHOD_STYLE_IDS: dict[str, str] = {
     "card": "pay_card",
     "gateway": "pay_gateway",
     "psp": "pay_psp",
+    "bbc": "pay_bbc",
     "crypto": "pay_crypto",
 }
 

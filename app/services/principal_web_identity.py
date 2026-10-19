@@ -10,6 +10,7 @@ Parent L1 must be active on every login and protected request.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass
 from typing import Any, Mapping
@@ -446,7 +447,7 @@ async def authenticate_level1_web(
     identity = await get_web_identity_by_username(session, uname)
     if identity is None:
         return None
-    if not verify_password_hash(password, identity.web_password_hash):
+    if not await asyncio.to_thread(verify_password_hash, password, identity.web_password_hash):
         return None
     if not bool(identity.is_active):
         raise PrincipalWebIdentityError(

@@ -5,9 +5,29 @@ from __future__ import annotations
 import asyncio
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def render_dashboard_shell(template: str) -> str:
+    from app.api.app import templates
+    from app.api.home_pages import _EMPTY_ACTION, _EMPTY_FUNNEL, _unchecked_overview
+    from app.services.home_overview import empty_period_stats
+    from app.services.shop_scope import empty_shop_stats
+
+    context = {
+        "request": SimpleNamespace(url=SimpleNamespace(path="/home"), state=SimpleNamespace(), query_params={}),
+        "staff": {"role": "admin", "pg_is_owner": True, "permissions": [], "pg_permissions": []},
+        "overview": _unchecked_overview(), "pg_health": {"unchecked": True},
+        "bot": {"unchecked": True}, "stats": empty_shop_stats(),
+        "funnel": dict(_EMPTY_FUNNEL), "periods": empty_period_stats(),
+        "action_center": dict(_EMPTY_ACTION), "widgets_deferred": True,
+        "widgets_body_url": "/pg/body" if template == "pg_home.html" else "/home/body",
+        "view": None, "nodes": [], "counts": {}, "reseller_overview": None,
+    }
+    return templates.env.get_template(template).render(context)
 
 
 class PanelTimingTests(unittest.TestCase):
@@ -85,30 +105,15 @@ class PanelShellFirstContractTests(unittest.TestCase):
         self.assertNotIn("panelNavigate", defer)
         self.assertIn("redirect: 'manual'", defer)
 
-    def test_templates_include_defer_and_body_partials(self):
-        home = (ROOT / "app/web/templates/home.html").read_text(encoding="utf-8")
-        self.assertIn("_home_dash_body.html", home)
-        self.assertIn("widgets_deferred", home)
-        self.assertIn('id="home-dash"', home)
-        # In-page clock removed — only global matte veil during /body.
-        self.assertNotIn("_panel_widgets_loading.html", home)
-        self.assertLess(
-            home.find("_panel_widgets_defer.html"),
-            home.find('id="home-dash"'),
-        )
-        self.assertLess(
-            home.find("_panel_widgets_defer.html"),
-            home.find("_home_dash_body.html"),
-        )
-        reseller = (ROOT / "app/web/templates/reseller_home.html").read_text(encoding="utf-8")
-        self.assertIn("_reseller_home_dash_body.html", reseller)
-        self.assertNotIn("_panel_widgets_loading.html", reseller)
-        self.assertLess(
-            reseller.find("_panel_widgets_defer.html"),
-            reseller.find("_reseller_home_dash_body.html"),
-        )
-        body = (ROOT / "app/web/templates/_home_dash_body.html").read_text(encoding="utf-8")
-        self.assertIn('id="home-dash"', body)
+    def test_templates_include_defer_and_body_partials(self) -> None:
+        for template in ("home.html", "reseller_home.html"):
+            with self.subTest(template=template):
+                html = render_dashboard_shell(template)
+                self.assertEqual(html.count('id="home-dash"'), 1)
+                self.assertIn("وضعیت اتصال", html)
+                self.assertIn('id="panel-widget-status"', html)
+                self.assertNotRegex(html, r'<div[^>]*id="home-dash"[^>]*>\s*</div>')
+                self.assertIn("redirect: 'manual'", html)
 
     def test_home_body_skips_sidebar_unread(self):
         from app.services.panel_tickets import should_skip_unread_count
@@ -131,29 +136,14 @@ class PanelShellFirstContractTests(unittest.TestCase):
         # No SPA nav.
         self.assertNotIn("panelNavigate", src)
 
-    def test_pg_shell_first_templates(self):
-        home = (ROOT / "app/web/templates/pg_home.html").read_text(encoding="utf-8")
-        self.assertIn("widgets_deferred", home)
-        self.assertIn("_pg_dash_body.html", home)
-        self.assertIn("_panel_widgets_defer.html", home)
-        self.assertNotIn("_panel_widgets_loading.html", home)
-        self.assertIn("_pg_live_metrics_script.html", home)
-        self.assertNotIn("در حال بارگذاری آمار پاسارگارد…", home)
-        # Early fetch before empty mount.
-        self.assertLess(
-            home.find("_panel_widgets_defer.html"),
-            home.find('id="pg-dash"'),
-        )
-        body = (ROOT / "app/web/templates/_pg_dash_body.html").read_text(encoding="utf-8")
-        self.assertIn('id="pg-dash"', body)
-        defer = (ROOT / "app/web/templates/_panel_widgets_defer.html").read_text(encoding="utf-8")
-        self.assertIn("panel-widgets-ready", defer)
-        self.assertNotIn("armVeil", defer)
-        self.assertNotIn("page-loading", defer)
-        self.assertNotIn("__pgPageReveal", defer)
-        live = (ROOT / "app/web/templates/_pg_live_metrics_script.html").read_text(encoding="utf-8")
-        self.assertIn("panel-widgets-ready", live)
-        self.assertIn("function els()", live)
+    def test_pg_shell_first_templates(self) -> None:
+        html = render_dashboard_shell("pg_home.html")
+        self.assertEqual(html.count('id="pg-dash"'), 1)
+        self.assertNotRegex(html, r'<div[^>]*id="pg-dash"[^>]*>\s*</div>')
+        self.assertIn('id="panel-widget-status"', html)
+        self.assertIn("/pg/body", html)
+        self.assertIn("panel-widgets-ready", html)
+        self.assertIn("/static/overview-live.js", html)
 
     def test_deferred_widgets_use_nav_clock_not_veil(self):
         """Deferred /body shows #panel-nav-clock — never the deleted page-load veil."""

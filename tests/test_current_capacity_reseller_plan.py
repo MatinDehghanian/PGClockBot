@@ -197,7 +197,8 @@ class StartOrRefreshCurrentCapacityTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(sub.base_users, 40)
         self.assertEqual(sub.plan_id, 7)
         self.assertIsNotNone(sub.expires_at)
-        budget.assert_awaited()
+        # Recording what the admin already has is not a sale: the owner budget is not checked.
+        budget.assert_not_awaited()
         # No extras and preserve mode → do not push (would be no-op / risk clear)
         sync.assert_not_awaited()
 

@@ -44,9 +44,9 @@ from app.services.lucky_wheel import (
     prize_in_scope,
     upsert_prize,
 )
+from app.services.shop_membership import assert_customer_in_staff_scope
 from app.services.shop_scope import (
     ShopScopeError,
-    assert_bot_user_in_scope,
     resolve_shop_scope_id,
 )
 from app.services.users import get_setting, set_setting
@@ -222,11 +222,11 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
             .order_by(PointsTransaction.id.desc())
             .limit(50)
         )
+        # The entry's own purse decides the shop, not the customer's attribution.
         if scope is not None:
-            txs_q = txs_q.where(BotUser.reseller_id == int(scope))
+            txs_q = txs_q.where(PointsTransaction.reseller_id == int(scope))
         else:
-            # Platform shop only — never list sibling/tenant loyalty txs as global.
-            txs_q = txs_q.where(BotUser.reseller_id.is_(None))
+            txs_q = txs_q.where(PointsTransaction.reseller_id.is_(None))
         txs = [
             {
                 "id": tx.id,
@@ -570,7 +570,7 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
                 f"/loyalty?tab=transactions&err={quote('کاربر پیدا نشد')}", status_code=303
             )
         try:
-            assert_bot_user_in_scope(staff, user)
+            await assert_customer_in_staff_scope(session, staff, user)
         except ShopScopeError as e:
             return RedirectResponse(
                 f"/loyalty?tab=transactions&err={quote(e.message)}", status_code=303
@@ -583,6 +583,7 @@ def register_loyalty_pages(app, *, render, require_perm, require_admin, get_db):
                 int(delta),
                 reason=reason,
                 admin_identity=admin_id,
+                shop_id=_shop_scope(staff),
             )
         except ValueError as e:
             return RedirectResponse(

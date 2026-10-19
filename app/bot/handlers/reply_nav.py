@@ -10,43 +10,83 @@ from __future__ import annotations
 import logging
 
 from aiogram import F, Router
+from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import BaseFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
-from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
 from app.bot import menu_nav as nav
 from app.bot.menu_nav import restore_main_reply
-from app.db.models import BotUser, Order, Role, UserService
+from app.bot.reseller_hub_groups import back_callback_for
+from app.bot.reply_keyboards import _reply_admin_marketing_entries
+from app.db.models import BotUser, Order, Role
 from app.services.formatting import format_message
 from app.services.home_overview import admin_customer_counts
-from app.services.users import get_all_settings
+from app.services.service_scope import list_customer_services
+from app.services.users import current_shop_reseller_id, get_all_settings
 from app.services.redact import user_safe_error
+from app.services import bot_feedback_texts as feedback
+from app.services.screen_titles import (
+    screen_caption,
+    screen_heading,
+    screen_title_html,
+    screen_title_raw,
+    with_caption,
+)
 
 logger = logging.getLogger(__name__)
 router = Router(name="reply_nav")
 
+_RESELLER_HUB_BACK = "nv:res:home"
+
+
 class _SoftCallback:
     """Duck-typed CallbackQuery so admin handlers can edit a bot-owned message."""
 
-    def __init__(self, message: Message, data: str):
+    def __init__(self, message: Message, data: str, *, back_callback: str | None = None):
         self.id = "reply"
         self.from_user = message.from_user
         self.message = message
         self.data = data
         self.bot = message.bot
+        # A denial replaces the «⏳» bubble, so it always keeps a way out.
+        self._denial_markup = InlineKeyboardMarkup(
+            inline_keyboard=[[kb.back_button(None, back_callback)] if back_callback else [kb.home_button(None)]]
+        )
 
     async def answer(self, *args, **kwargs):
         # Show denial / alert text on the ⏳ bubble (no-op answer would leave it stuck)
         text = args[0] if args else kwargs.get("text")
         if text:
             try:
-                await self.message.edit_text(str(text)[:500])
-            except Exception:
-                pass
+                await self.message.edit_text(
+                    str(text)[:500], reply_markup=self._denial_markup
+                )
+            except TelegramAPIError:
+                logger.debug("soft callback denial edit failed", exc_info=True)
         return True
+
+
+def _admin_back(callback_data: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[[kb.back_button(None, callback_data)]])
+
+
+def _hub_back_markup() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[[kb.back_button(None, _RESELLER_HUB_BACK)]]
+    )
+
+
+async def _live_bubble(message: Message) -> Message:
+    """Reuse the tapped panel when the tap came from an inline button; else a ⏳ bubble."""
+    from app.bot.nav_inline import is_bot_panel_message
+
+    if is_bot_panel_message(message):
+        return message
+    return await message.answer("⏳")
 
 class ReplyMenuTextFilter(BaseFilter):
     """Match known reply-menu / submenu labels (works even during FSM — clears it)."""
@@ -194,6 +234,9 @@ class ReplyMenuTextFilter(BaseFilter):
         elif level == nav.NAV_ADMIN_PRODUCT:
             for key, label in kb._reply_admin_product_entries(ui):
                 mapping[(label or "").strip()] = key
+        elif level == nav.NAV_ADMIN_MARKETING:
+            for key, label in _reply_admin_marketing_entries(ui):
+                mapping[(label or "").strip()] = key
         elif level == nav.NAV_ADMIN_SYSTEM:
             for key, label in kb._reply_admin_system_entries(ui):
                 mapping[(label or "").strip()] = key
@@ -212,6 +255,7 @@ class ReplyMenuTextFilter(BaseFilter):
             nav.NAV_ADMIN_OPS,
             nav.NAV_ADMIN_PEOPLE,
             nav.NAV_ADMIN_PRODUCT,
+            nav.NAV_ADMIN_MARKETING,
             nav.NAV_ADMIN_SYSTEM,
             nav.NAV_LOYALTY,
             nav.NAV_ADMIN_LOYALTY,
@@ -298,7 +342,7 @@ async def open_shop_list(
         from app.services.rich_text import outbound_setting_text
 
         text, send_kw = outbound_setting_text(
-            ui.get("shop_empty_text") or "در حال حاضر پلنی برای فروش فعال نیست.",
+            ui.get("shop_empty_text") or feedback.NO_PLANS_FOR_SALE,
             title="🛒 فروشگاه",
         )
         main_kb, _, _ = await build_main_reply_keyboard(
@@ -346,12 +390,7 @@ async def open_services_list(
     from app.bot.nav_chrome import heal_main_reply
     from app.bot.nav_inline import present_inline_only
     ui = await get_all_settings(session)
-    result = await session.execute(
-        select(UserService)
-        .where(UserService.bot_user_id == db_user.id)
-        .order_by(UserService.id.desc())
-    )
-    services = list(result.scalars().all())
+    services = await list_customer_services(session, db_user.id, current_shop_reseller_id())
     reseller_label = await _reseller_capacity_list_label(
         session,
         db_user,
@@ -366,17 +405,26 @@ async def open_services_list(
     )
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_SERVICES, push=push)
+    from app.bot.service_import_ui import EMPTY_LIST_HINT, empty_services_keyboard, import_enabled
+
+    allow_import = import_enabled(ui)
     if not services and not reseller_label:
         from app.services.rich_text import outbound_setting_text
 
         text, send_kw = outbound_setting_text(
             ui.get("empty_services_text")
-            or "هنوز سرویسی ندارید.\nاز بخش «خرید سرویس» شروع کنید."
+            or feedback.NO_SERVICES_YET
         )
+        if allow_import:
+            await present_inline_only(
+                message, text=f"{text}\n\n{EMPTY_LIST_HINT}", inline=empty_services_keyboard(ui), **send_kw
+            )
+            return
         await message.answer(text, reply_markup=main_kb, **send_kw)
         return
     # Exactly one customer service and no reseller capacity → open card (Wave B).
-    if len(services) == 1 and not reseller_label:
+    # With «افزودن سرویس قبلی» on, the list stays so the add button is reachable.
+    if len(services) == 1 and not reseller_label and not allow_import:
         from app.bot.handlers.services import svc_view
 
         bubble = await message.answer("⏳")
@@ -420,14 +468,18 @@ async def open_services_list(
                 ui=ui,
             )
         return
-    body = "📦 <b>سرویس‌های شما</b>\nیکی را انتخاب کنید:"
-    from app.bot.nav_inline import services_list_keyboard
+    from app.bot.list_pages import page_line
+    from app.bot.nav_inline import services_list_keyboard, services_page
+
+    body = with_caption(screen_heading(ui, "c.services"), screen_caption(ui, "c.services")) + page_line(
+        services_page(services)
+    )
 
     await present_inline_only(
         message,
         text=body,
         inline=services_list_keyboard(
-            services, ui, reseller_capacity_label=reseller_label
+            services, ui, reseller_capacity_label=reseller_label, allow_import=allow_import
         ),
     )
     if heal_reply:
@@ -457,9 +509,8 @@ async def open_wallet_home(
 
     ui = await get_all_settings(session)
     bal = await wallet_balance_for_context(session, db_user)
-    hint = "یک گزینه را از دکمه‌های زیر انتخاب کنید."
     text = format_message(
-        "👛 کیف پول",
+        screen_title_html(ui, "c.wallet"),
         "\n".join(
             [
                 kv_line(
@@ -468,7 +519,7 @@ async def open_wallet_home(
                     f"<b>{format_toman(bal, get_settings().currency)}</b>",
                 ),
                 "",
-                hint,
+                screen_caption(ui, "c.wallet"),
             ]
         ),
     )
@@ -491,6 +542,7 @@ async def open_wallet_topup(
             "pay_card_enabled",
             "pay_gateway_enabled",
             "pay_psp_enabled",
+            "pay_bbc_enabled",
             "pay_crypto_enabled",
         )
     )
@@ -513,7 +565,7 @@ async def open_wallet_topup(
         message,
         text=format_message(
             "➕ شارژ کیف پول",
-            "مبلغ را انتخاب کنید یا «مبلغ دیگر» را بزنید:",
+            feedback.PICK_AMOUNT,
         ),
         inline=wallet_topup_presets_keyboard(ui),
     )
@@ -560,8 +612,6 @@ async def open_support_home(
         parse_support_contacts,
         support_chat_url,
     )
-    from app.services.users import on
-
     from app.services.rich_text import outbound_setting_text
 
     _ = reseller_owner_id
@@ -570,7 +620,7 @@ async def open_support_home(
     default_support = "تیکت جدید بسازید یا تیکت‌های قبلی را ببینید."
     text, send_kw = outbound_setting_text(
         ui.get("support_text") or default_support,
-        title="🎧 پشتیبانی",
+        title_raw=screen_title_raw(ui, "c.support"),
     )
     contact_rows: list[list[InlineKeyboardButton]] = []
     for c in contacts:
@@ -580,26 +630,12 @@ async def open_support_home(
             contact_rows.append(
                 [InlineKeyboardButton(text=f"💬 گفتگو با {title}", url=url)]
             )
-    order_keys = {
-        p.strip() for p in (ui.get("menu_order") or "").split(",") if p.strip()
-    }
-    # Platform bot only — never offer reseller apply on a shop bot.
-    show_apply = (
-        not is_reseller_bot
-        and on(ui.get("show_reseller_apply"))
-        and "reseller_apply" in order_keys
-        and db_user.role == Role.USER.value
-    )
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_SUPPORT, push=push)
     await present_inline_only(
         message,
         text=text,
-        inline=support_hub_keyboard(
-            ui,
-            contact_rows=contact_rows or None,
-            include_reseller_apply=show_apply,
-        ),
+        inline=support_hub_keyboard(ui, contact_rows=contact_rows or None),
         **send_kw,
     )
     return
@@ -630,14 +666,11 @@ async def open_support_list(
     if not tickets:
         await present_inline_only(
             message,
-            text="تیکتی ندارید.",
+            text=feedback.NO_TICKETS,
             inline=InlineKeyboardMarkup(
                 inline_keyboard=[
                     [
-                        InlineKeyboardButton(
-                            text=ui.get("btn_back") or "⬅️ بازگشت",
-                            callback_data="nv:s:home",
-                        )
+                        kb.back_button(ui, "nv:s:home")
                     ]
                 ]
             ),
@@ -654,10 +687,7 @@ async def open_support_list(
     ]
     rows.append(
         [
-            InlineKeyboardButton(
-                text=ui.get("btn_back") or "⬅️ بازگشت",
-                callback_data="nv:s:home",
-            )
+            kb.back_button(ui, "nv:s:home")
         ]
     )
     await present_inline_only(
@@ -751,7 +781,7 @@ async def open_reseller_apply(
         await message.answer(
             format_message(
                 "نمایندگی",
-                "در حال حاضر پلن نمایندگی فعالی تعریف نشده است.\nبعداً دوباره بررسی کنید.",
+                feedback.NO_RESELLER_PLANS,
             ),
             reply_markup=main_kb,
         )
@@ -766,6 +796,44 @@ async def open_reseller_apply(
     await present_inline_only(message, text=text, inline=inline)
     return
 
+async def _open_main_bot_reseller_hub(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext | None,
+    *,
+    push: bool,
+) -> None:
+    from app.bot.auth import bot_may_open_pg_hub
+    from app.bot.nav_inline import present_nav_panel, reseller_main_bot_hub_keyboard
+    from app.services.reseller_access import load_reseller_capacity_actor
+
+    owner_id, profile = await load_reseller_capacity_actor(
+        session, db_user, is_reseller_bot=False, reseller_owner_id=None
+    )
+    if not owner_id or profile is None:
+        await open_reseller_creds(
+            message, session, db_user, is_reseller_bot=False, reseller_owner_id=None
+        )
+        return
+    try:
+        show_pg = await bot_may_open_pg_hub(session, db_user, is_reseller_bot=False)
+    except SQLAlchemyError:
+        logger.warning("reseller hub pg gate failed", exc_info=True)
+        show_pg = False
+    ui = await get_all_settings(session)
+    if state is not None:
+        await nav.set_nav_level(state, nav.NAV_RESELLER, push=push)
+    await present_nav_panel(
+        message,
+        text=format_message(
+            screen_title_html(ui, "r.home"), screen_caption(ui, "r.home")
+        ),
+        inline=reseller_main_bot_hub_keyboard(profile, ui, show_pg=show_pg),
+        state=state,
+    )
+
+
 async def open_reseller_home(
     message: Message,
     session: AsyncSession,
@@ -776,63 +844,21 @@ async def open_reseller_home(
     reseller_owner_id: int | None,
     push: bool = True,
 ) -> None:
+    from app.bot.handlers.reseller_hub import load_reseller_hub
     from app.bot.nav_inline import present_nav_panel, reseller_manage_hub_keyboard
-    from app.services.reseller_access import load_reseller_actor
+    from app.services.admin_counters import format_queue_summary
 
     if not is_reseller_bot:
-        await open_reseller_creds(
-            message,
-            session,
-            db_user,
-            is_reseller_bot=is_reseller_bot,
-            reseller_owner_id=reseller_owner_id,
+        await _open_main_bot_reseller_hub(
+            message, session, db_user, state, push=push
         )
         return
-    owner_id, profile = await load_reseller_actor(
-        session,
-        db_user,
-        is_reseller_bot=is_reseller_bot,
-        reseller_owner_id=reseller_owner_id,
-    )
-    if not owner_id or not profile:
-        await message.answer("دسترسی نماینده یافت نشد.")
+    hub = await load_reseller_hub(session, db_user, reseller_owner_id=reseller_owner_id)
+    if hub is None:
+        await message.answer(feedback.RESELLER_ACCESS_NOT_FOUND)
         return
-    ui = await get_all_settings(session)
-    can_add = False
-    try:
-        from app.services.representative_unification import (
-            shop_bot_can_manage_representatives,
-        )
-
-        can_add = await shop_bot_can_manage_representatives(
-            session,
-            db_user,
-            is_reseller_bot=True,
-            reseller_owner_id=reseller_owner_id,
-            reseller_profile_id=int(getattr(profile, "id", 0) or 0) or None,
-        )
-    except Exception:
-        can_add = False
-    from app.services.admin_counters import (
-        PendingCounts,
-        format_queue_summary,
-        pending_counts,
-    )
-
-    # Shop-scoped only — platform queue must never appear on reseller hub.
-    try:
-        queue = await pending_counts(session, shop_id=int(owner_id))
-    except Exception:
-        logger.warning(
-            "reseller hub pending_counts failed shop_id=%s",
-            owner_id,
-            exc_info=True,
-        )
-        queue = PendingCounts()
-    body = format_message(
-        "🤝 پنل نماینده",
-        "یک بخش را از دکمه‌های زیر انتخاب کنید.",
-    )
+    ui, queue = hub.ui, hub.queue
+    body = format_message(screen_title_html(ui, "r.home"), screen_caption(ui, "r.home"))
     queue_line = format_queue_summary(queue)
     if queue_line:
         body = f"{body}\n\n{queue_line}"
@@ -842,22 +868,24 @@ async def open_reseller_home(
         message,
         text=body,
         inline=reseller_manage_hub_keyboard(
-            profile,
+            hub.profile,
             ui,
-            can_add_representative=can_add,
+            can_add_representative=hub.can_add_representative,
             pending_payments=queue.payments,
             pending_tickets=queue.tickets,
             pending_cancellations=queue.cancellations,
+            pending_deliveries=queue.deliveries,
         ),
         state=state,
     )
-    return
+
 
 async def open_reseller_creds(
     message: Message,
     session: AsyncSession,
     db_user: BotUser,
     *,
+    state: FSMContext | None = None,
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ) -> None:
@@ -877,33 +905,16 @@ async def open_reseller_creds(
     if not profile or not profile.is_active:
         await message.answer("پروفایل نماینده یافت نشد.", reply_markup=main_kb)
         return
-    text = await format_reseller_access_card(session, profile)
-    rows: list[list[InlineKeyboardButton]] = []
-    if profile.bot_username:
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=f"باز کردن @{profile.bot_username}",
-                    url=f"https://t.me/{profile.bot_username}",
-                )
-            ]
-        )
-    try:
-        from app.services.pg_admin_subscription import is_subscription_plan
+    from app.bot.nav_inline import present_nav_panel, reseller_access_card_keyboard
 
-        plan = getattr(profile, "plan", None)
-        if plan is not None and is_subscription_plan(plan):
-            rows.append(
-                [InlineKeyboardButton(text="🔄 تمدید سرویس", callback_data="res:renew")]
-            )
-    except Exception:
-        pass
-    await message.answer(text, reply_markup=main_kb)
-    if rows:
-        await message.answer(
-            "لینک ربات / تمدید:",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
-        )
+    ui = await get_all_settings(session)
+    await present_nav_panel(
+        message,
+        text=await format_reseller_access_card(session, profile),
+        inline=reseller_access_card_keyboard(profile, ui),
+        state=state,
+    )
+
 
 async def open_pg_home(
     message: Message,
@@ -956,18 +967,24 @@ async def open_pg_home(
         feats = frozenset()
         can_create = False
     body = (
-        "🖥 <b>عملیات پاسارگارد</b>\n"
-        + "یک بخش را از دکمه‌های زیر انتخاب کنید."
+        with_caption(screen_heading(ui, "a.pg"), screen_caption(ui, "a.pg"))
     )
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_ADMIN_PG, push=push)
+    is_reseller_actor = is_reseller_bot or db_user.role == Role.RESELLER.value
+    back_callback = "nv:res:home" if is_reseller_actor else "nv:adm:product"
     if not feats:
         from app.bot.nav_inline import admin_product_hub_keyboard
 
+        unavailable_keyboard = (
+            pg_hub_keyboard(ui, features=feats, back_callback=back_callback)
+            if is_reseller_actor
+            else admin_product_hub_keyboard(ui, pg_features=feats)
+        )
         await present_nav_panel(
             message,
             text="🖥 پاسارگارد در دسترس نیست — به محصول برگردید.",
-            inline=admin_product_hub_keyboard(ui, pg_features=feats),
+            inline=unavailable_keyboard,
             state=state,
         )
         return
@@ -975,7 +992,10 @@ async def open_pg_home(
         message,
         text=body,
         inline=pg_hub_keyboard(
-            ui, features=feats, can_create_user=can_create
+            ui,
+            features=feats,
+            can_create_user=can_create,
+            back_callback=back_callback,
         ),
         state=state,
     )
@@ -1029,7 +1049,7 @@ async def dispatch_admin_inline_reply_action(
         await nav.set_nav_level(state, nav.NAV_ADMIN_PLANS_ADD_TYPE, push=True)
         await present_nav_panel(
             message,
-            text="➕ <b>افزودن پلن</b>\nنوع پلن را انتخاب کنید:",
+            text=feedback.PICK_PLAN_TYPE,
             inline=admin_plans_add_type_hub_keyboard(str(aud), ui),
             state=state,
         )
@@ -1110,41 +1130,22 @@ async def present_admin_plans_audience(
     *,
     audience: str,
     is_reseller_bot: bool = False,
+    page_index: int = 0,
 ) -> None:
-    """Wave E: plans audience list — inline actions + overview bubble.
+    """One audience's plans with their add / catalog actions, in one panel.
 
     Owner-gated (same Owner Principal gate as ``_OWNER_ONLY_REPLY_ACTIONS``).
     """
-    from app.bot.nav_inline import admin_plans_kind_hub_keyboard, present_nav_panel
+    from app.bot.handlers.admin_plans import present_plans_overview
 
     if not await _deny_unless_owner(
         message, session, db_user, is_reseller_bot=is_reseller_bot
     ):
         return
-    ui = await get_all_settings(session)
-    if state is not None:
-        await state.update_data(_adm_plans_aud=audience, _adm_plans_kind=None)
-    title = "👥 <b>پلن‌های کاربران</b>" if audience == "users" else "🤝 <b>پلن‌های نمایندگان</b>"
-    body = (
-        f"{title}\n"
-        + "پلن‌ها در پیام بعد؛ افزودن/کاتالوگ از دکمه‌های زیر."
-    )
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_ADMIN_PLANS_KIND, push=True)
-    await present_nav_panel(
-        message,
-        text=body,
-        inline=admin_plans_kind_hub_keyboard(audience, ui),
-        state=state,
-    )
-    if audience == "resellers":
-        from app.bot.handlers.admin_plans import send_resellers_plans_overview
+    await present_plans_overview(message, session, state, audience, page_index)
 
-        await send_resellers_plans_overview(message, session)
-    else:
-        from app.bot.handlers.admin_plans import send_users_plans_overview
-
-        await send_users_plans_overview(message, session)
 
 async def open_admin_users_hub(
     message: Message,
@@ -1164,14 +1165,13 @@ async def open_admin_users_hub(
     ui = await get_all_settings(session)
     counts = await admin_customer_counts(session)
     total, blocked, orders = counts["users"], counts["blocked"], counts["orders"]
-    hint = "یک گزینه را از دکمه‌های زیر انتخاب کنید."
     body = (
-        "👥 <b>کاربران بات</b>\n\n"
+        f"{screen_heading(ui, 'a.users')}\n\n"
         f"کل: {total}\n"
         f"مسدود: {blocked}\n"
         f"سفارش‌ها: {orders}\n\n"
-        f"{hint}"
-    )
+        f"{screen_caption(ui, 'a.users')}"
+    ).rstrip()
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_ADMIN_USERS, push=push)
     await present_nav_panel(
@@ -1196,12 +1196,11 @@ async def open_admin_resellers_hub(
     ):
         return
     if not await platform_can_manage_representatives():
-        await message.answer("قابلیت ساخت نماینده برای این حساب فعال نیست")
+        await message.answer(feedback.REPRESENTATIVES_DISABLED)
         return
     ui = await get_all_settings(session)
     body = (
-        "🤝 <b>نمایندگان</b>\n"
-        + "یک بخش را از دکمه‌های زیر انتخاب کنید."
+        with_caption(screen_heading(ui, "a.resellers"), screen_caption(ui, "a.resellers"))
     )
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_ADMIN_RESELLERS, push=push)
@@ -1230,8 +1229,7 @@ async def open_admin_settings_hub(
         return
     ui = await get_all_settings(session)
     body = (
-        "⚙️ <b>تنظیمات سریع</b>\n"
-        + "یک بخش را از دکمه‌های زیر انتخاب کنید.\nظاهر، رنگ، گزارش روزانه → وب‌پنل."
+        with_caption(screen_heading(ui, "a.settings"), screen_caption(ui, "a.settings"))
     )
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_ADMIN_SETTINGS, push=push)
@@ -1254,7 +1252,7 @@ async def open_admin_backup_hub(
     import asyncio
 
     from app.bot.handlers import admin_backup as backup_h
-    from app.bot.nav_inline import admin_backup_hub_keyboard, present_nav_panel, with_inline_back
+    from app.bot.nav_inline import present_nav_panel
     from app.services.backup import list_backups
 
     _ = (reseller_profile_id, reseller_owner_id)
@@ -1266,22 +1264,10 @@ async def open_admin_backup_hub(
     backups = await asyncio.to_thread(list_backups)
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_ADMIN_BACKUP, push=push)
-    files_kb = with_inline_back(
-        kb.backup_files_keyboard(backups), ui, "nv:adm:system"
-    )
-    # Prefixed actions from hub keyboard without trailing back, then files + back.
-    hub = admin_backup_hub_keyboard(ui)
-    hub_rows = [list(r) for r in hub.inline_keyboard[:-1]]  # drop Back
-    file_rows = [list(r) for r in files_kb.inline_keyboard]
-    from aiogram.types import InlineKeyboardMarkup
-    combined = InlineKeyboardMarkup(inline_keyboard=hub_rows + file_rows)
     await present_nav_panel(
         message,
-        text=(
-            "💾 <b>بکاپ / ریستور</b>\n"
-            f"{backup_h._hub_text(backups)}"
-        ),
-        inline=combined,
+        text=backup_h._hub_text(backups, ui),
+        inline=backup_h.backup_hub_markup(backups, ui),
         state=state,
     )
     return
@@ -1306,8 +1292,7 @@ async def open_admin_broadcast_hub(
         return
     ui = await get_all_settings(session)
     body = (
-        "📢 <b>پیام گروهی</b>\n"
-        + "مخاطب را از دکمه‌های زیر انتخاب کنید:"
+        with_caption(screen_heading(ui, "a.broadcast"), screen_caption(ui, "a.broadcast"))
     )
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_ADMIN_BROADCAST, push=push)
@@ -1338,8 +1323,7 @@ async def open_admin_plans_hub(
     await state.set_state(None)
     await state.update_data(_adm_plans_aud=None, _adm_plans_kind=None)
     body = (
-        "💎 <b>پلن‌ها</b> (مثل وب‌پنل /plans)\n"
-        + "مخاطب یا ابزار کاتالوگ را از دکمه‌های زیر انتخاب کنید."
+        with_caption(screen_heading(ui, "a.plans"), screen_caption(ui, "a.plans"))
     )
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_ADMIN_PLANS_AUDIENCE, push=push)
@@ -1377,23 +1361,17 @@ async def open_reseller_settings_hub(
         reseller_owner_id=reseller_owner_id,
     )
     if not owner_id or not profile:
-        await message.answer("دسترسی نماینده یافت نشد.")
+        await message.answer(feedback.RESELLER_ACCESS_NOT_FOUND)
         return
     if not has_bot_perm(profile, "shop_settings"):
-        await message.answer("دسترسی تنظیمات فروشگاه ندارید.")
+        await message.answer(feedback.NO_SHOP_SETTINGS_ACCESS)
         return
-    bot_line = f"@{profile.bot_username}" if profile.bot_username else "توکن ثبت نشده"
+    bot_line = f"@{profile.bot_username}" if profile.bot_username else feedback.BOT_TOKEN_NOT_SET
     from app.bot.nav_inline import present_nav_panel, reseller_settings_hub_keyboard
 
     ui = await get_all_settings(session)
-    body = (
-        "⚙️ <b>تنظیمات سریع فروشگاه</b>\n"
-        f"ربات: <code>{bot_line}</code>\n"
-        + (
-            "بخش‌ها از دکمه‌های زیر — فقط محدودهٔ همین فروشگاه.\n"
-            "ظاهر، رنگ، گزارش روزانه → وب‌پنل."
-            "ظاهر، رنگ، گزارش روزانه → وب‌پنل."
-        )
+    body = with_caption(
+        screen_heading(ui, "r.settings"), f"ربات: <code>{bot_line}</code>", screen_caption(ui, "r.settings")
     )
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_RESELLER_SETTINGS, push=push)
@@ -1411,8 +1389,10 @@ async def open_reseller_plans_hub(
     is_reseller_bot: bool,
     reseller_owner_id: int | None,
     push: bool = True,
+    page_index: int = 0,
 ) -> None:
     from app.bot.handlers.reseller_plans import _list_plans
+    from app.bot.list_pages import page_line, page_of
     from app.services.reseller_access import load_reseller_actor
     from app.services.resellers import has_bot_perm
 
@@ -1432,7 +1412,7 @@ async def open_reseller_plans_hub(
         reseller_owner_id=reseller_owner_id,
     )
     if not owner_id or not profile:
-        await message.answer("دسترسی نماینده یافت نشد.")
+        await message.answer(feedback.RESELLER_ACCESS_NOT_FOUND)
         return
     if not has_bot_perm(profile, "plans"):
         await message.answer("دسترسی پلن ندارید.")
@@ -1447,20 +1427,15 @@ async def open_reseller_plans_hub(
 
     ui = await get_all_settings(session, reseller_id=owner_id)
     plans = await _list_plans(session, owner_id)
-    list_body = "هنوز پلنی نساخته‌اید." if not plans else f"تعداد: {len(plans)}"
-    hub_text = (
-        "💎 <b>پلن‌های فروش</b>\n"
-        + (
-            "ساخت و کاتالوگ از دکمه‌های زیر."
-            "برچسب دسته و بسته حجم/زمان از کیبورد — مثل وب‌پنل."
-        )
-    )
+    page = page_of(plans, page_index, kb.RESELLER_PLANS_PAGE_SIZE)
+    list_body = "هنوز پلنی نساخته‌اید." if not plans else f"تعداد: {len(plans)}" + page_line(page)
+    hub_text = with_caption(screen_heading(ui, "r.plans"), screen_caption(ui, "r.plans"))
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_RESELLER_PLANS, push=push)
     hub = reseller_plans_hub_keyboard(ui)
     hub_rows = [list(r) for r in hub.inline_keyboard[:-1]]
     list_kb = with_inline_back(
-        kb.reseller_plans_list_keyboard(plans, ui), ui, "nv:res:home"
+        kb.reseller_plans_list_keyboard(plans, ui, page_index=page.index), ui, back_callback_for("res_plans")
     )
     combined = InlineKeyboardMarkup(
         inline_keyboard=hub_rows + [list(r) for r in list_kb.inline_keyboard]
@@ -1499,10 +1474,7 @@ async def open_admin_home(
         queue = await pending_counts(session, shop_id=None)
     except Exception:
         logger.warning("admin home pending_counts failed", exc_info=True)
-    body = (
-        f"🛠 <b>پنل ادمین</b>\n<code>v{local_version}</code>\n\n"
-        "یک گروه را از دکمه‌های زیر انتخاب کنید."
-    )
+    body = with_caption(f"{screen_heading(ui, 'a.home')}\n<code>v{local_version}</code>\n", screen_caption(ui, "a.home"))
     queue_line = format_queue_summary(queue)
     if queue_line:
         body = f"{body}\n\n{queue_line}"
@@ -1516,6 +1488,7 @@ async def open_admin_home(
             pending_payments=queue.payments,
             pending_tickets=queue.tickets,
             pending_cancellations=queue.cancellations,
+            pending_deliveries=queue.deliveries,
         ),
         state=state,
     )
@@ -1547,7 +1520,7 @@ async def open_admin_ops_hub(
     except Exception:
         logger.warning("admin ops pending_counts failed", exc_info=True)
         queue = PendingCounts()
-    body = "🗓 <b>عملیات روزانه</b>\nداشبورد، سفارش‌ها، رسیدها و تیکت‌ها."
+    body = with_caption(screen_heading(ui, "a.ops"), screen_caption(ui, "a.ops"))
     queue_line = format_queue_summary(queue)
     if queue_line:
         # Cancel count is summary-only (no bot cancel inbox yet).
@@ -1561,6 +1534,7 @@ async def open_admin_ops_hub(
             ui,
             pending_payments=queue.payments,
             pending_tickets=queue.tickets,
+            pending_deliveries=queue.deliveries,
         ),
         state=state,
     )
@@ -1585,7 +1559,7 @@ async def open_admin_people_hub(
     _, can_reps = await nav._platform_admin_menu_flags(
         session, db_user, is_reseller_bot=is_reseller_bot
     )
-    body = "👤 <b>افراد</b>\nکاربران، نمایندگان و باشگاه مشتریان."
+    body = with_caption(screen_heading(ui, "a.people"), screen_caption(ui, "a.people"))
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_ADMIN_PEOPLE, push=push)
     await present_nav_panel(
@@ -1617,7 +1591,7 @@ async def open_admin_product_hub(
     pg_feats, _ = await nav._platform_admin_menu_flags(
         session, db_user, is_reseller_bot=is_reseller_bot
     )
-    body = "📦 <b>محصول و PG</b>\nپلن‌ها و عملیات پاسارگارد."
+    body = with_caption(screen_heading(ui, "a.product"), screen_caption(ui, "a.product"))
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_ADMIN_PRODUCT, push=push)
     await present_nav_panel(
@@ -1644,7 +1618,7 @@ async def open_admin_system_hub(
     ):
         return
     ui = await get_all_settings(session)
-    body = "🛠 <b>سیستم</b>\nتنظیمات، پیام همگانی، بکاپ و پیش‌نمایش."
+    body = with_caption(screen_heading(ui, "a.system"), screen_caption(ui, "a.system"))
     if state is not None:
         await nav.set_nav_level(state, nav.NAV_ADMIN_SYSTEM, push=push)
     await present_nav_panel(
@@ -1769,7 +1743,7 @@ async def _soft_admin(
             from app.bot.auth import platform_can_manage_representatives
 
             if not await platform_can_manage_representatives():
-                await message.answer("قابلیت ساخت نماینده برای این حساب فعال نیست")
+                await message.answer(feedback.REPRESENTATIVES_DISABLED)
                 return
     bubble = await message.answer("⏳")
     cb = _SoftCallback(bubble, data)
@@ -1863,20 +1837,19 @@ async def _soft_admin(
         elif data == "adm:backup:upload":
             await backup_h.backup_upload_ask(cb, db_user, state, session=session)
         elif data == "adm:broadcast":
-            # Audience is chosen on reply keyboard (open_broadcast_hub)
-            await bubble.edit_text("مخاطب را از کیبورد پایین انتخاب کنید.")
+            await bubble.edit_text("مخاطب پیام گروهی را انتخاب کنید.", reply_markup=_admin_back("nv:adm:broadcast"))
         elif data.startswith("adm:broadcast:aud:"):
             await admin_h.adm_broadcast_audience(cb, db_user, state, session=session)
         elif data in {"adm:settings", "adm:st:hub"}:
             if state is not None:
                 await settings_h.settings_hub(cb, session, db_user, state)
             else:
-                await bubble.edit_text("⚙️ تنظیمات را از کیبورد پایین انتخاب کنید.")
+                await bubble.edit_text("⚙️ تنظیمات", reply_markup=_admin_back("nv:adm:settings"))
         else:
-            await bubble.edit_text("این بخش در دسترس نیست.")
+            await bubble.edit_text("این بخش در دسترس نیست.", reply_markup=_admin_back("nv:adm:home"))
     except Exception as e:
         try:
-            await bubble.edit_text(f"خطا: {user_safe_error(e)}")
+            await bubble.edit_text(f"خطا: {user_safe_error(e)}", reply_markup=_admin_back("nv:adm:home"))
         except Exception:
             pass
 
@@ -1997,6 +1970,20 @@ async def handle_back(
     if level == nav.NAV_ADMIN_PRODUCT:
         await open_admin_product_hub(
             message, session, db_user, state, push=False, is_reseller_bot=is_reseller_bot
+        )
+        return
+    if level == nav.NAV_ADMIN_MARKETING:
+        from app.bot.handlers.nav_marketing import open_admin_marketing_hub
+
+        await open_admin_marketing_hub(
+            message, session, db_user, state, push=False, is_reseller_bot=is_reseller_bot
+        )
+        return
+    if level in {nav.NAV_ADMIN_GIFTS, nav.NAV_ADMIN_CAMPAIGNS}:
+        from app.bot.handlers.marketing_tools import open_admin_marketing_panel
+
+        await open_admin_marketing_panel(
+            level, message, session, db_user, state, push=False, is_reseller_bot=is_reseller_bot
         )
         return
     if level == nav.NAV_ADMIN_SYSTEM:
@@ -2236,6 +2223,7 @@ async def _handle_pay_action(
         kb.REPLY_ACTION_PAY_CARD: f"pay:card:{order.id}",
         kb.REPLY_ACTION_PAY_GATEWAY: f"pay:gateway:{order.id}",
         kb.REPLY_ACTION_PAY_PSP: f"pay:psp:{order.id}",
+        kb.REPLY_ACTION_PAY_BBC: f"pay:bbc:{order.id}",
         kb.REPLY_ACTION_PAY_CRYPTO: f"pay:crypto:{order.id}",
         kb.REPLY_ACTION_PAY_STARS: f"pay:stars:{order.id}",
         kb.REPLY_ACTION_PAY_DISCOUNT: f"pay:discount:{order.id}",
@@ -2254,6 +2242,8 @@ async def _handle_pay_action(
             await shop_h.pay_gateway_cb(cb, session, db_user, state=state)
         elif action == kb.REPLY_ACTION_PAY_PSP:
             await shop_h.pay_psp_cb(cb, session, db_user, state=state)
+        elif action == kb.REPLY_ACTION_PAY_BBC:
+            await shop_h.pay_bbc_cb(cb, session, db_user, state=state)
         elif action == kb.REPLY_ACTION_PAY_CRYPTO:
             await shop_h.pay_crypto_cb(cb, session, db_user, state=state)
         elif action == kb.REPLY_ACTION_PAY_STARS:
@@ -2279,6 +2269,7 @@ async def _handle_topup_action(
         kb.REPLY_ACTION_TOPUP_CARD: "wtop:card",
         kb.REPLY_ACTION_TOPUP_GATEWAY: "wtop:gateway",
         kb.REPLY_ACTION_TOPUP_PSP: "wtop:psp",
+        kb.REPLY_ACTION_TOPUP_BBC: "wtop:bbc",
         kb.REPLY_ACTION_TOPUP_CRYPTO: "wtop:crypto",
     }.get(action)
     if not key:
@@ -2322,6 +2313,7 @@ async def _soft_reseller(
                 message,
                 session,
                 db_user,
+                state=state,
                 is_reseller_bot=is_reseller_bot,
                 reseller_owner_id=reseller_owner_id,
             )
@@ -2333,7 +2325,7 @@ async def _soft_reseller(
             reseller_owner_id=None,
         )
         if not owner_id or not profile:
-            await message.answer("دسترسی نماینده یافت نشد.")
+            await message.answer(feedback.RESELLER_ACCESS_NOT_FOUND)
             return
         # Fall through to capacity mapping below (no shop-panel gates).
     else:
@@ -2344,7 +2336,7 @@ async def _soft_reseller(
             reseller_owner_id=reseller_owner_id,
         )
         if not owner_id or not profile:
-            await message.answer("دسترسی نماینده یافت نشد.")
+            await message.answer(feedback.RESELLER_ACCESS_NOT_FOUND)
             return
 
     if action == kb.REPLY_ACTION_RES_ADD_REP:
@@ -2391,8 +2383,8 @@ async def _soft_reseller(
         )
         return
     if action == "res_plan_add":
-        bubble = await message.answer("⏳")
-        cb = _SoftCallback(bubble, "res:plan:add")
+        bubble = await _live_bubble(message)
+        cb = _SoftCallback(bubble, "res:plan:add", back_callback=back_callback_for("res_plans"))
         try:
             await res_plans_h.res_plan_add(
                 cb,
@@ -2404,7 +2396,9 @@ async def _soft_reseller(
             )
         except Exception as e:
             try:
-                await bubble.edit_text(f"خطا: {user_safe_error(e)}")
+                await bubble.edit_text(
+                    f"خطا: {user_safe_error(e)}", reply_markup=_hub_back_markup()
+                )
             except Exception:
                 pass
         return
@@ -2438,7 +2432,7 @@ async def _soft_reseller(
             from app.services.resellers import get_reseller_panel_base_url, has_bot_perm
 
             if not has_bot_perm(profile, "shop_settings"):
-                await message.answer("دسترسی تنظیمات فروشگاه ندارید.")
+                await message.answer(feedback.NO_SHOP_SETTINGS_ACCESS)
                 return
             base = (await get_reseller_panel_base_url(session) or "").rstrip("/")
             url = f"{base}/shop-settings" if base else "/shop-settings"
@@ -2447,8 +2441,8 @@ async def _soft_reseller(
                 f"<code>{url}</code>"
             )
             return
-        bubble = await message.answer("⏳")
-        cb = _SoftCallback(bubble, f"res:st:sec:{sec}")
+        bubble = await _live_bubble(message)
+        cb = _SoftCallback(bubble, f"res:st:sec:{sec}", back_callback=back_callback_for("res_settings"))
         try:
             await res_st_h.settings_section(
                 cb,
@@ -2459,7 +2453,9 @@ async def _soft_reseller(
             )
         except Exception as e:
             try:
-                await bubble.edit_text(f"خطا: {user_safe_error(e)}")
+                await bubble.edit_text(
+                    f"خطا: {user_safe_error(e)}", reply_markup=_hub_back_markup()
+                )
             except Exception:
                 pass
         return
@@ -2485,11 +2481,13 @@ async def _soft_reseller(
     # res_users handler name
     if fn_name == "res_users":
         fn_name = "res_users_list"
-    bubble = await message.answer("⏳")
-    cb = _SoftCallback(bubble, data)
+    bubble = await _live_bubble(message)
+    cb = _SoftCallback(bubble, data, back_callback=back_callback_for(action))
     fn = getattr(res_h, fn_name, None)
     if fn is None:
-        await bubble.edit_text("این بخش در دسترس نیست — از کیبورد نماینده استفاده کنید.")
+        await bubble.edit_text(
+            "این بخش در دسترس نیست.", reply_markup=_hub_back_markup()
+        )
         return
     try:
         await fn(
@@ -2528,12 +2526,14 @@ async def reply_main_nav(
         kb.REPLY_ACTION_PAY_CARD,
         kb.REPLY_ACTION_PAY_GATEWAY,
         kb.REPLY_ACTION_PAY_PSP,
+        kb.REPLY_ACTION_PAY_BBC,
         kb.REPLY_ACTION_PAY_CRYPTO,
         kb.REPLY_ACTION_PAY_STARS,
         kb.REPLY_ACTION_PAY_DISCOUNT,
         kb.REPLY_ACTION_TOPUP_CARD,
         kb.REPLY_ACTION_TOPUP_GATEWAY,
         kb.REPLY_ACTION_TOPUP_PSP,
+        kb.REPLY_ACTION_TOPUP_BBC,
         kb.REPLY_ACTION_TOPUP_CRYPTO,
         kb.REPLY_ACTION_WALLET_TOPUP,
         kb.REPLY_ACTION_SUPPORT_NEW,
@@ -2583,6 +2583,8 @@ async def reply_main_nav(
         "res_st_support",
         "res_st_access",
         "res_st_limits",
+        "res_st_labels",
+        "res_st_buy",
         "res_st_guides",
         "res_st_bot",
         "res_st_notify",
@@ -2595,6 +2597,8 @@ async def reply_main_nav(
         "adm_st_support",
         "adm_st_access",
         "adm_st_limits",
+        "adm_st_labels",
+        "adm_st_buy",
         "adm_st_guides",
         "adm_st_notify",
         kb.REPLY_ACTION_REV_OK,
@@ -2611,6 +2615,7 @@ async def reply_main_nav(
         kb.REPLY_ACTION_ADM_HUB_OPS,
         kb.REPLY_ACTION_ADM_HUB_PEOPLE,
         kb.REPLY_ACTION_ADM_HUB_PRODUCT,
+        kb.REPLY_ACTION_ADM_HUB_MARKETING,
         kb.REPLY_ACTION_ADM_HUB_SYSTEM,
         kb.REPLY_ACTION_ADMIN,
         kb.REPLY_ACTION_ADMIN_DASH,
@@ -2915,6 +2920,12 @@ async def reply_main_nav(
         await open_admin_product_hub(
             message, session, db_user, state, is_reseller_bot=is_reseller_bot
         )
+    elif action == kb.REPLY_ACTION_ADM_HUB_MARKETING:
+        from app.bot.handlers.nav_marketing import open_admin_marketing_hub
+
+        await open_admin_marketing_hub(
+            message, session, db_user, state, is_reseller_bot=is_reseller_bot
+        )
     elif action == kb.REPLY_ACTION_ADM_HUB_SYSTEM:
         await open_admin_system_hub(
             message, session, db_user, state, is_reseller_bot=is_reseller_bot
@@ -2930,7 +2941,7 @@ async def reply_main_nav(
         )
     elif action == kb.REPLY_ACTION_RES_PREVIEW:
         if not is_reseller_bot:
-            await message.answer("پیش‌نمایش فقط روی ربات فروشگاه شما فعال است.")
+            await message.answer(feedback.PREVIEW_ONLY_ON_SHOP_BOT)
             return
         await open_user_preview(
             message,
@@ -3002,7 +3013,7 @@ async def reply_main_nav(
             )
         await present_inline_only(
             message,
-            text="➕ <b>افزودن پلن</b>\nنوع پلن را انتخاب کنید:",
+            text=feedback.PICK_PLAN_TYPE,
             inline=admin_plans_add_type_hub_keyboard(str(aud), ui),
         )
         return
@@ -3313,7 +3324,7 @@ async def reply_main_nav(
             reseller_owner_id=reseller_owner_id,
         )
         if not owner_id or not profile or not has_bot_perm(profile, "shop_settings"):
-            await message.answer("دسترسی تنظیمات فروشگاه ندارید.")
+            await message.answer(feedback.NO_SHOP_SETTINGS_ACCESS)
             return
         try:
             base = (await get_reseller_panel_base_url(session) or "").rstrip("/")

@@ -164,15 +164,20 @@ async def restore_payg_reseller(
     profile: ResellerProfile,
     *,
     commit: bool = True,
+    force: bool = False,
 ) -> dict[str, int]:
-    """Re-enable PG admin + users previously cut by suspend."""
+    """Re-enable PG admin + users previously cut by suspend.
+
+    ``force`` lifts the suspension without a positive wallet balance, for a reseller
+    leaving PAYG billing. It does not send the "top-up confirmed" notice.
+    """
     stats = {"users_restored": 0, "skipped": 0, "errors": 0}
     if profile.billing_suspended_at is None:
         stats["skipped"] = 1
         return stats
     from app.services.billing import payg_available_balance
 
-    if await payg_available_balance(session, profile) <= 0:
+    if not force and await payg_available_balance(session, profile) <= 0:
         stats["skipped"] = 1
         return stats
 
@@ -197,10 +202,11 @@ async def restore_payg_reseller(
     if commit:
         await session.commit()
 
-    try:
-        await _notify_restored(session, profile)
-    except Exception:
-        logger.debug("restore notify failed", exc_info=True)
+    if not force:
+        try:
+            await _notify_restored(session, profile)
+        except Exception:
+            logger.debug("restore notify failed", exc_info=True)
     return stats
 
 

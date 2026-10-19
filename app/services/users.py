@@ -13,9 +13,16 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
-from app.db.models import BotUser, Role, Setting
+from app.db.models import BotUser, Order, Role, Setting, UserService
 from app.services.button_styles import default_settings as button_style_defaults
+from app.services.screen_titles import SCREEN_TEXT_TAB, screen_text_defaults, screen_text_setting_groups
+from app.services.settings_button_labels import appearance_button_subs, shop_button_subs
 from app.services.button_styles import setting_group_fields as button_style_setting_fields
+from app.services.connection_status_texts import MONITOR_TEXT_DEFAULTS, readable_monitor_texts
+from app.services.retired_text_defaults import refresh_retired_defaults
+from app.services.user_purge import purge_user_references
+
+logger = logging.getLogger("pgclock.users")
 
 logger = logging.getLogger("pgclock.users")
 
@@ -376,6 +383,36 @@ def _referral_code() -> str:
     return "".join(secrets.choice(alphabet) for _ in range(8))
 
 
+async def _record_cross_bot_membership(
+    session: AsyncSession, user: BotUser, bot_shop_id: int | None, *, known_member: bool
+) -> None:
+    """Remember that the person now uses a bot other than the one that attributed them.
+
+    The attributing shop is recorded when the person is created, so only a visit to
+    another bot (a platform customer in a shop bot, or the reverse) needs a row; this
+    keeps the per-message path free of extra queries.
+    """
+    if known_member or user.role != Role.USER.value or int(user.id) == int(bot_shop_id or 0):
+        return
+    if (user.reseller_id or None) == (bot_shop_id or None):
+        return
+    from app.services.shop_membership import ensure_member
+
+    if await ensure_member(session, int(user.id), bot_shop_id):
+        await session.commit()
+
+
+async def _has_commerce_history(session: AsyncSession, user_id: int) -> bool:
+    """True when the user already owns a service or placed an order (any shop)."""
+    has_service = await session.scalar(
+        select(UserService.id).where(UserService.bot_user_id == user_id).limit(1)
+    )
+    if has_service is not None:
+        return True
+    has_order = await session.scalar(select(Order.id).where(Order.user_id == user_id).limit(1))
+    return has_order is not None
+
+
 async def get_or_create_user(
     session: AsyncSession,
     telegram_id: int,
@@ -428,18 +465,29 @@ async def get_or_create_user(
             else:
                 user.role = Role.USER.value
             changed = True
-        # Sticky first-touch attribution for reseller shop bots
+        # Sticky first-touch attribution for reseller shop bots. A customer who
+        # already bought elsewhere keeps their services and stays out of the shop's
+        # user list: attribution would hand the platform's services to the shop.
+        # A returning customer costs one indexed lookup (the membership of this shop); the history
+        # check and the writes only happen on the first visit.
+        known_member = False
         if (
             reseller_owner_id
             and user.reseller_id is None
             and user.id != reseller_owner_id
             and user.role == Role.USER.value
         ):
-            user.reseller_id = reseller_owner_id
-            changed = True
+            from app.services.shop_membership import ensure_member, is_member
+
+            known_member = await is_member(session, int(user.id), reseller_owner_id)
+            if not known_member and not await _has_commerce_history(session, int(user.id)):
+                user.reseller_id = reseller_owner_id
+                await ensure_member(session, int(user.id), reseller_owner_id)
+                changed = True
         if changed:
             await session.commit()
             await session.refresh(user)
+        await _record_cross_bot_membership(session, user, reseller_owner_id, known_member=known_member)
         return user
 
     from app.services.referral_registration import ReferralRequired, find_registration_referrer
@@ -490,6 +538,11 @@ async def get_or_create_user(
         user.reseller_id = None
         await session.commit()
         await session.refresh(user)
+    if user.role == Role.USER.value:
+        from app.services.shop_membership import ensure_member
+
+        await ensure_member(session, int(user.id), user.reseller_id)
+        await session.commit()
     if referred_by_id:
         try:
             from app.services.loyalty import on_user_referred
@@ -678,6 +731,7 @@ DEFAULT_SETTINGS = {
         "از منوی زیر می‌توانید سرویس بخرید، وضعیت را ببینید و پشتیبانی بگیرید."
     ),
     "payment_cards": "[]",
+    "payment_cards_random": "0",
     "payment_gateways": "[]",
     "payment_crypto_wallets": "[]",
     "card_number": "",
@@ -772,6 +826,10 @@ DEFAULT_SETTINGS = {
     "notify_wallet_topup": "1",
     "notify_new_ticket": "1",
     "notify_service_cancellation": "1",
+    "notify_panel_update": "1",
+    "notify_panel_capacity": "1",
+    "notify_panel_delivery_failures": "1",
+    "notify_service_import_request": "1",
     "notify_auto_approve": "1",
     "notify_account_edits": "1",
     # User low-remaining alerts (volume / time)
@@ -793,6 +851,10 @@ DEFAULT_SETTINGS = {
     "btn_wallet_topup": "🟢➕ شارژ کیف پول",
     "btn_wallet_tx": "🟡📜 تراکنش‌ها",
     "btn_support": "🟣🎧 پشتیبانی",
+    "btn_restart": "🔄 شروع مجدد",
+    "show_restart_button": "1",
+    # In-menu «✏️ ویرایش این منو» for owners; off until the platform owner enables it.
+    "screen_editor_enabled": "0",
     "btn_support_new": "🟣✉️ تیکت جدید",
     "btn_support_list": "📋 تیکت‌های من",
     "btn_guide": "📘 راهنما",
@@ -813,10 +875,104 @@ DEFAULT_SETTINGS = {
     "btn_menu_home": "🏠 منوی اصلی",
     "btn_adm_hub_ops": "🗓 عملیات روزانه",
     "btn_adm_hub_people": "👤 افراد",
-    "btn_adm_hub_product": "📦 محصول و PG",
+    "btn_adm_hub_product": "📦 محصول و پاسارگارد",
+    "btn_adm_hub_marketing": "🎯 بازاریابی",
     "btn_adm_hub_system": "🛠 سیستم",
+    "btn_adm_edit_mode": "✏️ حالت ویرایش منوها",
+    # Submenu and hub button labels (editable from the bot editor and settings).
+    "btn_pg_stats": "🏠 نمای کلی",
+    "btn_pg_users": "👥 کاربران",
+    "btn_pg_create": "➕ ساخت کاربر",
+    "btn_pg_search": "🔎 جستجوی یوزر",
+    "btn_pg_nodes": "🕸 نودها",
+    "btn_pg_group": "📁 ساخت گروه",
+    "btn_pg_template": "📋 ساخت تمپلیت",
+    "btn_adm_users_list": "📋 لیست کاربران",
+    "btn_adm_users_search": "🔎 جستجو با آیدی تلگرام",
+    "btn_adm_users_web": "🌐 مدیریت کامل در وب‌پنل",
+    "btn_adm_res_list": "📋 لیست نمایندگان",
+    "btn_adm_res_apps": "📋 درخواست‌های در انتظار",
+    "btn_adm_res_add": "➕ افزودن نماینده",
+    "btn_adm_st_shop": "نام و متن‌ها",
+    "btn_adm_st_menu": "ظاهر منو",
+    "btn_adm_st_labels": "متن دکمه‌ها",
+    "btn_adm_st_pay": "پرداخت",
+    "btn_adm_st_support": "پشتیبان‌ها",
+    "btn_adm_st_access": "تحویل سرویس",
+    "btn_adm_st_limits": "ورود و عضویت",
+    "btn_adm_st_buy": "قوانین خرید",
+    "btn_adm_st_guides": "آموزش اتصال",
+    "btn_adm_st_notify": "اعلان‌ها",
+    "btn_adm_st_panel": "🌐 وب‌پنل",
+    "btn_backup_create": "🆕 ساخت بکاپ",
+    "btn_backup_create_env": "🆕 بکاپ + .env",
+    "btn_backup_upload": "📤 آپلود فایل بکاپ",
+    "btn_backup_refresh": "🔄 تازه‌سازی لیست",
+    "btn_bc_aud_all": "📢 همه",
+    "btn_bc_aud_users": "👥 کاربران عادی",
+    "btn_bc_aud_resellers": "🤝 فقط نمایندگان",
+    "btn_bc_aud_admins": "🛠 ادمین‌ها",
+    "btn_adm_plans_aud_users": "📦 پلن‌های کاربران",
+    "btn_adm_plans_aud_resellers": "🤝 پلن‌های نمایندگان",
+    "btn_adm_plans_categories": "🏷 برچسب دسته",
+    "btn_adm_plans_addons": "⏱ بسته حجم و زمان",
+    "btn_adm_plans_add": "➕ افزودن پلن",
+    "btn_adm_plans_kind_res_fixed": "اشتراک ثابت",
+    "btn_adm_plans_kind_res_payg": "اشتراک PAYG",
+    "btn_adm_plans_kind_res_addon_vol": "بسته حجم",
+    "btn_adm_plans_kind_res_addon_users": "بسته کاربر",
+    "btn_res_plan_add": "➕ پلن جدید",
+    "btn_res_plan_categories": "🏷 برچسب دسته",
+    "btn_res_plan_addons": "⏱ بسته حجم/زمان",
+    "btn_res_st_shop": "نام و متن‌ها",
+    "btn_res_st_menu": "ظاهر منو",
+    "btn_res_st_labels": "متن دکمه‌ها",
+    "btn_res_st_pay": "پرداخت",
+    "btn_res_st_support": "پشتیبان‌ها",
+    "btn_res_st_access": "تحویل سرویس",
+    "btn_res_st_limits": "ورود و عضویت",
+    "btn_res_st_buy": "قوانین خرید",
+    "btn_res_st_guides": "آموزش اتصال",
+    "btn_res_st_notify": "اعلان‌ها",
+    "btn_res_st_bot": "ربات",
+    "btn_res_st_panel": "🌐 وب‌پنل",
+    "btn_svc_refresh": "♻️ رفرش وضعیت",
+    "btn_svc_wireguard": "🔐 فایل WireGuard",
+    "btn_svc_auto": "⚙️ تنظیمات خودکار",
+    "btn_svc_cancel": "📝 درخواست لغو سرویس",
+    "btn_svc_delete": "🗑 حذف سرویس",
+    "btn_svc_more": "⚙️ بیشتر",
+    "btn_svc_add_existing": "🔗 اتصال اشتراک قبلی",
+    "btn_adm_st_find": "🔍 جستجو در تنظیمات",
+    "btn_adm_plans_view": "📋 مشاهده پلن‌ها",
+    "btn_adm_gift_codes": "🎁 کدهای هدیه",
+    "btn_adm_campaigns": "📣 کمپین‌ها",
+    "btn_adm_loy_overview": "📊 نمای کلی",
+    "btn_adm_loy_rules": "📐 قوانین امتیاز",
+    "btn_adm_loy_rewards": "🎁 جوایز",
+    "btn_adm_loy_tiers": "🏅 سطوح",
+    "btn_adm_loy_settings": "⚙️ تنظیمات باشگاه",
+    "btn_adm_loy_ref_text": "📝 متن دعوت",
+    "btn_res_addon_packs": "📦 بسته‌های حجم/کاربر",
+    "btn_res_renew": "🔄 تمدید سرویس",
+    "btn_res_dash": "🏠 خانه نماینده",
+    "btn_res_users": "👥 مشتریان من",
+    "btn_res_add_rep": "➕ افزودن نماینده",
+    "btn_res_reports": "📈 گزارش‌ها",
+    "btn_res_stats": "📊 آمار",
+    "btn_res_plans": "💎 پلن‌های فروش",
+    "btn_res_orders": "🛒 سفارش‌های مشتریان",
+    "btn_res_payments": "🧾 رسیدهای در انتظار",
+    "btn_res_tickets": "🎫 تیکت‌های مشتریان",
+    "btn_res_loyalty": "⭐ باشگاه مشتریان",
+    "btn_res_settings": "⚙️ تنظیمات فروشگاه",
+    "btn_res_billing": "💰 کیف پول PAYG",
+    "btn_res_grp_daily": "📥 کارهای روزانه",
+    "btn_res_grp_customers": "👥 مشتریان",
+    "btn_res_grp_shop": "🏪 فروشگاه من",
+    "btn_res_grp_account": "💼 حساب من",
     "btn_adm_dash": "📊 داشبورد",
-    "btn_adm_reports": "📈 گزارشات",
+    "btn_adm_reports": "📈 گزارش‌ها",
     "btn_adm_orders": "🛒 سفارش‌ها",
     "btn_adm_payments": "🧾 رسیدها",
     "btn_adm_tickets": "🎫 تیکت‌ها",
@@ -884,6 +1040,7 @@ DEFAULT_SETTINGS = {
     "pay_crypto_enabled": "0",
     "pay_stars_enabled": "0",
     "pay_psp_enabled": "0",
+    "pay_bbc_enabled": "0",
     "pay_card_auto_enabled": "0",
     "pay_discount_enabled": "1",
     "psp_provider": "zarinpal",
@@ -895,6 +1052,13 @@ DEFAULT_SETTINGS = {
         "پس از تأیید درگاه، سرویس به‌صورت خودکار تحویل می‌شود."
     ),
     "btn_pay_psp": "🔵🏦 درگاه آنلاین",
+    "bbc_api_key": "",
+    "bbc_pay_text": (
+        "مبلغ: <b>{amount}</b>\n"
+        "مبلغ دقیق واریز: <b>{unique_amount}</b>\n"
+        "از دکمهٔ زیر وارد صفحهٔ پرداخت شوید و همین مبلغ را کارت‌به‌کارت کنید."
+    ),
+    "btn_pay_bbc": "💳 بزن به کارت",
     "card_auto_provider": "generic",
     "card_auto_webhook_secret": "",
     "card_auto_hint_text": (
@@ -943,14 +1107,29 @@ DEFAULT_SETTINGS = {
     "backup_include_env_scheduled": "0",
     "backup_last_ok_at": "",
     "backup_last_verify_ok": "",
+    "backup_keep_count": "10",
+    "backup_telegram_enabled": "0",
+    "backup_telegram_custom_bot": "0",
+    "backup_telegram_bot_token": "",
+    "backup_telegram_chat_ids": "",
+    "backup_telegram_last_status": "",
+    "backup_telegram_last_at": "",
     "capacity_warn_pct": "80",
     "receipt_auto_match_enabled": "1",
     "receipt_match_window_minutes": "120",
     "action_center_expire_days": "3",
     "funnel_tracking_enabled": "1",
     "one_tap_renew_enabled": "1",
+    "service_import_enabled": "0",
+    "chat_cleanup_enabled": "1",
+    "service_import_mode": "instant",
+    "service_import_max_per_user": "5",
+    "service_import_paths": "",
+    "service_import_admins": "",
 }
 DEFAULT_SETTINGS.update(button_style_defaults())
+DEFAULT_SETTINGS.update(screen_text_defaults())
+DEFAULT_SETTINGS.update(MONITOR_TEXT_DEFAULTS)
 
 # field kinds: text | textarea | toggle | select | number | image
 # (key, label, kind, help?, options?)
@@ -960,12 +1139,14 @@ SETTINGS_TABS: list[tuple[str, str]] = [
     ("appearance", "هویت ربات"),
     ("messages", "متن پیام‌ها"),
     ("buttons", "متن دکمه‌ها"),
+    (SCREEN_TEXT_TAB, "تیتر و توضیح منوها"),
     ("colors", "رنگبندی دکمه‌ها"),
     ("menu", "منوی بات"),
     ("links", "لینک‌های سریع"),
     ("qr", "QR اشتراک"),
     ("naming", "نام‌گذاری سرویس"),
     ("limits", "محدودیت"),
+    ("service_import", "افزودن سرویس قبلی"),
     ("guides", "آموزش اتصال"),
     ("notifications", "نوتیفیکیشن"),
     ("daily_report", "گزارش روزانه"),
@@ -998,6 +1179,8 @@ PANEL_SETTINGS_TABS: list[tuple[str, str]] = [
 PANEL_SETTINGS_KEYS = {t[0] for t in PANEL_SETTINGS_TABS}
 ALL_SETTINGS_TABS: list[tuple[str, str]] = [*SETTINGS_TABS, *PANEL_SETTINGS_TABS]
 
+BUTTON_LABELS_GROUP = "متن دکمه‌های منو"
+
 SETTING_GROUPS = {
     "خوش‌آمد و هویت": [
         ("shop_title", "نام فروشگاه", "text", "بالای منوی اصلی ربات دیده می‌شود"),
@@ -1018,6 +1201,14 @@ SETTING_GROUPS = {
         ("wallet_success_title", "عنوان موفقیت شارژ کیف پول", "text", "عنوان پیام بعد از تأیید شارژ"),
         ("wallet_success_text", "متن موفقیت شارژ کیف پول", "textarea", "متغیرها: {amount} {payment_id}"),
         ("payment_ok_title", "عنوان تأیید پرداخت", "text", "عنوان پیام وقتی پرداخت غیر از شارژ کیف پول تأیید می‌شود"),
+        # Connection status is still being built; its texts come last.
+        ("connection_status_title", "عنوان وضعیت اتصال مشتری", "text", "بدون متغیر"),
+        ("connection_status_empty", "فهرست وضعیت خالی", "textarea", "بدون متغیر"),
+        ("connection_status_error", "خطای دریافت وضعیت", "textarea", "بدون متغیر"),
+        ("connection_status_admin_title", "عنوان مدیریت وضعیت اتصال", "text", "بدون متغیر"),
+        ("connection_status_account_prompt", "تنظیم کاربر تست", "textarea", "بدون متغیر"),
+        ("connection_status_name_prompt", "دریافت نام عمومی هاست", "text", "بدون متغیر"),
+        ("connection_status_order_prompt", "دریافت ترتیب هاست", "text", "بدون متغیر"),
     ],
     "متن پشتیبانی ربات": [
         ("support_text", "متن صفحه پشتیبانی", "textarea", "بالای دکمه/فرم پشتیبانی در ربات نمایش داده می‌شود"),
@@ -1027,7 +1218,7 @@ SETTING_GROUPS = {
             "referral_required",
             "معرف اجباری",
             "toggle",
-            "روشن = کاربر جدید بدون کد معرف معتبر ثبت‌نام نمی‌شود و نمی‌تواند سرویس بخرد. کاربران قبلی معاف‌اند.",
+            "اگر روشن باشد، کاربر جدید بدون کد معرف معتبر ثبت‌نام نمی‌شود و نمی‌تواند بخرد. کاربران قبلی معاف‌اند.",
         ),
         (
             "referral_required_text",
@@ -1041,13 +1232,13 @@ SETTING_GROUPS = {
             "trial_require_contact",
             "تأیید شماره تماس برای تست",
             "toggle",
-            "قبل از دریافت اکانت تست، دکمه اشتراک‌گذاری شماره (Contact) الزامی است. فقط شماره متعلق به همان اکانت تلگرام پذیرفته می‌شود.",
+            "قبل از دریافت اکانت تست، کاربر باید شمارهٔ خودش را با دکمهٔ اشتراک‌گذاری بفرستد. فقط شمارهٔ همان حساب تلگرام پذیرفته می‌شود.",
         ),
         (
             "trial_require_iran_phone",
             "فقط شماره ایران برای تست",
             "toggle",
-            "همراه با تأیید تماس: فقط موبایل ایران (+۹۸) پذیرفته می‌شود. شماره خام ذخیره یا لاگ نمی‌شود.",
+            "همراه با تأیید شماره: فقط موبایل ایران (+۹۸) پذیرفته می‌شود. شمارهٔ کامل ذخیره یا لاگ نمی‌شود.",
         ),
     ],
     "شماره تماس خرید": [
@@ -1055,7 +1246,7 @@ SETTING_GROUPS = {
             "purchase_require_contact",
             "شماره تماس اجباری برای خرید اشتراک",
             "toggle",
-            "قبل از خرید عادی، دلخواه یا عمده، شماره خود کاربر با دکمه Contact تأیید شود. تأیید فقط برای همان فروشگاه است؛ شماره خام ذخیره نمی‌شود. تست تنظیم جداگانه دارد.",
+            "قبل از خرید عادی، دلخواه یا عمده، کاربر شمارهٔ خودش را تأیید می‌کند. تأیید فقط برای همین فروشگاه است و شمارهٔ کامل ذخیره نمی‌شود. تست رایگان تنظیم جدا دارد.",
         ),
     ],
     "ضدتقلب رسید": [
@@ -1096,7 +1287,7 @@ SETTING_GROUPS = {
     "متن دعوت دوستان": [
         ("referral_text", "متن دعوت دوستان", "textarea", "متغیرها: {code} {link} — فهرست: /message-variables"),
     ],
-    "متن دکمه‌های منو": [
+    BUTTON_LABELS_GROUP: [
         ("btn_shop", "دکمه خرید", "text", ""),
         ("btn_services", "دکمه سرویس‌ها", "text", ""),
         ("btn_wallet", "دکمه کیف پول", "text", ""),
@@ -1109,6 +1300,13 @@ SETTING_GROUPS = {
             "هر مبلغ را جداگانه اضافه کنید؛ برای تغییر مبلغ، آن را در فهرست ویرایش کنید.",
         ),
         ("btn_support", "دکمه پشتیبانی", "text", ""),
+        ("btn_restart", "دکمه شروع مجدد", "text", "ردیف آخر کیبورد اصلی؛ منو را از نو می‌سازد"),
+        (
+            "show_restart_button",
+            "نمایش دکمه شروع مجدد",
+            "toggle",
+            "روشن = زیر کیبورد اصلی برای همه دکمه «شروع مجدد» نمایش داده می‌شود.",
+        ),
         ("btn_support_new", "دکمه تیکت جدید", "text", "زیرمنوی پشتیبانی (حالت تیکت)"),
         ("btn_support_list", "دکمه تیکت‌های من", "text", "زیرمنوی پشتیبانی (حالت تیکت)"),
         ("btn_guide", "دکمه راهنما", "text", ""),
@@ -1130,13 +1328,17 @@ SETTING_GROUPS = {
         ("btn_reseller", "دکمه نماینده", "text", "در کیبورد ربات اختصاصی نماینده"),
         ("btn_reseller_creds", "دکمه اطلاعات ورود نماینده", "text", "در ربات اصلی برای صاحب فروشگاه"),
         ("btn_admin", "دکمه ادمین", "text", ""),
+        ("btn_connection_status_admin", "دکمه وضعیت اتصال", "text", "صفحهٔ اول پنل ادمین"),
+        ("btn_connection_status", "دکمه وضعیت اتصال مشتری", "text", "منوی اصلی"),
         ("btn_menu_home", "دکمه منوی اصلی (کیبورد)", "text", "خروج از پیش‌نمایش / خانه"),
         ("btn_adm_hub_ops", "گروه عملیات روزانه (ادمین)", "text", "هاب پنل ادمین"),
         ("btn_adm_hub_people", "گروه افراد (ادمین)", "text", "هاب پنل ادمین"),
-        ("btn_adm_hub_product", "گروه محصول و PG (ادمین)", "text", "هاب پنل ادمین"),
+        ("btn_adm_hub_product", "گروه محصول و پاسارگارد (ادمین)", "text", "هاب پنل ادمین"),
+        ("btn_adm_hub_marketing", "گروه بازاریابی (ادمین)", "text", "هاب پنل ادمین"),
         ("btn_adm_hub_system", "گروه سیستم (ادمین)", "text", "هاب پنل ادمین"),
+        ("btn_adm_edit_mode", "دکمه حالت ویرایش منوها", "text", "هاب پنل ادمین"),
         ("btn_adm_dash", "دکمه داشبورد (ادمین)", "text", "هاب عملیات"),
-        ("btn_adm_reports", "دکمه گزارشات (ادمین)", "text", "هاب عملیات"),
+        ("btn_adm_reports", "دکمه گزارش‌ها (ادمین)", "text", "هاب عملیات"),
         ("btn_adm_orders", "دکمه سفارش‌ها (ادمین)", "text", "هاب عملیات"),
         ("btn_adm_payments", "دکمه رسیدها (ادمین)", "text", "هاب عملیات"),
         ("btn_adm_tickets", "دکمه تیکت‌ها (ادمین)", "text", "هاب عملیات"),
@@ -1144,9 +1346,9 @@ SETTING_GROUPS = {
         ("btn_adm_pg", "دکمه پاسارگارد (ادمین)", "text", "هاب محصول"),
         ("btn_adm_users", "دکمه کاربران (ادمین)", "text", "هاب افراد"),
         ("btn_adm_resellers", "دکمه نمایندگان (ادمین)", "text", "هاب افراد"),
-        ("btn_adm_loyalty", "دکمه باشگاه (ادمین)", "text", "هاب افراد"),
+        ("btn_adm_loyalty", "دکمه باشگاه (ادمین)", "text", "هاب بازاریابی"),
         ("btn_adm_settings", "دکمه تنظیمات (ادمین)", "text", "هاب سیستم"),
-        ("btn_adm_broadcast", "دکمه پیام گروهی (ادمین)", "text", "هاب سیستم"),
+        ("btn_adm_broadcast", "دکمه پیام گروهی (ادمین)", "text", "هاب بازاریابی"),
         ("btn_adm_backup", "دکمه بکاپ (ادمین)", "text", "هاب سیستم"),
         ("btn_adm_preview", "دکمه پیش‌نمایش کاربر (ادمین)", "text", "هاب سیستم"),
         ("btn_adm_exit_preview", "خروج از پیش‌نمایش", "text", "روی کیبورد هنگام پیش‌نمایش منوی کاربر"),
@@ -1175,9 +1377,9 @@ SETTING_GROUPS = {
         ),
         (
             "billing_low_balance",
-            "آستانه هشدار موجودی کم (تومان)",
+            "حداقل موجودی PAYG (تومان)",
             "number",
-            "وقتی موجودی Billing به این مقدار یا کمتر برسد یک‌بار هشدار تلگرام می‌رود؛ خرید PAYG نیز نیازمند کیف پول بیشتر از دو برابر این آستانه است",
+            "حداقل موجودی کیف پول برای خرید پلن پرداخت به‌ازای مصرف. شارژ لازم برای رفع تعلیق دو برابر آن است. هشدارهای موجودی کم ثابت‌اند (۱۰۰٬۰۰۰ و ۵۰٬۰۰۰ تومان).",
         ),
         (
             "billing_on_empty",
@@ -1198,7 +1400,7 @@ SETTING_GROUPS = {
             "user_alert_low_enabled",
             "ارسال خودکار هشدار کمبود به کاربر",
             "toggle",
-            "وقتی حجم یا زمان باقی‌مانده سرویس کمتر از درصد تعیین‌شده شود، در تلگرام به کاربر پیام می‌رود",
+            "وقتی حجم یا زمان باقی‌ماندهٔ سرویس از درصد تعیین‌شده کمتر شود، به کاربر در تلگرام پیام می‌رود.",
         ),
         (
             "user_alert_low_traffic_pct",
@@ -1224,7 +1426,7 @@ SETTING_GROUPS = {
             "subordinate_report_enabled",
             "گزارش نمایندگان زیرمجموعه",
             "toggle",
-            "همان ساعت، خلاصهٔ عملکرد هر نمایندهٔ مستقیم (کاربر، خرید، فروش، حجم) برای شما ارسال می‌شود",
+            "همان ساعت، خلاصهٔ عملکرد هر نمایندهٔ مستقیم (کاربر، خرید، فروش، حجم) برایتان فرستاده می‌شود.",
         ),
         (
             "admin_daily_report_hour",
@@ -1262,7 +1464,7 @@ SETTING_GROUPS = {
             "funnel_tracking_enabled",
             "ثبت رفتار کاربر",
             "toggle",
-            "مراحل باز کردن فروشگاه تا تحویل برای آمار «رفتار کاربر» در مدیریت مالی",
+            "مراحل باز کردن فروشگاه تا تحویل برای آمار «رفتار کاربر» در بخش بازاریابی و وفاداری",
         ),
     ],
     "رنگ دکمه‌ها": button_style_setting_fields(),
@@ -1284,6 +1486,39 @@ SETTING_GROUPS = {
             "شامل .env در بکاپ خودکار",
             "toggle",
             "توکن‌ها و اسرار — فقط اگر مطمئنید",
+        ),
+        (
+            "backup_keep_count",
+            "تعداد بکاپ نگه‌داشته‌شده",
+            "select",
+            "فقط همین تعداد آخرین بکاپ می‌ماند و قدیمی‌ترها از سرور پاک می‌شوند.",
+            [("5", "۵ بکاپ"), ("10", "۱۰ بکاپ"), ("15", "۱۵ بکاپ")],
+        ),
+    ],
+    "ارسال بکاپ به تلگرام": [
+        (
+            "backup_telegram_enabled",
+            "ارسال بکاپ به تلگرام",
+            "toggle",
+            "بعد از هر بکاپ بدون .env، فایل برای گیرنده‌ها فرستاده می‌شود (تا ۵۰ مگابایت).",
+        ),
+        (
+            "backup_telegram_custom_bot",
+            "ربات جداگانه برای بکاپ",
+            "toggle",
+            "خاموش: با همان ربات پنل برای مدیران اصلی ارسال می‌شود.",
+        ),
+        (
+            "backup_telegram_bot_token",
+            "توکن ربات بکاپ",
+            "password",
+            "فقط با روشن بودن «ربات جداگانه». خالی = بدون تغییر.",
+        ),
+        (
+            "backup_telegram_chat_ids",
+            "شناسهٔ چت گیرنده‌ها",
+            "text",
+            "عددی؛ چند شناسه را با کاما جدا کنید. ربات باید در آن چت شروع شده باشد.",
         ),
     ],
     "حالت تعمیرات و رسید": [
@@ -1323,11 +1558,18 @@ SETTING_GROUPS = {
         ("pay_card_enabled", "کارت به کارت", "toggle", ""),
         ("pay_gateway_enabled", "درگاه پرداخت (لینک + رسید)", "toggle", "لینک درگاه خارجی + ارسال رسید — روش قبلی حفظ می‌شود"),
         ("pay_psp_enabled", "درگاه آنلاین API", "toggle", "درگاه واقعی request→verify (Mock بدون مرچنت / زرین‌پال با مرچنت)"),
+        (
+            "pay_bbc_enabled",
+            "بزن به کارت",
+            "toggle",
+            "کارت‌به‌کارت خودکار با bezanbecard.ir و کلید API خود فروشگاه: مشتری مبلغ یکتا را "
+            "واریز می‌کند و ربات بعد از تأیید بزن به کارت، خودکار تحویل می‌دهد.",
+        ),
         ("pay_card_auto_enabled", "تأیید خودکار کارت به کارت", "toggle", "وب‌هوک امضادار از سرویس تأیید کارت — کنار رسید دستی"),
         ("pay_crypto_enabled", "رمزارز", "toggle", ""),
         ("pay_stars_enabled", "استارز تلگرام", "toggle", "پرداخت درون‌برنامه‌ای با ⭐"),
         ("pay_discount_enabled", "کد تخفیف", "toggle", "نمایش دکمه کد تخفیف هنگام پرداخت"),
-        ("auto_approve_payments", "تأیید خودکار رسید", "toggle", "روشن = بلافاصله بعد از رسید خرید، سرویس تحویل می‌شود. شارژ کیف‌پول هرگز خودکار تأیید نمی‌شود."),
+        ("auto_approve_payments", "تأیید خودکار رسید", "toggle", "اگر روشن باشد، سرویس بلافاصله بعد از ارسال رسید خرید تحویل می‌شود. شارژ کیف پول هرگز خودکار تأیید نمی‌شود."),
         ("referral_bonus", "پاداش دعوت (تومان)", "number", "هدیه به معرف بعد از خرید موفق دعوت‌شده"),
         ("payment_reject_text", "متن رد پرداخت", "textarea", "وقتی ادمین رسید را رد می‌کند"),
     ],
@@ -1357,6 +1599,12 @@ SETTING_GROUPS = {
             "کارت‌ها",
             "payment_cards",
             "چند کارت — دکمه + برای افزودن. متغیرهای متن: {amount} {card} {holder}",
+        ),
+        (
+            "payment_cards_random",
+            "نمایش کارت تصادفی",
+            "toggle",
+            "اگر چند کارت فعال باشد، یکی از آن‌ها به‌جای انتخاب مشتری نشان داده می‌شود. برای هر سفارش همیشه همان کارت می‌ماند.",
         ),
         ("card_pay_text", "راهنمای کارت‌به‌کارت", "textarea", "متغیرها: {amount} {card} {holder}"),
         ("btn_pay_card", "متن دکمه کارت به کارت", "text", ""),
@@ -1420,6 +1668,23 @@ SETTING_GROUPS = {
         ),
         ("btn_pay_psp", "متن دکمه درگاه آنلاین", "text", ""),
     ],
+    "بزن به کارت": [
+        (
+            "bbc_api_key",
+            "کلید API",
+            "password",
+            "از داشبورد bezanbecard.ir (طرح دارای API) کلید بسازید و اینجا بگذارید. "
+            "کلید دسترسی کامل حساب شماست و جایی نمایش داده نمی‌شود؛ خالی بگذارید تا کلید فعلی بماند.",
+        ),
+        (
+            "bbc_pay_text",
+            "راهنمای پرداخت",
+            "textarea",
+            "متن بالای دکمهٔ پرداخت. {unique_amount} مبلغ دقیق واریز به ریال است. "
+            "متغیرها: {amount} {unique_amount} {order_id} {payment_id} {shop_title}",
+        ),
+        ("btn_pay_bbc", "متن دکمه بزن به کارت", "text", ""),
+    ],
     "تأیید خودکار کارت به کارت": [
         (
             "card_auto_provider",
@@ -1460,7 +1725,7 @@ SETTING_GROUPS = {
             "force_join_channel",
             "کانال‌ها (دکمه‌های اینلاین)",
             "force_channels",
-            "شناسه: @username یا -100… یا لینک t.me/c/… — برای کانال خصوصی لینک دعوت (+…) را هم بگذارید. عنوان روی دکمه اینلاین نمایش داده می‌شود. ربات باید ادمین کانال باشد (توضیح بالا).",
+            "شناسه را به شکل @username، -100… یا لینک t.me/c/… بدهید. برای کانال خصوصی لینک دعوت (+…) را هم بگذارید. عنوان روی دکمه نمایش داده می‌شود. ربات باید ادمین کانال باشد.",
         ),
         (
             "force_join_msg",
@@ -1470,6 +1735,41 @@ SETTING_GROUPS = {
         ),
         ("btn_force_join", "متن پیش‌فرض دکمه لینک کانال", "text", "اگر عنوان کانال خالی باشد"),
         ("btn_force_join_check", "متن دکمه بررسی عضویت", "text", "دکمه «عضو شدم»"),
+    ],
+    "افزودن سرویس قبلی": [
+        (
+            "service_import_enabled",
+            "افزودن سرویس قبلی توسط مشتری",
+            "toggle",
+            "مشتری با لینک اشتراک، سرویس بیرونی خود را به «سرویس‌های من» اضافه می‌کند و همان‌جا تمدید می‌کند. فقط سرویس ادمین‌های مجاز که به کاربر دیگری وصل نیست قابل افزودن است. لغو و بازگشت وجه ندارد.",
+        ),
+        (
+            "service_import_mode",
+            "روش پذیرش سرویس",
+            "select",
+            "فوری: بعد از بررسی لینک همان لحظه اضافه می‌شود. با تأیید ادمین: درخواست در «درخواست‌های در انتظار» همین تب می‌ماند تا ادمین تأیید یا رد کند. درخواست بی‌پاسخ بعد از ۷ روز منقضی می‌شود.",
+            [("instant", "فوری"), ("approval", "با تأیید ادمین")],
+        ),
+        (
+            "service_import_max_per_user",
+            "سقف سرویس افزوده‌شده برای هر مشتری",
+            "number",
+            "بین ۱ تا ۲۰ — پیش‌فرض ۵",
+        ),
+    ],
+    "مسیرها و ادمین‌های مجاز": [
+        (
+            "service_import_paths",
+            "مسیرهای مجاز لینک اشتراک",
+            "list",
+            "مسیر اشتراک پنل (PG_SUBSCRIPTION_PATH) همیشه مجاز است. اگر بعضی لینک‌ها مسیر دیگری دارند، مثل /hamid، اینجا اضافه کنید. فقط مسیر را بنویسید، نه آدرس کامل.",
+        ),
+        (
+            "service_import_admins",
+            "ادمین‌های مجاز پاسارگارد",
+            "list",
+            "ادمینی که ربات با آن وارد پنل می‌شود همیشه مجاز است. اگر بعضی سرویس‌ها را با ادمین دیگری ساخته‌اید، نام کاربری او را اینجا بنویسید. ادمین نمایندگان قابل افزودن نیست.",
+        ),
     ],
     "قوانین ورود به ربات": [
         ("terms_entry_enabled", "فعال", "toggle", "قبل از منوی اصلی — فقط کاربران"),
@@ -1538,13 +1838,33 @@ SETTING_GROUPS = {
         ),
     ],
 }
+SETTING_GROUPS.update(screen_text_setting_groups())
+
+
+def _remaining_button_label_groups(groups: dict[str, list]) -> dict[str, list[tuple[str, str, str, str]]]:
+    """Every bot button label the «متن دکمه‌ها» tab does not list yet, in the bot's own categories."""
+    seen = {field[0] for field in groups[BUTTON_LABELS_GROUP]}
+    extra: dict[str, list[tuple[str, str, str, str]]] = {}
+    for _sub_id, title, fields in (*shop_button_subs(include_platform=True), *appearance_button_subs()):
+        rest = [(key, label, "text", "") for key, label, *_ in fields if key not in seen]
+        seen.update(field[0] for field in rest)
+        if rest:
+            extra.setdefault(title, []).extend(rest)
+    if set(extra) & set(groups):
+        raise RuntimeError("button label group name clashes with a settings group")
+    return extra
+
+
+BUTTON_LABEL_GROUPS_MORE = _remaining_button_label_groups(SETTING_GROUPS)
+SETTING_GROUPS.update(BUTTON_LABEL_GROUPS_MORE)
 
 # Map tab id → which SETTING_GROUPS cards to show (menu/notifications/update/naming special)
 TAB_SETTING_GROUPS: dict[str, list[str]] = {
     "menu": [],
     "welcome": ["خوش‌آمد و هویت"],
     "messages": ["متن پیام‌ها"],
-    "buttons": ["متن دکمه‌های منو"],
+    "buttons": [BUTTON_LABELS_GROUP, *BUTTON_LABEL_GROUPS_MORE],
+    SCREEN_TEXT_TAB: list(screen_text_setting_groups()),
     "colors": ["رنگ دکمه‌ها"],
     "qr": ["QR اشتراک"],
     "payment": [
@@ -1553,6 +1873,7 @@ TAB_SETTING_GROUPS: dict[str, list[str]] = {
         "تأیید خودکار کارت به کارت",
         "درگاه پرداخت",
         "درگاه آنلاین API",
+        "بزن به کارت",
         "رمزارز",
         "استارز تلگرام",
         "متن دکمه‌های پرداخت",
@@ -1573,13 +1894,14 @@ TAB_SETTING_GROUPS: dict[str, list[str]] = {
         "قوانین خرید پلن نماینده",
     ],
     "guides": ["آموزش اتصال"],
+    "service_import": ["افزودن سرویس قبلی", "مسیرها و ادمین‌های مجاز"],
     # Legacy aliases — redirected to limits
     "forcejoin": ["کانال اجباری"],
     "terms": ["قوانین ورود به ربات", "قوانین خرید پلن کاربر", "قوانین خرید پلن نماینده"],
     "billing": ["مدیریت PAYG"],
     "notifications": ["هشدار سرویس کاربر", "گزارش و عملیات"],
     "daily_report": ["گزارش روزانه"],
-    "backup": ["بکاپ زمان‌بندی"],
+    "backup": ["بکاپ زمان‌بندی", "ارسال بکاپ به تلگرام"],
     "pwa": [],
     "update": [],
     "ssl": [],
@@ -1627,6 +1949,21 @@ def keys_for_tab(tab: str) -> set[str]:
         for item in SETTING_GROUPS.get(name, []):
             keys.add(item[0])
     return keys
+
+
+# Tabs whose texts and colors the web panel can put back to the shipped defaults in one step.
+RESETTABLE_SETTINGS_TABS = frozenset({"welcome", "messages", "buttons", "colors", "menu", SCREEN_TEXT_TAB})
+# A reset brings back the shipped texts, never a placeholder shop name.
+RESET_KEEPS_KEYS = frozenset({"shop_title"})
+
+
+def default_values_for_keys(keys: set[str]) -> dict[str, str]:
+    """Shipped defaults for ``keys``; switches, images and the shop name keep their current value."""
+    return {
+        key: str(DEFAULT_SETTINGS.get(key, ""))
+        for key in keys
+        if key not in TOGGLE_KEYS and key not in IMAGE_KEYS and key not in RESET_KEEPS_KEYS
+    }
 
 
 _defaults_ready = False
@@ -1685,7 +2022,7 @@ async def get_all_settings(
         data["menu_order"] = ",".join(order)
         from app.services.payment_destinations import enrich_payment_settings
 
-        data = enrich_payment_settings(data)
+        data = enrich_payment_settings(refresh_retired_defaults(readable_monitor_texts(data), DEFAULT_SETTINGS))
         _SETTINGS_CACHE[cache_key] = (now, dict(data))
         return data
     result = await session.execute(select(Setting))
@@ -1693,7 +2030,7 @@ async def get_all_settings(
     data.update({r.key: r.value for r in rows})
     from app.services.payment_destinations import enrich_payment_settings
 
-    data = enrich_payment_settings(data)
+    data = enrich_payment_settings(refresh_retired_defaults(readable_monitor_texts(data), DEFAULT_SETTINGS))
     _SETTINGS_CACHE[cache_key] = (now, dict(data))
     return data
 
@@ -1781,8 +2118,6 @@ async def delete_bot_user(
     await session.execute(
         update(Order).where(Order.reseller_id == user_id).values(reseller_id=None)
     )
-    from app.db.models import Ticket
-
     await session.execute(
         update(Ticket).where(Ticket.reseller_id == user_id).values(reseller_id=None)
     )
@@ -1797,9 +2132,12 @@ async def delete_bot_user(
     if delete_pg_services:
         from app.services.bot_user_admin import ensure_pg_user_removed_or_absent
 
+        from app.services.service_import import is_external_service
+
         pg_client = get_pg()
         for svc in services:
-            if not svc.pg_user_id:
+            # Linked or imported services were not created by the bot; keep their panel users.
+            if not svc.pg_user_id or is_external_service(svc):
                 continue
             try:
                 # Confirmed PG 404 counts as removed so local cleanup can proceed.
@@ -1848,6 +2186,7 @@ async def delete_bot_user(
     # raises IntegrityError and the user row stays forever (the real "حذف نمی‌شود"
     # bug). Must run BEFORE deleting UserService (spins/redemptions FK to services).
     from app.db.models import (
+        BotUserShop,
         ChargeCode,
         DeliveryFailure,
         FunnelEvent,
@@ -1862,6 +2201,7 @@ async def delete_bot_user(
         PointsTransaction,
         ReferralEvent,
         RewardRedemption,
+        ShopPoints,
         ShopWallet,
         TermsAcceptance,
     )
@@ -1905,11 +2245,13 @@ async def delete_bot_user(
     await session.execute(
         update(LuckyWheelSpin).where(LuckyWheelSpin.reseller_id == user_id).values(reseller_id=None)
     )
-    await session.execute(
-        update(LuckyWheelUserState)
-        .where(LuckyWheelUserState.reseller_id == user_id)
-        .values(reseller_id=None)
-    )
+    # A shop's wheel counters go with the shop; relabelling them as the platform's would collide
+    # with the customer's own platform row (one row per customer and shop).
+    await session.execute(delete(LuckyWheelUserState).where(LuckyWheelUserState.reseller_id == user_id))
+    await session.execute(delete(BotUserShop).where(BotUserShop.shop_id == user_id))
+    await session.execute(delete(BotUserShop).where(BotUserShop.bot_user_id == user_id))
+    # Customers and orders of a deleted shop become the platform's (above); so do the services it sold.
+    await session.execute(update(UserService).where(UserService.shop_id == user_id).values(shop_id=None))
     # N1: never NULL-out shop-issued discounts / pending shop top-ups — that
     # would promote them to platform scope. Delete entitlements; reject pending
     # top-ups; only then clear wallet_shop_id for FK cleanup on historical rows.
@@ -1939,6 +2281,10 @@ async def delete_bot_user(
     )
     await session.execute(delete(ShopWallet).where(ShopWallet.user_id == user_id))
     await session.execute(delete(ShopWallet).where(ShopWallet.reseller_id == user_id))
+    # A deleted shop's points go with it; never re-label its entries as the platform's.
+    await session.execute(delete(ShopPoints).where(ShopPoints.user_id == user_id))
+    await session.execute(delete(ShopPoints).where(ShopPoints.reseller_id == user_id))
+    await session.execute(delete(PointsTransaction).where(PointsTransaction.reseller_id == user_id))
 
     await session.execute(
         delete(LoyaltyDiscountEntitlement).where(LoyaltyDiscountEntitlement.user_id == user_id)
@@ -1984,6 +2330,7 @@ async def delete_bot_user(
     await session.execute(
         delete(ChargeCodeRedemption).where(ChargeCodeRedemption.user_id == user_id)
     )
+    await purge_user_references(session, user_id)
     await session.execute(delete(Payment).where(Payment.user_id == user_id))
     await session.execute(delete(Order).where(Order.user_id == user_id))
     await session.execute(delete(UserService).where(UserService.bot_user_id == user_id))
@@ -2069,6 +2416,16 @@ def friendly_user_delete_error(exc: Exception) -> str:
     """Short Persian message for hard-delete failures (hide raw SQL)."""
     text = str(exc or "")
     low = text.lower()
+    is_integrity_error = (
+        "foreign key" in low
+        or "integrityerror" in low
+        or "constraint failed" in low
+        or isinstance(exc, IntegrityError)
+    )
+    if is_integrity_error:
+        logger.warning(
+            "user delete blocked by constraint: %s", str(getattr(exc, "orig", exc))[:500]
+        )
     if (
         "foreign key" in low
         or "integrityerror" in low

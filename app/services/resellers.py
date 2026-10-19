@@ -20,6 +20,7 @@ from app.db.models import (
     ResellerPlan,
     ResellerProfile,
     Role,
+    UserService,
 )
 
 logger = logging.getLogger(__name__)
@@ -35,10 +36,14 @@ FEATURE_PERMS: list[tuple[str, str]] = [
     ("demo_users", "مدیریت کاربران دمو"),
     ("shop_settings", "تنظیمات ربات فروشگاه"),
     ("campaigns", "کمپین‌های هدفمند فروشگاه"),
+    ("catalog_discounts", "تخفیف و کاهش قیمت فروشگاه"),
     ("loyalty", "باشگاه مشتریان"),
+    ("connection_status", "مشاهدهٔ وضعیت اتصال"),
+    ("connection_status_manage", "مدیریت تست اتصال"),
+    ("service_import", "تأیید افزودن سرویس قبلی"),
 ]
 
-DEFAULT_FEATURE_PERMS = "dashboard,plans,orders,payments,tickets,stats,shop_settings,campaigns,loyalty"
+DEFAULT_FEATURE_PERMS = "dashboard,plans,orders,payments,tickets,stats,shop_settings,campaigns,loyalty,service_import"
 
 # Tabs a reseller may edit for their own shop bot
 RESELLER_SETTINGS_TABS: list[tuple[str, str]] = [
@@ -46,11 +51,13 @@ RESELLER_SETTINGS_TABS: list[tuple[str, str]] = [
     ("appearance", "هویت ربات"),
     ("messages", "متن پیام‌ها"),
     ("buttons", "متن دکمه‌ها"),
+    ("screens", "تیتر و توضیح منوها"),
     ("colors", "رنگبندی دکمه‌ها"),
     ("menu", "منوی بات"),
     ("links", "لینک‌های سریع"),
     ("qr", "QR اشتراک"),
     ("limits", "محدودیت"),
+    ("service_import", "افزودن سرویس قبلی"),
     ("guides", "آموزش اتصال"),
     ("naming", "نام‌گذاری سرویس"),
     ("notifications", "نوتیفیکیشن"),
@@ -652,6 +659,8 @@ async def make_reseller(
     plan_id: int | None = None,
     billing_mode: str | None = None,
     issue_setup_token: bool = False,
+    confirm_mode_change: bool = False,
+    watermark_bytes: int | None = None,
 ) -> ResellerProfile:
     user.role = Role.RESELLER.value
     result = await session.execute(
@@ -667,10 +676,24 @@ async def make_reseller(
     if mode not in {"fixed", "payg"}:
         mode = None
 
+    mode_change = None
     if profile:
         profile.can_approve_receipts = approve
         if mode:
-            profile.billing_mode = mode
+            # billing_mode imports billing, which imports this module's dependents.
+            from app.services.billing_mode import (
+                ModeChange,
+                apply_mode_fields,
+                assert_mode_change_confirmed,
+                normalize_mode,
+            )
+
+            change = ModeChange(previous=normalize_mode(profile.billing_mode), new=mode)
+            if change.changed:
+                if profile.is_active:
+                    assert_mode_change_confirmed(change.previous, mode, confirmed=confirm_mode_change)
+                apply_mode_fields(profile, mode, watermark_bytes=watermark_bytes)
+                mode_change = change
         if pg_admin_username is not None:
             profile.pg_admin_username = pg_admin_username
         if pg_admin_password_enc is not None:
@@ -690,6 +713,7 @@ async def make_reseller(
             user_id=user.id,
             can_approve_receipts=approve,
             billing_mode=mode or "fixed",
+            billing_watermark_bytes=int(watermark_bytes or 0),
             pg_admin_username=pg_admin_username,
             pg_admin_password_enc=pg_admin_password_enc,
             pg_role_id=pg_role_id,
@@ -724,7 +748,16 @@ async def make_reseller(
 
     # Fresh install: map this shop to its depth-1 Principal now (idempotent).
     await bind_reseller_profile_principal(session, profile)
+    final_mode = str(profile.billing_mode or "fixed").lower()
     await session.commit()
+    if final_mode == "payg" or mode_change is not None:
+        from app.services.billing_mode import ModeChange, finish_mode_change
+
+        await finish_mode_change(
+            session,
+            profile,
+            mode_change or ModeChange(previous=final_mode, new=final_mode),
+        )
     await session.refresh(profile)
     return profile
 
@@ -821,6 +854,9 @@ async def create_application(
     from app.services.billing import BillingError, assert_payg_purchase_wallet
 
     if reseller_plan_mode_of(plan) == "payg":
+        from app.services.billing import require_positive_payg_rate
+
+        require_positive_payg_rate(int(getattr(plan, "price_per_gb", 0) or 0))
         try:
             await assert_payg_purchase_wallet(session, int(user.wallet_balance or 0))
         except BillingError as e:
@@ -991,6 +1027,10 @@ async def provision_reseller(
     plan_billing = str(getattr(plan, "billing_mode", None) or "fixed").strip().lower()
     if plan_billing not in {"fixed", "payg"}:
         plan_billing = "fixed"
+    if plan_billing == "payg":
+        from app.services.billing import require_positive_payg_rate
+
+        require_positive_payg_rate(int(getattr(plan, "price_per_gb", 0) or 0))
     perms = normalize_feature_perms(
         web_permissions
         or bot_permissions
@@ -1486,6 +1526,7 @@ async def seed_reseller_shop_settings(session: AsyncSession, reseller_user_id: i
         "pay_card_enabled",
         "pay_gateway_enabled",
         "pay_psp_enabled",
+        "pay_bbc_enabled",
         "pay_card_auto_enabled",
         "pay_crypto_enabled",
         "pay_wallet_enabled",
@@ -1667,6 +1708,7 @@ async def provision_existing_pg_admin(
     note: str = "",
     web_permissions: str | None = None,
     share_pg_panel_url: bool | None = None,
+    confirm_mode_change: bool = False,
 ) -> tuple[ResellerProfile | None, str | None, str | None]:
     """Grant web + shop access to an existing PG admin using a reseller plan.
 
@@ -1687,6 +1729,15 @@ async def provision_existing_pg_admin(
         validate_web_username,
     )
 
+    from app.services.db_safe import rollback_quiet
+    from app.services.pg_admin_subscription import (
+        PgCapacityUnreadable,
+        is_current_capacity_plan,
+        is_subscription_plan,
+        read_live_pg_admin_capacity,
+        start_or_refresh_subscription,
+    )
+
     pg_u = (pg_username or "").strip().lower()
     if not pg_u:
         return None, None, "نام ادمین پاسارگارد الزامی است"
@@ -1694,6 +1745,20 @@ async def provision_existing_pg_admin(
     plan = await session.get(ResellerPlan, int(plan_id))
     if not plan or not plan.is_active:
         return None, None, "پلن نمایندگی معتبر نیست — ابتدا یک پلن فعال بسازید"
+    if reseller_plan_mode_of(plan) == "payg":
+        from app.services.billing import PaygRateError, require_positive_payg_rate
+
+        try:
+            require_positive_payg_rate(int(getattr(plan, "price_per_gb", 0) or 0))
+        except PaygRateError as exc:
+            return None, None, str(exc)
+    if is_current_capacity_plan(plan):
+        # Nothing is created unless the admin's existing limits can be read, so a grant can
+        # never record «unlimited» by mistake.
+        try:
+            await read_live_pg_admin_capacity(pg_u)
+        except PgCapacityUnreadable as exc:
+            return None, None, str(exc)
 
     cleaned, uerr = validate_web_username(web_username, lowercase=True)
     if uerr:
@@ -1732,6 +1797,24 @@ async def provision_existing_pg_admin(
         conflict = await conflict_message_for_reseller_link(session, pg_u)
         if conflict:
             return None, None, conflict
+
+    from app.services.billing_mode import (
+        BillingModeChangeError,
+        assert_mode_change_confirmed,
+        normalize_mode,
+        starting_watermark,
+    )
+
+    plan_mode = reseller_plan_mode_of(plan)
+    watermark_bytes: int | None = None
+    try:
+        current_mode = normalize_mode(getattr(current, "billing_mode", None))
+        if current is not None and current.is_active:
+            assert_mode_change_confirmed(current_mode, plan_mode, confirmed=confirm_mode_change)
+        if plan_mode == "payg" and (current is None or current_mode != "payg"):
+            watermark_bytes = await starting_watermark(pg_u)
+    except BillingModeChangeError as exc:
+        return None, None, str(exc)
 
     # Unified login: web username must match the Pasarguard admin username.
     if cleaned != pg_u:
@@ -1805,8 +1888,10 @@ async def provision_existing_pg_admin(
         web_permissions=perms,
         bot_permissions=perms,
         plan_id=int(plan.id),
-        billing_mode=str(getattr(plan, "billing_mode", None) or "fixed"),
+        billing_mode=plan_mode,
         issue_setup_token=True,
+        confirm_mode_change=confirm_mode_change,
+        watermark_bytes=watermark_bytes,
     )
     if note:
         # Store operator note on profile via unused field if present; else ignore
@@ -1833,13 +1918,8 @@ async def provision_existing_pg_admin(
     await session.commit()
     await session.refresh(profile)
 
-    try:
-        from app.services.pg_admin_subscription import (
-            is_subscription_plan,
-            start_or_refresh_subscription,
-        )
-
-        if is_subscription_plan(plan):
+    if is_subscription_plan(plan):
+        try:
             await start_or_refresh_subscription(
                 session,
                 pg_username=pg_u,
@@ -1848,8 +1928,13 @@ async def provision_existing_pg_admin(
                 apply_pg_limits=True,
             )
             await session.commit()
-    except Exception:
-        logger.exception("subscription start failed after provision_existing pg=%s", pg_u)
+        except ValueError as exc:
+            await rollback_quiet(session)
+            return profile, None, f"نمایندگی فعال شد ولی اشتراک پلن ثبت نشد: {exc}"
+        except Exception:  # noqa: BLE001 - the panel/DB detail stays in the log, the admin sees a safe text
+            logger.exception("subscription start failed after provision_existing pg=%s", pg_u)
+            await rollback_quiet(session)
+            return profile, None, "نمایندگی فعال شد ولی اشتراک پلن ثبت نشد؛ اتصال پنل را بررسی و دوباره تلاش کنید"
 
     setup_hint = None
     if not (profile.bot_token or "").strip():
@@ -1910,7 +1995,7 @@ async def convert_staff_to_reseller(
         plan_id=plan_id,
         note=note or "converted from pg_staff",
     )
-    if err:
+    if err and profile is None:
         # Staff delete was flushed but not committed; restore prior state.
         await session.rollback()
         return None, None, f"تبدیل به نماینده ناموفق بود: {err}"
@@ -1923,7 +2008,7 @@ async def convert_staff_to_reseller(
         except Exception:
             pass
         await session.commit()
-    return profile, hint, None
+    return profile, hint, err
 
 
 def bot_needs_setup(profile: ResellerProfile | None) -> bool:
@@ -2091,6 +2176,8 @@ async def revoke_reseller(
     await session.execute(
         update(Order).where(Order.reseller_id == user_id).values(reseller_id=None)
     )
+    # The services the shop sold follow its customers and orders to the platform.
+    await session.execute(update(UserService).where(UserService.shop_id == user_id).values(shop_id=None))
     from app.db.models import Ticket
 
     await session.execute(

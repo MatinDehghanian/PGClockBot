@@ -394,6 +394,9 @@ def nodes_overview_json(overview: dict[str, Any]) -> dict[str, Any]:
         )
     return {
         "live": {
+            # Bytes per second summed over the nodes, for the live chart; None when unknown.
+            "rate_up": live.get("rate_up") if isinstance(live.get("rate_up"), int) else None,
+            "rate_down": live.get("rate_down") if isinstance(live.get("rate_down"), int) else None,
             "rate_up_num": live.get("rate_up_num") or "—",
             "rate_up_unit": live.get("rate_up_unit") or "",
             "rate_down_num": live.get("rate_down_num") or "—",

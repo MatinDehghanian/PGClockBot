@@ -3,20 +3,29 @@
 from __future__ import annotations
 
 import asyncio
+import logging
+from pathlib import Path
 from urllib.parse import quote
 
 from fastapi import Depends, File, Form, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.backup import (
     clear_idle_restore_status,
     create_backup,
     delete_backup,
     get_backup_path,
+    prune_backups,
     resolve_stale_restore_status,
     save_uploaded_backup,
     start_restore_async,
 )
+from app.services.backup_settings import KEEP_KEY, keep_count
+from app.services.backup_telegram import BackupTelegramError, send_backup, send_test_message
+from app.services.users import get_setting
+
+logger = logging.getLogger(__name__)
 
 
 def _wants_json(request: Request) -> bool:
@@ -40,6 +49,21 @@ def _status_payload() -> dict:
     return st
 
 
+async def _after_manual_backup(session: AsyncSession, result: dict) -> str:
+    """Apply the retention limit and Telegram delivery to a backup the admin just made; returns a flash suffix."""
+    await asyncio.to_thread(prune_backups, keep_count(await get_setting(session, KEEP_KEY, "10")))
+    try:
+        sent = await send_backup(
+            session, Path(str(result.get("path"))), include_env=bool(result.get("include_env")),
+            caption=f"💾 بکاپ PGClockBot — {result.get('created_at', '')[:16]}",
+        )
+    except Exception:  # noqa: BLE001 - a failed delivery must not hide a good backup
+        logger.exception("manual backup telegram delivery failed")
+        return " — ارسال به تلگرام ناموفق بود"
+    return {"ok": " — برای تلگرام هم ارسال شد", "skipped": " — برای تلگرام ارسال نشد (حجم یا .env)",
+            "error": " — ارسال به تلگرام ناموفق بود"}.get(sent, "")
+
+
 def register_backup_pages(app, *, render, require_admin, get_db):
     @app.get("/settings/backup", response_class=HTMLResponse)
     async def backup_redirect(staff: dict = Depends(require_admin)):
@@ -54,9 +78,26 @@ def register_backup_pages(app, *, render, require_admin, get_db):
     async def backup_clear(staff: dict = Depends(require_admin)):
         return JSONResponse({"ok": True, "status": clear_idle_restore_status()})
 
+    @app.post("/backup/telegram-test")
+    async def backup_telegram_test(
+        staff: dict = Depends(require_admin),
+        session: AsyncSession = Depends(get_db),
+    ):
+        try:
+            delivered = await send_test_message(session)
+        except BackupTelegramError as exc:
+            return RedirectResponse("/settings?tab=backup&err=" + quote(str(exc)), status_code=303)
+        if not delivered:
+            return RedirectResponse(
+                "/settings?tab=backup&err=" + quote("پیام آزمایشی ارسال نشد؛ توکن و شناسهٔ چت را بررسی کنید و ربات را در آن چت شروع کنید."),
+                status_code=303,
+            )
+        return RedirectResponse("/settings?tab=backup&ok=" + quote(f"پیام آزمایشی برای {delivered} گیرنده ارسال شد."), status_code=303)
+
     @app.post("/backup/create")
     async def backup_create(
         staff: dict = Depends(require_admin),
+        session: AsyncSession = Depends(get_db),
         note: str = Form(""),
         include_env: str = Form(""),
         confirm_include_env: str = Form(""),
@@ -95,11 +136,12 @@ def register_backup_pages(app, *, render, require_admin, get_db):
             if result.get("include_env")
             else " — بدون .env"
         )
+        sent_note = await _after_manual_backup(session, result)
         return RedirectResponse(
             "/settings?tab=backup&ok="
             + quote(
                 f"بکاپ ساخته شد: {result.get('filename')} "
-                f"({result.get('size_human')}){env_note}"
+                f"({result.get('size_human')}){env_note}{sent_note}"
             ),
             status_code=303,
         )

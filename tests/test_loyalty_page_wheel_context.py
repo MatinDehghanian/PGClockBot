@@ -13,6 +13,7 @@ os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from app.services.formatting import format_money
+from app.services.message_variables import template_variable_specs
 
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATES = ROOT / "app/web/templates"
@@ -31,6 +32,7 @@ def _jinja_env() -> Environment:
     )
     env.filters["gb"] = lambda v: str(v)
     env.filters["money"] = format_money
+    env.globals["template_variable_specs"] = template_variable_specs
     return env
 
 

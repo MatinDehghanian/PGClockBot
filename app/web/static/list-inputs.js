@@ -293,7 +293,7 @@
     state.toggle.setAttribute("aria-expanded", "false");
     state.toggle.setAttribute("aria-controls", id + "-panel");
     state.summary = element("span", "list-editor-summary");
-    const caret = element("span", "list-editor-caret", "⌄");
+    const caret = element("span", "list-editor-caret");
     caret.setAttribute("aria-hidden", "true");
     state.toggle.append(state.summary, caret);
     state.panel = element("div", "list-editor-panel");
@@ -308,7 +308,8 @@
     state.draft.dir = "ltr";
     state.draft.autocomplete = "off";
     state.draft.placeholder = state.source.placeholder || "مقدار جدید";
-    state.draft.dataset.normalizeDigits = "0";
+    state.draft.dataset.normalizeDigits = state.kind === "money" ? "1" : "0";
+    if (state.kind === "money") state.draft.setAttribute("data-money", "");
     if (LIMITS[state.kind]) state.draft.inputMode = "numeric";
     state.save = button("افزودن", "save");
     state.cancel = button("انصراف", "cancel");

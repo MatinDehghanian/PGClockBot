@@ -11,6 +11,8 @@ from sqlalchemy import or_, select
 from app.db.models import BotUser, ResellerProfile, UserService
 from app.db.session import SessionLocal
 from app.jobs.cancellation_notifications import run_cancellation_notifications
+from app.jobs.connection_status import run_connection_status
+from app.jobs.panel_alert_notifications import run_panel_alert_notifications
 from app.services.formatting import format_bytes_ratio, parse_expire
 from app.services.pasarguard import get_pg
 
@@ -32,20 +34,17 @@ def _resolve_send_bot(
     main_bot: Bot,
     reseller_user_id: int | None,
     profile_by_user: dict[int, int],
-) -> Bot:
-    """Prefer the shop's dedicated bot when alerting that shop's customers."""
+) -> Bot | None:
+    """The bot that may alert this shop's customers: the platform bot, or the shop's own (None if it has none)."""
     if not reseller_user_id:
         return main_bot
     from app.services.reseller_bots import get_reseller_bot_manager
 
     mgr = get_reseller_bot_manager()
-    if not mgr:
-        return main_bot
-    pid = profile_by_user.get(int(reseller_user_id))
-    if pid is None:
-        return main_bot
-    shop_bot = mgr.bot_for_profile_id(int(pid))
-    return shop_bot or main_bot
+    pid = profile_by_user.get(int(reseller_user_id)) if mgr else None
+    if mgr is None or pid is None:
+        return None
+    return mgr.bot_for_profile_id(int(pid))
 
 
 async def check_expiring_services(bot: Bot) -> None:
@@ -118,9 +117,7 @@ async def check_expiring_services(bot: Bot) -> None:
             )
             if not platform_on and reseller_ids_with_alerts:
                 # Narrow to shops that actually have alerts on before PG fan-out
-                svc_q = svc_q.join(BotUser, BotUser.id == UserService.bot_user_id).where(
-                    BotUser.reseller_id.in_(reseller_ids_with_alerts)
-                )
+                svc_q = svc_q.where(UserService.shop_id.in_(reseller_ids_with_alerts))
             services = list((await session.execute(svc_q)).scalars().all())
             if not services:
                 break
@@ -135,45 +132,15 @@ async def check_expiring_services(bot: Bot) -> None:
                 ).scalars().all()
                 users_by_id = {u.id: u for u in rows}
 
-            # Prefer shop of the fulfilling order (remark order:{id}) over sticky
-            # BotUser.reseller_id — first-touch attribution must not leak alerts.
-            order_ids: set[int] = set()
-            for svc in services:
-                remark = (getattr(svc, "remark", None) or "").strip()
-                if remark.startswith("order:"):
-                    try:
-                        order_ids.add(int(remark.split(":", 1)[1].split()[0]))
-                    except (TypeError, ValueError):
-                        pass
-            order_shop_by_id: dict[int, int | None] = {}
-            if order_ids:
-                from app.db.models import Order
-
-                for oid, orid in (
-                    await session.execute(
-                        select(Order.id, Order.reseller_id).where(Order.id.in_(order_ids))
-                    )
-                ).all():
-                    order_shop_by_id[int(oid)] = int(orid) if orid is not None else None
-
-            def _shop_rid_for(svc: UserService, user: BotUser) -> int | None:
-                remark = (getattr(svc, "remark", None) or "").strip()
-                if remark.startswith("order:"):
-                    try:
-                        oid = int(remark.split(":", 1)[1].split()[0])
-                    except (TypeError, ValueError):
-                        oid = 0
-                    if oid in order_shop_by_id:
-                        return order_shop_by_id[oid]
-                return int(user.reseller_id) if user.reseller_id else None
-
             eligible: list[tuple[UserService, BotUser, dict, int, int, int | None]] = []
             for svc in services:
                 user = users_by_id.get(svc.bot_user_id)
                 if not user or user.is_blocked:
                     continue
 
-                rid = _shop_rid_for(svc, user)
+                if svc.shop_needs_review:
+                    continue
+                rid = int(svc.shop_id) if svc.shop_id else None
                 if not platform_on:
                     if rid is None or rid not in reseller_ids_with_alerts:
                         continue
@@ -215,6 +182,8 @@ async def check_expiring_services(bot: Bot) -> None:
                 if cached_info.get("status") and "expire" in cached_info:
                     sync_service_quota_cache(svc, info=cached_info)
                 send_bot = _resolve_send_bot(bot, shop_rid, profile_by_user)
+                if send_bot is None:
+                    continue  # the shop's own bot is not running: never alert its customers from the platform bot
 
                 # --- remaining TIME percent ---
                 if not svc.notified_expire:
@@ -361,7 +330,9 @@ async def run_scheduled_backup() -> None:
             from datetime import datetime, timezone
             from pathlib import Path
 
-            from app.services.backup import create_backup, validate_backup_archive
+            from app.services.backup import create_backup, prune_backups, validate_backup_archive
+            from app.services.backup_settings import KEEP_KEY, keep_count
+            from app.services.backup_telegram import send_backup
             from app.services.users import get_setting, on, set_setting
 
             if not on(await get_setting(session, "backup_schedule_enabled", "1")):
@@ -391,6 +362,14 @@ async def run_scheduled_backup() -> None:
                 logger.warning("scheduled backup verify failed: %s", err)
             await set_setting(session, "backup_last_ok_at", now.isoformat())
             await session.commit()
+            await asyncio.to_thread(prune_backups, keep_count(await get_setting(session, KEEP_KEY, "10")))
+            try:
+                await send_backup(
+                    session, path, include_env=include_env,
+                    caption=f"💾 بکاپ خودکار PGClockBot — {now.strftime('%Y-%m-%d %H:%M')} UTC",
+                )
+            except Exception:  # noqa: BLE001 - a failed delivery must not undo a good backup
+                logger.exception("scheduled backup telegram delivery failed")
             logger.info("scheduled backup ok id=%s", meta.get("id"))
         except Exception:
             logger.exception("scheduled backup failed")
@@ -410,7 +389,6 @@ async def run_admin_daily_report(bot: Bot) -> None:
                 ACTOR_OWNER,
                 ACTOR_SHOP,
                 DEFAULT_REPORT_TEMPLATE,
-                build_daily_report,
                 shop_daily_report_chat_ids,
             )
             from app.services.org_principals import DEPTH_ONE, STATUS_ACTIVE
@@ -759,8 +737,11 @@ async def run_service_automation_tick(bot: Bot) -> None:
 async def run_targeted_campaigns_tick(bot: Bot) -> None:
     from app.db.models import TargetedCampaign
     from app.services.campaigns import process_campaign
+    from app.services.catalog_discounts import pause_expired_announcements
     from app.services.reseller_bots import open_notify_bot_for_reseller
 
+    async with SessionLocal() as session:
+        await pause_expired_announcements(session)
     last_id = 0
     while True:
         async with SessionLocal() as session:
@@ -786,6 +767,19 @@ async def run_targeted_campaigns_tick(bot: Bot) -> None:
                         await send_bot.session.close()
 
 
+async def run_bbc_settlement_poll() -> None:
+    """Re-read open «بزن به کارت» orders: the callback's backup and the late-payment check."""
+    from app.services.bbc_settlement import poll_bbc_settlements
+
+    async with SessionLocal() as session:
+        try:
+            n = await poll_bbc_settlements(session)
+            if n:
+                logger.info("bbc settlement poll settled=%s", n)
+        except Exception:
+            logger.exception("bbc settlement poll failed")
+
+
 def start_background_scheduler() -> None:
     """Run financial and maintenance jobs as soon as the database is ready."""
     jobs = (
@@ -793,6 +787,8 @@ def start_background_scheduler() -> None:
         ("pg_admin_subscription", run_pg_admin_subscription_tick, {"minutes": 5}, 300),
         ("pending_order_cleanup", cleanup_stale_pending_orders, {"hours": 1}, 3600),
         ("scheduled_backup", run_scheduled_backup, {"minutes": 30}, 3600),
+        ("connection_status", run_connection_status, {"seconds": 60}, 60),
+        ("bbc_settlement_poll", run_bbc_settlement_poll, {"seconds": 45}, 90),
     )
     for job_id, func, interval, grace in jobs:
         if scheduler.get_job(job_id) is None:
@@ -816,6 +812,10 @@ def start_scheduler(bot: Bot) -> None:
     scheduler.add_job(
         run_cancellation_notifications, "interval", seconds=10, args=[bot], id="cancellation_notifications",
         max_instances=1, coalesce=True, misfire_grace_time=60, replace_existing=True,
+    )
+    scheduler.add_job(
+        run_panel_alert_notifications, "interval", minutes=5, args=[bot], id="panel_alert_notifications",
+        max_instances=1, coalesce=True, misfire_grace_time=300, replace_existing=True,
     )
     scheduler.add_job(
         run_targeted_campaigns_tick, "interval", minutes=1, args=[bot], id="targeted_campaigns",

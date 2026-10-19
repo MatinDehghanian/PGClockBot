@@ -15,9 +15,25 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 
-from app.bot.keyboards import _ikb, _style, _t
+from app.bot.chat_cleanup import note_throwaway, sweep_above
+from app.bot.edit_mode import editable_screen
+from app.bot.keyboards import _ikb, _t
+from app.bot.list_pages import Page, page_of, pager_row
+from app.bot.reseller_hub_groups import (
+    RESELLER_GROUPS,
+    RESELLER_HOME_CALLBACK,
+    back_callback_for,
+    group_entries,
+    reseller_group,
+)
 
 logger = logging.getLogger(__name__)
+
+SERVICES_PAGE_SIZE = 10
+SERVICES_LIST_CALLBACK = "svc:list"
+SERVICES_SEARCH_CALLBACK = "svc:find"
+
+SEARCH_SERVICES_TEXT = "🔍 جستجوی سرویس"
 
 # FSM keys for the single live nav panel (edit instead of spam).
 NAV_PANEL_CHAT_KEY = "_nav_panel_chat_id"
@@ -71,13 +87,24 @@ async def present_inline_only(
     """
     if is_bot_panel_message(message):
         if await safe_edit_inline(message, text, reply_markup=inline, **send_kw):
+            await sweep_above(message)
             return message
         # Edit failed (deleted/too old) — fall through to one new panel.
     try:
-        return await message.answer(text, reply_markup=inline, **send_kw)
+        sent = await message.answer(text, reply_markup=inline, **send_kw)
     except Exception:
         logger.warning("present_inline_only failed", exc_info=True)
         return None
+    await _show_as_the_panel(sent, inline)
+    return sent
+
+
+async def _show_as_the_panel(sent: Message | None, markup: Any) -> None:
+    """A freshly sent panel is throwaway itself and clears the throwaway messages above it."""
+    if sent is None:
+        return
+    note_throwaway(sent, reply_markup=markup)
+    await sweep_above(sent)
 
 
 async def safe_edit_inline(
@@ -175,6 +202,7 @@ async def present_nav_panel(
     if prefer_edit and is_bot_panel_message(message):
         if await safe_edit_inline(message, text, reply_markup=inline, **send_kw):
             await remember_nav_panel(state, message)
+            await sweep_above(message)
             return message
     if prefer_edit and state is not None and message.bot is not None:
         data = await state.get_data()
@@ -196,9 +224,11 @@ async def present_nav_panel(
                     reply_markup=inline,
                     **send_kw,
                 )
+                await sweep_above(message, panel_id=int(msg_id))
                 return None
             except TelegramBadRequest as e:
                 if "message is not modified" in str(e).lower():
+                    await sweep_above(message, panel_id=int(msg_id))
                     return None
             except Exception:
                 logger.info("present_nav_panel tracked edit failed", exc_info=True)
@@ -212,6 +242,7 @@ async def present_nav_panel(
         logger.warning("present_nav_panel answer failed", exc_info=True)
         sent = None
     await remember_nav_panel(state, sent)
+    await _show_as_the_panel(sent, inline)
     return sent
 
 
@@ -263,7 +294,7 @@ def wallet_topup_presets_keyboard(ui: dict | None = None) -> InlineKeyboardMarku
             format_toman(n),
             callback_data=f"nv:w:amt:{n}",
             ui=ui,
-            style=_style(ui, "wallet_topup", fallback="primary"),
+            style_id="wallet_topup", style_fallback="primary",
         )
         for n in presets[:8]
     ]
@@ -276,7 +307,7 @@ def wallet_topup_presets_keyboard(ui: dict | None = None) -> InlineKeyboardMarku
                 "✍ مبلغ دیگر",
                 callback_data="nv:w:amt:custom",
                 ui=ui,
-                style=_style(ui, "wallet_topup", fallback="primary"),
+                style_id="wallet_topup", style_fallback="primary",
             )
         ]
     )
@@ -287,7 +318,7 @@ def wallet_topup_presets_keyboard(ui: dict | None = None) -> InlineKeyboardMarku
                 callback_data="nv:w:home",
                 ui=ui,
                 label_key="btn_back",
-                style=_style(ui, "back"),
+                style_id="back",
             )
         ]
     )
@@ -307,6 +338,7 @@ def topup_methods_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
         ("pay_card_enabled", "btn_pay_card", "wtop:card", "topup_card"),
         ("pay_gateway_enabled", "btn_pay_gateway", "wtop:gateway", "topup_gateway"),
         ("pay_psp_enabled", "btn_pay_psp", "wtop:psp", "topup_psp"),
+        ("pay_bbc_enabled", "btn_pay_bbc", "wtop:bbc", "topup_bbc"),
         ("pay_crypto_enabled", "btn_pay_crypto", "wtop:crypto", "topup_crypto"),
     )
     rows: list[list[InlineKeyboardButton]] = []
@@ -320,7 +352,7 @@ def topup_methods_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
                     callback_data=cb,
                     ui=ui,
                     label_key=label_key,
-                    style=_style(ui, style_key, fallback="primary"),
+                    style_id=style_key, style_fallback="primary",
                 )
             ]
         )
@@ -331,13 +363,14 @@ def topup_methods_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
                 callback_data="nv:w:topup",
                 ui=ui,
                 label_key="btn_back",
-                style=_style(ui, "back"),
+                style_id="back",
             )
         ]
     )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+@editable_screen("c.wallet")
 def wallet_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
     rows = [
         [
@@ -346,14 +379,14 @@ def wallet_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
                 callback_data="nv:w:topup",
                 ui=ui,
                 label_key="btn_wallet_topup",
-                style=_style(ui, "wallet_topup", fallback="primary"),
+                style_id="wallet_topup", style_fallback="primary",
             ),
             _ikb(
                 _t(ui, "btn_wallet_tx") or "📜 تراکنش‌ها",
                 callback_data="nv:w:tx",
                 ui=ui,
                 label_key="btn_wallet_tx",
-                style=_style(ui, "wallet_tx"),
+                style_id="wallet_tx",
             ),
         ],
         [
@@ -362,18 +395,18 @@ def wallet_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
                 callback_data="menu:home",
                 ui=ui,
                 label_key="btn_back",
-                style=_style(ui, "back"),
+                style_id="back",
             )
         ],
     ]
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+@editable_screen("c.support")
 def support_hub_keyboard(
     ui: dict | None = None,
     *,
     contact_rows: list[list[InlineKeyboardButton]] | None = None,
-    include_reseller_apply: bool = False,
 ) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = [
         [
@@ -382,31 +415,19 @@ def support_hub_keyboard(
                 callback_data="nv:s:new",
                 ui=ui,
                 label_key="btn_support_new",
-                style=_style(ui, "support_new", fallback="primary"),
+                style_id="support_new", style_fallback="primary",
             ),
             _ikb(
                 _t(ui, "btn_support_list") or "📋 تیکت‌های من",
                 callback_data="nv:s:list",
                 ui=ui,
                 label_key="btn_support_list",
-                style=_style(ui, "support_list"),
+                style_id="support_list",
             ),
         ]
     ]
     if contact_rows:
         rows.extend(contact_rows)
-    if include_reseller_apply:
-        rows.append(
-            [
-                _ikb(
-                    _t(ui, "btn_reseller_apply") or "🤝 درخواست نمایندگی",
-                    callback_data="nv:resapply",
-                    ui=ui,
-                    label_key="btn_reseller_apply",
-                    style=_style(ui, "reseller_apply"),
-                )
-            ]
-        )
     rows.append(
         [
             _ikb(
@@ -414,13 +435,14 @@ def support_hub_keyboard(
                 callback_data="menu:home",
                 ui=ui,
                 label_key="btn_back",
-                style=_style(ui, "back"),
+                style_id="back",
             )
         ]
     )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+@editable_screen("c.loyalty")
 def loyalty_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
     """Inline club hub from loyalty_submenu_order (same labels as reply submenu)."""
     from app.bot.reply_keyboards import (
@@ -452,7 +474,8 @@ def loyalty_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
             text,
             callback_data=cb_map[key],
             ui=ui,
-            style=_style(ui, style_map[key], fallback="primary"),
+            action=key,
+            style_id=style_map[key], style_fallback="primary",
         )
         for key, text in entries
         if key in cb_map
@@ -467,7 +490,7 @@ def loyalty_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
                 callback_data="menu:home",
                 ui=ui,
                 label_key="btn_back",
-                style=_style(ui, "back"),
+                style_id="back",
             )
         ]
     )
@@ -483,7 +506,7 @@ def _hub_back_row(
             callback_data=callback_data,
             ui=ui,
             label_key="btn_back",
-            style=_style(ui, "back"),
+            style_id="back",
         )
     ]
 
@@ -507,9 +530,11 @@ def queue_shortcut_row(
     payments: int = 0,
     tickets: int = 0,
     cancellations: int = 0,
+    deliveries: int = 0,
     payments_cb: str = "adm:payments",
     tickets_cb: str = "adm:tickets",
     cancellations_cb: str = "adm:cancellations",
+    deliveries_cb: str = "adm:orders",
 ) -> list[InlineKeyboardButton]:
     """Non-zero queue counts → danger shortcuts (side by side)."""
     from app.services.admin_counters import with_badge
@@ -521,7 +546,7 @@ def queue_shortcut_row(
                 with_badge("🧾 رسید", payments),
                 callback_data=payments_cb,
                 ui=ui,
-                style=_style(ui, "reject", fallback="danger"),
+                style_id="reject", style_fallback="danger",
             )
         )
     if int(tickets or 0) > 0:
@@ -530,7 +555,7 @@ def queue_shortcut_row(
                 with_badge("🎫 تیکت", tickets),
                 callback_data=tickets_cb,
                 ui=ui,
-                style=_style(ui, "reject", fallback="danger"),
+                style_id="reject", style_fallback="danger",
             )
         )
     if int(cancellations or 0) > 0:
@@ -539,37 +564,55 @@ def queue_shortcut_row(
                 with_badge("📝 لغو", cancellations),
                 callback_data=cancellations_cb,
                 ui=ui,
-                style=_style(ui, "reject", fallback="danger"),
+                style_id="reject", style_fallback="danger",
+            )
+        )
+    if int(deliveries or 0) > 0:
+        row.append(
+            _ikb(
+                with_badge("⚠️ تحویل", deliveries),
+                callback_data=deliveries_cb,
+                ui=ui,
+                style_id="reject", style_fallback="danger",
             )
         )
     return row
 
 
+@editable_screen("a.home")
 def admin_groups_hub_keyboard(
     ui: dict | None = None,
     *,
     pending_payments: int = 0,
     pending_tickets: int = 0,
     pending_cancellations: int = 0,
+    pending_deliveries: int = 0,
 ) -> InlineKeyboardMarkup:
     """Top-level admin groups (Wave D) — mirrors ``_reply_admin_hub_entries``.
 
-    Non-zero queue counts become a danger shortcut row above the groups.
+    Non-zero queue counts become a danger shortcut row above the groups, and the daily-operations
+    group carries their sum so open work is visible before opening it.
     """
     from app.bot.reply_keyboards import _reply_admin_hub_entries
+    from app.services.admin_counters import with_badge
+
+    open_work = pending_payments + pending_tickets + pending_cancellations + pending_deliveries
 
     cb_map = {
         "adm_hub_ops": "nv:adm:ops",
         "adm_hub_people": "nv:adm:people",
         "adm_hub_product": "nv:adm:product",
+        "adm_hub_marketing": "nv:adm:marketing",
         "adm_hub_system": "nv:adm:system",
+        "connection_status_admin": "cma:home:0",
     }
     buttons = [
         _ikb(
-            text,
+            with_badge(text, open_work) if key == "adm_hub_ops" else text,
             callback_data=cb_map[key],
             ui=ui,
-            style=_style(ui, key, fallback="primary"),
+            action=key,
+            style_id=key, style_fallback="primary",
         )
         for key, text in _reply_admin_hub_entries(ui)
         if key in cb_map
@@ -580,20 +623,34 @@ def admin_groups_hub_keyboard(
         payments=pending_payments,
         tickets=pending_tickets,
         cancellations=pending_cancellations,
+        deliveries=pending_deliveries,
     )
     if shortcuts:
         rows.append(shortcuts)
     for i in range(0, len(buttons), 2):
         rows.append(buttons[i : i + 2])
+    rows.append(
+        [
+            _ikb(
+                _t(ui, "btn_adm_edit_mode") or "✏️ حالت ویرایش منوها",
+                callback_data="ed:a:h",
+                ui=ui,
+                label_key="btn_adm_edit_mode",
+                style_id="adm_edit_mode",
+            )
+        ]
+    )
     rows.append(_hub_back_row(ui, callback_data="menu:home"))
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+@editable_screen("a.ops")
 def admin_ops_hub_keyboard(
     ui: dict | None = None,
     *,
     pending_payments: int = 0,
     pending_tickets: int = 0,
+    pending_deliveries: int = 0,
 ) -> InlineKeyboardMarkup:
     """Daily ops — leaf buttons reuse existing ``adm:*`` callbacks."""
     from app.bot.reply_keyboards import (
@@ -616,13 +673,15 @@ def admin_ops_hub_keyboard(
     badge_for = {
         REPLY_ACTION_ADMIN_PAYMENTS: pending_payments,
         REPLY_ACTION_ADMIN_TICKETS: pending_tickets,
+        REPLY_ACTION_ADMIN_ORDERS: pending_deliveries,
     }
     buttons = [
         _ikb(
             with_badge(text, badge_for.get(key, 0)),
             callback_data=cb_map[key],
             ui=ui,
-            style=_style(ui, key, fallback="primary"),
+            action=key,
+            style_id=key, style_fallback="primary",
         )
         for key, text in _reply_admin_ops_entries(ui)
         if key in cb_map
@@ -630,11 +689,11 @@ def admin_ops_hub_keyboard(
     return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:home")
 
 
+@editable_screen("a.people")
 def admin_people_hub_keyboard(
     ui: dict | None = None, *, can_manage_representatives: bool = True
 ) -> InlineKeyboardMarkup:
     from app.bot.reply_keyboards import (
-        REPLY_ACTION_ADMIN_LOYALTY,
         REPLY_ACTION_ADMIN_RESELLERS,
         REPLY_ACTION_ADMIN_USERS,
         _reply_admin_people_entries,
@@ -643,14 +702,14 @@ def admin_people_hub_keyboard(
     cb_map = {
         REPLY_ACTION_ADMIN_USERS: "nv:adm:users",
         REPLY_ACTION_ADMIN_RESELLERS: "nv:adm:resellers",
-        REPLY_ACTION_ADMIN_LOYALTY: "nv:adm:loy",
     }
     buttons = [
         _ikb(
             text,
             callback_data=cb_map[key],
             ui=ui,
-            style=_style(ui, key, fallback="primary"),
+            action=key,
+            style_id=key, style_fallback="primary",
         )
         for key, text in _reply_admin_people_entries(
             ui, can_manage_representatives=can_manage_representatives
@@ -660,6 +719,7 @@ def admin_people_hub_keyboard(
     return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:home")
 
 
+@editable_screen("a.product")
 def admin_product_hub_keyboard(
     ui: dict | None = None,
     *,
@@ -680,7 +740,8 @@ def admin_product_hub_keyboard(
             text,
             callback_data=cb_map[key],
             ui=ui,
-            style=_style(ui, key, fallback="primary"),
+            action=key,
+            style_id=key, style_fallback="primary",
         )
         for key, text in _reply_admin_product_entries(ui, pg_features=pg_features)
         if key in cb_map
@@ -688,10 +749,57 @@ def admin_product_hub_keyboard(
     return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:home")
 
 
+@editable_screen("a.marketing")
+def admin_marketing_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
+    """Club and broadcast leaves reuse ``nv:adm:*``; gift codes and campaigns are inline-only."""
+    from app.bot.marketing_panels import CAMPAIGN_PANEL_CALLBACK, GIFT_PANEL_CALLBACK
+
+    from app.bot.reply_keyboards import (
+        REPLY_ACTION_ADMIN_BROADCAST,
+        REPLY_ACTION_ADMIN_LOYALTY,
+        _reply_admin_marketing_entries,
+    )
+
+    cb_map = {
+        REPLY_ACTION_ADMIN_LOYALTY: "nv:adm:loy",
+        REPLY_ACTION_ADMIN_BROADCAST: "nv:adm:broadcast",
+    }
+    buttons = [
+        _ikb(
+            text,
+            callback_data=cb_map[key],
+            ui=ui,
+            action=key,
+            style_id=key, style_fallback="primary",
+        )
+        for key, text in _reply_admin_marketing_entries(ui)
+        if key in cb_map
+    ]
+    buttons.extend(
+        [
+            _ikb(
+                _t(ui, "btn_adm_gift_codes"),
+                callback_data=GIFT_PANEL_CALLBACK,
+                ui=ui,
+                label_key="btn_adm_gift_codes",
+                style_id="adm_gift_codes",
+            ),
+            _ikb(
+                _t(ui, "btn_adm_campaigns"),
+                callback_data=CAMPAIGN_PANEL_CALLBACK,
+                ui=ui,
+                label_key="btn_adm_campaigns",
+                style_id="adm_campaigns",
+            ),
+        ]
+    )
+    return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:home")
+
+
+@editable_screen("a.system")
 def admin_system_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
     from app.bot.reply_keyboards import (
         REPLY_ACTION_ADMIN_BACKUP,
-        REPLY_ACTION_ADMIN_BROADCAST,
         REPLY_ACTION_ADMIN_PREVIEW,
         REPLY_ACTION_ADMIN_SETTINGS,
         _reply_admin_system_entries,
@@ -699,7 +807,6 @@ def admin_system_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
 
     cb_map = {
         REPLY_ACTION_ADMIN_SETTINGS: "nv:adm:settings",
-        REPLY_ACTION_ADMIN_BROADCAST: "nv:adm:broadcast",
         REPLY_ACTION_ADMIN_BACKUP: "nv:adm:backup",
         REPLY_ACTION_ADMIN_PREVIEW: "nv:adm:preview",
     }
@@ -708,7 +815,8 @@ def admin_system_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
             text,
             callback_data=cb_map[key],
             ui=ui,
-            style=_style(ui, key, fallback="primary"),
+            action=key,
+            style_id=key, style_fallback="primary",
         )
         for key, text in _reply_admin_system_entries(ui)
         if key in cb_map
@@ -716,11 +824,13 @@ def admin_system_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
     return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:home")
 
 
+@editable_screen("a.pg")
 def pg_hub_keyboard(
     ui: dict | None = None,
     *,
     features: frozenset[str] | set[str] | None = None,
     can_create_user: bool = True,
+    back_callback: str = "nv:adm:product",
 ) -> InlineKeyboardMarkup:
     """PG feature hub — leaf buttons reuse ``adm:pg:*``."""
     from app.bot.reply_keyboards import (
@@ -748,21 +858,23 @@ def pg_hub_keyboard(
             text,
             callback_data=cb_map[key],
             ui=ui,
-            style=_style(ui, key, fallback="primary"),
+            action=key,
+            style_id=key, style_fallback="primary",
         )
         for key, text in _pg_submenu_entries(
             ui, features=features, can_create_user=can_create_user
         )
         if key in cb_map
     ]
-    return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:product")
+    return _pack_hub_keyboard(buttons, ui, back_callback=back_callback)
 
 
+@editable_screen("a.loyalty")
 def admin_loyalty_manage_hub_keyboard(
     ui: dict | None = None,
     *,
     include_tiers: bool = True,
-    back_callback: str = "nv:adm:people",
+    back_callback: str = "nv:adm:marketing",
 ) -> InlineKeyboardMarkup:
     from app.bot.reply_keyboards import (
         REPLY_ACTION_ADM_LOY_OVERVIEW,
@@ -787,7 +899,8 @@ def admin_loyalty_manage_hub_keyboard(
             text,
             callback_data=cb_map[key],
             ui=ui,
-            style=_style(ui, key, fallback="primary"),
+            action=key,
+            style_id=key, style_fallback="primary",
         )
         for key, text in _admin_loyalty_submenu_entries(
             ui, include_tiers=include_tiers
@@ -797,6 +910,24 @@ def admin_loyalty_manage_hub_keyboard(
     return _pack_hub_keyboard(buttons, ui, back_callback=back_callback)
 
 
+def _reseller_entry_buttons(
+    entries: list[tuple[str, str]], ui: dict | None, badge_for: dict[str, int]
+) -> list[InlineKeyboardButton]:
+    from app.services.admin_counters import with_badge
+
+    return [
+        _ikb(
+            with_badge(text, badge_for.get(key, 0)),
+            callback_data=f"nv:res:ra:{key}",
+            ui=ui,
+            action=key,
+            style_id=key, style_fallback="primary",
+        )
+        for key, text in entries
+    ]
+
+
+@editable_screen("r.home")
 def reseller_manage_hub_keyboard(
     profile,
     ui: dict | None = None,
@@ -805,26 +936,26 @@ def reseller_manage_hub_keyboard(
     pending_payments: int = 0,
     pending_tickets: int = 0,
     pending_cancellations: int = 0,
+    pending_deliveries: int = 0,
 ) -> InlineKeyboardMarkup:
-    """Reseller shop-bot manage hub (Wave D) — ``nv:res:ra:<action>``."""
+    """Shop panel home: queue shortcuts, then one button per group that has an entry."""
     from app.bot.reply_keyboards import _reseller_submenu_entries
     from app.services.admin_counters import with_badge
 
     entries = _reseller_submenu_entries(
-        profile, can_add_representative=can_add_representative
+        profile, can_add_representative=can_add_representative, ui=ui
     )
-    badge_for = {
-        "res_payments": pending_payments,
-        "res_tickets": pending_tickets,
-    }
+    group_badge = {"daily": pending_payments + pending_tickets + pending_deliveries}
     buttons = [
         _ikb(
-            with_badge(text, badge_for.get(key, 0)),
-            callback_data=f"nv:res:ra:{key}",
+            with_badge(_t(ui, group.label_key), group_badge.get(group.id, 0)),
+            callback_data=group.callback,
             ui=ui,
-            style=_style(ui, key, fallback="primary"),
+            label_key=group.label_key,
+            style_id=group.label_key.removeprefix("btn_"), style_fallback="primary",
         )
-        for key, text in entries
+        for group in RESELLER_GROUPS
+        if group_entries(group, entries)
     ]
     rows: list[list[InlineKeyboardButton]] = []
     shortcuts = queue_shortcut_row(
@@ -832,9 +963,11 @@ def reseller_manage_hub_keyboard(
         payments=pending_payments,
         tickets=pending_tickets,
         cancellations=pending_cancellations,
+        deliveries=pending_deliveries,
         payments_cb="res:payments",
         tickets_cb="res:tickets",
         cancellations_cb="res:cancellations",
+        deliveries_cb="res:orders",
     )
     if shortcuts:
         rows.append(shortcuts)
@@ -844,9 +977,104 @@ def reseller_manage_hub_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+@editable_screen(lambda group_id, *_a, **_kw: f"r.{group_id}")
+def reseller_group_hub_keyboard(
+    group_id: str,
+    profile,
+    ui: dict | None = None,
+    *,
+    can_add_representative: bool = False,
+    pending_payments: int = 0,
+    pending_tickets: int = 0,
+    pending_deliveries: int = 0,
+) -> InlineKeyboardMarkup:
+    """One shop panel group; «بازگشت» returns to the panel home."""
+    from app.bot.reply_keyboards import _reseller_submenu_entries
+
+    group = reseller_group(group_id)
+    entries = _reseller_submenu_entries(
+        profile, can_add_representative=can_add_representative, ui=ui
+    )
+    shown = group_entries(group, entries) if group else []
+    badge_for = {"res_payments": pending_payments, "res_tickets": pending_tickets, "res_orders": pending_deliveries}
+    return _pack_hub_keyboard(
+        _reseller_entry_buttons(shown, ui, badge_for), ui, back_callback=RESELLER_HOME_CALLBACK
+    )
+
+
+def reseller_access_card_keyboard(
+    profile, ui: dict | None = None
+) -> InlineKeyboardMarkup:
+    """Links under the access card plus «بازگشت» to the reseller hub."""
+    from app.services.pg_admin_subscription import is_subscription_plan
+
+    rows: list[list[InlineKeyboardButton]] = []
+    if profile.bot_username:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=f"باز کردن @{profile.bot_username}",
+                    url=f"https://t.me/{profile.bot_username}",
+                )
+            ]
+        )
+    plan = getattr(profile, "plan", None)
+    if plan is not None and is_subscription_plan(plan):
+        rows.append(
+            [InlineKeyboardButton(text="🔄 تمدید سرویس", callback_data="res:renew")]
+        )
+    rows.append(_hub_back_row(ui, callback_data="nv:res:home"))
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def reseller_main_bot_hub_keyboard(
+    profile,
+    ui: dict | None = None,
+    *,
+    show_pg: bool = False,
+) -> InlineKeyboardMarkup:
+    """Shop owner hub on the platform bot: access card, PasarGuard and capacity."""
+    from app.bot.keyboards import REPLY_ACTION_ADMIN_PG, REPLY_ACTION_CREDS
+    from app.bot.reply_keyboards import _reseller_capacity_entries
+
+    buttons = [
+        _ikb(
+            _t(ui, "btn_reseller_creds") or "🔑 اطلاعات ورود",
+            callback_data=f"nv:res:ra:{REPLY_ACTION_CREDS}",
+            ui=ui,
+            action=REPLY_ACTION_CREDS,
+            style_id=REPLY_ACTION_CREDS, style_fallback="primary",
+        )
+    ]
+    if show_pg:
+        buttons.append(
+            _ikb(
+                _t(ui, "btn_adm_pg"),
+                callback_data="nv:adm:pg",
+                ui=ui,
+                action=REPLY_ACTION_ADMIN_PG,
+                style_id=REPLY_ACTION_ADMIN_PG, style_fallback="primary",
+            )
+        )
+    buttons.extend(
+        _ikb(
+            text,
+            callback_data=f"nv:res:ra:{key}",
+            ui=ui,
+            action=key,
+            style_id=key, style_fallback="primary",
+        )
+        for key, text in _reseller_capacity_entries(profile, ui)
+    )
+    rows = [buttons[i : i + 2] for i in range(0, len(buttons), 2)]
+    rows.append(_hub_back_row(ui, callback_data="menu:home"))
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
 # ── Wave E: admin / reseller leaf hubs ─────────────────────────────────────
 
 
+@editable_screen("a.users")
 def admin_users_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
     from app.bot.reply_keyboards import (
         REPLY_ACTION_ADM_USERS_LIST,
@@ -865,7 +1093,8 @@ def admin_users_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
             text,
             callback_data=cb_map[key],
             ui=ui,
-            style=_style(ui, key, fallback="primary"),
+            action=key,
+            style_id=key, style_fallback="primary",
         )
         for key, text in _admin_users_submenu_entries(ui)
         if key in cb_map
@@ -873,6 +1102,7 @@ def admin_users_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
     return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:people")
 
 
+@editable_screen("a.resellers")
 def admin_resellers_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
     from app.bot.reply_keyboards import (
         REPLY_ACTION_ADM_RES_ADD,
@@ -891,7 +1121,8 @@ def admin_resellers_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup
             text,
             callback_data=cb_map[key],
             ui=ui,
-            style=_style(ui, key, fallback="primary"),
+            action=key,
+            style_id=key, style_fallback="primary",
         )
         for key, text in _admin_resellers_submenu_entries(ui)
         if key in cb_map
@@ -903,6 +1134,7 @@ def admin_resellers_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+@editable_screen("a.settings")
 def admin_settings_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
     from app.bot.reply_keyboards import (
         REPLY_ACTION_ADM_ST_PANEL,
@@ -925,12 +1157,25 @@ def admin_settings_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
                 text,
                 callback_data=cb,
                 ui=ui,
-                style=_style(ui, key, fallback="primary"),
+                action=key,
+                style_id=key, style_fallback="primary",
             )
         )
-    return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:system")
+    markup = _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:system")
+    search_row = [
+        _ikb(
+            _t(ui, "btn_adm_st_find"),
+            callback_data="adm:st:find",
+            ui=ui,
+            label_key="btn_adm_st_find",
+            style_id="adm_st_find",
+        )
+    ]
+    markup.inline_keyboard.insert(0, search_row)
+    return markup
 
 
+@editable_screen("a.backup")
 def admin_backup_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
     cb_map = {
         "backup_create": "adm:backup:create:noenv",
@@ -945,7 +1190,8 @@ def admin_backup_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
             text,
             callback_data=cb_map[key],
             ui=ui,
-            style=_style(ui, key, fallback="primary"),
+            action=key,
+            style_id=key, style_fallback="primary",
         )
         for key, text in _admin_backup_submenu_entries(ui)
         if key in cb_map
@@ -953,6 +1199,7 @@ def admin_backup_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
     return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:system")
 
 
+@editable_screen("a.broadcast")
 def admin_broadcast_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
     from app.bot.reply_keyboards import _admin_broadcast_submenu_entries
 
@@ -961,14 +1208,16 @@ def admin_broadcast_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup
             text,
             callback_data=f"adm:broadcast:aud:{key.replace('bc_aud_', '', 1)}",
             ui=ui,
-            style=_style(ui, key, fallback="primary"),
+            action=key,
+            style_id=key, style_fallback="primary",
         )
         for key, text in _admin_broadcast_submenu_entries(ui)
         if key.startswith("bc_aud_")
     ]
-    return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:system")
+    return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:marketing")
 
 
+@editable_screen("a.plans")
 def admin_plans_audience_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
     from app.bot.reply_keyboards import (
         REPLY_ACTION_ADM_PLANS_ADDONS,
@@ -989,7 +1238,8 @@ def admin_plans_audience_hub_keyboard(ui: dict | None = None) -> InlineKeyboardM
             text,
             callback_data=cb_map[key],
             ui=ui,
-            style=_style(ui, key, fallback="primary"),
+            action=key,
+            style_id=key, style_fallback="primary",
         )
         for key, text in _admin_plans_audience_entries(ui)
         if key in cb_map
@@ -997,11 +1247,20 @@ def admin_plans_audience_hub_keyboard(ui: dict | None = None) -> InlineKeyboardM
     return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:product")
 
 
-def admin_plans_kind_hub_keyboard(
-    audience: str, ui: dict | None = None
+
+def _plans_kind_screen_id(audience: str, *_args: object, **_kwargs: object) -> str:
+    return f"a.plans.{audience}"
+
+
+@editable_screen(_plans_kind_screen_id)
+def admin_plans_audience_keyboard(
+    audience: str,
+    ui: dict | None = None,
+    *,
+    plan_rows: list[list[InlineKeyboardButton]] | None = None,
+    pager: list[InlineKeyboardButton] | None = None,
 ) -> InlineKeyboardMarkup:
-    """List-screen actions after choosing users/resellers audience."""
-    _ = audience
+    """One audience's plans: add / catalog actions, a page of plan rows, «بازگشت» to the plans hub."""
     from app.bot.reply_keyboards import (
         REPLY_ACTION_ADM_PLANS_ADD,
         REPLY_ACTION_ADM_PLANS_ADDONS,
@@ -1009,22 +1268,23 @@ def admin_plans_kind_hub_keyboard(
         _admin_plans_list_entries,
     )
 
+    _ = audience  # names the screen for the menu editor
     cb_map = {
         REPLY_ACTION_ADM_PLANS_ADD: "nv:adm:ra:adm_plans_add",
         REPLY_ACTION_ADM_PLANS_CATEGORIES: "nv:adm:ra:adm_plans_categories",
         REPLY_ACTION_ADM_PLANS_ADDONS: "nv:adm:ra:adm_plans_addons",
     }
-    buttons = [
-        _ikb(
-            text,
-            callback_data=cb_map[key],
-            ui=ui,
-            style=_style(ui, key, fallback="primary"),
-        )
+    actions = [
+        _ikb(text, callback_data=cb_map[key], ui=ui, action=key, style_id=key, style_fallback="primary")
         for key, text in _admin_plans_list_entries(ui)
         if key in cb_map
     ]
-    return _pack_hub_keyboard(buttons, ui, back_callback="nv:adm:plans")
+    rows = [actions[i : i + 2] for i in range(0, len(actions), 2)]
+    rows.extend(plan_rows or [])
+    if pager:
+        rows.append(pager)
+    rows.append(_hub_back_row(ui, callback_data="nv:adm:plans"))
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def admin_plans_add_type_hub_keyboard(
@@ -1037,7 +1297,8 @@ def admin_plans_add_type_hub_keyboard(
             text,
             callback_data=f"nv:adm:ra:{key}",
             ui=ui,
-            style=_style(ui, key, fallback="primary"),
+            action=key,
+            style_id=key, style_fallback="primary",
         )
         for key, text in _admin_plans_add_type_entries(audience, ui)
     ]
@@ -1049,6 +1310,7 @@ def admin_plans_add_type_hub_keyboard(
     return _pack_hub_keyboard(buttons, ui, back_callback=back)
 
 
+@editable_screen("r.settings")
 def reseller_settings_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
     from app.bot.reply_keyboards import _reseller_settings_submenu_entries
 
@@ -1057,13 +1319,15 @@ def reseller_settings_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMark
             text,
             callback_data=f"nv:res:ra:{key}",
             ui=ui,
-            style=_style(ui, key, fallback="primary"),
+            action=key,
+            style_id=key, style_fallback="primary",
         )
         for key, text in _reseller_settings_submenu_entries(ui)
     ]
-    return _pack_hub_keyboard(buttons, ui, back_callback="nv:res:home")
+    return _pack_hub_keyboard(buttons, ui, back_callback=back_callback_for("res_settings"))
 
 
+@editable_screen("r.plans")
 def reseller_plans_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
     from app.bot.reply_keyboards import _reseller_plans_submenu_entries
 
@@ -1072,109 +1336,100 @@ def reseller_plans_hub_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
             text,
             callback_data=f"nv:res:ra:{key}",
             ui=ui,
-            style=_style(ui, key, fallback="primary"),
+            action=key,
+            style_id=key, style_fallback="primary",
         )
         for key, text in _reseller_plans_submenu_entries(ui)
     ]
-    return _pack_hub_keyboard(buttons, ui, back_callback="nv:res:home")
+    return _pack_hub_keyboard(buttons, ui, back_callback=back_callback_for("res_plans"))
 
 
-def service_card_keyboard(
-    service_id: int, ui: dict | None = None
-) -> InlineKeyboardMarkup:
-    """Inline actions for one service card (replaces service_actions_reply_keyboard).
+def _service_button(ui: dict | None, label_key: str, fallback: str, callback_data: str, style_id: str, **kw: Any):
+    return _ikb(
+        _t(ui, label_key) or fallback, callback_data=callback_data, ui=ui, label_key=label_key, style_id=style_id, **kw
+    )
+
+
+@editable_screen("c.service")
+def service_card_keyboard(service_id: int, ui: dict | None = None) -> InlineKeyboardMarkup:
+    """Inline actions for one service card: the daily ones, then «⚙️ بیشتر» for the rest.
 
     Reuses existing ``svc:*`` / ``guide:svc:*`` callbacks — no duplicated business logic.
-    Cancel sits above delete so destructive delete stays visually separated.
     """
     sid = int(service_id)
     rows: list[list[InlineKeyboardButton]] = [
         [
-            _ikb(
-                _t(ui, "btn_renew") or "🔄 تمدید",
-                callback_data=f"svc:renew:{sid}",
-                ui=ui,
-                label_key="btn_renew",
-                style=_style(ui, "svc_renew", fallback="primary"),
-            ),
-            _ikb(
-                _t(ui, "btn_svc_addon") or "➕ حجم / زمان",
-                callback_data=f"svc:addon:{sid}",
-                ui=ui,
-                label_key="btn_svc_addon",
-                style=_style(ui, "svc_addon", fallback="primary"),
-            ),
+            _service_button(ui, "btn_renew", "🔄 تمدید", f"svc:renew:{sid}", "svc_renew", style_fallback="primary"),
+            _service_button(ui, "btn_svc_addon", "➕ حجم / زمان", f"svc:addon:{sid}", "svc_addon", style_fallback="primary"),
         ],
         [
-            _ikb(
-                _t(ui, "btn_sub_link") or "🔗 لینک و QR",
-                callback_data=f"svc:link:{sid}",
-                ui=ui,
-                label_key="btn_sub_link",
-                style=_style(ui, "svc_link"),
-            ),
-            _ikb(
-                _t(ui, "btn_guides") or _t(ui, "btn_guide") or "📘 آموزش اتصال",
-                callback_data=f"guide:svc:{sid}",
-                ui=ui,
-                label_key="btn_guides",
-                style=_style(ui, "guides", fallback="primary"),
+            _service_button(ui, "btn_sub_link", "🔗 لینک و QR", f"svc:link:{sid}", "svc_link"),
+            _service_button(
+                ui, "btn_guides", _t(ui, "btn_guide") or "📘 آموزش اتصال", f"guide:svc:{sid}", "guides",
+                style_fallback="primary",
             ),
         ],
-        [
-            _ikb(
-                "♻️ رفرش وضعیت",
-                callback_data=f"svc:view:{sid}",
-                ui=ui,
-                style=_style(ui, "svc_refresh"),
-            ),
-            _ikb(
-                "⚙️ تنظیمات خودکار",
-                callback_data=f"svc:auto:{sid}",
-                ui=ui,
-            ),
-        ],
-        [
-            _ikb(
-                "📝 درخواست لغو سرویس",
-                callback_data=f"svc:cancel:{sid}",
-                ui=ui,
-            ),
-        ],
-        [
-            _ikb(
-                "🗑 حذف سرویس",
-                callback_data=f"svc:delask:{sid}",
-                ui=ui,
-                style=_style(ui, "svc_delete", fallback="danger"),
-            ),
-        ],
-        [
-            _ikb(
-                _t(ui, "btn_back") or "⬅️ بازگشت",
-                callback_data="svc:list",
-                ui=ui,
-                label_key="btn_back",
-                style=_style(ui, "back"),
-            )
-        ],
+        [_service_button(ui, "btn_svc_more", "⚙️ بیشتر", f"svc:more:{sid}", "svc_more")],
+        [_service_button(ui, "btn_back", "⬅️ بازگشت", SERVICES_LIST_CALLBACK, "back")],
     ]
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+@editable_screen("c.service_more")
+def service_more_keyboard(
+    service_id: int, ui: dict | None = None, *, external: bool = False, wireguard: bool = False
+) -> InlineKeyboardMarkup:
+    """«⚙️ بیشتر» of a service card: refresh, WireGuard, automation, cancellation and delete.
+
+    The WireGuard button shows only for a service the panel gave a WireGuard address (``wireguard``).
+    Cancel sits above delete so destructive delete stays visually separated. A service that was
+    not sold by the bot (``external``) can never be cancelled for a refund, so it has no cancel button.
+    """
+    sid = int(service_id)
+    rows: list[list[InlineKeyboardButton]] = [
+        [_service_button(ui, "btn_svc_refresh", "♻️ رفرش وضعیت", f"svc:view:{sid}", "svc_refresh")]
+    ]
+    if wireguard:
+        rows.append([_service_button(ui, "btn_svc_wireguard", "🔐 فایل WireGuard", f"svc:wg:{sid}", "svc_wireguard")])
+    rows.append([_service_button(ui, "btn_svc_auto", "⚙️ تنظیمات خودکار", f"svc:auto:{sid}", "svc_auto")])
+    if not external:
+        rows.append([_service_button(ui, "btn_svc_cancel", "📝 درخواست لغو", f"svc:cancel:{sid}", "svc_cancel")])
+    rows.append(
+        [_service_button(ui, "btn_svc_delete", "🗑 حذف سرویس", f"svc:delask:{sid}", "svc_delete", style_fallback="danger")]
+    )
+    rows.append([_service_button(ui, "btn_back", "⬅️ بازگشت", f"svc:view:{sid}", "back")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def services_page(services: list, page_index: int = 0) -> Page:
+    return page_of(services, page_index, SERVICES_PAGE_SIZE)
+
+
+@editable_screen("c.services")
 def services_list_keyboard(
     services: list,
     ui: dict | None = None,
     *,
     reseller_capacity_label: str | None = None,
+    allow_import: bool = False,
+    page_index: int = 0,
 ) -> InlineKeyboardMarkup:
-    """Paginated-ready service list with back-to-home (inline nav)."""
+    """One page of the customer's services; a long list gets «قبلی/بعدی» and a search."""
     from app.bot.keyboards import services_keyboard
+    from app.bot.service_import_ui import add_existing_row
 
+    page = services_page(services, page_index)
     base = services_keyboard(
-        services, ui, reseller_capacity_label=reseller_capacity_label
+        page.items, ui, reseller_capacity_label=reseller_capacity_label
     )
     rows = list(base.inline_keyboard)
+    if page.is_split:
+        rows.append(pager_row(page, SERVICES_LIST_CALLBACK))
+        rows.append(
+            [InlineKeyboardButton(text=SEARCH_SERVICES_TEXT, callback_data=SERVICES_SEARCH_CALLBACK)]
+        )
+    if allow_import:
+        rows.append(add_existing_row(ui))
     rows.append(
         [
             _ikb(
@@ -1182,7 +1437,7 @@ def services_list_keyboard(
                 callback_data="menu:home",
                 ui=ui,
                 label_key="btn_back",
-                style=_style(ui, "back"),
+                style_id="back",
             )
         ]
     )

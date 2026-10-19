@@ -38,6 +38,7 @@ def svc():
         subscription_token=None,
         subscription_url="https://pg.example:8443/apilog/test-token",
         plan_id=2,
+        remark=None,
     )
 
 
@@ -154,6 +155,10 @@ def test_client_uses_custom_route_own_origin_and_fresh_public_request(
         pg.settings = SimpleNamespace(pg_subscription_path=configured)
         pg.base_url = "https://pg.example:8443/dashboard"
         pg._token = "private-owner-token"
+        # This fixture bypasses __init__; target validation is separately tested.
+        pg._validated_base = pg.base_url
+        pg._validated_until = float("inf")
+        pg._cache_partition = "subscription-test-client"
         pg._headers = AsyncMock(
             side_effect=AssertionError("public read must not authenticate")
         )
@@ -317,6 +322,7 @@ def test_bot_handlers_read_custom_link_and_display_result(svc, handler_name, fai
     session = AsyncMock()
     session.get.return_value = svc
     with (
+        patch.object(handlers, "customer_may_use_service", new=AsyncMock(return_value=True)),
         patch.object(handlers, "get_all_settings", new=AsyncMock(return_value={})),
         patch.object(handlers, "get_pg", return_value=pg),
         patch.object(handlers, "safe_edit_text", new=AsyncMock()) as edit,

@@ -9,7 +9,7 @@
   </div>
 </div>
 
-{{ shop_settings_tabs(tab, tabs, "/shop-settings", request.url.path) }}
+{{ shop_settings_tabs(tab, tabs, "/shop-settings", request.url.path, tab_nav|default(none)) }}
 
 <div class="settings-layout {% if tab in ['menu','welcome','messages','buttons','qr','appearance','daily_report'] %}can-preview{% endif %}" id="settings-layout">
   <div class="settings-main">
@@ -75,6 +75,7 @@
             <option value="compact" {% if values.get('menu_layout','compact')=='compact' %}selected{% endif %}>فشرده (جفتی — پیشنهادی)</option>
           </select>
         </label>
+        {% include "_settings_chat_cleanup.html" %}
       </div>
     </div>
     <form method="post" action="/shop-settings/menu-layout" id="menu-form" class="menu-layout-form">
@@ -122,28 +123,26 @@
         <button class="btn" type="submit">ذخیره منو</button>
       </div>
     </form>
+    {% set reset_action = '/shop-settings?tab=menu' %}
+    {% set reset_confirm = 'ترتیب و چیدمان دکمه‌های منو به حالت اولیهٔ ربات برمی‌گردد. ادامه می‌دهید؟' %}
+    {% include "_settings_reset_defaults.html" %}
 
   {% elif tab == 'colors' %}
     {% set settings_action = '/shop-settings?tab=colors' %}
     {% include "_settings_colors.html" %}
+    {% set reset_action = '/shop-settings?tab=colors' %}
+    {% include "_settings_reset_defaults.html" %}
 
   {% else %}
-    {% if tab == 'forcejoin' %}
-      {% include "_forcejoin_admin_notice.html" %}
-    {% elif tab == 'terms' %}
-      {% include "_terms_admin_notice.html" %}
+    {% if tab == 'service_import' %}
+      {% include "_settings_service_import.html" %}
     {% endif %}
     <form method="post" action="/shop-settings?tab={{ tab }}" enctype="multipart/form-data" class="settings-form" id="settings-form">
       {% for group_name in tab_groups %}
-      {% if tab == 'limits' and group_name == 'کانال اجباری' %}
-        {% include "_forcejoin_admin_notice.html" %}
-      {% endif %}
-      {% if tab == 'limits' and group_name == 'قوانین ورود به ربات' %}
-        {% include "_terms_admin_notice.html" %}
-      {% endif %}
       {% set fields = groups[group_name] %}
       <div class="card settings-card">
         <h2>{{ group_name }}</h2>
+        {% include "_settings_group_notice.html" %}
         <div class="settings-grid">
         {% for field in fields %}
           {% include "_settings_field.html" %}
@@ -155,6 +154,8 @@
         <button class="btn" type="submit">ذخیره تنظیمات</button>
       </div>
     </form>
+    {% set reset_action = '/shop-settings?tab=' ~ tab %}
+    {% include "_settings_reset_defaults.html" %}
   {% endif %}
 
   </div>

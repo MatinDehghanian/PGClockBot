@@ -48,8 +48,55 @@ class PaygPlanUiTests(unittest.TestCase):
         src = (ROOT / "app/api/reseller_pages.py").read_text(encoding="utf-8")
         self.assertIn("price_per_gb", src)
         self.assertIn("sync_plan_billing_rate", src)
-        self.assertIn("delete_plan_billing_rate", src)
         self.assertIn("_parse_pg_group_ids", src)
+
+
+class PaygPlanDeleteTests(unittest.IsolatedAsyncioTestCase):
+    async def test_deleting_plan_removes_only_its_billing_rate(self):
+        from sqlalchemy import select
+        from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+        import app.db.models  # noqa: F401
+        from app.db import Base
+        from app.db.models import ResellerBillingRate, ResellerPlan
+        from app.services.plans_catalog import delete_reseller_plan
+
+        engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        sessionmaker = async_sessionmaker(engine, expire_on_commit=False)
+        try:
+            async with sessionmaker() as session:
+                doomed = ResellerPlan(name="payg-a", billing_mode="payg", price_per_gb=900)
+                kept = ResellerPlan(name="payg-b", billing_mode="payg", price_per_gb=700)
+                session.add_all([doomed, kept])
+                await session.flush()
+                for plan in (doomed, kept):
+                    session.add(
+                        ResellerBillingRate(
+                            scope_kind="plan",
+                            scope_key=str(plan.id),
+                            reseller_user_id=None,
+                            price_per_gb=plan.price_per_gb,
+                            is_active=True,
+                        )
+                    )
+                await session.flush()
+                kept_id = kept.id
+
+                await delete_reseller_plan(session, doomed)
+                await session.commit()
+
+                remaining = (
+                    await session.execute(
+                        select(ResellerBillingRate.scope_key).where(
+                            ResellerBillingRate.scope_kind == "plan"
+                        )
+                    )
+                ).scalars().all()
+                self.assertEqual(remaining, [str(kept_id)])
+        finally:
+            await engine.dispose()
 
 
 class PaygRateResolveTests(unittest.IsolatedAsyncioTestCase):

@@ -1,22 +1,20 @@
 from __future__ import annotations
 
-import hashlib
-import hmac
+import asyncio
 import json
 import logging
 import time
 from pathlib import Path
 from typing import Optional
-from urllib.parse import parse_qsl, quote
+from urllib.parse import quote
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from itsdangerous import BadSignature, BadTimeSignature, URLSafeTimedSerializer
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.config import DATA_DIR, get_settings, normalize_pg_base_url, normalize_pg_subscription_path
@@ -29,7 +27,6 @@ from app.db.models import (
     Plan,
     ResellerProfile,
     Role,
-    UserService,
 )
 from app.db.session import SessionLocal
 from app.services.orders import (
@@ -41,9 +38,12 @@ from app.services.orders import (
     reject_order,
     reject_payment,
 )
+from app.api.guide_media_pages import PLATFORM_BASE as GUIDE_MEDIA_PLATFORM_BASE
+from app.api.guide_media_pages import guides_media_view, register_guide_media_pages
+from app.services.chat_cleanup_config import chat_cleanup_payload
+from app.services.connection_guides import prune_guide_media, serialize_submitted_guides
 from app.services.list_query import filter_by_search, normalize_search_q
 from app.services.payer_notify import notify_payer
-from app.services.pasarguard import get_pg
 from app.services.resellers import (
     setup_is_complete,
     DEFAULT_FEATURE_PERMS,
@@ -78,12 +78,16 @@ from app.services.security_policy import (
 )
 from app.services.updates import local_version
 from app.services.message_variables import template_variable_specs
+from app.services.panel_assets import get_panel_asset_cache_key
+from app.services.shop_scope import is_platform_admin, payment_shop_id
+from app.services.settings_tab_groups import group_settings_tabs, tabs_with_message_variables
 from app.services.users import (
     SETTINGS_DOMAIN_REDIRECTS,
     SETTING_GROUPS,
     SETTINGS_TABS,
     PANEL_SETTINGS_KEYS,
     PANEL_SETTINGS_TABS,
+    RESETTABLE_SETTINGS_TABS,
     TAB_SETTING_GROUPS,
     get_all_settings,
     set_setting,
@@ -97,8 +101,17 @@ from app.services.web_auth import (
     verify_password_hash,
     verify_web_admin,
 )
+from app.api.catalog_discounts import register_catalog_discounts
+from app.api.connection_status_pages import register_connection_status_pages
+from app.api.funnel_pages import register_funnel_pages
+from app.api.gift_code_pages import legacy_gift_modal_redirect, register_gift_code_pages
+from app.api.bot_overview_pages import register_bot_overview_pages
+from app.api.dashboard_trend_pages import register_dashboard_trend_pages
+from app.services.backup_settings import apply_backup_retention, normalize_backup_payload
 from app.api.home_pages import register_home_pages
 from app.api.pg_pages import register_pg_pages
+from app.api.service_import_pages import register_service_import_pages
+from app.api.panel_connection import PanelConnectionMiddleware, finish_panel_authentication
 from app.api.login_guard import (
     client_ip as _client_ip,
     login_blocked as _login_blocked,
@@ -120,6 +133,11 @@ templates.env.filters["expire"] = format_expire_short
 templates.env.filters["order_status"] = order_status_fa
 templates.env.filters["ticket_status"] = ticket_status_fa
 templates.env.globals["app_version"] = local_version()
+templates.env.globals["panel_script_cache_key"] = get_panel_asset_cache_key("panel.js")
+templates.env.globals["panel_widget_cache_key"] = get_panel_asset_cache_key("panel_widget_request.js")
+templates.env.globals["money_inputs_cache_key"] = get_panel_asset_cache_key("money-inputs.js")
+templates.env.globals["list_inputs_cache_key"] = get_panel_asset_cache_key("list-inputs.js")
+templates.env.globals["sales_chart_cache_key"] = get_panel_asset_cache_key("sales-chart.js")
 try:
     from app.services.update_channel import badge_context as _badge_context_boot
 
@@ -255,8 +273,11 @@ def render(request: Request, name: str, context: dict | None = None, status_code
             ctx["pwa_name"] = panel_display_name()
         except Exception:
             ctx["pwa_name"] = "MrClockBot"
+    # Update availability is shown to the Owner only, like the update pages themselves.
+    if not is_platform_admin(ctx.get("staff")):
+        ctx["update"] = None
     # Sidebar update badge — prefer explicit context, else request.state, else cache peek.
-    if "update" not in ctx:
+    elif "update" not in ctx:
         upd = getattr(request.state, "panel_update", None)
         if upd is None:
             try:
@@ -291,6 +312,14 @@ def render(request: Request, name: str, context: dict | None = None, status_code
             ctx["is_owner"] = bool(is_explicit_owner_staff(ctx.get("staff")))
         except Exception:
             ctx["is_owner"] = False
+    if ctx.get("staff") and "marketing_sections" not in ctx:
+        try:
+            from app.services.marketing_nav import marketing_sections
+
+            ctx["marketing_sections"] = marketing_sections(ctx.get("staff"))
+        except Exception:
+            logging.getLogger(__name__).warning("marketing nav resolution failed", exc_info=True)
+            ctx["marketing_sections"] = ()
     response = templates.TemplateResponse(request, name, ctx, status_code=status_code)
     try:
         from app.services.csrf import CSRF_COOKIE, ensure_csrf_token
@@ -739,6 +768,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         from app.services.db_safe import recover_session
 
         await recover_session(session)
+        finish_panel_authentication(request)
         return user
 
     async def require_admin(
@@ -1352,6 +1382,10 @@ def create_api_app(lifespan=None) -> FastAPI:
         require_staff=require_staff,
         get_db=get_db,
     )
+    register_dashboard_trend_pages(app, require_staff=require_staff, get_db=get_db)
+    register_bot_overview_pages(
+        app, render=render, require_perm=require_perm, require_admin=require_admin, get_db=get_db
+    )
     register_pg_pages(
         app,
         render=render,
@@ -1412,12 +1446,21 @@ def create_api_app(lifespan=None) -> FastAPI:
         require_admin=require_admin,
         get_db=get_db,
     )
+    from app.api.delivery_failure_pages import register_delivery_failure_pages
+    register_delivery_failure_pages(app, require_orders=require_perm("orders"), get_db=get_db)
+    from app.api.service_shop_review_pages import register_service_shop_review_pages
+    register_service_shop_review_pages(app, render=render, require_admin=require_admin, get_db=get_db)
+    from app.api.reseller_capacity_repair_pages import register_reseller_capacity_repair_pages
+    register_reseller_capacity_repair_pages(app, require_staff=require_staff, get_db=get_db)
     register_shop_settings(
         app,
         render=render,
         require_staff=require_staff,
         require_shop_settings=require_perm("shop_settings"),
         get_db=get_db,
+    )
+    register_guide_media_pages(
+        app, require_admin=require_admin, require_shop_settings=require_perm("shop_settings"), get_db=get_db
     )
     from app.api.loyalty_pages import register_loyalty_pages
 
@@ -1462,6 +1505,11 @@ def create_api_app(lifespan=None) -> FastAPI:
     from app.api.customer_features import register_customer_features
 
     register_customer_features(app, render=render, require_staff=require_staff, get_db=get_db)
+    register_catalog_discounts(app, render=render, require_staff=require_staff, get_db=get_db)
+    register_gift_code_pages(app, render=render, require_staff=require_staff, get_db=get_db)
+    register_funnel_pages(app, render=render, require_staff=require_staff, get_db=get_db)
+    register_service_import_pages(app, require_staff=require_staff, get_db=get_db)
+    register_connection_status_pages(app, render=render, require_staff=require_staff, get_db=get_db)
 
     @app.get("/settings/ssl/progress")
     async def ssl_progress(staff: dict = Depends(require_admin)):
@@ -1730,7 +1778,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         if not base:
             return await fail("آدرس پاسارگارد الزامی است.")
         try:
-            base = assert_safe_pg_base_url(base)
+            base = await asyncio.to_thread(assert_safe_pg_base_url, base)
         except UnsafePgUrlError as exc:
             return await fail(str(exc))
         if not (pg_username or "").strip():
@@ -1938,7 +1986,10 @@ def create_api_app(lifespan=None) -> FastAPI:
         pg_credentials_ready = False
         pg_staff_id = None
 
-        if verify_web_admin(u, p):
+        # Bind the login to the credential version before yielding for hashing;
+        # a concurrent password change must not issue a session for the old password.
+        owner_session_version = await asyncio.to_thread(admin_session_version)
+        if await asyncio.to_thread(verify_web_admin, u, p):
             role = "admin"
             display = load_web_admin()["username"]
         else:
@@ -1962,7 +2013,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             row = result.first()
             if row:
                 ru, profile = row
-                if verify_password_hash(p, profile.web_password_hash):
+                if await asyncio.to_thread(verify_password_hash, p, profile.web_password_hash):
                     if not profile.is_active:
                         for k in limit_keys:
                             _login_fail(k)
@@ -2057,7 +2108,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 )
 
                 staff_row = await access_by_web_username(session, u.strip().lower())
-                if staff_row and verify_password_hash(p, staff_row.web_password_hash):
+                if staff_row and await asyncio.to_thread(verify_password_hash, p, staff_row.web_password_hash):
                     if not staff_row.is_active:
                         for k in limit_keys:
                             _login_fail(k)
@@ -2261,7 +2312,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             "pg_permissions": pg_permissions,
         }
         if role == "admin":
-            payload["sv"] = admin_session_version()
+            payload["sv"] = owner_session_version
             payload["web_owner"] = True
         if bot_user_id is not None:
             payload["bot_user_id"] = bot_user_id
@@ -2349,205 +2400,15 @@ def create_api_app(lifespan=None) -> FastAPI:
         resp.delete_cookie("session", path="/")
         return resp
 
-    @app.get("/dashboard", response_class=HTMLResponse)
-    async def dashboard(
-        request: Request,
-        staff: dict = Depends(require_perm("dashboard")),
-        session: AsyncSession = Depends(get_db),
-    ):
-        # Bot overview (/dashboard): platform admin sees bot boxes;
-        # overall web home stays at /home. Resellers stay shop-scoped.
-        from sqlalchemy import or_
-
-        from app.services.shop_scope import empty_shop_stats, is_platform_admin, shop_owner_id
-
-        rid = shop_owner_id(staff)
-        stats = empty_shop_stats()
-        recent_payments: list = []
-        recent_orders: list = []
-        bot_setup_needed = False
-        host_gauges = None
-
-        if is_platform_admin(staff):
-            import asyncio
-
-            from app.services.db_safe import rollback_quiet
-            from app.services.home_overview import bot_panel_summary
-            from app.services.host_gauges import local_host_gauges
-
-            try:
-                host_gauges = await asyncio.to_thread(local_host_gauges, wait_cpu=0.0)
-            except Exception:
-                from app.services.host_gauges import empty_host_gauges
-
-                host_gauges = empty_host_gauges()
-
-            try:
-                summary = await bot_panel_summary(session)
-            except Exception:
-                await rollback_quiet(session)
-                summary = {
-                    "users": 0,
-                    "orders": 0,
-                    "services": 0,
-                    "pending": 0,
-                    "revenue": 0,
-                    "tickets": 0,
-                    "resellers": 0,
-                }
-            try:
-                plans_count = (
-                    await session.scalar(
-                        select(func.count())
-                        .select_from(Plan)
-                        .where(Plan.is_active.is_(True), Plan.owner_reseller_id.is_(None))
-                    )
-                    or 0
-                )
-            except Exception:
-                await rollback_quiet(session)
-                plans_count = 0
-            stats = {
-                "users": summary["users"],
-                "orders": summary["orders"],
-                "pending": summary["pending"],
-                "services": summary["services"],
-                "revenue": summary["revenue"],
-                "plans": int(plans_count),
-                "tickets": summary["tickets"],
-            }
-            # Hard shop isolation: platform dashboard never lists tenant shop traffic
-            try:
-                recent_payments = list(
-                    (
-                        await session.execute(
-                            select(Payment)
-                            .outerjoin(Order, Order.id == Payment.order_id)
-                            .where(
-                                or_(
-                                    Payment.is_wallet_topup.is_(True),
-                                    Order.reseller_id.is_(None),
-                                )
-                            )
-                            .order_by(Payment.id.desc())
-                            .limit(6)
-                        )
-                    ).scalars().all()
-                )
-                recent_orders = list(
-                    (
-                        await session.execute(
-                            select(Order)
-                            .where(Order.reseller_id.is_(None))
-                            .order_by(Order.id.desc())
-                            .limit(6)
-                        )
-                    ).scalars().all()
-                )
-            except Exception:
-                await rollback_quiet(session)
-                recent_payments = []
-                recent_orders = []
-            return render(
-                request,
-                "dashboard.html",
-                {
-                    "staff": staff,
-                    "stats": stats,
-                    "recent_payments": recent_payments,
-                    "recent_orders": recent_orders,
-                    "bot_setup_needed": False,
-                    "host_gauges": host_gauges,
-                },
-            )
-
-        # Fail closed: never fall through to platform/admin aggregates.
-        # Bot نمای کلی is bot-only (PG lives on /home and /pg).
-        if rid:
-            from app.db.models import ResellerProfile
-            from app.services.resellers import bot_needs_setup
-
-            profile = (
-                await session.execute(
-                    select(ResellerProfile).where(ResellerProfile.user_id == int(rid))
-                )
-            ).scalar_one_or_none()
-            bot_setup_needed = bot_needs_setup(profile)
-            # Until dedicated bot token is set, bot overview is setup-only.
-            if bot_setup_needed:
-                return render(
-                    request,
-                    "dashboard.html",
-                    {
-                        "staff": staff,
-                        "stats": stats,
-                        "recent_payments": [],
-                        "recent_orders": [],
-                        "bot_setup_needed": True,
-                    },
-                )
-
-            from app.api.home_pages import _reseller_shop_stats
-
-            perms = staff.get("permissions") or []
-            stats = await _reseller_shop_stats(session, int(rid))
-            if "payments" in perms:
-                recent_payments = list(
-                    (
-                        await session.execute(
-                            select(Payment)
-                            .join(BotUser, BotUser.id == Payment.user_id)
-                            .where(BotUser.reseller_id == rid)
-                            .order_by(Payment.id.desc())
-                            .limit(6)
-                        )
-                    ).scalars().all()
-                )
-            if "orders" in perms:
-                recent_orders = list(
-                    (
-                        await session.execute(
-                            select(Order)
-                            .where(Order.reseller_id == rid)
-                            .order_by(Order.id.desc())
-                            .limit(6)
-                        )
-                    ).scalars().all()
-                )
-
-        return render(
-            request,
-            "dashboard.html",
-            {
-                "staff": staff,
-                "stats": stats,
-                "recent_payments": recent_payments,
-                "recent_orders": recent_orders,
-                "bot_setup_needed": bot_setup_needed,
-                "host_gauges": host_gauges,
-            },
-        )
-
-    @app.get("/dashboard/metrics")
-    async def dashboard_host_metrics_json(staff: dict = Depends(require_admin)):
-        """Local bot-server CPU/RAM for the bot overview gauges (platform admin only)."""
-        import asyncio
-
-        from fastapi.responses import JSONResponse
-
-        from app.services.host_gauges import gauges_json, local_host_gauges
-
-        host = await asyncio.to_thread(local_host_gauges, wait_cpu=0.0)
-        if host.get("cpu_percent") is None:
-            host = await asyncio.to_thread(local_host_gauges, wait_cpu=0.12)
-        return JSONResponse(gauges_json(host))
-
     @app.get("/plans", response_class=HTMLResponse)
     async def plans_page(
         request: Request,
         staff: dict = Depends(require_perm("plans")),
         session: AsyncSession = Depends(get_db),
     ):
+        legacy_gifts = legacy_gift_modal_redirect(request.query_params)
+        if legacy_gifts:
+            return RedirectResponse(legacy_gifts, status_code=303)
         from app.services.plans_catalog import (
             catalog_owner_id,
             custom_range_limit_issue,
@@ -2646,27 +2507,6 @@ def create_api_app(lifespan=None) -> FastAPI:
             except Exception:
                 pg_roles = []
 
-        gift_codes: list = []
-        gift_code_details: dict = {}
-        try:
-            from app.db.models import ChargeCode
-
-            if is_platform_admin(staff) or rid:
-                q = select(ChargeCode).order_by(ChargeCode.id.desc()).limit(200)
-                if is_platform_admin(staff):
-                    q = q.where(ChargeCode.reseller_id.is_(None))
-                else:
-                    q = q.where(ChargeCode.reseller_id == int(rid))
-                gift_codes = list((await session.execute(q)).scalars().all())
-                from app.services.gift_codes import describe_code
-
-                gift_code_details = {c.id: describe_code(c) for c in gift_codes}
-        except Exception:
-            import logging
-
-            logging.getLogger(__name__).exception("gift codes load failed on /plans")
-            gift_codes = []
-
         plan_categories: list = []
         plan_category_map: dict = {}
         reseller_plan_category_map: dict = {}
@@ -2726,8 +2566,6 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "reseller_plans_err": reseller_plans_err,
                 "feature_perms": feature_perms,
                 "pg_roles": pg_roles,
-                "gift_codes": gift_codes,
-                "gift_code_details": gift_code_details,
                 "plan_categories": plan_categories,
                 "plan_category_map": plan_category_map,
                 "reseller_plan_category_map": reseller_plan_category_map,
@@ -2738,7 +2576,6 @@ def create_api_app(lifespan=None) -> FastAPI:
                 "plan_limit_issues": plan_limit_issues,
                 "trial_limit_issue": trial_limit_issue,
                 "custom_limit_issue": custom_limit_msg,
-                "open_gifts": request.query_params.get("gifts") in {"1", "true", "yes"},
                 "open_categories": request.query_params.get("categories")
                 in {"1", "true", "yes"},
                 "open_addons": request.query_params.get("addons") in {"1", "true", "yes"},
@@ -3153,7 +2990,6 @@ def create_api_app(lifespan=None) -> FastAPI:
         btn = str(form.get("btn_wholesale") or "").strip() or "📦 فروش عمده"
         await set_setting(session, "btn_wholesale", btn, reseller_id=owner_id)
         tiers = parse_wholesale_tiers(str(form.get("wholesale_tiers") or ""))
-        import json
 
         await set_setting(
             session,
@@ -3516,6 +3352,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             order.user_id,
             title="❌ سفارش رد شد",
             body=f"سفارش #{order_id} رد شد. اگر اشتباهی رخ داده با پشتیبانی در تماس باشید.",
+            shop_id=order.reseller_id,
         )
         return _redirect_msg("/finance?tab=orders", ok="سفارش رد شد")
 
@@ -3549,6 +3386,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             order.user_id,
             title="⏹ سفارش لغو شد",
             body=f"سفارش #{order_id} لغو شد.",
+            shop_id=order.reseller_id,
         )
         return _redirect_msg("/finance?tab=orders", ok="سفارش لغو شد")
 
@@ -3581,13 +3419,19 @@ def create_api_app(lifespan=None) -> FastAPI:
             order_row = await session.get(Order, payment.order_id)
             if not order_row or order_row.reseller_id != rid:
                 return _redirect_msg("/finance?tab=payments", err="دسترسی به این پرداخت ندارید")
-        elif payment.order_id and not payment.is_wallet_topup:
-            # Platform admin must not approve shop-tenant payments (match bot isolation)
-            order_row = await session.get(Order, payment.order_id)
-            if order_row and order_row.reseller_id is not None:
+        else:
+            # Platform admin must not approve shop-tenant payments or shop wallet top-ups.
+            from app.services.shop_scope import platform_may_review_payment
+
+            order_row = await session.get(Order, payment.order_id) if payment.order_id else None
+            if not platform_may_review_payment(payment, order_row):
                 return _redirect_msg(
-                "/finance?tab=payments",
-                    err="پرداخت‌های فروشگاه فقط توسط نماینده همان فروشگاه تأیید می‌شود",
+                    "/finance?tab=payments",
+                    err=(
+                        "شارژ کیف پول فروشگاه فقط توسط نماینده همان فروشگاه تأیید می‌شود"
+                        if payment.is_wallet_topup
+                        else "پرداخت‌های فروشگاه فقط توسط نماینده همان فروشگاه تأیید می‌شود"
+                    ),
                 )
         if payment.status != PaymentStatus.PENDING.value:
             return _redirect_msg("/finance?tab=payments", err="این پرداخت قابل تأیید نیست")
@@ -3602,7 +3446,9 @@ def create_api_app(lifespan=None) -> FastAPI:
                 from app.services.notifications import notify_new_subscription, notify_wallet_topup_ok
                 from app.services.reseller_bots import open_notify_bot_for_user
 
-                bot, should_close = await open_notify_bot_for_user(session, user)
+                bot, should_close = await open_notify_bot_for_user(
+                    session, user, shop_id=payment_shop_id(payment, order)
+                )
                 try:
                     try:
                         await send_delivery_to_user(
@@ -3659,12 +3505,18 @@ def create_api_app(lifespan=None) -> FastAPI:
             order_row = await session.get(Order, payment.order_id)
             if not order_row or order_row.reseller_id != rid:
                 return _redirect_msg("/finance?tab=payments", err="دسترسی به این پرداخت ندارید")
-        elif payment.order_id and not payment.is_wallet_topup:
-            order_row = await session.get(Order, payment.order_id)
-            if order_row and order_row.reseller_id is not None:
+        else:
+            from app.services.shop_scope import platform_may_review_payment
+
+            order_row = await session.get(Order, payment.order_id) if payment.order_id else None
+            if not platform_may_review_payment(payment, order_row):
                 return _redirect_msg(
-                "/finance?tab=payments",
-                    err="پرداخت‌های فروشگاه فقط توسط نماینده همان فروشگاه رد می‌شود",
+                    "/finance?tab=payments",
+                    err=(
+                        "شارژ کیف پول فروشگاه فقط توسط نماینده همان فروشگاه رد می‌شود"
+                        if payment.is_wallet_topup
+                        else "پرداخت‌های فروشگاه فقط توسط نماینده همان فروشگاه رد می‌شود"
+                    ),
                 )
         try:
             await reject_payment(session, payment, reviewer_tg=0, note="web reject")
@@ -3674,7 +3526,9 @@ def create_api_app(lifespan=None) -> FastAPI:
         user = await session.get(BotUser, payment.user_id)
         if user:
             try:
-                shop_rid = getattr(user, "reseller_id", None)
+                shop_rid = payment_shop_id(
+                    payment, await session.get(Order, payment.order_id) if payment.order_id else None
+                )
                 ui = await get_all_settings(session, reseller_id=shop_rid)
                 body = ui.get("payment_reject_text") or body
             except Exception:
@@ -3685,6 +3539,9 @@ def create_api_app(lifespan=None) -> FastAPI:
             payment.user_id,
             title="❌ پرداخت رد شد",
             body=body,
+            shop_id=payment_shop_id(
+                payment, await session.get(Order, payment.order_id) if payment.order_id else None
+            ),
         )
         return _redirect_msg("/finance?tab=payments", ok="پرداخت رد شد")
 
@@ -4181,29 +4038,6 @@ def create_api_app(lifespan=None) -> FastAPI:
             clear_idle_status()
         return start_update(target_version=target)
 
-    @app.post("/update/rollback")
-    async def update_rollback(
-        request: Request,
-        staff: dict = Depends(require_admin),
-    ):
-        from app.services.panel_update import start_rollback, start_rollback_to_version
-        from app.services.updates import fetch_recent_versions
-
-        body = {}
-        try:
-            body = await request.json()
-        except Exception:
-            body = {}
-        version = str((body or {}).get("version") or "").strip()
-        if version:
-            recent = await fetch_recent_versions(limit=3, force=True)
-            allowed = [str(x.get("version") or "") for x in recent]
-            return start_rollback_to_version(version, allowed=allowed)
-        snapshot_id = str((body or {}).get("snapshot_id") or "").strip()
-        if not snapshot_id:
-            return {"ok": False, "error": "نسخه بازگشت مشخص نشده"}
-        return start_rollback(snapshot_id)
-
     @app.get("/notifications", response_class=HTMLResponse)
     async def notifications_page(staff: dict = Depends(require_admin)):
         return RedirectResponse("/settings?tab=notifications", status_code=303)
@@ -4288,14 +4122,15 @@ def create_api_app(lifespan=None) -> FastAPI:
         return RedirectResponse("/tickets?supports=1&saved=1", status_code=303)
 
     def _menu_tab_context(values: dict) -> dict:
-        from app.bot.keyboards import DEFAULT_MENU_ORDER
+        from app.bot.keyboards import DEFAULT_ACTIVE_MENU_ORDER, DEFAULT_MENU_ORDER
 
-        order_raw = values.get("menu_order") or ",".join(DEFAULT_MENU_ORDER)
+        order_raw = values.get("menu_order") or ",".join(DEFAULT_ACTIVE_MENU_ORDER)
         order = [p.strip() for p in order_raw.split(",") if p.strip()]
         order = [k for k in order if k in DEFAULT_MENU_ORDER]
         if "shop" not in order:
             order.insert(0, "shop")
         catalog_meta = {
+            "connection_status": {"label": "وضعیت اتصال", "required": False},
             "shop": {"label": "خرید سرویس", "required": True},
             "services": {"label": "سرویس‌های من", "required": False},
             "wallet": {"label": "کیف پول", "required": False},
@@ -4350,6 +4185,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         # nav_mode classic removed — always inline (Option B)
         payload["nav_mode"] = "inline"
         payload.update(sync_show_flags_for_order(order))
+        payload.update(chat_cleanup_payload(form))
         # miniapp is welcome-inline only — never a DnD / ReplyKeyboard item
         payload["show_miniapp"] = "0"
         if reseller_id is not None:
@@ -4362,7 +4198,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         staff: dict = Depends(require_admin),
         session: AsyncSession = Depends(get_db),
     ):
-        from app.services.notifications import NOTIFY_PREFS, get_notify_prefs
+        from app.services.notifications import PLATFORM_NOTIFY_PREFS, get_notify_prefs
         from app.services.updates import clear_update_cache, local_version
 
         tab = (request.query_params.get("tab") or "welcome").strip()
@@ -4388,10 +4224,10 @@ def create_api_app(lifespan=None) -> FastAPI:
         values = await get_all_settings(session)
         tab_groups = TAB_SETTING_GROUPS.get(tab, [])
         groups = {name: SETTING_GROUPS[name] for name in tab_groups if name in SETTING_GROUPS}
-        if tab in {"terms", "limits"}:
-            from app.services.rich_text import prepare_settings_values_for_web
+        # Texts edited in the bot may be packed with premium emoji; fields show their plain text.
+        from app.services.rich_text import prepare_settings_values_for_web
 
-            values = prepare_settings_values_for_web(values)
+        values = prepare_settings_values_for_web(values)
 
         if tab == "guides":
             from app.services.connection_guides import (
@@ -4420,12 +4256,17 @@ def create_api_app(lifespan=None) -> FastAPI:
             "groups": groups,
             "tab_groups": tab_groups,
             "tabs": page_tabs,
+            "tab_nav": group_settings_tabs(tabs_with_message_variables(page_tabs, staff) if page_tabs else [], tab),
             "tab": tab,
             "is_panel_settings": tab in PANEL_SETTINGS_KEYS,
             "panel_tab_label": dict(PANEL_SETTINGS_TABS).get(tab),
+            "reset_tabs": RESETTABLE_SETTINGS_TABS,
             "saved": request.query_params.get("saved") == "1",
             "saved_msg": request.query_params.get("msg") or "",
         }
+        if tab == "guides":
+            ctx["guides_media"] = await guides_media_view(session, GUIDE_MEDIA_PLATFORM_BASE, reseller_id=None)
+            ctx["guides_media_base"] = GUIDE_MEDIA_PLATFORM_BASE
         # Single flash above page title (base.html) — avoid below-title duplicates
         if request.query_params.get("saved") == "1":
             ctx["flash_ok"] = request.query_params.get("msg") or "ذخیره شد."
@@ -4469,7 +4310,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         elif tab == "notifications":
             prefs = await get_notify_prefs(session)
             ctx["notify_prefs"] = prefs
-            ctx["notify_items"] = NOTIFY_PREFS
+            ctx["notify_items"] = PLATFORM_NOTIFY_PREFS
         elif tab == "daily_report":
             from app.services.daily_report import (
                 ACTOR_OWNER,
@@ -4628,7 +4469,15 @@ def create_api_app(lifespan=None) -> FastAPI:
 
         from starlette.datastructures import UploadFile
 
-        from app.services.users import IMAGE_KEYS, SECRET_KEYS, TOGGLE_KEYS, keys_for_tab, should_keep_secret_value
+        from app.services.screen_titles import SCREEN_TEXT_TAB, validate_screen_text_settings
+        from app.services.users import (
+            IMAGE_KEYS,
+            SECRET_KEYS,
+            TOGGLE_KEYS,
+            default_values_for_keys,
+            keys_for_tab,
+            should_keep_secret_value,
+        )
 
         tab = (request.query_params.get("tab") or "welcome").strip()
         form = await request.form()
@@ -4652,7 +4501,7 @@ def create_api_app(lifespan=None) -> FastAPI:
                 return pg_result(False, "عملیات نامعتبر است", code=400)
             current = current_setup_values()
             try:
-                base = assert_safe_pg_base_url(str(form.get("PG_BASE_URL") or ""))
+                base = await asyncio.to_thread(assert_safe_pg_base_url, str(form.get("PG_BASE_URL") or ""))
                 sub_path = normalize_pg_subscription_path(str(form.get("PG_SUBSCRIPTION_PATH") or "/sub"))
             except (ValueError, UnsafePgUrlError) as exc:
                 return pg_result(False, str(exc), code=400)
@@ -4681,7 +4530,6 @@ def create_api_app(lifespan=None) -> FastAPI:
                     code=400,
                 )
             if action == "test":
-                import asyncio
 
                 try:
                     caps = await asyncio.wait_for(resolve_platform_pg_capabilities(
@@ -4822,7 +4670,7 @@ def create_api_app(lifespan=None) -> FastAPI:
             pg_base = normalize_pg_base_url(str(form.get("PG_BASE_URL") or "").strip())
             if pg_base:
                 try:
-                    pg_base = assert_safe_pg_base_url(pg_base)
+                    pg_base = await asyncio.to_thread(assert_safe_pg_base_url, pg_base)
                 except UnsafePgUrlError as exc:
                     return _bot_err(str(exc))
             pg_user = str(form.get("PG_USERNAME") or "").strip()
@@ -5075,6 +4923,13 @@ def create_api_app(lifespan=None) -> FastAPI:
                 status_code=303,
             )
 
+        if tab == "menu" and form.get("reset_defaults"):
+            from app.bot.keyboards import default_menu_layout_settings
+
+            await set_settings_bulk(session, default_menu_layout_settings(for_shop=False))
+            return RedirectResponse(
+                "/settings?tab=menu&saved=1&msg=" + quote("چیدمان منو به پیش‌فرض برگشت."), status_code=303
+            )
         if tab == "menu" or form.get("menu_layout_save"):
             await _save_menu_layout(session, form)
             return RedirectResponse("/settings?tab=menu&saved=1", status_code=303)
@@ -5082,6 +4937,12 @@ def create_api_app(lifespan=None) -> FastAPI:
         known = keys_for_tab(tab)
         if tab == "menu":
             known = known | {"menu_order"}
+        if form.get("reset_defaults") and tab in RESETTABLE_SETTINGS_TABS:
+            await set_settings_bulk(session, default_values_for_keys(known))
+            return RedirectResponse(
+                f"/settings?tab={tab}&saved=1&msg=" + quote("متن‌ها و رنگ‌های این بخش به پیش‌فرض برگشت."),
+                status_code=303,
+            )
 
         payload: dict[str, str] = {}
         for key in TOGGLE_KEYS:
@@ -5108,19 +4969,15 @@ def create_api_app(lifespan=None) -> FastAPI:
 
                     val = normalize_force_join_channel_value(val)
                 if key == "connection_guides":
-                    import json as _json
-
-                    from app.services.connection_guides import serialize_connection_guides
-
-                    try:
-                        parsed = _json.loads(val) if (val or "").strip() else []
-                    except _json.JSONDecodeError:
-                        parsed = []
-                    val = serialize_connection_guides(parsed if isinstance(parsed, list) else [])
+                    val = await serialize_submitted_guides(session, val, reseller_id=None)
                 if key == "receipt_dup_policy":
                     from app.services.receipt_fingerprints import normalize_dup_policy
 
                     val = normalize_dup_policy(val)
+                if key.startswith("service_import_"):
+                    from app.services.service_import_config import normalize_setting_value
+
+                    val = normalize_setting_value(key, val)
                 payload[key] = val
         if tab == "daily_report":
             from app.services.daily_report import (
@@ -5160,13 +5017,30 @@ def create_api_app(lifespan=None) -> FastAPI:
                 if content:
                     dest.write_bytes(content)
                     payload[key] = f"uploads/{dest_name}"
-        if tab in {"terms", "buttons"} and payload:
+        backup_error = normalize_backup_payload(payload) if tab == "backup" else None
+        if backup_error:
+            return RedirectResponse("/settings?tab=backup&err=" + quote(backup_error), status_code=303)
+        if tab == SCREEN_TEXT_TAB:
+            try:
+                validate_screen_text_settings(payload)
+            except ValueError as exc:
+                return RedirectResponse(f"/settings?tab={tab}&err=" + quote(str(exc)), status_code=303)
+        if payload:
             from app.services.rich_text import merge_rich_settings_on_save
 
+            # Unchanged text keeps the premium emoji it was saved with in the bot.
             existing = await get_all_settings(session)
             payload = merge_rich_settings_on_save(existing, payload)
         if payload:
             await set_settings_bulk(session, payload)
+            if "connection_guides" in payload:
+                await prune_guide_media(session, reseller_id=None)
+            removed = await apply_backup_retention(payload) if tab == "backup" else 0
+            if removed:
+                return RedirectResponse(
+                    "/settings?tab=backup&saved=1&msg=" + quote(f"{removed} بکاپ قدیمی‌تر از سرور پاک شد."),
+                    status_code=303,
+                )
         elif known:
             # Empty payload with expected keys usually means the request body was
             # lost (e.g. CSRF middleware consumed the stream). Do not flash success.
@@ -5262,5 +5136,6 @@ def create_api_app(lifespan=None) -> FastAPI:
     # (update button, backup restore, bot settings, … all look like “click does nothing”).
     from starlette.middleware.gzip import GZipMiddleware
 
+    app.add_middleware(PanelConnectionMiddleware)
     app.add_middleware(GZipMiddleware, minimum_size=400)
     return app

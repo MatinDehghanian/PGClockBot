@@ -61,7 +61,7 @@ class CapacityActorTests(unittest.IsolatedAsyncioTestCase):
 
 
 class MainBotCapacityKeyboardTests(unittest.TestCase):
-    def test_capacity_entries_on_main_user_keyboard(self):
+    def test_main_keyboard_has_single_reseller_hub_entry(self):
         from app.bot.keyboards import _reply_user_entries
 
         plan = MagicMock(plan_kind="subscription", allow_buy_extra=False, billing_mode="fixed")
@@ -77,8 +77,9 @@ class MainBotCapacityKeyboardTests(unittest.TestCase):
                     profile=profile,
                 )
             ]
-        self.assertIn("🔄 تمدید سرویس", labels)
-        self.assertIn("🔐 اطلاعات ورود پنل و ربات", labels)
+        self.assertIn("🤝 پنل نماینده", labels)
+        self.assertNotIn("🔄 تمدید سرویس", labels)
+        self.assertNotIn("🔐 اطلاعات ورود پنل و ربات", labels)
 
     def test_capacity_entries_hidden_without_creds(self):
         from app.bot.keyboards import _reply_user_entries

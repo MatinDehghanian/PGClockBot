@@ -540,14 +540,35 @@ def delete_backup(backup_id: str) -> bool:
             return False
 
 
+def _restore_is_active() -> bool:
+    status = read_restore_status()
+    return bool(status.get("state") == "running" or status.get("awaiting_restart"))
+
+
+def prune_backups(keep: int) -> int:
+    """Keep exactly the ``keep`` newest backups and delete the rest; returns how many were removed.
+
+    Nothing is deleted while a restore is running, because it reads one of these files.
+    """
+    keep = max(1, int(keep))
+    with _lock:
+        if _restore_is_active():
+            return 0
+        zips = sorted(BACKUP_DIR.glob(f"{BACKUP_PREFIX}*.zip"), key=lambda p: p.stat().st_mtime, reverse=True)
+        removed = 0
+        for old in zips[keep:]:
+            try:
+                old.unlink(missing_ok=True)
+                old.with_suffix(".json").unlink(missing_ok=True)
+                removed += 1
+            except OSError:
+                log.warning("could not delete old backup %s", old.name, exc_info=True)
+        return removed
+
+
 def _prune_old_backups() -> None:
-    zips = sorted(BACKUP_DIR.glob(f"{BACKUP_PREFIX}*.zip"), key=lambda p: p.stat().st_mtime, reverse=True)
-    for old in zips[MAX_BACKUPS:]:
-        try:
-            old.unlink(missing_ok=True)
-            old.with_suffix(".json").unlink(missing_ok=True)
-        except Exception:
-            pass
+    """Safety cap for callers that do not know the configured retention (CLI, safety backups)."""
+    prune_backups(MAX_BACKUPS)
 
 
 def _default_restore_status() -> dict[str, Any]:

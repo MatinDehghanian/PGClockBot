@@ -99,9 +99,9 @@ class SurfaceContractTests(unittest.TestCase):
     def test_dashboard_hides_node_conn_without_permission(self):
         home = (ROOT / "app/web/templates/_home_dash_body.html").read_text(encoding="utf-8")
         self.assertIn("show_pg_nodes", home)
-        conn = home[home.find("home-conn-card") : home.find("wallet_card")]
-        self.assertIn("show_pg_nodes", conn)
-        self.assertIn('href="/pg/nodes"', conn)
+        tiles = home[home.find("status_tiles(tiles)") - 1500 : home.find("status_tiles(tiles)")]
+        self.assertIn("show_pg_nodes", tiles)
+        self.assertIn("'/pg/nodes'", tiles)
 
     def test_home_bundle_skips_nodes_when_disabled(self):
         src = (ROOT / "app/services/home_overview.py").read_text(encoding="utf-8")

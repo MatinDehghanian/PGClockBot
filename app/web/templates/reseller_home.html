@@ -4,9 +4,11 @@
 {% block content %}
 {% if widgets_deferred %}
 {% include "_panel_widgets_defer.html" %}
-{# Empty mount — #panel-nav-clock covers until /home/body swaps in. #}
-<div class="home-dash" id="home-dash" aria-busy="true"></div>
+{% include "_reseller_home_dash_body.html" %}
 {% else %}
 {% include "_reseller_home_dash_body.html" %}
 {% endif %}
+{% endblock %}
+{% block page_scripts %}
+<script src="/static/sales-chart.js?v={{ sales_chart_cache_key|default(app_version) }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
 {% endblock %}

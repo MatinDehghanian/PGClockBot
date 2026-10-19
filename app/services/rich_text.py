@@ -10,6 +10,7 @@ Button labels (``btn_*``) pack custom-emoji entities so keyboards can set Bot AP
 
 from __future__ import annotations
 
+import html
 import json
 import logging
 import re
@@ -206,6 +207,34 @@ def first_custom_emoji_id(entities: Sequence[MessageEntity] | None) -> str | Non
     return None
 
 
+def custom_emoji_html(
+    text: str, entities: Sequence[MessageEntity] | None, *, start: int = 0, end: int | None = None
+) -> str:
+    """HTML for ``text`` between UTF-16 offsets ``start`` and ``end``: escaped, premium emoji as ``<tg-emoji>``.
+
+    Only custom emoji are kept; other entities (bold, links, …) become plain text.
+    """
+    body = text or ""
+    total = utf16_len(body)
+    end = total if end is None else max(start, min(end, total))
+    spans = sorted(
+        (int(e.offset), int(e.offset) + int(e.length), str(e.custom_emoji_id))
+        for e in entities or []
+        if _entity_type_str(e) == "custom_emoji" and e.custom_emoji_id and int(e.length) > 0
+    )
+    parts: list[str] = []
+    cursor = start
+    for span_start, span_end, emoji_id in spans:
+        if span_start < cursor or span_end > end:
+            continue
+        parts.append(html.escape(_utf16_slice(body, cursor, span_start), quote=False))
+        glyph = html.escape(_utf16_slice(body, span_start, span_end), quote=False)
+        parts.append(f'<tg-emoji emoji-id="{html.escape(emoji_id)}">{glyph}</tg-emoji>')
+        cursor = span_end
+    parts.append(html.escape(_utf16_slice(body, cursor, end), quote=False))
+    return "".join(parts)
+
+
 def strip_custom_emoji_spans(
     text: str, entities: Sequence[MessageEntity] | None
 ) -> str:
@@ -248,9 +277,12 @@ _ACTION_TO_BTN_KEY: dict[str, str] = {
     "topup_card": "btn_pay_card",
     "topup_gateway": "btn_pay_gateway",
     "topup_psp": "btn_pay_psp",
+    "topup_bbc": "btn_pay_bbc",
     "topup_crypto": "btn_pay_crypto",
     "svc_renew": "btn_renew",
     "svc_link": "btn_sub_link",
+    "svc_guide": "btn_guides",
+    "res_preview": "btn_adm_preview",
 }
 
 
@@ -323,6 +355,7 @@ MESSAGE_RICH_KEYS = frozenset(
         "gateway_pay_text",
         "crypto_pay_text",
         "psp_pay_text",
+        "bbc_pay_text",
         "card_auto_hint_text",
         "shop_maintenance_text",
         "admin_daily_report_template",
@@ -348,10 +381,18 @@ def pack_setting_from_message(key: str, message: Any) -> str:
     return (text or "").strip()
 
 
+# Menu titles and captions edited in the bot may carry premium emoji too (see screen_titles).
+SCREEN_TEXT_KEY_PREFIXES = ("screen_title_", "screen_caption_")
+
+
+def _is_web_rich_key(key: str) -> bool:
+    return is_button_label_key(key) or str(key or "").startswith(SCREEN_TEXT_KEY_PREFIXES)
+
+
 def _iter_rich_web_keys(values: dict) -> list[str]:
     keys = set(MESSAGE_RICH_KEYS)
     for k in values:
-        if is_button_label_key(k):
+        if _is_web_rich_key(k):
             keys.add(k)
     return sorted(keys)
 
@@ -369,7 +410,7 @@ def merge_rich_settings_on_save(existing: dict, payload: dict) -> dict:
     """Keep packed entities when web save did not change visible text."""
     keys = set(MESSAGE_RICH_KEYS)
     for k in list(payload.keys()) + list(existing.keys()):
-        if is_button_label_key(k):
+        if _is_web_rich_key(k):
             keys.add(k)
     for key in keys:
         if key not in payload:

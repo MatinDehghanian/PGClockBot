@@ -85,35 +85,36 @@ def is_addon_plan(plan: ResellerPlan | None) -> bool:
     return plan_kind_of(plan) in {PLAN_KIND_ADDON_VOLUME, PLAN_KIND_ADDON_USERS}
 
 
-async def read_live_pg_admin_capacity(pg_username: str) -> tuple[int, int]:
-    """Read live PasarGuard admin data_limit / max_users as (gb, users).
+class PgCapacityUnreadable(ValueError):
+    """The admin's limits could not be read from PasarGuard, so no capacity may be recorded."""
 
-    ``0`` means unset/unlimited on that axis — callers must not push zeros
-    back to PG (would clear a real limit).
+
+UNREADABLE_CAPACITY = "سقف حجم و کاربر این ادمین از پاسارگارد خوانده نشد؛ اتصال پنل را بررسی و دوباره تلاش کنید"
+
+
+async def read_live_pg_admin_capacity(pg_username: str) -> tuple[int, int]:
+    """Read the admin's live data limit and max users as ``(gb, users)``.
+
+    ``0`` means unlimited on that axis. A limit that cannot be read raises
+    ``PgCapacityUnreadable`` instead of looking like «unlimited», and a limit below one gigabyte
+    rounds up so it never turns into «unlimited».
     """
-    from app.services.billing import GB
     from app.services.pasarguard import get_pg
-    from app.services.pg_quota import _as_int, merge_role_limits
+    from app.services.pg_quota import extract_admin_capacity
 
     uname = normalize_pg_username(pg_username)
     if not uname:
-        return 0, 0
+        raise PgCapacityUnreadable(UNREADABLE_CAPACITY)
     try:
         admin = await get_pg().get_admin(uname)
     except Exception:
-        logger.exception("read live PG capacity failed admin=%s", uname)
-        return 0, 0
+        logger.warning("read live PG capacity failed admin=%s", uname, exc_info=True)
+        raise PgCapacityUnreadable(UNREADABLE_CAPACITY) from None
     if not isinstance(admin, dict) or not admin:
-        return 0, 0
+        raise PgCapacityUnreadable(UNREADABLE_CAPACITY)
     role = admin.get("role") if isinstance(admin.get("role"), dict) else None
-    limits = merge_role_limits(admin, role)
-    data_limit_bytes = max(
-        0, _as_int(limits.get("data_limit")) or _as_int(admin.get("data_limit")) or 0
-    )
-    gb = int(data_limit_bytes / GB) if data_limit_bytes > 0 else 0
-    users = max(
-        0, _as_int(limits.get("max_users")) or _as_int(admin.get("max_users")) or 0
-    )
+    data_limit_bytes, users = extract_admin_capacity(admin, role)
+    gb = -(-data_limit_bytes // GB) if data_limit_bytes > 0 else 0
     return gb, users
 
 
@@ -387,17 +388,17 @@ async def start_or_refresh_subscription(
                 max(0, int(getattr(plan, "included_gb", 0) or 0)),
                 max(0, int(getattr(plan, "included_users", 0) or 0)),
             )
-        snap_gb, snap_users = await read_live_pg_admin_capacity(pg_username)
-        if snap_gb or snap_users:
-            return snap_gb, snap_users
-        # PG read failed / unlimited — keep prior SoT when refreshing.
-        existing = await get_subscription(session, pg_username)
-        if existing is not None and (existing.base_gb or existing.base_users):
-            return (
-                max(0, int(existing.base_gb or 0)),
-                max(0, int(existing.base_users or 0)),
-            )
-        return 0, 0
+        try:
+            return await read_live_pg_admin_capacity(pg_username)
+        except PgCapacityUnreadable:
+            # A refresh may keep what is already recorded; a first grant must not guess.
+            existing = await get_subscription(session, pg_username)
+            if existing is not None:
+                return (
+                    max(0, int(existing.base_gb or 0)),
+                    max(0, int(existing.base_users or 0)),
+                )
+            raise
 
     # PAYG: no time clock (current_capacity is always fixed billing)
     if str(getattr(plan, "billing_mode", "") or "").lower() == "payg" and not preserve:
@@ -436,12 +437,14 @@ async def start_or_refresh_subscription(
     sub.expiry_disabled_user_ids = None
     sub.warn_sent_at = None
     await session.flush()
-    await _assert_owner_capacity_budget(
-        session,
-        target_pg_username=sub.pg_username,
-        next_total_gb=int(sub.base_gb or 0) + int(sub.extra_gb_purchased or 0),
-        next_total_users=int(sub.base_users or 0) + int(sub.extra_users_purchased or 0),
-    )
+    # A current_capacity grant records what the admin already has; it does not sell anything new.
+    if not preserve:
+        await _assert_owner_capacity_budget(
+            session,
+            target_pg_username=sub.pg_username,
+            next_total_gb=int(sub.base_gb or 0) + int(sub.extra_gb_purchased or 0),
+            next_total_users=int(sub.base_users or 0) + int(sub.extra_users_purchased or 0),
+        )
     # current_capacity: SoT mirrors live PG — sync only when extras need push,
     # never when totals are zero (would clear unlimited / unread limits).
     if apply_pg_limits and (

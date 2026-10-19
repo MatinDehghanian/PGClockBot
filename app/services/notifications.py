@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.db.models import BotUser, Order, Payment
-from app.services.message_variables import DOMAIN_QR, render_message_template
+from app.services.message_variables import DOMAIN_QR
 from app.services.formatting import (
     format_bytes,
     format_bytes_ratio,
@@ -46,9 +46,33 @@ def ticket_action_markup(ticket_id: int) -> InlineKeyboardMarkup:
 # (setting_key, title, description, default "1"|"0")
 NOTIFY_PREFS: list[tuple[str, str, str, str]] = [
     (
+        "notify_panel_update",
+        "نسخه جدید پنل",
+        "وقتی نسخه جدیدی برای آپدیت آماده می‌شود (فقط مالک اصلی)",
+        "1",
+    ),
+    (
+        "notify_panel_capacity",
+        "نزدیک پر شدن ظرفیت",
+        "وقتی سقف حجم یا کاربر ادمین فروشگاه به درصد هشدار می‌رسد؛ با کم شدن مصرف دوباره فعال می‌شود",
+        "1",
+    ),
+    (
+        "notify_panel_delivery_failures",
+        "تحویل ناموفق در انتظار",
+        "وقتی تعداد تحویل‌های ناموفق باز بیشتر می‌شود؛ حداکثر هر ۶ ساعت تکرار می‌شود",
+        "1",
+    ),
+    (
         "notify_service_cancellation",
         "درخواست لغو سرویس",
         "وقتی مشتری درخواست لغو سرویس ثبت می‌کند؛ همراه دلیل و لینک بررسی در پنل",
+        "1",
+    ),
+    (
+        "notify_service_import_request",
+        "درخواست افزودن سرویس قبلی",
+        "وقتی «افزودن سرویس قبلی» روی تأیید ادمین است و مشتری درخواست جدید ثبت می‌کند؛ همراه لینک بررسی در پنل",
         "1",
     ),
     (
@@ -100,12 +124,24 @@ PLATFORM_ONLY_NOTIFY_KEYS: frozenset[str] = frozenset(
     {
         "notify_account_edits",
         "notify_wallet_topup",
+        "notify_panel_update",
     }
 )
+
+# Keys that only make sense for a reseller shop (nothing to announce for the platform itself).
+SHOP_ONLY_NOTIFY_KEYS: frozenset[str] = frozenset({"notify_panel_capacity"})
+
+# What the platform Owner sees and toggles.
+PLATFORM_NOTIFY_PREFS: list[tuple[str, str, str, str]] = [
+    item for item in NOTIFY_PREFS if item[0] not in SHOP_ONLY_NOTIFY_KEYS
+]
 
 # Shop notify key → at least one of these feature perms is required to see/toggle it.
 SHOP_NOTIFY_PERM_MAP: dict[str, frozenset[str]] = {
     "notify_service_cancellation": frozenset({"orders"}),
+    "notify_panel_capacity": frozenset({"dashboard"}),
+    "notify_panel_delivery_failures": frozenset({"orders"}),
+    "notify_service_import_request": frozenset({"service_import"}),
     "notify_new_subscription": frozenset({"orders", "payments"}),
     "notify_pending_approval": frozenset({"payments"}),
     "notify_new_order": frozenset({"orders"}),
@@ -317,7 +353,8 @@ async def _resolve_shop_reseller_id(
         return int(order.reseller_id)
     if payment is not None:
         if payment.is_wallet_topup:
-            return None
+            # A top-up belongs to the wallet's shop (None = the platform's wallet).
+            return int(payment.wallet_shop_id) if payment.wallet_shop_id else None
         if payment.order_id:
             ord_row = await session.get(Order, payment.order_id)
             if ord_row and ord_row.reseller_id:
@@ -680,7 +717,7 @@ async def notify_pending_approval(
     text = format_message("⏳ نیاز به تأیید", info_block(lines) + "\n\n" + tail)
     # Always payrev so shop staff can act on their own bot; ordrev is platform-only.
     markup = _approval_markup(payment_id=payment.id)
-    # Wallet top-ups are platform-only; shop prefs never apply.
+    # A shop's wallet top-up is reviewed by that shop; only the platform's own top-ups are platform-only.
     await _dispatch_dual_notify(
         bot,
         session,
@@ -689,7 +726,7 @@ async def notify_pending_approval(
         markup=markup,
         photo=payment.receipt_file_id,
         payment=payment,
-        shop=not payment.is_wallet_topup,
+        shop=not payment.is_wallet_topup or payment.wallet_shop_id is not None,
     )
 
 
@@ -851,7 +888,7 @@ async def _pending_order_detail_lines(
     extras.append(kv_line("💎", "پلن", plan_name))
     if plan is not None:
         if plan.data_limit_gb is not None:
-            extras.append(kv_line("📶", "حجم پلن", f"{plan.data_limit_gb} گیگ"))
+            extras.append(kv_line("📶", "حجم پلن", f"{plan.data_limit_gb} گیگابایت"))
         from app.services.formatting import format_plan_duration_days
 
         extras.append(
@@ -1075,8 +1112,46 @@ async def notify_auto_approve(
         "notify_auto_approve",
         text,
         payment=payment,
-        shop=not payment.is_wallet_topup,
+        shop=not payment.is_wallet_topup or payment.wallet_shop_id is not None,
     )
+
+
+async def notify_settlement_review(
+    session: AsyncSession,
+    payment: Payment,
+    *,
+    shop_id: int | None,
+    reason: str,
+) -> int:
+    """Staff of the payment's shop (platform admins for the platform): an automatic
+    payment needs a person. Never approves or rejects anything itself."""
+    # Local import: app.bot imports the handler modules, which import this module.
+    from app.bot import create_bot
+
+    settings = get_settings()
+    user = await session.get(BotUser, payment.user_id) if payment.user_id else None
+    lines = [
+        kv_line("🧾", "پرداخت", f"#{payment.id}"),
+        kv_line("💰", "مبلغ", format_toman(payment.amount, settings.currency)),
+        kv_line("👤", "کاربر", format_user_label(user, telegram_id=getattr(user, "telegram_id", None))),
+    ]
+    if payment.order_id:
+        lines.append(kv_line("🛒", "سفارش", f"#{payment.order_id}"))
+    text = format_message("⚠️ پرداخت «بزن به کارت» نیاز به بررسی دارد", info_block(lines) + f"\n\n{reason}")
+    bot = create_bot()
+    try:
+        # The settlement's shop is passed as the explicit scope, so shop events never reach platform admins.
+        return await _dispatch_dual_notify(
+            bot, session, "notify_pending_approval", text, ticket_reseller_id=shop_id
+        )
+    finally:
+        await bot.session.close()
+
+
+async def notify_wireguard_missing(bot: Bot, session: AsyncSession, detail: str) -> int:
+    """Platform admins: a customer who should get WireGuard files got none."""
+    text = format_message("⚠️ فایل WireGuard تحویل نشد", detail)
+    return await _dispatch_dual_notify(bot, session, "notify_panel_delivery_failures", text, shop=False)
 
 
 async def notify_approved_delivery_stuck(
@@ -1139,7 +1214,7 @@ async def notify_approved_delivery_stuck(
         markup=markup,
         photo=payment.receipt_file_id,
         payment=payment,
-        shop=not payment.is_wallet_topup,
+        shop=not payment.is_wallet_topup or payment.wallet_shop_id is not None,
     )
 
 

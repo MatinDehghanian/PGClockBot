@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import datetime, timezone
+from typing import Any
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, or_, select, update
@@ -18,6 +20,8 @@ from app.db.models import (
     OrderStatus,
     Plan,
 )
+from app.services.authz import authz_from_staff, can_shop
+from app.services.shop_scope import is_platform_admin, shop_owner_id
 
 TEHRAN = ZoneInfo("Asia/Tehran")
 PURCHASE_TYPES = {
@@ -28,6 +32,7 @@ PURCHASE_TYPES = {
 }
 MAX_AMOUNT = 50_000_000
 MAX_USES = 1000
+GIFT_CODE_LIST_LIMIT = 200
 
 
 def utc(value: datetime) -> datetime:
@@ -431,3 +436,51 @@ def describe_code(row: ChargeCode) -> dict:
         state=state,
         purchase_label="، ".join(types) or "همه خریدها",
     )
+
+
+def gift_code_scope(staff: Mapping[str, Any]) -> int | None:
+    """Shop whose gift codes ``staff`` may manage (``None`` = the platform shop).
+
+    Same rule as the create, edit and toggle routes: an explicit Owner manages the
+    platform codes, anyone else needs the orders or plans permission *and* a shop.
+    Staff without a shop (for example PG staff) never reach another tenant's codes.
+    """
+    if is_platform_admin(dict(staff)):
+        return None
+    authz = authz_from_staff(staff)
+    if not (can_shop(authz, "orders") or can_shop(authz, "plans")):
+        raise PermissionError("دسترسی مدیریت کد هدیه ندارید")
+    shop_id = shop_owner_id(dict(staff))
+    if shop_id is None:
+        raise PermissionError("حساب شما به فروشگاه متصل نیست")
+    return shop_id
+
+
+async def list_gift_codes(
+    session: AsyncSession, *, shop_id: int | None, limit: int = GIFT_CODE_LIST_LIMIT
+) -> list[ChargeCode]:
+    """Newest codes of one shop, bounded; the shop filter is applied in SQL."""
+    query = select(ChargeCode).order_by(ChargeCode.id.desc()).limit(max(1, int(limit)))
+    if shop_id is None:
+        query = query.where(ChargeCode.reseller_id.is_(None))
+    else:
+        query = query.where(ChargeCode.reseller_id == int(shop_id))
+    return list((await session.execute(query)).scalars().all())
+
+
+async def set_gift_code_active(
+    session: AsyncSession, code_id: int, *, shop_id: int | None, active: bool
+) -> bool:
+    """Set a code's state in one shop-scoped UPDATE; repeating the call is harmless.
+
+    Returns ``False`` when the code does not belong to ``shop_id``.
+    """
+    owner = ChargeCode.reseller_id.is_(None) if shop_id is None else ChargeCode.reseller_id == int(shop_id)
+    result = await session.execute(
+        update(ChargeCode)
+        .where(ChargeCode.id == int(code_id), owner)
+        .values(is_active=bool(active))
+        .execution_options(synchronize_session=False)
+    )
+    await session.commit()
+    return result.rowcount == 1

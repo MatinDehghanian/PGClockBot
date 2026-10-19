@@ -8,10 +8,9 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, Message, ReplyKeyboardMarkup
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.bot import keyboards as kb
+from app.bot.menu_nav import build_main_reply_keyboard
 from app.db.models import BotUser
 from app.services.purchase_contact import purchase_contact_needed, purchase_shop_key, verify_purchase_contact
-from app.services.users import get_all_settings
 
 router = Router(name="purchase_contact")
 
@@ -53,7 +52,14 @@ async def verify_phone_command(message: Message, session: AsyncSession, db_user:
 
 
 @router.message(PurchaseContactStates.contact, F.contact)
-async def receive_purchase_contact(message: Message, session: AsyncSession, db_user: BotUser, state: FSMContext) -> None:
+async def receive_purchase_contact(
+    message: Message,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+    is_reseller_bot: bool = False,
+    reseller_owner_id: int | None = None,
+) -> None:
     data = await state.get_data()
     if data.get("purchase_contact_shop") != purchase_shop_key():
         await state.set_state(None)
@@ -68,8 +74,11 @@ async def receive_purchase_contact(message: Message, session: AsyncSession, db_u
         await message.answer(str(exc))
         return
     await state.set_state(None)
-    ui = await get_all_settings(session)
-    await message.answer("✅ شماره تماس شما برای این فروشگاه تأیید شد.", reply_markup=kb.shop_reply_keyboard(ui))
+    # The contact button leaves; the person's own main menu comes back, not a shop submenu.
+    main_kb, _ui, _role = await build_main_reply_keyboard(
+        session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id
+    )
+    await message.answer("✅ شماره تماس شما برای این فروشگاه تأیید شد.", reply_markup=main_kb)
     await message.answer("خرید را ادامه دهید:", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
         InlineKeyboardButton(text="🛒 ادامه خرید", callback_data=data.get("purchase_contact_resume") or "shop:list"),
     ]]))

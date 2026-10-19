@@ -5,6 +5,7 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -20,12 +21,32 @@ class Version364Tests(unittest.TestCase):
         self.assertIn('"0.1.0"', notes)
 
 
-class AdminResellersHubTests(unittest.TestCase):
-    def test_adm_resellers_restores_reply_kb(self):
-        src = (ROOT / "app/bot/handlers/admin.py").read_text(encoding="utf-8")
-        chunk = src.split("async def adm_resellers")[1].split("RESELLERS_PAGE_SIZE")[0]
-        self.assertIn("admin_resellers_reply_keyboard()", chunk)
-        self.assertIn("NAV_ADMIN_RESELLERS", chunk)
+class AdminResellersHubTests(unittest.IsolatedAsyncioTestCase):
+    async def test_adm_resellers_opens_hub_in_place_without_reply_kb(self):
+        from app.bot.handlers.admin import adm_resellers
+
+        callback = AsyncMock()
+        callback.message = MagicMock()
+        callback.message.answer = AsyncMock()
+        state = AsyncMock()
+        with (
+            patch("app.bot.auth.require_bot_owner", AsyncMock(return_value=True)),
+            patch("app.bot.auth.is_platform_admin", return_value=True),
+            patch("app.bot.auth.platform_can_manage_representatives", AsyncMock(return_value=True)),
+            patch("app.bot.handlers.admin._is_admin", MagicMock(return_value=True)),
+            patch(
+                "app.bot.handlers.reply_nav.open_admin_resellers_hub",
+                new_callable=AsyncMock,
+            ) as open_hub,
+        ):
+            await adm_resellers(
+                callback, session=AsyncMock(), db_user=MagicMock(role="admin"), state=state
+            )
+
+        open_hub.assert_awaited_once()
+        self.assertIs(open_hub.await_args.args[0], callback.message)
+        self.assertFalse(open_hub.await_args.kwargs["push"])
+        callback.message.answer.assert_not_awaited()
 
     def test_list_keyboard_no_back_chrome(self):
         from app.bot.keyboards import admin_resellers_list_keyboard, admin_users_list_keyboard

@@ -16,6 +16,7 @@
         <option value="compact" {% if values.get('menu_layout','compact')=='compact' %}selected{% endif %}>فشرده — دکمه‌ها جفتی (پیشنهادی)</option>
       </select>
     </label>
+    {% include "_settings_chat_cleanup.html" %}
   </div>
 </div>
 <form method="post" action="/settings?tab=menu" id="menu-form" class="menu-layout-form">

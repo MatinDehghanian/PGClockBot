@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from sqlalchemy import or_, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.db.models import BotUser, Ticket, TicketMessage, TicketStatus
+from app.db.models import Ticket, TicketMessage, TicketStatus
+from app.services.ticket_scope import ticket_shop_clause
 from app.services.users import current_shop_reseller_id
 
 
@@ -106,32 +107,14 @@ async def list_open_tickets(
     platform_only: bool = False,
     reseller_id: int | None = None,
 ) -> list[Ticket]:
-    """List open tickets scoped by Ticket.reseller_id (with legacy sticky fallback)."""
+    """List open tickets scoped by the shop stamped on each ticket."""
     base = Ticket.status != TicketStatus.CLOSED.value
     if platform_only:
-        q = (
-            select(Ticket)
-            .outerjoin(BotUser, BotUser.id == Ticket.user_id)
-            .where(
-                base,
-                Ticket.reseller_id.is_(None),
-                BotUser.reseller_id.is_(None),
-            )
-        )
+        q = select(Ticket).where(base, ticket_shop_clause(None))
     elif reseller_id is not None:
-        rid = int(reseller_id)
-        q = (
-            select(Ticket)
-            .outerjoin(BotUser, BotUser.id == Ticket.user_id)
-            .where(
-                base,
-                or_(
-                    Ticket.reseller_id == rid,
-                    (Ticket.reseller_id.is_(None)) & (BotUser.reseller_id == rid),
-                ),
-            )
-        )
+        q = select(Ticket).where(base, ticket_shop_clause(reseller_id))
     else:
-        q = select(Ticket).where(base)
+        # No scope given means the platform's own tickets, never every shop's.
+        q = select(Ticket).where(base, ticket_shop_clause(None))
     result = await session.execute(q.order_by(Ticket.id.desc()).limit(limit))
     return list(result.scalars().all())

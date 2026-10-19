@@ -216,12 +216,38 @@
 <svg viewBox="0 0 24 24"><path d="M4 12h16M12 4v16"/><circle cx="12" cy="12" r="3"/></svg>
 {%- elif name == 'admins' -%}
 <svg viewBox="0 0 24 24"><path d="M12 3 5 6v5c0 4.2 2.8 7.2 7 8.5 4.2-1.3 7-4.3 7-8.5V6l-7-3z"/></svg>
+{%- elif name == 'discounts' -%}
+<svg viewBox="0 0 24 24"><path d="M19 5 5 19"/><circle cx="7.5" cy="7.5" r="2.2"/><circle cx="16.5" cy="16.5" r="2.2"/></svg>
+{%- elif name == 'gift' -%}
+<svg viewBox="0 0 24 24"><rect x="3.5" y="8.5" width="17" height="4" rx="1"/><path d="M5 12.5V20h14v-7.5"/><path d="M12 8.5V20"/><path d="M12 8.5C10.5 5.5 7 5.5 7 7.3c0 1.4 3 1.2 5 1.2zM12 8.5c1.5-3 5-3 5-1.2 0 1.4-3 1.2-5 1.2z"/></svg>
 {%- elif name == 'loyalty' -%}
 <svg viewBox="0 0 24 24"><path d="M12 3l2.2 4.5 5 .7-3.6 3.5.9 5L12 14.8 7.5 16.7l.9-5L4.8 8.2l5-.7L12 3z"/></svg>
 {%- else -%}
 <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l2.5 2.5"/></svg>
 {%- endif -%}
 </span>
+{%- endmacro %}
+
+{# Card title with a line icon, same icon language as page_title. tone: neutral (web panel) | bot (bot panel, orange) #}
+{% macro card_title(name, text, tone='neutral') -%}
+<h2 class="card-title card-title--{{ tone }}">
+  <svg class="card-title-ico" viewBox="0 0 24 24" aria-hidden="true">
+  {%- if name == 'payments' -%}<rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M3 10.5h18M7 15h3"/>
+  {%- elif name == 'orders' -%}<path d="M6 8h12l-1 11H7L6 8z"/><path d="M9 8a3 3 0 0 1 6 0"/>
+  {%- elif name == 'connection' -%}<path d="M5 12.5a10 10 0 0 1 14 0M8 15.5a6 6 0 0 1 8 0"/><circle cx="12" cy="19" r="1"/>
+  {%- elif name == 'wallet' -%}<rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M16 12.5h5"/>
+  {%- elif name == 'queue' -%}<path d="M9 6h11M9 12h11M9 18h11"/><path d="M4 6l1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2"/>
+  {%- elif name == 'sales' -%}<path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/>
+  {%- elif name == 'account' -%}<circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/>
+  {%- elif name == 'limits' -%}<path d="M12 3 4.5 6.5v5.2c0 4.7 3.2 8 7.5 9.3 4.3-1.3 7.5-4.6 7.5-9.3V6.5L12 3z"/>
+  {%- elif name == 'server' -%}<rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/>
+  {%- elif name == 'traffic' -%}<path d="M4 19V5M4 19h16"/><path d="M7 15l4-4 3 3 5-6"/>
+  {%- elif name == 'users' -%}<circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9" r="2.4"/><path d="M15.2 19c.4-2.2 2-3.8 4.3-4.2"/>
+  {%- elif name == 'nodes' -%}<rect x="3" y="4" width="18" height="6" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/><path d="M7 7h.01M7 17h.01"/>
+  {%- endif -%}
+  </svg>
+  <span>{{ text }}</span>
+</h2>
 {%- endmacro %}
 
 {% macro page_title(name, text, tone='brand', help=None) -%}
@@ -298,4 +324,10 @@
   <a href="/pg/inbounds" class="{% if active=='pg_inbounds' %}active{% endif %}">اینباند</a>
   {% endif %}
 </nav>
+{%- endmacro %}
+
+{# Warning icon drawn in the markup for alerts shown later by script: some mobile browsers
+   do not paint the ::before icon of an element that was hidden when the page loaded. #}
+{% macro flash_warn_icon() -%}
+<span class="flash-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.8L21 19.2H3L12 3.8z"/><path d="M12 9.2v5"/><circle cx="12" cy="16.6" r="0.9" fill="currentColor" stroke="none"/></svg></span>
 {%- endmacro %}

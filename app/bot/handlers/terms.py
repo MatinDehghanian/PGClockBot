@@ -22,6 +22,7 @@ from app.services.terms import (
     shop_scope_id,
 )
 from app.services.users import get_all_settings
+from app.services import bot_feedback_texts as feedback
 
 logger = logging.getLogger(__name__)
 router = Router(name="terms")
@@ -100,7 +101,7 @@ async def terms_accept(
 ):
     gate = (callback.data or "").split(":")[-1]
     if gate not in GATES:
-        await callback.answer("نامعتبر", show_alert=True)
+        await callback.answer(feedback.INVALID, show_alert=True)
         return
     ui = await get_all_settings(session)
     await record_acceptance(

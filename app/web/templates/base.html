@@ -10,6 +10,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="{{ pwa_name|default('MrClockBot') }}" />
+  <script src="/static/panel_widget_request.js?v={{ panel_widget_cache_key|default(app_version) }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
   {% if csrf_token %}<meta name="csrf-token" content="{{ csrf_token }}" />{% endif %}
   <title>{% block title %}پنل مدیریت{% endblock %} · {{ pwa_name|default('MrClockBot') }}</title>
   <script{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}>
@@ -224,31 +225,25 @@
             <span class="nav-item-label"><span>پشتیبانی</span>{% if tickets_unread %}<i class="nav-dot" aria-label="پیام خوانده‌نشده"></i>{% endif %}</span>
           </a>
           {% endif %}
-          {% if is_owner %}
-          <a href="/broadcast" class="nav-item nav-item-bot {% if path.startswith('/broadcast') %}active{% endif %}">
+          {% set mk_sections = marketing_sections if marketing_sections is defined else () %}
+          {% if mk_sections %}
+          {% set mk_active = namespace(on=false) %}
+          {% for section in mk_sections if path.startswith(section.href.split('?')[0]) %}{% set mk_active.on = true %}{% endfor %}
+          <a href="{{ mk_sections[0].href }}" class="nav-item nav-item-bot {% if mk_active.on %}active{% endif %}">
             <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4h3l5 4V6L7 10H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M18.8 6.2a8.5 8.5 0 0 1 0 11.6"/></svg>
-            <span>پیام گروهی</span>
-          </a>
-          {% endif %}
-          {% if is_admin or 'loyalty' in perms %}
-          <a href="/loyalty" class="nav-item nav-item-bot {% if path.startswith('/loyalty') %}active{% endif %}">
-            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.2 4.5 5 .7-3.6 3.5.9 5L12 14.8 7.5 16.7l.9-5L4.8 8.2l5-.7L12 3z"/></svg>
-            <span>باشگاه مشتریان</span>
-          </a>
-          {% endif %}
-          {% if is_owner or 'campaigns' in perms %}
-          <a href="/campaigns" class="nav-item nav-item-bot {% if path.startswith('/campaigns') %}active{% endif %}"><svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4h3l5 4V6L7 10H4zM17 8v8M21 6v12"/></svg><span>کمپین هدفمند</span></a>
-          {% endif %}
-          {% if is_owner or 'shop_settings' in perms %}
-          <a href="/message-variables" class="nav-item nav-item-bot {% if path.startswith('/message-variables') %}active{% endif %}">
-            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h10v10H7z"/><path d="M10 10h4M10 14h2"/><path d="M4 12h2M18 12h2"/></svg>
-            <span>متغیرهای پیام</span>
+            <span>بازاریابی و وفاداری</span>
           </a>
           {% endif %}
           {% if is_owner or 'shop_settings' in perms %}
-          <a href="{% if is_owner %}/settings{% else %}/shop-settings{% endif %}" class="nav-item nav-item-bot {% if (path.startswith('/settings') and not is_panel_settings) or path.startswith('/shop-settings') %}active{% endif %}">
+          <a href="{% if is_owner %}/settings{% else %}/shop-settings{% endif %}" class="nav-item nav-item-bot {% if (path.startswith('/settings') and not is_panel_settings) or path.startswith('/shop-settings') or path.startswith('/message-variables') %}active{% endif %}">
             <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="8" width="16" height="11" rx="2.5"/><path d="M12 8V5H9"/><path d="M2 14h2M20 14h2"/><circle cx="9.5" cy="13.5" r="1.1"/><circle cx="14.5" cy="13.5" r="1.1"/><path d="M9.5 17h5"/></svg>
             <span>تنظیمات</span>
+          </a>
+          {% endif %}
+          {% if is_owner %}
+          <a href="/connection-status" class="nav-item nav-item-bot {% if path.startswith('/connection-status') %}active{% endif %}">
+            <svg class="nav-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>
+            <span>وضعیت اتصال</span>
           </a>
           {% endif %}
         </div>
@@ -376,6 +371,7 @@
         {% set _catalog_modal_open = open_categories|default(false) %}
         {% if flash_ok and not open_edit and not _domain_modal_open and not _principal_modal_open and not _catalog_modal_open %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
         {% if flash_err and not open_edit and not _domain_modal_open and not _principal_modal_open and not _catalog_modal_open %}<div class="flash err">{{ flash_err }}</div>{% endif %}
+        {% include "_pg_connection_notice.html" %}
         {% block content %}{% endblock %}
       </div>
       <footer class="site-footer">
@@ -419,7 +415,7 @@
         <p class="muted" id="inbox-dismiss-hint">مدت مخفی‌سازی را انتخاب کنید، سپس تأیید کنید.</p>
         <div class="inbox-dismiss-options" role="radiogroup" aria-labelledby="inbox-dismiss-hint">
           <label class="inbox-dismiss-option is-selected">
-            <input type="radio" value="24h" checked data-inbox-mode="24h" />
+            <input type="radio" name="dismiss_choice" value="24h" checked data-inbox-mode="24h" />
             <span class="inbox-dismiss-radio" aria-hidden="true"></span>
             <span class="inbox-dismiss-copy">
               <strong>۲۴ ساعت</strong>
@@ -427,11 +423,11 @@
             </span>
           </label>
           <label class="inbox-dismiss-option">
-            <input type="radio" value="forever" data-inbox-mode="forever" />
+            <input type="radio" name="dismiss_choice" value="forever" data-inbox-mode="forever" />
             <span class="inbox-dismiss-radio" aria-hidden="true"></span>
             <span class="inbox-dismiss-copy">
               <strong>برای همیشه</strong>
-              <small>تا وقتی مشکل برطرف شود نمایش داده نمی‌شود</small>
+              <small>تا وقتی مورد جدیدی اضافه نشود نمایش داده نمی‌شود؛ با برطرف شدن مشکل کاملاً حذف می‌شود</small>
             </span>
           </label>
         </div>
@@ -464,9 +460,10 @@
       </form>
     </div>
   </div>
-  <script src="/static/money-inputs.js?v={{ app_version }}&grouping=1"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
-  <script src="/static/panel.js?v={{ app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
-  <script src="/static/list-inputs.js?v={{ app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
+  <script src="/static/money-inputs.js?v={{ money_inputs_cache_key|default(app_version) }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
+  <script src="/static/nav-accordion.js?v={{ app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
+  <script src="/static/panel.js?v={{ panel_script_cache_key|default(app_version) }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
+  <script src="/static/list-inputs.js?v={{ list_inputs_cache_key|default(app_version) }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
   <script type="application/json" id="template-variable-specs"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}>{{ template_variable_specs(daily_report_actor|default('shop' if shop_mode|default(false) else 'owner', true))|tojson }}</script>
   <script src="/static/template-variables.js?v={{ app_version }}"{% if csp_nonce %} nonce="{{ csp_nonce }}"{% endif %}></script>
   {% block page_scripts %}{% endblock %}

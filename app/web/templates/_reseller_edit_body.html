@@ -51,6 +51,9 @@
             <option value="payg" {% if profile.billing_mode == 'payg' %}selected{% endif %}>PAYG</option>
           </select>
         </label>
+        <div class="ui-switch-list">
+          {{ switch('confirm_billing_mode_change', 'تأیید تغییر نوع پرداخت', checked=false, help='مصرف PAYG از مصرف فعلی ادمین شروع می‌شود و مسدودی PAYG در بازگشت به «ثابت» برداشته می‌شود') }}
+        </div>
       </div>
       <div>
         <label class="form-field">یوزرنیم پاسارگارد
@@ -109,12 +112,9 @@
       </small>
     </label>
     {% if pg_api_key_ready %}
-    <label class="form-field">
-      <span class="ui-check">
-        <input type="checkbox" name="clear_pg_api_key" value="1" />
-        حذف کلید API (بازگشت به احراز هویت با رمز)
-      </span>
-    </label>
+    <div class="ui-switch-list">
+      {{ switch('clear_pg_api_key', 'حذف کلید API', checked=false, help='بازگشت به احراز هویت با رمز') }}
+    </div>
     {% endif %}
     {% endif %}
 
@@ -174,13 +174,40 @@
     </li>
     <li>
       <span class="payg-meta-label">حجم کل</span>
-      <span class="payg-meta-value num-ratio">{{ pg_subscription.total_gb }} گیگ</span>
+      <span class="payg-meta-value num-ratio">{{ pg_subscription.total_gb_text }}</span>
     </li>
     <li>
       <span class="payg-meta-label">حجم اضافه</span>
-      <span class="payg-meta-value num-ratio">{{ pg_subscription.extra_gb }} گیگ</span>
+      <span class="payg-meta-value num-ratio">{{ pg_subscription.extra_gb_text }}</span>
     </li>
+    <li>
+      <span class="payg-meta-label">کاربران کل</span>
+      <span class="payg-meta-value num-ratio">{{ pg_subscription.total_users_text }}</span>
+    </li>
+    <li>
+      <span class="payg-meta-label">کاربران اضافه</span>
+      <span class="payg-meta-value num-ratio">{{ pg_subscription.extra_users_text }}</span>
+    </li>
+    {% if pg_subscription.can_sync %}
+    <li>
+      <span class="payg-meta-label">سقف فعلی در پاسارگارد</span>
+      <span class="payg-meta-value num-ratio">{{ pg_subscription.live_gb_text }} · {{ pg_subscription.live_users_text }}</span>
+    </li>
+    {% endif %}
   </ul>
+  {% if pg_subscription.can_sync %}
+  {% if pg_subscription.differs %}
+  <div class="flash warn">ظرفیت ثبت‌شده با سقف فعلی ادمین در پاسارگارد یکی نیست. اگر سقف پاسارگارد درست است، «همگام‌سازی از پاسارگارد» را بزنید.</div>
+  {% endif %}
+  <form method="post" action="/resellers/{{ user.id }}/subscription/sync" class="form-stack"
+        data-confirm="ظرفیت ثبت‌شده این نماینده برابر سقف فعلی ادمین در پاسارگارد شود؟ چیزی در پاسارگارد تغییر نمی‌کند."
+        data-confirm-title="همگام‌سازی ظرفیت"
+        data-confirm-label="همگام‌سازی">
+    <div class="actions">
+      <button class="btn btn-ghost btn-sm" type="submit">همگام‌سازی از پاسارگارد</button>
+    </div>
+  </form>
+  {% endif %}
   <form method="post" action="/resellers/{{ user.id }}/subscription/adjust" class="form-stack"
         data-confirm="ظرفیت اشتراک نماینده تغییر کند؟ (مثبت = افزایش، منفی = کاهش)"
         data-confirm-title="تغییر ظرفیت اشتراک"
@@ -227,7 +254,7 @@
       <span class="payg-meta-value num-ratio">{{ (profile.billing_watermark_bytes or 0) | bytes }}</span>
     </li>
   </ul>
-  <p class="muted payg-help">مصرف ترافیک از همان کیف پول فروشگاهی نماینده کسر می‌شود. شارژ دستی زیر نیز به همان کیف پول واریز می‌شود. ستون «مانده» = مانده کیف پول بعد از هر تراکنش.</p>
+  <p class="muted payg-help">مصرف ترافیک از کیف پول فروشگاه نماینده کم می‌شود و شارژ دستی هم به همان کیف پول می‌رود. ستون «مانده» موجودی بعد از هر تراکنش است.</p>
   <form method="post" action="/resellers/{{ user.id }}/billing-topup" class="form-stack">
     <input type="hidden" name="nonce" value="{{ topup_nonce }}" />
     <div class="form-row">
@@ -298,7 +325,7 @@
 <section class="edit-section">
   <header class="edit-section-head">
     <h3>حذف نمایندگی</h3>
-    <p class="muted">پروفایل نماینده و ادمین پاسارگارد متصل حذف می‌شود. علت برای کاربر در ربات/تلگرام ارسال می‌شود و نقشش به «کاربر» برمی‌گردد.</p>
+    <p class="muted">پروفایل نماینده و ادمین پاسارگارد او حذف می‌شود و نقشش به «کاربر» برمی‌گردد. علت برای او در تلگرام فرستاده می‌شود.</p>
   </header>
   <form method="post" action="/resellers/{{ user.id }}/delete" class="form-stack"
         data-confirm="نمایندگی و ادمین پاسارگارد متصل حذف شوند؟ علت برای کاربر ارسال می‌شود."
@@ -316,7 +343,7 @@
 <section class="edit-section">
   <header class="edit-section-head">
     <h3>حذف کامل کاربر</h3>
-    <p class="muted">کاربر بات، نمایندگی، ادمین پاسارگارد متصل و تمام سفارش‌ها/سرویس‌ها/پرداخت‌ها/تیکت‌ها حذف می‌شوند. برگشت‌ناپذیر است. اگر دوباره به ربات پیام بدهد، حساب جدید (خالی) برای همان تلگرام ساخته می‌شود.</p>
+    <p class="muted">حساب، نمایندگی، ادمین پاسارگارد و همهٔ سفارش‌ها، سرویس‌ها، پرداخت‌ها و تیکت‌های او حذف می‌شود و برگشت ندارد. اگر دوباره به ربات پیام بدهد، حساب خالی جدیدی ساخته می‌شود.</p>
   </header>
   {% if (user.wallet_balance or 0) > 0 %}
   <div class="flash warn">موجودی کیف پول: <span dir="ltr">{{ user.wallet_balance | money }}</span> تومان — با حذف کامل از بین می‌رود.</div>

@@ -1,4 +1,4 @@
-{% from "macros.html" import modal_title %}
+{% from "macros.html" import flash_warn_icon, modal_title %}
 {% set st = restore_status or {} %}
 {% set restore_ops = st.state == 'running' or st.awaiting_restart or st.state == 'error' or st.restart_required %}
 <div class="card settings-card">
@@ -40,9 +40,26 @@
   </div>
   {% endfor %}
   <div class="actions sticky-actions">
-    <button class="btn" type="submit">ذخیره زمان‌بندی</button>
+    <button class="btn" type="submit">ذخیره تنظیمات بکاپ</button>
   </div>
 </form>
+{% set tg_status = (values.get('backup_telegram_last_status') or '') %}
+<div class="card settings-card" id="backup-telegram-card">
+  <h2>وضعیت ارسال به تلگرام</h2>
+  {% if tg_status %}
+  {% set tg_kind = tg_status.split(':')[0] %}
+  <p class="muted update-card-caption">
+    <span class="badge {% if tg_kind == 'ok' %}active{% elif tg_kind == 'skipped' %}warn{% else %}danger{% endif %}">{% if tg_kind == 'ok' %}موفق{% elif tg_kind == 'skipped' %}ارسال نشد{% else %}خطا{% endif %}</span>
+    {{ tg_status.split(':', 1)[1].strip() if ':' in tg_status else tg_status }}
+    {% if values.get('backup_telegram_last_at') %}<span class="mono" dir="ltr">· {{ values.get('backup_telegram_last_at')[:16] }}</span>{% endif %}
+  </p>
+  {% else %}
+  <p class="muted update-card-caption">هنوز بکاپی به تلگرام ارسال نشده است. بعد از ذخیرهٔ تنظیمات، با دکمهٔ زیر اتصال را بسنجید.</p>
+  {% endif %}
+  <form method="post" action="/backup/telegram-test" class="actions">
+    <button class="btn btn-ghost" type="submit">ارسال پیام آزمایشی</button>
+  </form>
+</div>
 {% endif %}
 <form method="post" action="/backup/create" class="settings-form" id="backup-create-form" data-busy-label="در حال ساخت بکاپ…">
   <div class="card settings-card">
@@ -139,8 +156,9 @@
     بعد از تأیید، مراحل بازیابی اینجا نمایش داده می‌شود — مشابه آپدیت پنل.
   </p>
   <div id="backup-restore-ops" class="update-ops" {% if not restore_ops %}hidden{% endif %}>
-    <div class="flash warn update-stay-warn" id="backup-restore-stay-warn" role="status">
-      تا پایان عملیات از این صفحه خارج نشوید و رفرش نکنید؛ ممکن است چند دقیقه طول بکشد.
+    <div class="flash warn update-stay-warn flash-has-ico" id="backup-restore-stay-warn" role="status">
+      {{ flash_warn_icon() }}
+      <span class="flash-copy">تا پایان عملیات از این صفحه خارج نشوید و رفرش نکنید؛ ممکن است چند دقیقه طول بکشد.</span>
     </div>
     <div class="progress-wrap" aria-label="نوار پیشرفت ریستور">
       <div class="progress-bar">

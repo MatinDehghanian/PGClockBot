@@ -803,7 +803,8 @@ class Phase5DBotL2RoutingTests(unittest.IsolatedAsyncioTestCase):
                     reply_role=Role.ADMIN.value,
                     is_reseller_bot=False,
                 )
-                plans_fn.assert_awaited()
+                plans_fn.assert_not_awaited()
+                self.assertTrue(msg2.answer.await_count)
 
     async def test_p_l1_behavior_unchanged(self) -> None:
         from app.bot.handlers.reply_nav import open_admin_backup_hub, open_pg_home

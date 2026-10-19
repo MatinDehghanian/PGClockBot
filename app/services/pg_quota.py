@@ -80,6 +80,33 @@ def merge_role_limits(admin: dict | None, role: dict | None) -> dict[str, Any]:
     return limits
 
 
+_DATA_LIMIT_KEYS = ("data_limit", "max_traffic", "traffic_limit")
+_USER_LIMIT_KEYS = ("max_users", "users_max")
+
+
+def _first_positive(source: dict[str, Any] | None, keys: tuple[str, ...]) -> int:
+    for key in keys:
+        value = _as_int((source or {}).get(key))
+        if value and value > 0:
+            return value
+    return 0
+
+
+def extract_admin_capacity(admin: dict | None, role: dict | None = None) -> tuple[int, int]:
+    """Traffic limit in bytes and user limit of a PasarGuard admin; ``0`` means unlimited.
+
+    One reader for every screen and for the reseller grant. Order matches what the bot writes
+    back: the admin's own ``data_limit`` first, then role limits and overrides; for users the
+    overrides and role limits first, then the admin's own ``max_users``.
+    """
+    if not isinstance(admin, dict):
+        return 0, 0
+    limits = merge_role_limits(admin, role)
+    data_limit = _first_positive(admin, _DATA_LIMIT_KEYS) or _first_positive(limits, _DATA_LIMIT_KEYS)
+    max_users = _first_positive(limits, _USER_LIMIT_KEYS) or _first_positive(admin, _USER_LIMIT_KEYS)
+    return data_limit, max_users
+
+
 def hwid_bounds(limits: dict[str, Any]) -> tuple[int | None, int | None]:
     """Return (min_hwid, max_hwid) from role limits (aliases supported)."""
     hmin = (

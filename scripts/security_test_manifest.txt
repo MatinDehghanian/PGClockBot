@@ -1,5 +1,27 @@
 
 #
+# Selected-host route identity, scope and prevention of direct fallback.
+tests/test_connection_monitor_catalog.py
+tests/test_connection_monitor_subscription.py
+tests/test_connection_monitor_subscription_migration.py
+tests/test_connection_monitor_config.py
+tests/test_xray_probe.py
+tests/test_connection_probe.py
+tests/test_connection_status_policy.py
+tests/test_connection_monitor_panel.py
+tests/test_connection_monitor_snapshots.py
+tests/test_connection_monitor_worker.py
+tests/test_connection_monitor_queue.py
+tests/test_connection_monitor_admin.py
+tests/test_connection_status_admin_bot.py
+tests/test_connection_status_public.py
+tests/test_connection_status_public_bot.py
+tests/test_connection_status_menu_migration.py
+tests/test_connection_monitor_install.py
+tests/test_connection_status.py
+tests/test_connection_status_authz.py
+tests/test_connection_status_concurrency.py
+tests/test_connection_status_migration.py
 # Subscription contact ownership, shop isolation and cancellation notification claims.
 tests/test_purchase_contact_and_cancellation_notices.py
 # Monetary display escaping and canonical refund form values.
@@ -19,6 +41,24 @@ tests/test_update_migration_metadata.py
 # starting with # are comments; blank lines are ignored.
 # --- Tenant / shop isolation & IDOR ---
 
+# Bot settings button colors: owner/shop permissions and per-shop writes.
+tests/test_button_color_editor.py
+# In-menu screen editor: owner/shop permissions, per-shop writes, edit-mode switch.
+tests/test_screen_editor.py
+# Editable menu titles: owner/shop scope, unsafe titles refused.
+tests/test_screen_titles.py
+tests/test_update_owner_only.py
+tests/test_marketing_nav.py
+tests/test_gift_code_page.py
+tests/test_message_variables_tab.py
+tests/test_admin_marketing_hub.py
+tests/test_marketing_tools_bot.py
+tests/test_marketing_nav_levels.py
+tests/test_addon_general_scope.py
+tests/test_service_import.py
+tests/test_service_import_flow.py
+tests/test_service_import_hardening.py
+tests/test_funnel_page.py
 tests/test_authz_regression_premerge_4_5_1.py
 tests/test_bot_friendly_errors.py
 tests/test_bot_inline_settings_owner.py
@@ -96,6 +136,8 @@ tests/test_setup_wizard_secret_masking.py
 tests/test_shop_isolation_3_5_4.py
 tests/test_nav_admin_counters_0_2_47.py
 tests/test_shop_wallet_isolation.py
+# BezanBeCard: tenant callback token, API re-verify, merchant_order_id bind, no blind trust.
+tests/test_bezanbecard_settlement.py
 tests/test_service_automation.py
 tests/test_customer_features.py
 tests/test_scheduler_background_jobs.py
@@ -111,3 +153,68 @@ tests/test_v4_0_8_security_audit_sanitize.py
 tests/test_v4_1_1_reseller_pg_role_access.py
 tests/test_demo_users.py
 tests/test_web_list_inputs.py
+tests/test_plans_single_message.py
+tests/test_main_bot_reseller_hub.py
+tests/test_admin_settings_authorization.py
+tests/test_reseller_hub_in_place.py
+# Web read deadlines, outage gates, credential isolation and mutation outcomes.
+tests/test_panel_connection_resilience.py
+tests/test_panel_asset_cache.py
+tests/test_catalog_discounts.py
+tests/test_inbox_dismissal_lifecycle.py
+tests/test_stale_menu_notice.py
+tests/test_restart_button.py
+tests/test_payg_low_balance_alerts.py
+tests/test_payg_rate_validation.py
+tests/test_payg_tick_issue_alerts.py
+tests/test_payg_billing_mode.py
+tests/test_payg_shortfall_billing.py
+tests/test_user_purge_schema_sweep.py
+tests/test_delivery_failure_queue.py
+tests/test_service_import_config.py
+tests/test_service_import_settings_tab.py
+tests/test_service_import_approval.py
+tests/test_service_import_notify.py
+tests/test_reseller_capacity_snapshot.py
+tests/test_reseller_capacity_view.py
+tests/test_random_payment_card.py
+tests/test_panel_alert_notifications.py
+tests/test_stuck_order_resolution.py
+
+tests/test_connection_status_web.py
+tests/test_shop_isolation_owner_routes.py
+tests/test_shop_isolation_tickets.py
+tests/test_shop_isolation_order_payment.py
+tests/test_shop_isolation_service_ops.py
+tests/test_shop_isolation_customer_services.py
+tests/test_service_shop_scope_migration.py
+tests/test_shop_attribution_keeps_platform_customers.py
+tests/test_shop_membership.py
+tests/test_service_shop_review.py
+tests/test_shop_isolation_rewards_campaigns.py
+tests/test_shop_isolation_notifications.py
+tests/test_shop_isolation_dashboards.py
+tests/test_service_shop_review_page.py
+tests/test_shop_points.py
+tests/test_shop_points_migration.py
+tests/test_shop_isolation_remaining.py
+tests/test_shop_isolation_review_fixes.py
+tests/test_wheel_state_per_shop.py
+tests/test_owner_bot_hides_shop_panel_users.py
+tests/test_shop_isolation_audit_fixes.py
+tests/test_dashboard_trend.py
+tests/test_guide_media.py
+tests/test_guide_editor.py
+tests/test_wireguard_delivery_followup.py
+tests/test_settings_back_cancel.py
+tests/test_settings_regroup.py
+tests/test_cancel_one_step.py
+tests/test_reseller_panel_groups.py
+tests/test_long_lists.py
+tests/test_service_card_more.py
+tests/test_admin_tweaks.py
+tests/test_chat_cleanup.py
+tests/test_chat_cleanup_forms.py
+tests/test_risk_mark.py
+tests/test_overview_redesign.py
+tests/test_backup_retention_telegram.py

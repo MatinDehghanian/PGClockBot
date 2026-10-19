@@ -133,11 +133,12 @@ class ChargeCodeScopeSourceTests(unittest.TestCase):
 
 
 class SchedulerShopScopeSourceTests(unittest.TestCase):
-    def test_prefers_order_remark_shop(self):
-        src = (ROOT / "app/jobs/scheduler.py").read_text(encoding="utf-8")
-        self.assertIn("_shop_rid_for", src)
-        self.assertIn('startswith("order:")', src)
-        self.assertIn("shop_rid", src)
+    def test_services_carry_the_shop_that_sold_them(self):
+        from app.db.models import UserService
+
+        columns = UserService.__table__.columns
+        self.assertTrue(columns["shop_id"].nullable)
+        self.assertFalse(columns["shop_needs_review"].nullable)
 
 
 class BotTokenRedactSourceTests(unittest.TestCase):

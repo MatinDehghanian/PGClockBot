@@ -418,7 +418,7 @@
         }</div>
           </div>
           <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
-            <div class="price">${esc(money(p.price))}</div>
+            <div class="price">${window.PGClockCatalogPrice.renderPrice(p, money, esc)}</div>
             <button type="button" class="btn sm" ${action}>${label}</button>
           </div>
         </div>`;
@@ -872,7 +872,7 @@
             <div class="muted">+${esc(p.amount_label)}</div>
             ${p.description ? `<p class="hint">${esc(p.description)}</p>` : ""}
           </div>
-          <div class="addon-price"><div class="price">${esc(money(p.price))}</div>
+          <div class="addon-price"><div class="price">${window.PGClockCatalogPrice.renderPrice(p, money, esc)}</div>
             <button type="button" class="btn sm" data-do-addon="${serviceId}" data-pack="${Number(p.id)}">خرید بسته</button>
           </div>
         </div>`).join("") : '<p class="muted">بسته‌ای برای خرید فعال نیست</p>');
@@ -904,7 +904,7 @@
         : window.confirm(message);
       if (!ok) return;
       const res = await api("/api/mini/addon", {
-        method: "POST", body: { service_id: serviceId, pack_id: packId, kind: pack.kind },
+        method: "POST", body: { service_id: serviceId, pack_id: packId, kind: pack.kind, price: pack.price },
       });
       toast(res.message || "بسته اضافه شد", "ok");
       await reload();
@@ -927,11 +927,11 @@
       toast("پرداخت کیف پول غیرفعال است", "err");
       return;
     }
+    const plan = (c.plans || []).find((p) => p.id === planId);
     if (tg && tg.showConfirm) {
-      const plan = (c.plans || []).find((p) => p.id === planId);
       const ok = await new Promise((resolve) => {
         tg.showConfirm(
-          "خرید «" + (plan ? plan.name : planId) + "» با کیف پول؟",
+          "خرید «" + (plan ? plan.name : planId) + "» به مبلغ " + money(plan ? plan.price : 0) + " با کیف پول؟",
           resolve
         );
       });
@@ -939,7 +939,7 @@
     }
     busy = true;
     try {
-      const res = await api("/api/mini/buy", { method: "POST", body: { plan_id: planId } });
+      const res = await api("/api/mini/buy", { method: "POST", body: { plan_id: planId, price: plan ? plan.price : undefined } });
       toast(res.message || "خرید شد", "ok");
       await reload();
       setView("services");
@@ -965,7 +965,7 @@
       if (host.hidden || host.dataset.requestId !== requestId) return;
       renewalPreviews.set(serviceId, {planId, terms: preview.terms, price: preview.price, requestKey: preview.request_key});
       host.innerHTML = '<h3>پیش‌نمایش تمدید</h3><p>' + esc(preview.plan_name) + '</p>' +
-        '<p>مبلغ: <b>' + esc(money(preview.price)) + '</b></p>' +
+        '<p>مبلغ: ' + window.PGClockCatalogPrice.renderPrice(preview, money, esc) + '</p>' +
         (preview.lines || []).map((line) => '<p>' + esc(line) + '</p>').join('') +
         (preview.warnings || []).map((line) => '<p class="error">' + esc(line) + '</p>').join('') +
         '<p class="muted">' + esc(preview.notice) + '</p>' +

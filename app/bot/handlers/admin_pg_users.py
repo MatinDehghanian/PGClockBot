@@ -20,6 +20,7 @@ from app.bot.auth import (
     filtered_pg_reply_keyboard,
 )
 from app.bot.auth import is_platform_admin as _is_admin
+from app.bot.nav_input import form_origin
 from app.bot.tg_utils import safe_edit_text
 from app.db.models import BotUser
 from app.services.formatting import format_message, service_card
@@ -33,6 +34,14 @@ from app.services.pasarguard import (
 )
 from app.services.pg_quota import PgQuotaError, assert_can_create_user
 from app.services.redact import user_safe_error
+from app.services import bot_feedback_texts as feedback
+
+_USERS_BACK = InlineKeyboardMarkup(
+    inline_keyboard=[[kb.back_button(None, "adm:pg:users")]]
+)
+# The PasarGuard hub the users list is opened from.
+PG_HUB_CALLBACK = "nv:adm:pg"
+_PG_HUB_BACK = InlineKeyboardMarkup(inline_keyboard=[[kb.back_button(None, PG_HUB_CALLBACK)]])
 
 router = Router(name="admin_pg_users")
 
@@ -48,9 +57,9 @@ async def _require_users(db_user: BotUser, callback=None, message=None, *, actio
     """
     if not _is_admin(db_user):
         if callback is not None:
-            await callback.answer("ادمین نیستید", show_alert=True)
+            await callback.answer(feedback.NOT_ADMIN, show_alert=True)
         elif message is not None:
-            await message.answer("ادمین نیستید.")
+            await message.answer(feedback.NOT_ADMIN_REPLY)
         return False
     if not await can_platform_pg_page(db_user, "pg_users"):
         if callback is not None:
@@ -60,9 +69,9 @@ async def _require_users(db_user: BotUser, callback=None, message=None, *, actio
         return False
     if action and not await can_platform_pg_action(db_user, "users", action):
         if callback is not None:
-            await callback.answer("اجازه این عمل را ندارید", show_alert=True)
+            await callback.answer(feedback.ACTION_NOT_ALLOWED, show_alert=True)
         elif message is not None:
-            await message.answer("اجازه این عمل را ندارید.")
+            await message.answer(feedback.ACTION_NOT_ALLOWED_REPLY)
         return False
     return True
 
@@ -168,19 +177,21 @@ def _user_actions_kb(uid: int, *, back: str = "adm:pg:users") -> InlineKeyboardM
             [
                 InlineKeyboardButton(text="🗑 حذف", callback_data=f"adm:pg:u:{uid}:delask"),
             ],
-            [InlineKeyboardButton(text="⬅️ بازگشت", callback_data=back)],
+            [kb.back_button(None, back)],
         ]
     )
 
 def _edit_menu_kb(uid: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="👤 تغییر نام کاربری", callback_data=f"adm:pg:u:{uid}:ed:name")],
-            [InlineKeyboardButton(text="📦 تغییر حجم (گیگ)", callback_data=f"adm:pg:u:{uid}:ed:gb")],
-            [InlineKeyboardButton(text="📅 تغییر مدت (روز)", callback_data=f"adm:pg:u:{uid}:ed:days")],
-            [InlineKeyboardButton(text="📁 تغییر گروه‌ها", callback_data=f"adm:pg:u:{uid}:ed:grps")],
-            [InlineKeyboardButton(text="⬅️ کارت کاربر", callback_data=f"adm:pg:u:{uid}")],
-        ]
+        inline_keyboard=kb.pack_detail_rows(
+            [
+                [InlineKeyboardButton(text="👤 تغییر نام کاربری", callback_data=f"adm:pg:u:{uid}:ed:name")],
+                [InlineKeyboardButton(text="📦 تغییر حجم (گیگ)", callback_data=f"adm:pg:u:{uid}:ed:gb")],
+                [InlineKeyboardButton(text="📅 تغییر مدت (روز)", callback_data=f"adm:pg:u:{uid}:ed:days")],
+                [InlineKeyboardButton(text="📁 تغییر گروه‌ها", callback_data=f"adm:pg:u:{uid}:ed:grps")],
+                [kb.back_button(None, f"adm:pg:u:{uid}")],
+            ]
+        )
     )
 
 async def _fetch_users_page(
@@ -228,7 +239,7 @@ async def _render_users_list(
         )
     except Exception as e:
         text = format_message("❌ خطا", _err_msg(e))
-        markup = None  # navigation is on reply keyboard (pg_reply_keyboard)
+        markup = _PG_HUB_BACK
         if edit:
             await safe_edit_text(target, text, reply_markup=markup)
         else:
@@ -268,7 +279,7 @@ async def _render_users_list(
         rows.append(
             [InlineKeyboardButton(text="🧹 پاک کردن جستجو", callback_data="adm:pg:users:clear")]
         )
-    # Hub actions (search/create/back) live on the reply keyboard — not inline
+    rows.append([kb.back_button(None, PG_HUB_CALLBACK)])
 
     title = "👥 کاربران پاسارگارد"
     bits = [f"صفحه {page_label}"]
@@ -300,20 +311,20 @@ async def _show_user_card(
 ) -> None:
     if user is None:
         if pg is None:
-            text = format_message("❌ خطا", "اجازه این عمل را ندارید")
+            text = format_message("❌ خطا", feedback.ACTION_NOT_ALLOWED)
             if edit:
-                await safe_edit_text(target, text, reply_markup=None)
+                await safe_edit_text(target, text, reply_markup=_USERS_BACK)
             else:
-                await target.answer(text, reply_markup=None)
+                await target.answer(text, reply_markup=_USERS_BACK)
             return
         try:
             user = await pg.get_user_by_id(uid)
         except Exception as e:
             text = format_message("❌ خطا", user_safe_error(e))
             if edit:
-                await safe_edit_text(target, text, reply_markup=None)
+                await safe_edit_text(target, text, reply_markup=_USERS_BACK)
             else:
-                await target.answer(text, reply_markup=None)
+                await target.answer(text, reply_markup=_USERS_BACK)
             return
     text = service_card(user if isinstance(user, dict) else {})
     if notice:
@@ -336,8 +347,7 @@ async def adm_pg(
     reseller_owner_id: int | None = None,
 ):
     """PasarGuard hub for Owner and L1 with migrated PG pages (not platform overview)."""
-    from app.bot.auth import bot_may_open_pg_hub, filtered_pg_reply_keyboard
-    from app.services.users import get_all_settings
+    from app.bot.auth import bot_may_open_pg_hub
 
     if not await bot_may_open_pg_hub(
         session,
@@ -351,7 +361,6 @@ async def adm_pg(
     await callback.answer()
     if not callback.message:
         return
-    ui = await get_all_settings(session)
     from app.bot.handlers.reply_nav import open_pg_home
 
     await open_pg_home(
@@ -420,7 +429,12 @@ async def adm_pg_group_hint(
         ]
     )
     if callback.message:
-        await callback.message.edit_text("\n".join(lines)[:3900], reply_markup=None)
+        await callback.message.edit_text(
+            "\n".join(lines)[:3900],
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[[kb.back_button(None, "nv:adm:pg")]]
+            ),
+        )
 
 @router.callback_query(F.data == "adm:pg:template")
 async def adm_pg_template_hint(
@@ -475,7 +489,12 @@ async def adm_pg_template_hint(
         ]
     )
     if callback.message:
-        await callback.message.edit_text("\n".join(lines)[:3900], reply_markup=None)
+        await callback.message.edit_text(
+            "\n".join(lines)[:3900],
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[[kb.back_button(None, "nv:adm:pg")]]
+            ),
+        )
 
 # ----- list / search -----
 
@@ -571,6 +590,7 @@ async def pg_search_start(
             "(جستجو در لیست فیلتر می‌شود؛ برای انصراف «انصراف» بزنید)"
         ),
         cancel_code="adm_pg_u",
+        return_to="adm:pg:users",
         fsm_state=PgUserStates.search,
         edit=True,
     )
@@ -612,7 +632,7 @@ async def pg_search_query(
         ):
             return
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
+        await message.answer(feedback.CANCELLED, reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
         return
     q = (message.text or "").strip()
     if not q:
@@ -902,7 +922,7 @@ async def pg_user_del(
         )
         if session is not None:
             await detach_local_services_for_pg_user(session, uid, commit=True)
-        await callback.answer("حذف شد", show_alert=True)
+        await callback.answer(feedback.DELETED, show_alert=True)
         list_gate = await _pg_user_gate(
             db_user,
             action="list",
@@ -953,7 +973,7 @@ async def pg_create_menu(
         inline_keyboard=[
             [InlineKeyboardButton(text="📋 از تمپلیت", callback_data="adm:pg:create:tpl")],
             [InlineKeyboardButton(text="🛠 سفارشی (گروه + حجم + روز)", callback_data="adm:pg:create:custom")],
-            [InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:pg:users")],
+            [kb.back_button(None, "adm:pg:users")],
         ]
     )
     if callback.message:
@@ -1012,9 +1032,9 @@ async def pg_create_tpl_pick(
         )
     if not rows:
         rows.append(
-            [InlineKeyboardButton(text="تمپلیتی نیست", callback_data="adm:pg:create")]
+            [InlineKeyboardButton(text=feedback.NO_TEMPLATES, callback_data="adm:pg:create")]
         )
-    rows.append([InlineKeyboardButton(text="⬅️ بازگشت", callback_data="adm:pg:create")])
+    rows.append([kb.back_button(None, "adm:pg:create")])
     if callback.message:
         await safe_edit_text(
             callback.message,
@@ -1045,13 +1065,13 @@ async def pg_create_tpl_chosen(
         return
     match = _SETTPL_RE.match(callback.data or "")
     if match is None:
-        await callback.answer("اجازه این عمل را ندارید", show_alert=True)
+        await callback.answer(feedback.ACTION_NOT_ALLOWED, show_alert=True)
         return
     tid = int(match.group(1))
     from app.services.bot_pg_catalog_authz import catalog_template_allowed
 
     if not catalog_template_allowed(gate.staff, tid):
-        await callback.answer("اجازه این عمل را ندارید", show_alert=True)
+        await callback.answer(feedback.ACTION_NOT_ALLOWED, show_alert=True)
         return
     await callback.answer()
     await state.update_data(pg_create_mode="template", pg_template_id=tid)
@@ -1063,6 +1083,7 @@ async def pg_create_tpl_chosen(
         state,
         prompt=f"تمپلیت #{tid} انتخاب شد.\nنام کاربری جدید را بفرستید (۳–۳۲ حرف انگلیسی/عدد/_):",
         cancel_code="adm_pg_u",
+        return_to="adm:pg:create",
         fsm_state=PgUserStates.create_username,
         edit=True,
     )
@@ -1138,8 +1159,8 @@ async def _show_create_group_picker(
             ]
         )
     else:
-        rows.append([InlineKeyboardButton(text="گروهی نیست", callback_data=back_cb)])
-    rows.append([InlineKeyboardButton(text="⬅️ بازگشت", callback_data=back_cb)])
+        rows.append([InlineKeyboardButton(text=feedback.NO_GROUPS, callback_data=back_cb)])
+    rows.append([kb.back_button(None, back_cb)])
     text = (
         "📁 گروه‌ها را انتخاب کنید (چندتایی):\n"
         f"انتخاب‌شده: {', '.join(str(x) for x in selected) or '—'}"
@@ -1174,7 +1195,7 @@ async def pg_create_toggrp(
         return
     match = _TOGGRP_RE.match(callback.data or "")
     if match is None:
-        await callback.answer("اجازه این عمل را ندارید", show_alert=True)
+        await callback.answer(feedback.ACTION_NOT_ALLOWED, show_alert=True)
         return
     gid = int(match.group(1))
     data = await state.get_data()
@@ -1185,7 +1206,7 @@ async def pg_create_toggrp(
         from app.services.bot_pg_catalog_authz import catalog_groups_allowed
 
         if not catalog_groups_allowed(gate.staff, [gid]):
-            await callback.answer("اجازه این عمل را ندارید", show_alert=True)
+            await callback.answer(feedback.ACTION_NOT_ALLOWED, show_alert=True)
             return
         selected.append(gid)
     await state.update_data(pg_selected_groups=selected)
@@ -1216,12 +1237,12 @@ async def pg_create_grpdone(
     data = await state.get_data()
     selected = [int(x) for x in (data.get("pg_selected_groups") or [])]
     if not selected:
-        await callback.answer("حداقل یک گروه انتخاب کنید", show_alert=True)
+        await callback.answer(feedback.PICK_AT_LEAST_ONE_GROUP, show_alert=True)
         return
     from app.services.bot_pg_catalog_authz import catalog_groups_allowed
 
     if not catalog_groups_allowed(gate.staff, selected):
-        await callback.answer("اجازه این عمل را ندارید", show_alert=True)
+        await callback.answer(feedback.ACTION_NOT_ALLOWED, show_alert=True)
         return
     await callback.answer()
     await state.update_data(pg_create_mode="custom")
@@ -1233,6 +1254,7 @@ async def pg_create_grpdone(
         state,
         prompt="نام کاربری جدید را بفرستید (۳–۳۲ حرف انگلیسی/عدد/_):",
         cancel_code="adm_pg_u",
+        return_to="adm:pg:create",
         fsm_state=PgUserStates.create_username,
         edit=True,
     )
@@ -1274,7 +1296,7 @@ async def pg_create_username(
         ):
             return
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
+        await message.answer(feedback.CANCELLED, reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
         return
     uname = (message.text or "").strip()
     if not _USERNAME_RE.fullmatch(uname):
@@ -1292,6 +1314,7 @@ async def pg_create_username(
             state,
             prompt="حجم به گیگابایت را بفرستید (عدد؛ برای نامحدود ۰ بفرستید):",
             cancel_code="adm_pg_u",
+            return_to=await form_origin(state),
             fsm_state=PgUserStates.create_gb,
             edit=False,
         )
@@ -1320,7 +1343,7 @@ async def pg_create_username(
     if not catalog_template_allowed(gate.staff, int(tid)):
         await state.clear()
         await message.answer(
-            "اجازه این عمل را ندارید",
+            feedback.ACTION_NOT_ALLOWED,
             reply_markup=await filtered_pg_reply_keyboard(
                 db_user, session=session, is_reseller_bot=is_reseller_bot
             ),
@@ -1401,7 +1424,7 @@ async def pg_create_gb(
         ):
             return
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
+        await message.answer(feedback.CANCELLED, reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
         return
     raw = (message.text or "").strip().replace(",", ".")
     try:
@@ -1420,6 +1443,7 @@ async def pg_create_gb(
         state,
         prompt="مدت به روز را بفرستید (عدد؛ برای بدون انقضا ۰ بفرستید):",
         cancel_code="adm_pg_u",
+        return_to=await form_origin(state),
         fsm_state=PgUserStates.create_days,
         edit=False,
     )
@@ -1461,7 +1485,7 @@ async def pg_create_days(
         ):
             return
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
+        await message.answer(feedback.CANCELLED, reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
         return
     raw = (message.text or "").strip()
     try:
@@ -1477,13 +1501,13 @@ async def pg_create_days(
     gb = float(data.get("pg_create_gb") or 0)
     if not uname or not groups:
         await state.clear()
-        await message.answer("داده ناقص است — دوباره شروع کنید.", reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
+        await message.answer("اطلاعات این مرحله کامل نیست. دوباره شروع کنید.", reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
         return
     from app.services.bot_pg_catalog_authz import catalog_groups_allowed
 
     if not catalog_groups_allowed(gate.staff, groups):
         await state.clear()
-        await message.answer("اجازه این عمل را ندارید", reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
+        await message.answer(feedback.ACTION_NOT_ALLOWED, reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
         return
     data_limit = int(gb * (1024**3)) if gb > 0 else 0
     expire_ts = int(time.time()) + days * 86400 if days > 0 else 0
@@ -1524,6 +1548,7 @@ async def pg_create_days(
             state,
             prompt=f"❌ {_err_msg(e)}\nنام کاربری دیگری بفرستید:",
             cancel_code="adm_pg_u",
+            return_to=await form_origin(state),
             fsm_state=PgUserStates.create_username,
             edit=False,
         )
@@ -1607,6 +1632,7 @@ async def pg_edit_name_ask(
         state,
         prompt="نام کاربری جدید را بفرستید:",
         cancel_code="adm_pg_u",
+        return_to=f"adm:pg:u:{uid}:edit",
         fsm_state=PgUserStates.edit_username,
         edit=True,
     )
@@ -1636,7 +1662,7 @@ async def pg_edit_name_save(
         ):
             return
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
+        await message.answer(feedback.CANCELLED, reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
         return
     uname = (message.text or "").strip()
     if not _USERNAME_RE.fullmatch(uname):
@@ -1707,8 +1733,9 @@ async def pg_edit_gb_ask(
     await ask_text(
         callback,
         state,
-        prompt="حجم جدید به گیگابایت (۰ = نامحدود):",
+        prompt="حجم جدید را به گیگابایت بفرستید. برای نامحدود <code>0</code> بفرستید:",
         cancel_code="adm_pg_u",
+        return_to=f"adm:pg:u:{uid}:edit",
         fsm_state=PgUserStates.edit_gb,
         edit=True,
     )
@@ -1738,7 +1765,7 @@ async def pg_edit_gb_save(
         ):
             return
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
+        await message.answer(feedback.CANCELLED, reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
         return
     raw = (message.text or "").strip().replace(",", ".")
     try:
@@ -1746,7 +1773,7 @@ async def pg_edit_gb_save(
         if gb < 0:
             raise ValueError
     except ValueError:
-        await message.answer("عدد معتبر بفرستید.")
+        await message.answer(feedback.ENTER_VALID_NUMBER)
         return
     data = await state.get_data()
     uid = int(data.get("pg_edit_uid") or 0)
@@ -1817,6 +1844,7 @@ async def pg_edit_days_ask(
         state,
         prompt="مدت باقی‌مانده از الان به روز (۰ = بدون انقضا):",
         cancel_code="adm_pg_u",
+        return_to=f"adm:pg:u:{uid}:edit",
         fsm_state=PgUserStates.edit_days,
         edit=True,
     )
@@ -1846,7 +1874,7 @@ async def pg_edit_days_save(
         ):
             return
         await state.clear()
-        await message.answer("لغو شد.", reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
+        await message.answer(feedback.CANCELLED, reply_markup=await filtered_pg_reply_keyboard(db_user, session=session, is_reseller_bot=is_reseller_bot))
         return
     raw = (message.text or "").strip()
     try:
@@ -1947,7 +1975,7 @@ async def pg_edit_toggrp(
         return
     match = _EDGRP_RE.match(callback.data or "")
     if match is None:
-        await callback.answer("اجازه این عمل را ندارید", show_alert=True)
+        await callback.answer(feedback.ACTION_NOT_ALLOWED, show_alert=True)
         return
     gid = int(match.group(1))
     selected = [int(x) for x in (data.get("pg_selected_groups") or [])]
@@ -1957,7 +1985,7 @@ async def pg_edit_toggrp(
         from app.services.bot_pg_catalog_authz import catalog_groups_allowed
 
         if not catalog_groups_allowed(gate.staff, [gid]):
-            await callback.answer("اجازه این عمل را ندارید", show_alert=True)
+            await callback.answer(feedback.ACTION_NOT_ALLOWED, show_alert=True)
             return
         selected.append(gid)
     await state.update_data(pg_selected_groups=selected)
@@ -1995,12 +2023,12 @@ async def pg_edit_grpdone(
         await callback.answer("کاربر نامعتبر", show_alert=True)
         return
     if not selected:
-        await callback.answer("حداقل یک گروه انتخاب کنید", show_alert=True)
+        await callback.answer(feedback.PICK_AT_LEAST_ONE_GROUP, show_alert=True)
         return
     from app.services.bot_pg_catalog_authz import catalog_groups_allowed
 
     if not catalog_groups_allowed(gate.staff, selected):
-        await callback.answer("اجازه این عمل را ندارید", show_alert=True)
+        await callback.answer(feedback.ACTION_NOT_ALLOWED, show_alert=True)
         return
     try:
         current = gate.pg_user or {}

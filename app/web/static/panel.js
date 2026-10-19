@@ -60,10 +60,6 @@
     function disarmPanelNavClock() {
       var clock = document.getElementById('panel-nav-clock');
       if (!clock) return;
-      /* Keep clock if shell-first widgets are still loading. */
-      if (document.documentElement.getAttribute('data-panel-widgets-pending') === '1') return;
-      var dash = document.getElementById('home-dash') || document.getElementById('pg-dash');
-      if (dash && dash.getAttribute('aria-busy') === 'true' && !dash.firstElementChild) return;
       clock.hidden = true;
       clock.setAttribute('aria-hidden', 'true');
     }
@@ -332,34 +328,15 @@
     (function () {
       const clock = document.getElementById('panel-nav-clock');
       if (!clock) return;
-      /* Shell-first /home|/pg|/reseller home: defer script may fire
-         panel-widgets-loading before this listener exists. Track pending via
-         DOM flag + empty aria-busy mount so pageshow cannot hide the clock
-         before /body swaps in. */
-      function shellWidgetsPending() {
-        if (document.documentElement.getAttribute('data-panel-widgets-pending') === '1') {
-          return true;
-        }
-        const dash = document.getElementById('home-dash') || document.getElementById('pg-dash');
-        return !!(dash && dash.getAttribute('aria-busy') === 'true' && !dash.firstElementChild);
-      }
-      let widgetsPending = shellWidgetsPending() ? 1 : 0;
       function arm() {
         clock.hidden = false;
         clock.setAttribute('aria-hidden', 'false');
         void clock.offsetWidth;
       }
       function disarm() {
-        if (widgetsPending > 0 || shellWidgetsPending()) return;
         clock.hidden = true;
         clock.setAttribute('aria-hidden', 'true');
       }
-      function disarmAfterPaint() {
-        requestAnimationFrame(function () {
-          requestAnimationFrame(disarm);
-        });
-      }
-      if (widgetsPending > 0) arm();
       function sameDocumentNav(url) {
         return url.origin === location.origin
           && url.pathname === location.pathname
@@ -408,36 +385,22 @@
         arm();
       }, true);
       window.addEventListener('pageshow', function () {
-        if (widgetsPending > 0 || shellWidgetsPending()) {
-          widgetsPending = Math.max(widgetsPending, 1);
-          arm();
-          return;
-        }
         disarm();
       });
       window.addEventListener('pagehide', function () {
-        widgetsPending = 0;
         document.documentElement.removeAttribute('data-panel-widgets-pending');
         clock.hidden = true;
         clock.setAttribute('aria-hidden', 'true');
       });
       window.addEventListener('popstate', function () {
-        if (widgetsPending > 0 || shellWidgetsPending()) {
-          arm();
-          return;
-        }
         disarm();
       });
-      /* Shell-first home/PG: keep the clock up until /body swaps widgets in. */
+      /* Optional widget reads must never cover an already usable page. */
       document.addEventListener('panel-widgets-loading', function () {
-        widgetsPending = Math.max(widgetsPending, 1);
         document.documentElement.setAttribute('data-panel-widgets-pending', '1');
-        arm();
       });
       document.addEventListener('panel-widgets-ready', function () {
-        widgetsPending = 0;
         document.documentElement.removeAttribute('data-panel-widgets-pending');
-        disarmAfterPaint();
       });
     })();
 
@@ -1027,15 +990,10 @@
               btn.appendChild(dot);
             }
           } else if (isColorTag && tagColor) {
-            const swatch = document.createElement('span');
-            swatch.className = 'color-tag-swatch';
-            swatch.style.setProperty('--tag-color', tagColor);
-            swatch.setAttribute('aria-hidden', 'true');
             const optLabel = document.createElement('span');
             optLabel.className = 'color-tag-menu-label';
             optLabel.textContent = opt.textContent;
             optLabel.style.color = tagColor;
-            btn.appendChild(swatch);
             btn.appendChild(optLabel);
             btn.classList.add('color-tag-menu-option');
           } else {
@@ -1116,6 +1074,17 @@
         }, true);
       }
       sel.addEventListener('change', syncLabel);
+      /* The real select's name moved to the hidden mirror, so a plain `select.value = x`
+         from page script changed nothing that gets submitted (an edited «زمان» pack was
+         saved as «حجم»). Keep the mirror and the label in step with script assignments. */
+      try {
+        const nativeValue = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value');
+        Object.defineProperty(sel, 'value', {
+          configurable: true,
+          get() { return nativeValue.get.call(this); },
+          set(next) { nativeValue.set.call(this, next); syncLabel(); },
+        });
+      } catch (e) {}
       /* Always rebuild custom menu when <option> list is rewritten (e.g. plans modal
          audience → kind options). Previously only settings forms were watched, so
          dynamic selects kept showing stale labels/options. */
@@ -2755,6 +2724,9 @@
           el.setAttribute('dir', el.getAttribute('dir') || 'ltr');
           el.setAttribute('autocomplete', el.getAttribute('autocomplete') || 'off');
         });
+        (root || document).querySelectorAll('input[data-money-kind]').forEach((el) => {
+          window.PanelMoney.syncMoneyMode(el, normalizeNumberText);
+        });
         (root || document).querySelectorAll('input[data-money]').forEach((el) => {
           window.PanelMoney.formatMoneyInput(el, normalizeNumberText);
         });
@@ -2777,6 +2749,11 @@
         applyNormalize(e.target);
       }, true);
       document.addEventListener('change', (e) => {
+        if (e.target instanceof HTMLSelectElement && e.target.form) {
+          e.target.form.querySelectorAll('input[data-money-kind]').forEach((el) => {
+            window.PanelMoney.syncMoneyMode(el, normalizeNumberText);
+          });
+        }
         applyNormalize(e.target);
       }, true);
       document.addEventListener('input', (e) => {
@@ -2878,14 +2855,15 @@
       const modeInput = document.getElementById('inbox-dismiss-mode');
       if (!modal || !keyInput || !form) return;
 
+      const radios = Array.from(form.querySelectorAll('input[data-inbox-mode]'));
+
       function selectedMode() {
-        const checked = form.querySelector('input[data-inbox-mode]:checked');
-        const v = checked && (checked.getAttribute('data-inbox-mode') || checked.value)
-          ? String(checked.getAttribute('data-inbox-mode') || checked.value)
-          : '24h';
-        return (v === 'forever') ? 'forever' : '24h';
+        const checked = radios.find((r) => r.checked);
+        return checked && checked.getAttribute('data-inbox-mode') === 'forever' ? 'forever' : '24h';
       }
 
+      /* One radio group (shared name) keeps exactly one option checked; this only mirrors it
+         into the hidden mode field and the highlight class. */
       function syncSelected() {
         const mode = selectedMode();
         if (modeInput) modeInput.value = mode;
@@ -2899,8 +2877,7 @@
         keyInput.value = alertKey || '';
         if (entityInput) entityInput.value = entityId || '';
         if (returnInput) returnInput.value = window.location.pathname + window.location.search;
-        const first = form.querySelector('input[data-inbox-mode="24h"]');
-        if (first) first.checked = true;
+        radios.forEach((r) => { r.checked = r.getAttribute('data-inbox-mode') === '24h'; });
         syncSelected();
         if (typeof openModal === 'function') openModal('modal-inbox-dismiss');
         else {
@@ -2911,14 +2888,6 @@
 
       form.addEventListener('change', (e) => {
         if (e.target && e.target.matches('input[type="radio"]')) syncSelected();
-      });
-      form.querySelectorAll('.inbox-dismiss-option').forEach((opt) => {
-        opt.addEventListener('click', () => {
-          const input = opt.querySelector('input[type="radio"]');
-          if (!input) return;
-          input.checked = true;
-          syncSelected();
-        });
       });
 
       form.addEventListener('submit', (e) => {
@@ -3328,6 +3297,36 @@
         html += '</select></div></div>';
         return html;
       }
+      // Same cap as MAX_LINKS_PER_GUIDE on the server.
+      const GUIDE_LINK_SLOTS = 3;
+      function linkRowHtml(link) {
+        const item = link || {};
+        return (
+          '<div class="guides-link-row" data-guides-link>' +
+            '<label>متن دکمه<input type="text" class="guides-link-label" maxlength="48" value="' + esc(item.label) + '" placeholder="▶️ دیدن ویدیو" autocomplete="off" /></label>' +
+            '<label>لینک<input type="url" class="guides-link-url" dir="ltr" maxlength="512" value="' + esc(item.url) + '" placeholder="https://youtu.be/…" autocomplete="off" /></label>' +
+            '<button type="button" class="icon-btn icon-remove guides-link-remove" aria-label="حذف این لینک" title="حذف این لینک">' +
+              '<svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg>' +
+            '</button>' +
+          '</div>'
+        );
+      }
+      function linkAddHtml(count) {
+        return '<button type="button" class="pay-dest-add-row guides-link-add" data-guides-link-add' +
+          (count >= GUIDE_LINK_SLOTS ? ' hidden' : '') +
+          '><span aria-hidden="true">+</span><span>افزودن لینک</span></button>';
+      }
+      function linksHtml(links) {
+        // Saved links, or one empty row; more rows come from «افزودن لینک».
+        const saved = (Array.isArray(links) ? links : []).filter((l) => l && l.url).slice(0, GUIDE_LINK_SLOTS);
+        const rows = saved.length ? saved : [{}];
+        return '<fieldset class="full guides-links"><legend>لینک ویدیو (یوتیوب یا تلگرام، اختیاری)</legend>' +
+          rows.map(linkRowHtml).join('') + linkAddHtml(rows.length) + '</fieldset>';
+      }
+      function refreshLinkAdd(fieldset) {
+        const add = fieldset.querySelector('[data-guides-link-add]');
+        if (add) add.hidden = fieldset.querySelectorAll('[data-guides-link]').length >= GUIDE_LINK_SLOTS;
+      }
       function rowHtml(item) {
         const id = (item && item.id) || uid();
         const enabled = !item || item.enabled === undefined || item.enabled === null
@@ -3361,6 +3360,8 @@
               '</label>' +
               styleSelectHtml(style) +
               '<label class="full">متن آموزش<textarea class="guides-body" rows="4" maxlength="4000" placeholder="مراحل اتصال…">' + esc(item && (item.body || item.text)) + '</textarea></label>' +
+              linksHtml(item && item.links) +
+              '<div class="full guides-media" data-guides-media-slot></div>' +
             '</div>' +
             '<button type="button" class="btn btn-danger btn-sm guides-remove pay-dest-remove-btn">حذف</button>' +
           '</div>'
@@ -3389,6 +3390,12 @@
           const dl = row.querySelector('.guides-deeplink');
           const aud = row.querySelector('.guides-audience');
           const styleSel = row.querySelector('.guides-style');
+          const links = [];
+          row.querySelectorAll('.guides-link-row').forEach((linkRow) => {
+            const url = String((linkRow.querySelector('.guides-link-url') || {}).value || '').trim();
+            const label = String((linkRow.querySelector('.guides-link-label') || {}).value || '').trim();
+            if (url) links.push({ label: label, url: url });
+          });
           entries.push({
             id: rowId,
             title: title,
@@ -3398,6 +3405,7 @@
             enabled: !!(en && en.checked),
             deep_link: !!(dl && dl.checked),
             style: styleSel ? styleSel.value : 'primary',
+            links: links,
           });
         });
         hidden.value = JSON.stringify(entries);
@@ -3408,6 +3416,7 @@
         const rows = (items && items.length ? items : [{}]).map((item) => rowHtml(item)).join('');
         list.innerHTML = rows + addBtnHtml();
         sync(root);
+        root.dispatchEvent(new CustomEvent('guides-rendered'));
       }
       document.querySelectorAll('[data-guides-editor]').forEach((root) => {
         const hidden = root.querySelector('[data-guides-json]');
@@ -3420,6 +3429,34 @@
             const html = rowHtml({});
             if (add) add.insertAdjacentHTML('beforebegin', html);
             else if (list) list.insertAdjacentHTML('afterbegin', html);
+            sync(root);
+            root.dispatchEvent(new CustomEvent('guides-rendered'));
+            return;
+          }
+          const linkAdd = e.target.closest('[data-guides-link-add]');
+          if (linkAdd) {
+            e.preventDefault();
+            const fieldset = linkAdd.closest('.guides-links');
+            if (fieldset.querySelectorAll('[data-guides-link]').length < GUIDE_LINK_SLOTS) {
+              linkAdd.insertAdjacentHTML('beforebegin', linkRowHtml({}));
+              const input = linkAdd.previousElementSibling.querySelector('.guides-link-label');
+              if (input) input.focus();
+            }
+            refreshLinkAdd(fieldset);
+            return;
+          }
+          const linkRemove = e.target.closest('.guides-link-remove');
+          if (linkRemove) {
+            e.preventDefault();
+            const fieldset = linkRemove.closest('.guides-links');
+            const row = linkRemove.closest('[data-guides-link]');
+            if (fieldset.querySelectorAll('[data-guides-link]').length > 1) {
+              row.remove();
+            } else {
+              // The last row stays as the empty default.
+              row.querySelectorAll('input').forEach((input) => { input.value = ''; });
+            }
+            refreshLinkAdd(fieldset);
             sync(root);
             return;
           }
@@ -3761,8 +3798,6 @@ const root = document.getElementById('upd-root');
   const toEl = document.getElementById('upd-to');
   const fromEl = document.getElementById('upd-from');
   const ops = document.getElementById('upd-ops');
-  const rollbackBtn = document.getElementById('rollback-start');
-  const rollbackSelect = document.getElementById('rollback-version');
   const channelSelect = document.getElementById('upd-channel');
   const migrationFlash = document.getElementById('upd-migration-flash');
   const versionFlash = document.getElementById('upd-version-flash');
@@ -3848,8 +3883,6 @@ const root = document.getElementById('upd-root');
         startBtn.textContent = retry ? 'تلاش دوباره' : (canStart ? 'شروع آپدیت' : 'آپدیتی نیست');
       }
     }
-    if (rollbackBtn) rollbackBtn.disabled = !!busy;
-    if (rollbackSelect) rollbackSelect.disabled = !!busy;
     if (channelSelect) channelSelect.disabled = !!busy || channelBusy;
     if (busy) setBlockLeave(true);
   }
@@ -4076,9 +4109,8 @@ const root = document.getElementById('upd-root');
         : (st.state === 'running' ? 'در حال اعمال…' : 'آماده');
     }
     if (stateEl) stateEl.textContent = st.message || st.state || '';
-    const modeLabel = st.mode === 'rollback' ? 'بازگشت' : 'آپدیت';
     if (st.state === 'running') {
-      setBusy(true, 'در حال ' + modeLabel + '…');
+      setBusy(true, 'در حال آپدیت…');
       showOps(true);
     } else if (st.state === 'error' || st.restart_required) {
       showOps(true);
@@ -4249,51 +4281,6 @@ const root = document.getElementById('upd-root');
     });
   }
 
-  if (rollbackBtn && rollbackSelect) {
-    rollbackBtn.addEventListener('click', async () => {
-      const ver = (rollbackSelect.value || '').trim();
-      if (!ver) return;
-      const ask = (window.panelConfirm
-        ? window.panelConfirm({
-            title: 'بازگشت نسخه',
-            message: 'بازگشت به نسخه v' + ver + '؟ سرویس بعد از اعمال دوباره راه‌اندازی می‌شود.',
-            warn: true,
-            confirmLabel: 'شروع بازگشت',
-          })
-        : Promise.resolve({ ok: window.confirm('بازگشت به نسخه v' + ver + '؟') }));
-      const result = await ask;
-      if (!result || !result.ok) return;
-      showOps(true);
-      setBusy(true, 'شروع بازگشت…');
-      waitingRestart = false;
-      sawDown = false;
-      baselineBoot = null;
-      baselinePid = null;
-      expectedVersion = ver;
-      if (toEl) toEl.textContent = ver;
-      try {
-        const tok = csrfToken();
-        const res = await fetch('/update/rollback', {
-          method: 'POST',
-          credentials: 'same-origin',
-          headers: updateFetchHeaders(),
-          body: JSON.stringify({ version: ver, csrf_token: tok || undefined })
-        });
-        const data = await readUpdateResponse(res);
-        if (!data.ok) {
-          if (stateEl) stateEl.textContent = data.error || 'بازگشت ممکن نشد';
-          setBusy(false);
-          return;
-        }
-        if (data.status) applyStatus(data.status);
-        startPolling();
-      } catch (e) {
-        if (stateEl) stateEl.textContent = 'خطا در شروع بازگشت — اتصال یا نشست را بررسی کنید';
-        setBusy(false);
-      }
-    });
-  }
-
   if (root && root.dataset.running === '1') startPolling();
   const params = new URLSearchParams(location.search);
   if (!params.get('ok') && root && root.dataset.awaitingRestart === '1') {
@@ -4311,7 +4298,8 @@ const root = document.getElementById('upd-root');
 })();
 
 /* === Sidebar section accordion (no work-mode tabs) ===
-   Only the section that owns the current page stays open; others stay collapsed. */
+   Web panel and bot sections start open together; the PasarGuard section is exclusive
+   with them (rules in nav-accordion.js). A page inside PasarGuard opens only that section. */
 (function initNavWorkModes() {
   function boot() {
     var nav = document.querySelector('[data-side-nav]');
@@ -4351,32 +4339,47 @@ const root = document.getElementById('upd-root');
       return sectionFromPath(location.pathname, location.search);
     }
 
-    function setOpenSection(openKey) {
-      var sections = nav.querySelectorAll('.nav-section[data-nav-mode]');
-      var found = false;
-      if (openKey) {
-        for (var i = 0; i < sections.length; i++) {
-          if (sections[i].getAttribute('data-nav-mode') === openKey) found = true;
-        }
-        if (!found && sections.length) openKey = sections[0].getAttribute('data-nav-mode');
+    /* Fallback keeps the sidebar usable when a cached page and an older script mix. */
+    var rules = window.PGClockNavAccordion || {
+      defaultOpenKeys: function (active, all) { return all; },
+      afterToggle: function (open, key) {
+        return open.indexOf(key) < 0 ? open.concat(key) : open.filter(function (k) { return k !== key; });
       }
-      for (var j = 0; j < sections.length; j++) {
-        var section = sections[j];
-        var key = section.getAttribute('data-nav-mode');
+    };
+
+    function sectionKeys() {
+      var keys = [];
+      nav.querySelectorAll('.nav-section[data-nav-mode]').forEach(function (section) {
+        keys.push(section.getAttribute('data-nav-mode'));
+      });
+      return keys;
+    }
+
+    function openSectionKeys() {
+      var keys = [];
+      nav.querySelectorAll('.nav-section[data-nav-mode]:not(.is-collapsed)').forEach(function (section) {
+        keys.push(section.getAttribute('data-nav-mode'));
+      });
+      return keys;
+    }
+
+    function setOpenSections(openKeys, scrollToActive) {
+      nav.querySelectorAll('.nav-section[data-nav-mode]').forEach(function (section) {
         var btn = section.querySelector('[data-nav-collapse]');
-        var collapsed = !openKey || key !== openKey;
+        var collapsed = openKeys.indexOf(section.getAttribute('data-nav-mode')) < 0;
         section.classList.toggle('is-collapsed', collapsed);
         if (btn) btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
-      }
-      /* Only scroll when the active link is in the *open* section — scrolling a
+      });
+      /* Only scroll when the active link is in an *open* section — scrolling a
          display:none item in a just-collapsed accordion caused sidebar jump/lag. */
+      if (!scrollToActive) return;
       var active = nav.querySelector('.nav-section[data-nav-mode]:not(.is-collapsed) .nav-item.active');
       if (active && typeof active.scrollIntoView === 'function') {
         try { active.scrollIntoView({ block: 'nearest' }); } catch (_) {}
       }
     }
 
-    setOpenSection(activeSectionKey());
+    setOpenSections(rules.defaultOpenKeys(activeSectionKey(), sectionKeys()), true);
 
     nav.addEventListener('click', function (e) {
       var btn = e.target.closest('[data-nav-collapse]');
@@ -4385,14 +4388,7 @@ const root = document.getElementById('upd-root');
       var key = btn.getAttribute('data-nav-collapse');
       var section = btn.closest('.nav-section');
       if (!section || !key) return;
-      /* Exclusive accordion: opening one closes the rest; collapsing the
-         open one is allowed so the user can peek without leaving the page. */
-      if (section.classList.contains('is-collapsed')) {
-        setOpenSection(key);
-      } else {
-        section.classList.add('is-collapsed');
-        btn.setAttribute('aria-expanded', 'false');
-      }
+      setOpenSections(rules.afterToggle(openSectionKeys(), key, sectionKeys()), false);
       /* Drop sticky focus chrome after tap (iOS/PWA) */
       if (typeof btn.blur === 'function') btn.blur();
     });
@@ -4485,6 +4481,44 @@ const root = document.getElementById('upd-root');
       bindAll((e && e.detail && e.detail.root) || document);
     });
   }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+})();
+
+/* === Focus guard ===
+   Inputs marked data-focus-guard stay read-only until the user taps, clicks or presses a key, so a
+   browser or PWA restoring focus on load cannot pop the mobile keyboard open. */
+(function initFocusGuards() {
+  var INTENT_WINDOW_MS = 800;
+  var lastIntent = 0;
+  ['pointerdown', 'touchstart', 'mousedown', 'keydown'].forEach(function (type) {
+    document.addEventListener(type, function () { lastIntent = Date.now(); }, true);
+  });
+  function guard(input) {
+    if (input.dataset.focusGuardReady === '1') return;
+    input.dataset.focusGuardReady = '1';
+    input.readOnly = true;
+    input.addEventListener('focus', function () {
+      if (Date.now() - lastIntent <= INTENT_WINDOW_MS) {
+        input.readOnly = false;
+        return;
+      }
+      requestAnimationFrame(function () {
+        if (document.activeElement === input && input.readOnly) input.blur();
+      });
+    });
+  }
+  function boot() {
+    document.querySelectorAll('input[data-focus-guard]').forEach(guard);
+  }
+  window.addEventListener('pageshow', function () {
+    document.querySelectorAll('input[data-focus-guard]').forEach(function (input) {
+      if (input.readOnly && document.activeElement === input) input.blur();
+    });
+  });
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', boot);
   } else {

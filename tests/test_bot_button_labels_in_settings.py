@@ -59,13 +59,13 @@ class BotButtonLabelCoverageTests(unittest.TestCase):
                 )
                 self.assertTrue(fields)
 
-    def test_shop_section_uses_categorized_button_subs(self):
+    def test_labels_section_holds_the_categorized_button_subs(self):
         from app.bot.handlers.admin_settings import SECTIONS as admin_s
         from app.bot.handlers.reseller_settings import SECTIONS as res_s
 
         for sections, platform in ((admin_s, True), (res_s, False)):
-            sub_ids = {s[0] for s in sections["shop"]["subs"]}
-            self.assertIn("identity", sub_ids)
+            self.assertEqual({s[0] for s in sections["shop"]["subs"]} - {"invite"}, {"identity", "texts"})
+            sub_ids = {s[0] for s in sections["labels"]["subs"]}
             self.assertIn("btn_main", sub_ids)
             self.assertIn("btn_loyalty_sub", sub_ids)
             self.assertNotIn("btn_labels", sub_ids)
@@ -88,6 +88,7 @@ class BotButtonLabelCoverageTests(unittest.TestCase):
             "btn_pay_crypto",
             "btn_pay_stars",
             "btn_pay_psp",
+            "btn_pay_bbc",
         ):
             self.assertIn(key, admin_f, key)
             self.assertIn(key, res_f, key)
@@ -119,14 +120,15 @@ class BotSettingsHubIATestsRegression(unittest.TestCase):
         from app.bot.handlers.admin_settings import HUB_ORDER
 
         self.assertEqual(
-            HUB_ORDER, ["shop", "menu", "pay", "support", "access", "notify"]
+            HUB_ORDER,
+            ["shop", "menu", "labels", "pay", "access", "limits", "buy", "support", "guides", "notify"],
         )
         self.assertNotIn("service", HUB_ORDER)
 
-    def test_access_still_owns_force_join_buttons(self):
+    def test_limits_owns_force_join_buttons(self):
         from app.bot.handlers.admin_settings import FIELDS, _owner_screen_for_key
 
-        self.assertEqual(_owner_screen_for_key("btn_force_join"), ("access", "force"))
+        self.assertEqual(_owner_screen_for_key("btn_force_join"), ("limits", "force"))
         self.assertIn("btn_force_join_check", FIELDS)
 
 

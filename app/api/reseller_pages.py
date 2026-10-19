@@ -14,6 +14,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings, normalize_pg_base_url
 from app.db.models import BotUser, ResellerPlan, ResellerProfile, Role
+from app.services.shop_scope import ShopScopeError, assert_bot_user_in_scope
+from app.services.billing import require_positive_payg_rate
 from app.services.pasarguard import get_pg
 from app.services.pg_quota import limit_snapshot_cards, load_staff_limit_snapshot
 from app.services.resellers import (
@@ -523,7 +525,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         _ = form.get("reseller_profile_id")
         try:
             role_raw = str(form.get("pg_role_id") or "").strip()
-            result = await provision_level2_child(
+            await provision_level2_child(
                 session,
                 staff,
                 Level2ProvisionRequest(
@@ -636,16 +638,21 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             from app.services.formatting import format_expire_short
             from app.services.pg_admin_subscription import get_subscription
 
+            from app.db.models import ResellerPlan
+            from app.services.pg_admin_subscription import is_current_capacity_plan
+            from app.services.reseller_capacity_view import build_capacity_view, live_capacity_from_overview
+
             sub = await get_subscription(session, profile.pg_admin_username)
             if sub is not None:
-                extra = int(sub.extra_gb_purchased or 0)
-                base = int(sub.base_gb or 0)
+                plan = await session.get(ResellerPlan, int(sub.plan_id)) if sub.plan_id else None
                 exp = sub.expires_at
                 pg_subscription = {
                     "expires_at": format_expire_short(exp) if exp else None,
-                    "extra_gb": extra,
-                    "base_gb": base,
-                    "total_gb": base + extra,
+                    **build_capacity_view(
+                        sub,
+                        current_capacity=is_current_capacity_plan(plan),
+                        live=live_capacity_from_overview(pg_limits),
+                    ),
                 }
         from app.services.color_tags import color_tags_for_ui
 
@@ -790,9 +797,6 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         ).scalar_one_or_none()
         if not user or not profile:
             return RedirectResponse(f"/resellers?err={_q('نماینده یافت نشد')}", status_code=303)
-        mode = str(form.get("billing_mode") or "").strip().lower()
-        if mode in {"fixed", "payg"}:
-            profile.billing_mode = mode
         perms = _feature_perms_from_form(form)
         profile.web_permissions = perms
         profile.bot_permissions = perms  # must stay identical
@@ -860,6 +864,19 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
                     profile,
                     api_key=new_api_key if not clear_api_key else None,
                     clear=clear_api_key,
+                )
+            except ValueError as e:
+                return _redirect_reseller_edit(user_id, err=str(e))
+        mode = str(form.get("billing_mode") or "").strip().lower()
+        if mode in {"fixed", "payg"}:
+            from app.services.billing_mode import switch_billing_mode
+
+            try:
+                await switch_billing_mode(
+                    session,
+                    profile,
+                    mode,
+                    confirmed=bool(form.get("confirm_billing_mode_change")),
                 )
             except ValueError as e:
                 return _redirect_reseller_edit(user_id, err=str(e))
@@ -937,6 +954,30 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         except Exception as e:
             return _redirect_reseller_edit(user_id, err=f"تغییر ظرفیت ناموفق: {e}")
         return _redirect_reseller_edit(user_id, ok="ظرفیت اشتراک به‌روز شد")
+
+    @app.post("/resellers/{user_id}/subscription/sync")
+    async def reseller_subscription_sync(
+        user_id: int,
+        staff: dict = Depends(require_admin),
+        session: AsyncSession = Depends(get_db),
+    ):
+        from app.services.platform_identity import is_explicit_owner_staff
+        from app.services.reseller_capacity_view import sync_reseller_capacity
+
+        if not is_explicit_owner_staff(staff):
+            return _redirect_reseller_edit(user_id, err="فقط مالک اصلی می‌تواند ظرفیت را از پاسارگارد همگام کند")
+        profile = (
+            await session.execute(select(ResellerProfile).where(ResellerProfile.user_id == user_id))
+        ).scalar_one_or_none()
+        if not profile:
+            return RedirectResponse(f"/resellers?err={_q('نماینده یافت نشد')}", status_code=303)
+        try:
+            gb, users = await sync_reseller_capacity(session, profile)
+        except ValueError as e:
+            return _redirect_reseller_edit(user_id, err=str(e))
+        gb_text = f"{gb} گیگ" if gb else "حجم نامحدود"
+        users_text = f"{users} کاربر" if users else "کاربر نامحدود"
+        return _redirect_reseller_edit(user_id, ok=f"ظرفیت از پاسارگارد خوانده شد: {gb_text} · {users_text}")
 
     @app.post("/resellers/{user_id}/delete")
     async def reseller_delete(
@@ -1115,6 +1156,10 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         if not user:
             return RedirectResponse(f"/resellers?err={_q('کاربر یافت نشد')}", status_code=303)
         try:
+            assert_bot_user_in_scope(staff, user)
+        except ShopScopeError as e:
+            return RedirectResponse(f"/resellers?err={_q(e.message)}", status_code=303)
+        try:
             await notify_account_edit(
                 session,
                 user=user,
@@ -1251,6 +1296,11 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         if billing_mode not in {"fixed", "payg"}:
             billing_mode = "fixed"
         price_per_gb = _parse_price_per_gb(form) if billing_mode == "payg" else 0
+        if billing_mode == "payg":
+            try:
+                require_positive_payg_rate(price_per_gb)
+            except ValueError as e:
+                return RedirectResponse(f"/plans?err={_q(str(e))}#reseller-plans", status_code=303)
         pg_group_ids = _parse_pg_group_ids(form)
         if not pg_group_ids:
             return RedirectResponse(
@@ -1577,8 +1627,19 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
                 f"/resellers/plans/{plan_id}/edit?err={_q(str(e))}",
                 status_code=303,
             )
+        try:
+            payg_rate = (
+                require_positive_payg_rate(_parse_price_per_gb(form))
+                if billing_mode == "payg"
+                else 0
+            )
+        except ValueError as e:
+            return RedirectResponse(
+                f"/resellers/plans/{plan_id}/edit?err={_q(str(e))}",
+                status_code=303,
+            )
         if billing_mode == "payg":
-            plan.price_per_gb = _parse_price_per_gb(form)
+            plan.price_per_gb = payg_rate
             plan.pg_group_ids = pg_group_ids
             plan.allow_buy_extra = False
             plan.extra_gb_price = 0

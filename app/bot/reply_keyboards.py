@@ -11,6 +11,7 @@ from aiogram.types import KeyboardButton, ReplyKeyboardMarkup
 
 from app.db.models import Role
 from app.services.users import on
+from app.services.connection_status_texts import CONNECTION_STATUS_MENU_KEY
 
 # Bind helpers/constants from keyboards after that module has defined them
 # (keyboards imports this module mid-file, once primitives exist).
@@ -53,6 +54,7 @@ REPLY_ACTION_ADMIN_USERS = _k.REPLY_ACTION_ADMIN_USERS
 REPLY_ACTION_ADM_HUB_OPS = _k.REPLY_ACTION_ADM_HUB_OPS
 REPLY_ACTION_ADM_HUB_PEOPLE = _k.REPLY_ACTION_ADM_HUB_PEOPLE
 REPLY_ACTION_ADM_HUB_PRODUCT = _k.REPLY_ACTION_ADM_HUB_PRODUCT
+REPLY_ACTION_ADM_HUB_MARKETING = _k.REPLY_ACTION_ADM_HUB_MARKETING
 REPLY_ACTION_ADM_HUB_SYSTEM = _k.REPLY_ACTION_ADM_HUB_SYSTEM
 REPLY_ACTION_ADM_LOY_OVERVIEW = _k.REPLY_ACTION_ADM_LOY_OVERVIEW
 REPLY_ACTION_ADM_LOY_REF_TEXT = _k.REPLY_ACTION_ADM_LOY_REF_TEXT
@@ -82,6 +84,7 @@ REPLY_ACTION_PAY_CRYPTO = _k.REPLY_ACTION_PAY_CRYPTO
 REPLY_ACTION_PAY_DISCOUNT = _k.REPLY_ACTION_PAY_DISCOUNT
 REPLY_ACTION_PAY_GATEWAY = _k.REPLY_ACTION_PAY_GATEWAY
 REPLY_ACTION_PAY_PSP = _k.REPLY_ACTION_PAY_PSP
+REPLY_ACTION_PAY_BBC = _k.REPLY_ACTION_PAY_BBC
 REPLY_ACTION_PAY_STARS = _k.REPLY_ACTION_PAY_STARS
 REPLY_ACTION_PAY_WALLET = _k.REPLY_ACTION_PAY_WALLET
 REPLY_ACTION_PG_CREATE = _k.REPLY_ACTION_PG_CREATE
@@ -105,6 +108,7 @@ REPLY_ACTION_TOPUP_CARD = _k.REPLY_ACTION_TOPUP_CARD
 REPLY_ACTION_TOPUP_CRYPTO = _k.REPLY_ACTION_TOPUP_CRYPTO
 REPLY_ACTION_TOPUP_GATEWAY = _k.REPLY_ACTION_TOPUP_GATEWAY
 REPLY_ACTION_TOPUP_PSP = _k.REPLY_ACTION_TOPUP_PSP
+REPLY_ACTION_TOPUP_BBC = _k.REPLY_ACTION_TOPUP_BBC
 REPLY_ACTION_WALLET = _k.REPLY_ACTION_WALLET
 REPLY_ACTION_WALLET_TOPUP = _k.REPLY_ACTION_WALLET_TOPUP
 REPLY_ACTION_WALLET_TX = _k.REPLY_ACTION_WALLET_TX
@@ -141,6 +145,21 @@ def _reply_markup(
     )
 
 
+def _restart_footer(ui: dict | None) -> list[tuple[str, str, str]]:
+    """Own-row «شروع مجدد» at the bottom of level-0 menus (admin-toggleable)."""
+    if not on(_t(ui, "show_restart_button")):
+        return []
+    label = (_t(ui, "btn_restart") or "").strip()
+    return [(REPLY_ACTION_HOME, label, "btn_restart")] if label else []
+
+
+def _connection_status_entries(key: str, ui: dict | None, role: str) -> list[tuple[str, str]]:
+    # Admins reach the same data from «وضعیت اتصال»; the customer view stays in user preview.
+    if key != CONNECTION_STATUS_MENU_KEY or role == Role.ADMIN.value:
+        return []
+    return [(CONNECTION_STATUS_MENU_KEY, _t(ui, "btn_connection_status"))]
+
+
 def _reply_user_entries(
     role: str,
     *,
@@ -158,6 +177,7 @@ def _reply_user_entries(
     """
     entries: list[tuple[str, str]] = []
     for key in _menu_order(ui):
+        entries.extend(_connection_status_entries(key, ui, role))
         if key == "shop":
             entries.append((REPLY_ACTION_SHOP, _t(ui, "btn_shop")))
         elif key == "services" and has_services:
@@ -185,10 +205,11 @@ def _reply_user_entries(
         if show_reseller_creds:
             entries.append((REPLY_ACTION_ADMIN_PG, _t(ui, "btn_adm_pg")))
     elif show_reseller_creds:
-        entries.append((REPLY_ACTION_CREDS, _t(ui, "btn_reseller_creds")))
-        # Platform bot: shop owner can renew / buy capacity without opening shop panel
-        entries.extend(_reseller_capacity_entries(profile))
-        entries.append((REPLY_ACTION_ADMIN_PG, _t(ui, "btn_adm_pg")))
+        # Platform bot: access card, renew/capacity and PasarGuard live on the
+        # inline reseller hub behind this single entry.
+        entries.append(
+            (REPLY_ACTION_RESELLER, _t(ui, "btn_reseller") or "🤝 پنل نماینده")
+        )
     if role == Role.ADMIN.value:
         entries.append((REPLY_ACTION_ADMIN, _t(ui, "btn_admin")))
     return entries
@@ -200,7 +221,9 @@ def _reply_admin_hub_entries(ui: dict | None = None) -> list[tuple[str, str]]:
         (REPLY_ACTION_ADM_HUB_OPS, _t(ui, "btn_adm_hub_ops")),
         (REPLY_ACTION_ADM_HUB_PEOPLE, _t(ui, "btn_adm_hub_people")),
         (REPLY_ACTION_ADM_HUB_PRODUCT, _t(ui, "btn_adm_hub_product")),
+        (REPLY_ACTION_ADM_HUB_MARKETING, _t(ui, "btn_adm_hub_marketing")),
         (REPLY_ACTION_ADM_HUB_SYSTEM, _t(ui, "btn_adm_hub_system")),
+        ("connection_status_admin", _t(ui, "btn_connection_status_admin")),
     ]
 
 
@@ -222,7 +245,6 @@ def _reply_admin_people_entries(
     entries = [
         (REPLY_ACTION_ADMIN_USERS, _t(ui, "btn_adm_users")),
         (REPLY_ACTION_ADMIN_RESELLERS, _t(ui, "btn_adm_resellers")),
-        (REPLY_ACTION_ADMIN_LOYALTY, _t(ui, "btn_adm_loyalty")),
     ]
     if not can_manage_representatives:
         entries = [e for e in entries if e[0] != REPLY_ACTION_ADMIN_RESELLERS]
@@ -243,10 +265,16 @@ def _reply_admin_product_entries(
     return entries
 
 
+def _reply_admin_marketing_entries(ui: dict | None = None) -> list[tuple[str, str]]:
+    return [
+        (REPLY_ACTION_ADMIN_LOYALTY, _t(ui, "btn_adm_loyalty")),
+        (REPLY_ACTION_ADMIN_BROADCAST, _t(ui, "btn_adm_broadcast")),
+    ]
+
+
 def _reply_admin_system_entries(ui: dict | None = None) -> list[tuple[str, str]]:
     return [
         (REPLY_ACTION_ADMIN_SETTINGS, _t(ui, "btn_adm_settings")),
-        (REPLY_ACTION_ADMIN_BROADCAST, _t(ui, "btn_adm_broadcast")),
         (REPLY_ACTION_ADMIN_BACKUP, _t(ui, "btn_adm_backup")),
         (REPLY_ACTION_ADMIN_PREVIEW, _t(ui, "btn_adm_preview")),
     ]
@@ -265,6 +293,7 @@ def _reply_admin_entries(
             ui, can_manage_representatives=can_manage_representatives
         ),
         *_reply_admin_product_entries(ui, pg_features=pg_features),
+        *_reply_admin_marketing_entries(ui),
         *_reply_admin_system_entries(ui),
     ]
 
@@ -276,16 +305,15 @@ def _pg_submenu_entries(
     can_create_user: bool = True,
 ) -> list[tuple[str, str]]:
     """PasarGuard reply submenu — filtered by Hybrid PG feature keys when given."""
-    _ = ui
     feats = features
     all_entries = [
-        (REPLY_ACTION_PG_STATS, "🏠 نمای کلی", "pg_overview"),
-        (REPLY_ACTION_PG_USERS, "👥 کاربران", "pg_users"),
-        (REPLY_ACTION_PG_CREATE, "➕ ساخت کاربر", "pg_users"),
-        (REPLY_ACTION_PG_SEARCH, "🔎 جستجوی یوزر", "pg_users"),
-        (REPLY_ACTION_PG_NODES, "🕸 نودها", "pg_nodes"),
-        (REPLY_ACTION_PG_GROUP, "📁 ساخت گروه", "pg_groups"),
-        (REPLY_ACTION_PG_TEMPLATE, "📋 ساخت تمپلیت", "pg_templates"),
+        (REPLY_ACTION_PG_STATS, _t(ui, "btn_pg_stats"), "pg_overview"),
+        (REPLY_ACTION_PG_USERS, _t(ui, "btn_pg_users"), "pg_users"),
+        (REPLY_ACTION_PG_CREATE, _t(ui, "btn_pg_create"), "pg_users"),
+        (REPLY_ACTION_PG_SEARCH, _t(ui, "btn_pg_search"), "pg_users"),
+        (REPLY_ACTION_PG_NODES, _t(ui, "btn_pg_nodes"), "pg_nodes"),
+        (REPLY_ACTION_PG_GROUP, _t(ui, "btn_pg_group"), "pg_groups"),
+        (REPLY_ACTION_PG_TEMPLATE, _t(ui, "btn_pg_template"), "pg_templates"),
     ]
     out: list[tuple[str, str]] = []
     for key, label, feat in all_entries:
@@ -298,58 +326,55 @@ def _pg_submenu_entries(
 
 
 def _admin_users_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]]:
-    _ = ui
     return [
-        (REPLY_ACTION_ADM_USERS_LIST, "📋 لیست کاربران"),
-        (REPLY_ACTION_ADM_USERS_SEARCH, "🔎 جستجو با آیدی تلگرام"),
-        (REPLY_ACTION_ADM_USERS_WEB, "🌐 مدیریت کامل در وب‌پنل"),
+        (REPLY_ACTION_ADM_USERS_LIST, _t(ui, "btn_adm_users_list")),
+        (REPLY_ACTION_ADM_USERS_SEARCH, _t(ui, "btn_adm_users_search")),
+        (REPLY_ACTION_ADM_USERS_WEB, _t(ui, "btn_adm_users_web")),
     ]
 
 
 def _admin_resellers_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]]:
-    _ = ui
     return [
-        (REPLY_ACTION_ADM_RES_LIST, "📋 لیست نمایندگان"),
-        (REPLY_ACTION_ADM_RES_APPS, "📋 درخواست‌های منتظر"),
-        (REPLY_ACTION_ADM_RES_ADD, "➕ افزودن دستی"),
+        (REPLY_ACTION_ADM_RES_LIST, _t(ui, "btn_adm_res_list")),
+        (REPLY_ACTION_ADM_RES_APPS, _t(ui, "btn_adm_res_apps")),
+        (REPLY_ACTION_ADM_RES_ADD, _t(ui, "btn_adm_res_add")),
     ]
 
 
 def _admin_settings_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]]:
-    _ = ui
     # Labels MUST match admin_settings.SECTIONS[*]["title"] for HUB_ORDER keys
     return [
-        ("adm_st_shop", "فروشگاه"),
-        ("adm_st_menu", "منو"),
-        ("adm_st_pay", "پرداخت"),
-        ("adm_st_support", "پشتیبان‌ها"),
-        ("adm_st_access", "دسترسی"),
-        ("adm_st_limits", "محدودیت"),
-        ("adm_st_guides", "آموزش اتصال"),
-        ("adm_st_notify", "اعلان‌ها"),
-        (REPLY_ACTION_ADM_ST_PANEL, "🌐 وب‌پنل"),
+        ("adm_st_shop", _t(ui, "btn_adm_st_shop")),
+        ("adm_st_menu", _t(ui, "btn_adm_st_menu")),
+        ("adm_st_labels", _t(ui, "btn_adm_st_labels")),
+        ("adm_st_pay", _t(ui, "btn_adm_st_pay")),
+        ("adm_st_access", _t(ui, "btn_adm_st_access")),
+        ("adm_st_limits", _t(ui, "btn_adm_st_limits")),
+        ("adm_st_buy", _t(ui, "btn_adm_st_buy")),
+        ("adm_st_support", _t(ui, "btn_adm_st_support")),
+        ("adm_st_guides", _t(ui, "btn_adm_st_guides")),
+        ("adm_st_notify", _t(ui, "btn_adm_st_notify")),
+        (REPLY_ACTION_ADM_ST_PANEL, _t(ui, "btn_adm_st_panel")),
     ]
 
 
 def _admin_backup_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]]:
-    _ = ui
     # Phase 2: default create is without .env; with-.env is a separate confirm path.
     return [
-        ("backup_create", "🆕 ساخت بکاپ"),
-        ("backup_create_env", "🆕 بکاپ + .env"),
-        ("backup_upload", "📤 آپلود فایل بکاپ"),
-        ("backup_refresh", "🔄 تازه‌سازی لیست"),
+        ("backup_create", _t(ui, "btn_backup_create")),
+        ("backup_create_env", _t(ui, "btn_backup_create_env")),
+        ("backup_upload", _t(ui, "btn_backup_upload")),
+        ("backup_refresh", _t(ui, "btn_backup_refresh")),
     ]
 
 
 def _admin_broadcast_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]]:
-    _ = ui
     # Labels must NOT collide with admin hub («🤝 نمایندگان» → adm_resellers).
     return [
-        ("bc_aud_all", "📢 همه"),
-        ("bc_aud_users", "👥 کاربران عادی"),
-        ("bc_aud_resellers", "🤝 فقط نمایندگان"),
-        ("bc_aud_admins", "🛠 ادمین‌ها"),
+        ("bc_aud_all", _t(ui, "btn_bc_aud_all")),
+        ("bc_aud_users", _t(ui, "btn_bc_aud_users")),
+        ("bc_aud_resellers", _t(ui, "btn_bc_aud_resellers")),
+        ("bc_aud_admins", _t(ui, "btn_bc_aud_admins")),
     ]
 
 
@@ -360,22 +385,20 @@ def _admin_plans_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]
 
 def _admin_plans_audience_entries(ui: dict | None = None) -> list[tuple[str, str]]:
     """Labels MUST NOT collide with btn_adm_users («👥 کاربران») or admin resellers hub."""
-    _ = ui
     return [
-        (REPLY_ACTION_ADM_PLANS_AUD_USERS, "📦 پلن‌های کاربران"),
-        (REPLY_ACTION_ADM_PLANS_AUD_RESELLERS, "🤝 پلن‌های نمایندگان"),
-        (REPLY_ACTION_ADM_PLANS_CATEGORIES, "🏷 برچسب دسته"),
-        (REPLY_ACTION_ADM_PLANS_ADDONS, "⏱ بسته حجم/زمان"),
+        (REPLY_ACTION_ADM_PLANS_AUD_USERS, _t(ui, "btn_adm_plans_aud_users")),
+        (REPLY_ACTION_ADM_PLANS_AUD_RESELLERS, _t(ui, "btn_adm_plans_aud_resellers")),
+        (REPLY_ACTION_ADM_PLANS_CATEGORIES, _t(ui, "btn_adm_plans_categories")),
+        (REPLY_ACTION_ADM_PLANS_ADDONS, _t(ui, "btn_adm_plans_addons")),
     ]
 
 
 def _admin_plans_list_entries(ui: dict | None = None) -> list[tuple[str, str]]:
     """Reply keyboard on audience list screen — add plan + catalog extras (web parity)."""
-    _ = ui
     return [
-        (REPLY_ACTION_ADM_PLANS_ADD, "➕ افزودن پلن"),
-        (REPLY_ACTION_ADM_PLANS_CATEGORIES, "🏷 برچسب دسته"),
-        (REPLY_ACTION_ADM_PLANS_ADDONS, "⏱ بسته حجم/زمان"),
+        (REPLY_ACTION_ADM_PLANS_ADD, _t(ui, "btn_adm_plans_add")),
+        (REPLY_ACTION_ADM_PLANS_CATEGORIES, _t(ui, "btn_adm_plans_categories")),
+        (REPLY_ACTION_ADM_PLANS_ADDONS, _t(ui, "btn_adm_plans_addons")),
     ]
 
 
@@ -383,10 +406,10 @@ def _admin_plans_add_type_entries(audience: str, ui: dict | None = None) -> list
     """Plan type picker shown after «افزودن پلن» — mirrors web modal kind step."""
     if audience == "resellers":
         return [
-            (REPLY_ACTION_ADM_PLANS_KIND_RES_FIXED, "اشتراک ثابت"),
-            (REPLY_ACTION_ADM_PLANS_KIND_RES_PAYG, "اشتراک PAYG"),
-            (REPLY_ACTION_ADM_PLANS_KIND_RES_ADDON_VOL, "بسته حجم"),
-            (REPLY_ACTION_ADM_PLANS_KIND_RES_ADDON_USERS, "بسته کاربر"),
+            (REPLY_ACTION_ADM_PLANS_KIND_RES_FIXED, _t(ui, "btn_adm_plans_kind_res_fixed")),
+            (REPLY_ACTION_ADM_PLANS_KIND_RES_PAYG, _t(ui, "btn_adm_plans_kind_res_payg")),
+            (REPLY_ACTION_ADM_PLANS_KIND_RES_ADDON_VOL, _t(ui, "btn_adm_plans_kind_res_addon_vol")),
+            (REPLY_ACTION_ADM_PLANS_KIND_RES_ADDON_USERS, _t(ui, "btn_adm_plans_kind_res_addon_users")),
         ]
     wholesale = _t(ui, "btn_wholesale") or "فروش عمده"
     from app.bot.keyboards import _label_or
@@ -422,28 +445,28 @@ REPLY_ACTION_RES_PLAN_ADDONS = "res_plan_addons"
 
 
 def _reseller_plans_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]]:
-    _ = ui
     return [
-        ("res_plan_add", "➕ پلن جدید"),
-        (REPLY_ACTION_RES_PLAN_CATEGORIES, "🏷 برچسب دسته"),
-        (REPLY_ACTION_RES_PLAN_ADDONS, "⏱ بسته حجم/زمان"),
+        ("res_plan_add", _t(ui, "btn_res_plan_add")),
+        (REPLY_ACTION_RES_PLAN_CATEGORIES, _t(ui, "btn_res_plan_categories")),
+        (REPLY_ACTION_RES_PLAN_ADDONS, _t(ui, "btn_res_plan_addons")),
     ]
 
 
 def _reseller_settings_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]]:
-    _ = ui
     # Labels MUST match reseller_settings.SECTIONS[*]["title"] / HUB_ORDER
     return [
-        ("res_st_shop", "فروشگاه"),
-        ("res_st_menu", "منو"),
-        ("res_st_pay", "پرداخت"),
-        ("res_st_support", "پشتیبان‌ها"),
-        ("res_st_access", "دسترسی"),
-        ("res_st_limits", "محدودیت"),
-        ("res_st_guides", "آموزش اتصال"),
-        ("res_st_notify", "اعلان‌ها"),
-        ("res_st_bot", "ربات"),
-        (REPLY_ACTION_RES_ST_PANEL, "🌐 وب‌پنل"),
+        ("res_st_shop", _t(ui, "btn_res_st_shop")),
+        ("res_st_menu", _t(ui, "btn_res_st_menu")),
+        ("res_st_labels", _t(ui, "btn_res_st_labels")),
+        ("res_st_pay", _t(ui, "btn_res_st_pay")),
+        ("res_st_access", _t(ui, "btn_res_st_access")),
+        ("res_st_limits", _t(ui, "btn_res_st_limits")),
+        ("res_st_buy", _t(ui, "btn_res_st_buy")),
+        ("res_st_support", _t(ui, "btn_res_st_support")),
+        ("res_st_guides", _t(ui, "btn_res_st_guides")),
+        ("res_st_notify", _t(ui, "btn_res_st_notify")),
+        ("res_st_bot", _t(ui, "btn_res_st_bot")),
+        (REPLY_ACTION_RES_ST_PANEL, _t(ui, "btn_res_st_panel")),
     ]
 
 
@@ -488,24 +511,23 @@ def _loyalty_submenu_entries(ui: dict | None = None) -> list[tuple[str, str]]:
 
 def _admin_loyalty_submenu_entries(ui: dict | None = None, *, include_tiers: bool = True) -> list[tuple[str, str]]:
     """Staff club management subsets (platform admin / reseller with loyalty perm)."""
-    _ = ui
     entries = [
-        (REPLY_ACTION_ADM_LOY_OVERVIEW, "📊 نمای کلی"),
-        (REPLY_ACTION_ADM_LOY_RULES, "📐 قوانین امتیاز"),
-        (REPLY_ACTION_ADM_LOY_REWARDS, "🎁 جوایز"),
+        (REPLY_ACTION_ADM_LOY_OVERVIEW, _t(ui, "btn_adm_loy_overview")),
+        (REPLY_ACTION_ADM_LOY_RULES, _t(ui, "btn_adm_loy_rules")),
+        (REPLY_ACTION_ADM_LOY_REWARDS, _t(ui, "btn_adm_loy_rewards")),
     ]
     if include_tiers:
-        entries.append((REPLY_ACTION_ADM_LOY_TIERS, "🏅 سطوح"))
+        entries.append((REPLY_ACTION_ADM_LOY_TIERS, _t(ui, "btn_adm_loy_tiers")))
     entries.extend(
         [
-            (REPLY_ACTION_ADM_LOY_SETTINGS, "⚙️ تنظیمات باشگاه"),
-            (REPLY_ACTION_ADM_LOY_REF_TEXT, "📝 متن دعوت"),
+            (REPLY_ACTION_ADM_LOY_SETTINGS, _t(ui, "btn_adm_loy_settings")),
+            (REPLY_ACTION_ADM_LOY_REF_TEXT, _t(ui, "btn_adm_loy_ref_text")),
         ]
     )
     return entries
 
 
-def _reseller_capacity_entries(profile=None) -> list[tuple[str, str]]:
+def _reseller_capacity_entries(profile=None, ui: dict | None = None) -> list[tuple[str, str]]:
     """Renew + unified volume/user packs hub — shop bot and main-bot shop owner.
 
     Unit buy-extra (GB/users) and catalog addon packs share one reply button
@@ -521,12 +543,12 @@ def _reseller_capacity_entries(profile=None) -> list[tuple[str, str]]:
         plan = getattr(profile, "plan", None)
         if plan is not None and is_subscription_plan(plan):
             # One hub: catalog packs + unit buy-extra (when plan allows).
-            entries.append(("res_addon_packs", "📦 بسته‌های حجم/کاربر"))
-            entries.append(("res_renew", "🔄 تمدید سرویس"))
+            entries.append(("res_addon_packs", _t(ui, "btn_res_addon_packs")))
+            entries.append(("res_renew", _t(ui, "btn_res_renew")))
         elif plan is not None and plan_allows_buy_extra(plan):
             # Subscription check failed closed above; still expose unit extras
             # only when allow_buy_extra is set (rare non-subscription edge).
-            entries.append(("res_addon_packs", "📦 بسته‌های حجم/کاربر"))
+            entries.append(("res_addon_packs", _t(ui, "btn_res_addon_packs")))
     except Exception:
         # Fail closed — do not expose capacity without a verified subscription plan
         pass
@@ -534,7 +556,7 @@ def _reseller_capacity_entries(profile=None) -> list[tuple[str, str]]:
 
 
 def _reseller_submenu_entries(
-    profile=None, *, can_add_representative: bool = False
+    profile=None, *, can_add_representative: bool = False, ui: dict | None = None
 ) -> list[tuple[str, str]]:
     from app.services.authz import shop_feature_allowed
 
@@ -543,37 +565,37 @@ def _reseller_submenu_entries(
         return []
     entries: list[tuple[str, str]] = []
     if shop_feature_allowed(key="dashboard", profile=profile):
-        entries.append(("res_dash", "🏠 خانه نماینده"))
-        entries.append(("res_users", "👥 مشتریان من"))
+        entries.append(("res_dash", _t(ui, "btn_res_dash")))
+        entries.append(("res_users", _t(ui, "btn_res_users")))
     if can_add_representative:
-        entries.append((REPLY_ACTION_RES_ADD_REP, "➕ افزودن نماینده"))
+        entries.append((REPLY_ACTION_RES_ADD_REP, _t(ui, "btn_res_add_rep")))
     # PAYG billing wallet — only when mode is payg
     try:
         from app.services.billing import is_payg
 
         if is_payg(profile):
-            entries.append(("res_billing", "💰 کیف پول PAYG"))
+            entries.append(("res_billing", _t(ui, "btn_res_billing")))
     except Exception:
         pass
-    entries.extend(_reseller_capacity_entries(profile))
+    entries.extend(_reseller_capacity_entries(profile, ui))
     if shop_feature_allowed(key="orders", profile=profile) or shop_feature_allowed(
         key="payments", profile=profile
     ):
-        entries.append(("res_reports", "📈 گزارشات"))
+        entries.append(("res_reports", _t(ui, "btn_res_reports")))
     if shop_feature_allowed(key="stats", profile=profile):
-        entries.append(("res_stats", "📊 آمار"))
+        entries.append(("res_stats", _t(ui, "btn_res_stats")))
     if shop_feature_allowed(key="plans", profile=profile):
-        entries.append(("res_plans", "💎 پلن‌های فروش"))
+        entries.append(("res_plans", _t(ui, "btn_res_plans")))
     if shop_feature_allowed(key="orders", profile=profile):
-        entries.append(("res_orders", "🛒 سفارش‌های مشتریان"))
+        entries.append(("res_orders", _t(ui, "btn_res_orders")))
     if shop_feature_allowed(key="payments", profile=profile):
-        entries.append(("res_payments", "🧾 رسیدهای در انتظار"))
+        entries.append(("res_payments", _t(ui, "btn_res_payments")))
     if shop_feature_allowed(key="tickets", profile=profile):
-        entries.append(("res_tickets", "🎫 تیکت‌های مشتریان"))
+        entries.append(("res_tickets", _t(ui, "btn_res_tickets")))
     if shop_feature_allowed(key="loyalty", profile=profile):
-        entries.append(("res_loyalty", "⭐ باشگاه مشتریان"))
+        entries.append(("res_loyalty", _t(ui, "btn_res_loyalty")))
     if shop_feature_allowed(key="shop_settings", profile=profile):
-        entries.append(("res_settings", "⚙️ تنظیمات فروشگاه"))
+        entries.append(("res_settings", _t(ui, "btn_res_settings")))
     # Preview lives on thin reply KB (reseller_hub_main_keyboard), not manage hub.
     return entries
 
@@ -593,7 +615,7 @@ def reseller_hub_main_keyboard(
         (REPLY_ACTION_RESELLER, _t(ui, "btn_reseller") or "🤝 پنل نماینده"),
         (REPLY_ACTION_RES_PREVIEW, _t(ui, "btn_adm_preview")),
     ]
-    rows = _pack_reply_rows(entries, ui, footer=[])
+    rows = _pack_reply_rows(entries, ui, footer=_restart_footer(ui))
     return _reply_markup(
         rows or [[_kb(_home_label(ui), action=REPLY_ACTION_HOME, ui=ui)]],
         placeholder="از منوی پایین انتخاب کنید…",
@@ -610,6 +632,8 @@ def _pay_method_entries(ui: dict | None = None) -> list[tuple[str, str]]:
         entries.append((REPLY_ACTION_PAY_GATEWAY, _t(ui, "btn_pay_gateway")))
     if on(_t(ui, "pay_psp_enabled")):
         entries.append((REPLY_ACTION_PAY_PSP, _t(ui, "btn_pay_psp")))
+    if on(_t(ui, "pay_bbc_enabled")):
+        entries.append((REPLY_ACTION_PAY_BBC, _t(ui, "btn_pay_bbc")))
     if on(_t(ui, "pay_crypto_enabled")):
         entries.append((REPLY_ACTION_PAY_CRYPTO, _t(ui, "btn_pay_crypto")))
     if on(_t(ui, "pay_stars_enabled")):
@@ -627,6 +651,8 @@ def _topup_method_entries(ui: dict | None = None) -> list[tuple[str, str]]:
         entries.append((REPLY_ACTION_TOPUP_GATEWAY, _t(ui, "btn_pay_gateway")))
     if on(_t(ui, "pay_psp_enabled")):
         entries.append((REPLY_ACTION_TOPUP_PSP, _t(ui, "btn_pay_psp")))
+    if on(_t(ui, "pay_bbc_enabled")):
+        entries.append((REPLY_ACTION_TOPUP_BBC, _t(ui, "btn_pay_bbc")))
     if on(_t(ui, "pay_crypto_enabled")):
         entries.append((REPLY_ACTION_TOPUP_CRYPTO, _t(ui, "btn_pay_crypto")))
     return entries
@@ -645,8 +671,8 @@ def _pack_reply_rows(
     entries: list[tuple[str, str]],
     ui: dict | None,
     *,
-    footer: list[str | tuple[str, str]] | None = None,
-    footer_row: list[str | tuple[str, str]] | None = None,
+    footer: list[str | tuple[str, ...]] | None = None,
+    footer_row: list[str | tuple[str, ...]] | None = None,
 ) -> list[list[KeyboardButton]]:
     layout = _menu_layout(ui)
     items = [(a, t) for a, t in entries if (t or "").strip()]
@@ -663,15 +689,17 @@ def _pack_reply_rows(
             if btn is not None:
                 rows.append([btn])
 
-    def _footer_btns(items_in: list[str | tuple[str, str]]) -> list[KeyboardButton]:
+    def _footer_btns(items_in: list[str | tuple[str, ...]]) -> list[KeyboardButton]:
         out: list[KeyboardButton] = []
         for item in items_in:
+            label_key = None
             if isinstance(item, tuple):
                 action, text = item[0], item[1]
+                label_key = item[2] if len(item) > 2 else None
             else:
                 action, text = None, item
             if (text or "").strip():
-                out.append(_kb(text, action=action, ui=ui))
+                out.append(_kb(text, action=action, ui=ui, label_key=label_key))
         return out
 
     if footer_row:
@@ -739,8 +767,9 @@ def main_reply_keyboard(
             _t(ui, "btn_adm_exit_preview") or "🛠 بازگشت به پنل ادمین"
         ).strip()
         entries.append((preview_exit_action, exit_label))
-    # No Home row on level-0 (already at home).
-    rows = _pack_reply_rows(entries, ui, footer=[])
+    rows = _pack_reply_rows(
+        entries, ui, footer=[] if as_user else _restart_footer(ui)
+    )
     return _reply_markup(rows, placeholder="از منوی پایین انتخاب کنید…")
 
 
@@ -794,7 +823,16 @@ def admin_product_reply_keyboard(
         ui,
         footer_row=_submenu_footer(ui),
     )
-    return _reply_markup(rows, placeholder="محصول و PG…")
+    return _reply_markup(rows, placeholder="محصول و پاسارگارد…")
+
+
+def admin_marketing_reply_keyboard(ui: dict | None = None) -> ReplyKeyboardMarkup:
+    rows = _pack_reply_rows(
+        _reply_admin_marketing_entries(ui),
+        ui,
+        footer_row=_submenu_footer(ui),
+    )
+    return _reply_markup(rows, placeholder="بازاریابی…")
 
 
 def admin_system_reply_keyboard(ui: dict | None = None) -> ReplyKeyboardMarkup:
@@ -846,7 +884,7 @@ def admin_loyalty_reply_keyboard(
 
 def reseller_reply_keyboard(profile=None, ui: dict | None = None) -> ReplyKeyboardMarkup:
     """Reply-keyboard mirror of reseller panel sections."""
-    entries = _reseller_submenu_entries(profile)
+    entries = _reseller_submenu_entries(profile, ui=ui)
     rows = _pack_reply_rows(entries, ui, footer_row=_submenu_footer(ui))
     return _reply_markup(
         rows or [[_kb(_home_label(ui), action=REPLY_ACTION_HOME, ui=ui)]],
@@ -882,7 +920,7 @@ def pg_reply_keyboard(
 
 def admin_users_reply_keyboard(ui: dict | None = None) -> ReplyKeyboardMarkup:
     rows = _pack_reply_rows(_admin_users_submenu_entries(ui), ui, footer_row=_submenu_footer(ui))
-    return _reply_markup(rows, placeholder="کاربران بات…")
+    return _reply_markup(rows, placeholder="کاربران ربات…")
 
 
 def admin_resellers_reply_keyboard(ui: dict | None = None) -> ReplyKeyboardMarkup:
@@ -1000,6 +1038,9 @@ def reply_action_map(
         back_label: REPLY_ACTION_BACK,
         BTN_BACK: REPLY_ACTION_BACK,
     }
+    restart_label = (_t(ui, "btn_restart") or "").strip()
+    if restart_label:
+        mapping[restart_label] = REPLY_ACTION_HOME
     # Legacy aliases
     mapping[BTN_RESTART] = REPLY_ACTION_HOME
     mapping["شروع مجدد"] = REPLY_ACTION_HOME
@@ -1064,13 +1105,20 @@ def reply_action_map(
                 mapping.setdefault(apply_label, REPLY_ACTION_RESELLER_APPLY)
         # L1 on the platform bot: register migrated PG submenu labels (not overview).
         if show_reseller_creds and not is_reseller_bot:
+            # Stale reply keyboards still carry the pre-hub entry labels.
+            for legacy_key, legacy_label in (
+                (REPLY_ACTION_CREDS, _t(ui, "btn_reseller_creds")),
+                (REPLY_ACTION_ADMIN_PG, _t(ui, "btn_adm_pg")),
+            ):
+                if (legacy_label or "").strip():
+                    mapping.setdefault(legacy_label.strip(), legacy_key)
             l1_pg = frozenset(
                 {"pg_users", "pg_nodes", "pg_templates", "pg_groups"}
             )
             for key, text in _pg_submenu_entries(ui, features=l1_pg):
                 mapping[(text or "").strip()] = key
             # Capacity labels (renew / extras) — also registered via _reply_user_entries
-            for key, text in _reseller_capacity_entries(profile):
+            for key, text in _reseller_capacity_entries(profile, ui):
                 mapping[(text or "").strip()] = key
         # Preview escape — custom exit label (and legacy admin/reseller labels).
         # ``as_user`` may be called with role="user" when merging preview labels
@@ -1170,7 +1218,7 @@ def reply_action_map(
             # Fail closed: without a live profile, register no reseller panel leaves
             if profile is not None:
                 for key, text in _reseller_submenu_entries(
-                    profile, can_add_representative=can_add_representative
+                    profile, can_add_representative=can_add_representative, ui=ui
                 ):
                     # Thin entry owns the manage label; skip duplicate res_dash
                     if key == "res_dash":
@@ -1272,7 +1320,7 @@ def cancel_reply(ui: dict | None = None) -> ReplyKeyboardMarkup:
     if label and "انصراف" in label and label != BTN_CANCEL:
         cancel_label = BTN_CANCEL
     return _reply_markup(
-        [[_kb(cancel_label, style=_style(ui, "cancel", fallback="danger"), ui=ui)]],
+        [[_kb(cancel_label, style=_style(ui, "cancel", fallback="danger"), ui=ui, label_key="btn_cancel")]],
         placeholder="مقدار را بفرستید یا انصراف بزنید…",
     )
 

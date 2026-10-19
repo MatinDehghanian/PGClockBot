@@ -74,8 +74,8 @@ class AdminExtendNegativesTests(unittest.IsolatedAsyncioTestCase):
         snap = MagicMock()
         with (
             patch(
-                "app.services.bot_user_admin._pg_client_for_service",
-                return_value=pg,
+                "app.services.bot_user_admin._pg_client_for_bot_service",
+            AsyncMock(return_value=pg),
             ),
             patch(
                 "app.services.bot_user_admin.admin_set_service_quota",
@@ -128,8 +128,8 @@ class AdminExtendNegativesTests(unittest.IsolatedAsyncioTestCase):
         pg = AsyncMock()
         pg.get_user_by_id = AsyncMock(return_value={"data_limit": 0})
         with patch(
-            "app.services.bot_user_admin._pg_client_for_service",
-            return_value=pg,
+            "app.services.bot_user_admin._pg_client_for_bot_service",
+            AsyncMock(return_value=pg),
         ):
             with self.assertRaises(ValueError) as ctx:
                 await admin_extend_service(

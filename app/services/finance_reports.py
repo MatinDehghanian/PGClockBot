@@ -27,6 +27,9 @@ from app.services.demo_users import non_demo_customer
 from app.services.formatting import format_toman
 from app.services.home_overview import _period_since_utc, shop_period_stats
 from app.services.users_ops import DEFAULT_EXPIRE_DAYS
+from app.services.service_scope import shop_services_clause
+from app.services.shop_membership import shop_member_clause
+from app.services.ticket_scope import ticket_shop_clause
 
 ReportPeriod = Literal["day", "week", "month"]
 VALID_PERIODS: frozenset[str] = frozenset({"day", "week", "month"})
@@ -74,7 +77,7 @@ async def shop_ops_snapshot(
     out = empty_ops_snapshot()
 
     if reseller_id is None:
-        user_scope = BotUser.reseller_id.is_(None)
+        user_scope = shop_member_clause(None)
         fail_scope = DeliveryFailure.reseller_id.is_(None)
         pay_scope = or_(
             and_(Payment.is_wallet_topup.is_(True), Payment.wallet_shop_id.is_(None)),
@@ -82,7 +85,7 @@ async def shop_ops_snapshot(
         )
     else:
         rid = int(reseller_id)
-        user_scope = BotUser.reseller_id == rid
+        user_scope = shop_member_clause(rid)
         fail_scope = DeliveryFailure.reseller_id == rid
         pay_scope = or_(
             and_(Payment.is_wallet_topup.is_(True), Payment.wallet_shop_id == rid),
@@ -105,7 +108,7 @@ async def shop_ops_snapshot(
     # Users with zero UserService rows (shop customers only — same list rules)
     has_svc = (
         select(UserService.id)
-        .where(UserService.bot_user_id == BotUser.id)
+        .where(UserService.bot_user_id == BotUser.id, shop_services_clause(reseller_id))
         .correlate(BotUser)
         .exists()
     )
@@ -141,19 +144,7 @@ async def shop_ops_snapshot(
         .join(BotUser, BotUser.id == Ticket.user_id)
         .where(Ticket.status == "open", BotUser.is_demo.is_(False))
     )
-    if reseller_id is None:
-        tickets_q = tickets_q.where(
-            Ticket.reseller_id.is_(None),
-            BotUser.reseller_id.is_(None),
-        )
-    else:
-        rid = int(reseller_id)
-        tickets_q = tickets_q.where(
-            or_(
-                Ticket.reseller_id == rid,
-                and_(Ticket.reseller_id.is_(None), BotUser.reseller_id == rid),
-            )
-        )
+    tickets_q = tickets_q.where(ticket_shop_clause(reseller_id))
     out["open_tickets"] = int((await session.execute(tickets_q)).scalar() or 0)
 
     fail_q = (
@@ -168,7 +159,7 @@ async def shop_ops_snapshot(
         select(func.count())
         .select_from(UserService)
         .join(BotUser, BotUser.id == UserService.bot_user_id)
-        .where(UserService.notified_traffic.is_(True), user_scope, BotUser.is_demo.is_(False))
+        .where(UserService.notified_traffic.is_(True), shop_services_clause(reseller_id), BotUser.is_demo.is_(False))
     )
     out["low_volume_services"] = int((await session.execute(low_q)).scalar() or 0)
 
@@ -199,7 +190,7 @@ async def shop_ops_snapshot(
                     Plan.duration_days.is_not(None),
                     UserService.created_at.is_not(None),
                     UserService.created_at >= scan_since,
-                    user_scope,
+                    shop_services_clause(reseller_id),
                     BotUser.is_demo.is_(False),
                 )
             )

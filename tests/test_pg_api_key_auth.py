@@ -533,7 +533,7 @@ class OwnerEnvApiKeyTests(unittest.IsolatedAsyncioTestCase):
         with patch("app.services.pasarguard.get_settings", return_value=fake_settings):
             with patch(
                 "app.services.pasarguard.assert_safe_pg_base_url",
-                side_effect=lambda u: u,
+                side_effect=lambda u, **kwargs: u,
             ):
                 client = get_pg()
         self.assertTrue(client.uses_api_key)
@@ -567,7 +567,7 @@ class OwnerEnvApiKeyTests(unittest.IsolatedAsyncioTestCase):
         with patch("app.services.pasarguard.PasarGuardClient", _FakeClient):
             with patch(
                 "app.services.pg_access.assert_safe_pg_base_url",
-                side_effect=lambda u: u,
+                side_effect=lambda u, **kwargs: u,
             ):
                 with patch(
                     "app.services.pg_access.acl_from_admin_payload",
@@ -613,7 +613,7 @@ class ConnectionUiCopyTests(unittest.TestCase):
         html = Path("app/web/templates/_settings_bot.html").read_text(encoding="utf-8")
         self.assertIn('name="PG_API_KEY"', html)
         self.assertIn("ادمین متصل", html)
-        self.assertIn("لزوماً owner پاسارگارد نیست", html)
+        self.assertIn("لازم نیست مالک پاسارگارد باشد", html)
         self.assertIn('name="clear_pg_api_key"', html)
 
 

@@ -8,8 +8,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards as kb
+from app.bot.chat_cleanup import replace_home
 from app.db.models import BotUser, UserService
-from app.services.users import get_all_settings
+from app.services.service_scope import shop_services_clause
+from app.services.users import current_shop_reseller_id, get_all_settings
 
 # FSM data keys (do not collide with shop/wallet payload keys)
 NAV_LEVEL = "_kb_nav"
@@ -33,6 +35,9 @@ NAV_ADMIN = "admin"
 NAV_ADMIN_OPS = "admin_ops"
 NAV_ADMIN_PEOPLE = "admin_people"
 NAV_ADMIN_PRODUCT = "admin_product"
+NAV_ADMIN_MARKETING = "admin_marketing"
+NAV_ADMIN_GIFTS = "admin_gifts"
+NAV_ADMIN_CAMPAIGNS = "admin_campaigns"
 NAV_ADMIN_SYSTEM = "admin_system"
 NAV_ADMIN_PG = "admin_pg"
 NAV_ADMIN_USERS = "admin_users"
@@ -62,7 +67,9 @@ REVIEW_ID = "_rev_id"
 
 async def user_has_services(session: AsyncSession, user_id: int) -> bool:
     result = await session.execute(
-        select(UserService.id).where(UserService.bot_user_id == user_id).limit(1)
+        select(UserService.id)
+        .where(UserService.bot_user_id == user_id, shop_services_clause(current_shop_reseller_id()))
+        .limit(1)
     )
     return result.scalar_one_or_none() is not None
 
@@ -74,8 +81,16 @@ async def user_sees_my_services(
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ) -> bool:
-    """True when My Services should appear (VPN rows and/or reseller capacity)."""
+    """True when My Services should appear (VPN rows, reseller capacity, or the add-existing entry).
+
+    While «افزودن سرویس قبلی» is on the button is shown to everybody, because the add button
+    lives inside it and a customer without services has no other way to reach it.
+    """
     if await user_has_services(session, int(db_user.id)):
+        return True
+    from app.bot.service_import_ui import import_enabled
+
+    if import_enabled(await get_all_settings(session)):
         return True
     from app.services.reseller_access import load_reseller_my_service_profile
 
@@ -416,7 +431,7 @@ async def restore_main_reply(
         reseller_owner_id=reseller_owner_id,
         as_user=as_user,
     )
-    await message.answer(text, reply_markup=markup)
+    await replace_home(await message.answer(text, reply_markup=markup))
     return ui
 
 
@@ -454,7 +469,9 @@ async def show_nav_keyboard(
         # Customer keyboard only — never leak admin/reseller hub buttons
         from app.db.models import Role as _Role
 
-        has = await user_has_services(session, db_user.id)
+        from app.bot.service_import_ui import import_enabled
+
+        has = await user_has_services(session, db_user.id) or import_enabled(ui)
         exit_action = (
             kb.REPLY_ACTION_RESELLER if is_reseller_bot else kb.REPLY_ACTION_ADMIN
         )

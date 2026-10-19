@@ -50,7 +50,10 @@ class PlansModalDynamicKindTests(unittest.TestCase):
         # Must rebuild ui-select for every enhanced select, not only settings forms
         self.assertIn("Always rebuild custom menu when <option> list is rewritten", js)
         idx = js.find("function enhanceSelect")
-        block = js[idx : idx + 9000]
+        self.assertGreaterEqual(idx, 0)
+        # enhanceSelect grew past a fixed window; read up to the next top-level function.
+        end = js.find("\n    function ", idx + 1)
+        block = js[idx : end if end != -1 else len(js)]
         self.assertIn("MutationObserver", block)
         # Old gated watch must be gone
         self.assertNotIn(

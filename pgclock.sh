@@ -7,11 +7,11 @@ set -euo pipefail
 set +H
 
 # curl|bash leaves stdin as a dead pipe. For interactive menus, attach to TTY.
-# `install` / `update` / `status` / `help` can run without a TTY.
+# Install, update, status, help and Xray setup can run without a TTY.
 _CMD="${1:-}"
 if [[ ! -t 0 ]]; then
   case "${_CMD}" in
-    install|i|update|u|status|s|help|h|-h|--help) ;;
+    install|i|update|u|status|s|xray|help|h|-h|--help) ;;
     *)
       if [[ -r /dev/tty ]]; then
         exec </dev/tty
@@ -1515,6 +1515,21 @@ restart_service_if_any() {
 }
 
 # ── actions ─────────────────────────────────────────────
+ensure_monitor_xray() {
+  step "Connection-test Xray"
+  if "$PY" -m app.cli.connection_monitor_install --root "$SCRIPT_DIR"; then
+    ok "Xray is ready; choose a Test user and hosts in the panel"
+  else
+    warn "Xray setup did not finish; the bot can still run. Retry: bash pgclock.sh xray"
+  fi
+}
+
+cmd_xray() {
+  [[ -x "$PY" && -f .env ]] || { err "Run Install first."; return 1; }
+  "$PY" -m app.cli.connection_monitor_install --root "$SCRIPT_DIR" || return 1
+  restart_service_if_any
+}
+
 cmd_install() {
   # Optional $1 = main|dev (menu passes this; env PGCLOCK_CHANNEL is fallback).
   set_install_channel "${1:-}"
@@ -1594,6 +1609,8 @@ PY
   fi
   # Keep channel keys in sync even when reusing an existing .env.
   persist_channel_env "$INSTALL_CHANNEL"
+
+  ensure_monitor_xray
 
   # Critical: loopback bind makes every public Setup URL fail (ERR_EMPTY_RESPONSE).
   ensure_public_web_host
@@ -1801,6 +1818,8 @@ PY
   fi
 
   ensure_public_web_host
+
+  ensure_monitor_xray
 
   # Migrate before restart so the new process does not hang with no listener.
   ensure_db_schema || {
@@ -2200,6 +2219,7 @@ cmd_help() {
     bash pgclock.sh service         systemd controls
     bash pgclock.sh status          Quick status
     bash pgclock.sh doctor          Read-only diagnostics (OK/WARN/FAIL)
+    bash pgclock.sh xray            Install/repair connection-test Xray
     bash pgclock.sh uninstall       Remove service / data
     bash pgclock.sh help            This help
 
@@ -2315,6 +2335,7 @@ show_menu() {
     printf '  %s8)%s  Status         Quick health overview\n' "$O" "$N"
     printf '  %s9)%s  Doctor         Read-only diagnostics (OK/WARN/FAIL)\n' "$O" "$N"
     printf '  %s10)%s Uninstall      Remove EVERYTHING (full wipe)\n' "$O" "$N"
+    printf '  %s11)%s Setup Xray     Install/repair the connection-test core\n' "$O" "$N"
     printf '  %s0)%s  Exit\n' "$O" "$N"
     echo ""
   } > /dev/tty
@@ -2336,6 +2357,7 @@ run_menu() {
       8|status)    cmd_status ; pause ;;
       9|doctor)    cmd_doctor ; pause ;;
       10|uninstall) cmd_uninstall ; pause ;;
+      11|xray) cmd_xray ; pause ;;
       # Back-compat shortcuts
       install|i) cmd_install main ; pause ;;
       update|u)  cmd_update main  ; pause ;;
@@ -2370,6 +2392,7 @@ dispatch() {
     service|svc)   cmd_service ;;
     status|s)      cmd_status ;;
     doctor|d)      cmd_doctor ;;
+    xray)          cmd_xray ;;
     uninstall|remove) cmd_uninstall ;;
     help|-h|--help) cmd_help ;;
     *)

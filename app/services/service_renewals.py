@@ -9,6 +9,7 @@ from datetime import timezone
 
 from sqlalchemy import select
 
+from app.services.catalog_pricing import quote_product
 from app.db.models import Order
 from app.services.formatting import (
     format_bytes, format_expire_short, hold_duration_from_info, is_on_hold_status,
@@ -133,4 +134,5 @@ async def preview_renewal(session, *, user_id, service, plan) -> dict:
     pg = await get_pg_for_reseller(session, shop_id) if shop_id else get_pg()
     result = calculate_renewal(await pg.get_user_by_id(service.pg_user_id), terms)
     result.pop("payload")
-    return {**result, "terms": terms, "price": plan.price, "plan_name": plan.name, "request_key": secrets.token_hex(16)}
+    quote = await quote_product(session, plan, shop_id=shop_id)
+    return {**result, **quote.payload(), "terms": terms, "plan_name": plan.name, "request_key": secrets.token_hex(16)}

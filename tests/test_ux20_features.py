@@ -98,7 +98,7 @@ class Ux20TemplatePresenceTests(unittest.TestCase):
             self.assertTrue((root / name).is_file(), name)
         self.assertFalse((root / "tools.html").is_file())
         self.assertFalse((root / "_home_inbox.html").is_file())
-        self.assertFalse((root / "gift_codes.html").is_file())
+        self.assertTrue((root / "gift_codes.html").is_file())
         self.assertFalse((root / "magic_links.html").is_file())
 
     def test_home_overview_only_no_pg_open_or_old_shortcuts(self):
@@ -143,11 +143,6 @@ class Ux20TemplatePresenceTests(unittest.TestCase):
         home_src = Path("app/api/home_pages.py").read_text(encoding="utf-8")
         self.assertIn('"/inbox"', home_src)
         self.assertIn("build_inbox_context", home_src)
-        html = Path("app/web/templates/_pg_dash_body.html").read_text(encoding="utf-8")
-        self.assertIn("ورود به پاسارگارد", html)
-        self.assertIn("آمار پنل", html)
-        self.assertIn("pg_external_url", html)
-        self.assertIn("btn-sm btn-ghost", html)
 
     def test_links_moved_to_bot_settings(self):
         tabs = Path("app/services/users.py").read_text(encoding="utf-8")
@@ -156,10 +151,10 @@ class Ux20TemplatePresenceTests(unittest.TestCase):
         self.assertIn("لینک‌های سریع ربات", links)
         self.assertIn("data-copy=", links)
 
-    def test_gifts_on_plans_page(self):
+    def test_plans_page_does_not_carry_the_gift_code_page_or_its_old_modal(self):
         html = Path("app/web/templates/plans.html").read_text(encoding="utf-8")
-        self.assertIn("modal-gift-codes", html)
-        self.assertIn("کد هدیه", html)
+        self.assertNotIn("modal-gift-codes", html)
+        self.assertNotIn('href="/gift-codes"', html)
 
     def test_sidebar_no_tools_nav(self):
         html = Path("app/web/templates/base.html").read_text(encoding="utf-8")
@@ -184,17 +179,14 @@ class Ux20TemplatePresenceTests(unittest.TestCase):
         self.assertGreater(export_at, -1)
         self.assertLess(export_at, create_at)
 
-    def test_finance_behavior_tab(self):
+    def test_behavior_panel_moved_out_of_finance(self):
         html = Path("app/web/templates/finance.html").read_text(encoding="utf-8")
         self.assertIn("finance?tab=reports", html)
-        self.assertIn("finance?tab=behavior", html)
-        self.assertLess(
-            html.find("finance?tab=reports"),
-            html.find("finance?tab=behavior"),
-        )
+        self.assertNotIn("finance?tab=behavior", html)
+        self.assertNotIn("_funnel_panel.html", html)
+        self.assertIn("_funnel_panel.html", Path("app/web/templates/funnel.html").read_text(encoding="utf-8"))
         self.assertIn("تحویل ناموفق", html)
         self.assertIn("retry-delivery", html)
-        self.assertIn('_funnel_panel.html', html)
         self.assertNotIn("staff-note", html)
         self.assertNotIn("finance-note-form", html)
         self.assertIn("data-receipt-open", html)
@@ -488,7 +480,7 @@ class ButtonStyleTests(unittest.TestCase):
         from app.services.button_styles import setting_key
 
         kb = admin_plan_kind_keyboard("resellers", ui={})
-        fixed, payg = kb.inline_keyboard[0][0], kb.inline_keyboard[1][0]
+        fixed, payg = kb.inline_keyboard[0][0], kb.inline_keyboard[0][1]
         self.assertEqual(fixed.style, "primary")
         self.assertEqual(payg.style, "primary")
         custom = {
@@ -497,7 +489,7 @@ class ButtonStyleTests(unittest.TestCase):
         }
         kb2 = admin_plan_kind_keyboard("resellers", ui=custom)
         self.assertEqual(kb2.inline_keyboard[0][0].style, "success")
-        self.assertEqual(kb2.inline_keyboard[1][0].style, "danger")
+        self.assertEqual(kb2.inline_keyboard[0][1].style, "danger")
 
     def test_global_home_back_footer_styles(self):
         from app.bot.keyboards import Role, main_reply_keyboard, wallet_reply_keyboard
@@ -537,7 +529,7 @@ class Ux20VersionTests(unittest.TestCase):
 
     def test_export_skips_secrets(self):
         ux = Path("app/services/ux20.py").read_text(encoding="utf-8")
-        self.assertIn('skip = {"bot_token", "webhook_secret"}', ux)
+        self.assertIn('skip = {"bot_token", "webhook_secret", "backup_telegram_bot_token"}', ux)
         inbox = Path("app/services/panel_inbox.py").read_text(encoding="utf-8")
         self.assertIn("never includes bot tokens", inbox)
 

@@ -63,10 +63,6 @@ class UpdatePageContextSoftFailTests(unittest.IsolatedAsyncioTestCase):
                 return_value="0.3.11",
             ),
             patch(
-                "app.services.updates.fetch_recent_versions",
-                new=AsyncMock(return_value=[]),
-            ),
-            patch(
                 "app.services.update_channel.migration_preflight",
                 new=AsyncMock(
                     side_effect=AttributeError(

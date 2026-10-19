@@ -31,7 +31,19 @@
     }
   }
 
-  const helpers = {groupMoneyDigits, formatMoneyInput};
+  function syncMoneyMode(input, normalize) {
+    const name = input.dataset.moneyKind;
+    // The native select has the current value during capture and form resets; its mirror may lag.
+    const kind = input.form && (Array.from(input.form.elements).find((control) =>
+      control.tagName === "SELECT" && (control.name || control.dataset.uiSelectName) === name
+    ) || input.form.elements.namedItem(name));
+    const isMoney = !!kind && kind.value === input.dataset.moneyValue;
+    input.toggleAttribute("data-money", isMoney);
+    if (isMoney) formatMoneyInput(input, normalize);
+    else input.value = normalize(input.value);
+  }
+
+  const helpers = {groupMoneyDigits, formatMoneyInput, syncMoneyMode};
   if (typeof module === "object" && module.exports) module.exports = helpers;
   else root.PanelMoney = helpers;
 })(typeof window === "object" ? window : globalThis);

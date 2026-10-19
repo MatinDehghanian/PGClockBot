@@ -29,6 +29,7 @@ const context = vm.createContext({
     return {ok: true, text: async () => JSON.stringify(options.method === "POST" ? {message: "تمدید شد"} : preview)};
   },
 });
+vm.runInContext(fs.readFileSync(path.join(__dirname, "../app/web/static/catalog_price.js"), "utf8"), context);
 // Expose the actual handlers while replacing navigation and initial loading.
 vm.runInContext(source.replace(/  load\(\);\s*\}\)\(\);\s*$/, `
   reload = async () => {};

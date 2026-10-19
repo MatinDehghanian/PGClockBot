@@ -74,10 +74,11 @@ class FinanceReportsUiTests(unittest.TestCase):
     def test_finance_reports_first_tab(self):
         html = (ROOT / "app/web/templates/finance.html").read_text(encoding="utf-8")
         reports_at = html.find('tab=reports">گزارشات')
-        behavior_at = html.find('tab=behavior">رفتار کاربر')
+        orders_at = html.find('tab=orders">سفارشات')
         self.assertGreater(reports_at, -1)
-        self.assertGreater(behavior_at, -1)
-        self.assertLess(reports_at, behavior_at)
+        self.assertGreater(orders_at, -1)
+        self.assertLess(reports_at, orders_at)
+        self.assertNotIn("tab=behavior", html)
         self.assertIn('_finance_reports.html', html)
 
     def test_reports_partial(self):

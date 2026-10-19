@@ -8,7 +8,6 @@
          style="--tag-color: {{ t.hex }}">
     <input type="radio" name="{{ field_name }}" value="{{ t.key }}"
            {% if selected_color == t.key %}checked{% endif %} />
-    <span class="color-tag-swatch" title="{{ t.title_fa }}" aria-hidden="true"></span>
     <span class="color-tag-label">{{ t.title_fa }}</span>
   </label>
   {% endfor %}

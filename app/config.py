@@ -117,6 +117,8 @@ class Settings(BaseSettings):
     # Admin API key for the connected PG identity (X-Api-Key). Preferred over password.
     pg_api_key: str = Field(default="", alias="PG_API_KEY")
     pg_access_token: str = Field(default="", alias="PG_ACCESS_TOKEN")
+    connection_monitor_xray_path: str = Field(default="", alias="CONNECTION_MONITOR_XRAY_PATH")
+    connection_monitor_xray_sha256: str = Field(default="", alias="CONNECTION_MONITOR_XRAY_SHA256")
 
     web_host: str = Field(default="0.0.0.0", alias="WEB_HOST")
     web_port: int = Field(default=9000, alias="WEB_PORT")

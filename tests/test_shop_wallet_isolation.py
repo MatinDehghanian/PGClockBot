@@ -427,11 +427,11 @@ class ShopWalletIsolationTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_linked_service_delete_and_renew_guards(self):
         svc = (ROOT / "app/bot/handlers/services.py").read_text(encoding="utf-8")
-        self.assertIn('!= "linked"', svc)
-        self.assertIn("delete_pg = (svc.remark or \"\").strip() != \"linked\"", svc)
+        self.assertIn("delete_pg = not is_external_service(svc)", svc)
         self.assertIn("سرویس متصل‌شده فقط مشاهده است", svc)
-        start = (ROOT / "app/bot/handlers/start.py").read_text(encoding="utf-8")
-        self.assertIn("get_pg_for_reseller", start)
+        # Shop bots resolve a subscription link through the shop's own panel credentials.
+        service_import = (ROOT / "app/services/service_import.py").read_text(encoding="utf-8")
+        self.assertIn("get_pg_for_reseller", service_import)
         mini = (ROOT / "app/api/miniapp_pages.py").read_text(encoding="utf-8")
         renew = mini.split("async def mini_renew", 1)[1].split("return _no_store", 1)[0]
         self.assertIn('== "linked"', renew)

@@ -7,6 +7,7 @@ import unittest
 from app.bot.keyboards import (
     DEFAULT_MENU_ORDER,
     REMOVED_MENU_KEYS,
+    admin_reply_keyboard,
     cancel_reply,
     is_cancel_text,
     is_home_text,
@@ -60,10 +61,15 @@ class KeyboardMenu357Tests(unittest.TestCase):
             "btn_menu_home": "🏠 منوی اصلی",
             "btn_back": "⬅️ بازگشت",
         }
-        flat = [b.text for row in main_reply_keyboard("admin", ui=ui).keyboard for b in row]
+        main_flat = [b.text for row in main_reply_keyboard("admin", ui=ui).keyboard for b in row]
+        # Option B: main menu only offers the panel entry; groups live in the hub.
+        self.assertIn("🛠 پنل", main_flat)
+        self.assertNotIn("🗓 عملیات روزانه", main_flat)
+        self.assertNotIn("👥 کاربران", main_flat)
+        flat = [b.text for row in admin_reply_keyboard(ui).keyboard for b in row]
         self.assertIn("🗓 عملیات روزانه", flat)
         self.assertIn("👤 افراد", flat)
-        self.assertIn("📦 محصول و PG", flat)
+        self.assertIn("📦 محصول و پاسارگارد", flat)
         self.assertIn("🛠 سیستم", flat)
         self.assertNotIn("👥 کاربران", flat)
         self.assertNotIn("⚙️ تنظیمات", flat)

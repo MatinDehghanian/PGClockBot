@@ -20,6 +20,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import PgStaffAccess, ResellerProfile
+from app.services.pg_read_resilience import READ_COOLDOWN_SEC
 from app.services.web_auth import (
     hash_password,
     load_web_admin,
@@ -88,6 +89,7 @@ async def fetch_pg_admin_gate(pg_username: str) -> tuple[PgAdminGate, dict | Non
 # Short TTL cache so every authenticated HTML request does not hit PasarGuard.
 _PG_GATE_CACHE: dict[str, tuple[float, tuple[bool, str | None]]] = {}
 _PG_GATE_TTL_SEC = 45.0
+_PG_GATE_UNAVAILABLE_TTL_SEC = READ_COOLDOWN_SEC
 
 
 async def enforce_pg_admin_web_gate(
@@ -104,7 +106,8 @@ async def enforce_pg_admin_web_gate(
     uname = _norm_pg(pg_username)
     now = time.monotonic()
     cached = _PG_GATE_CACHE.get(uname) if uname else None
-    if cached and (now - cached[0]) < _PG_GATE_TTL_SEC:
+    cache_ttl = _PG_GATE_UNAVAILABLE_TTL_SEC if cached and cached[1][1] == PG_UNAVAILABLE_MSG else _PG_GATE_TTL_SEC
+    if cached and (now - cached[0]) < cache_ttl:
         return cached[1]
 
     gate, _admin = await fetch_pg_admin_gate(pg_username)
@@ -123,7 +126,7 @@ async def enforce_pg_admin_web_gate(
         result = (False, PG_ACCESS_DENIED_MSG)
 
     if uname:
-        _PG_GATE_CACHE[uname] = (now, result)
+        _PG_GATE_CACHE[uname] = (time.monotonic(), result)
         if len(_PG_GATE_CACHE) > 512:
             oldest = sorted(_PG_GATE_CACHE.items(), key=lambda kv: kv[1][0])[:128]
             for k, _ in oldest:

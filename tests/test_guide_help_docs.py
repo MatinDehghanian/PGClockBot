@@ -167,3 +167,26 @@ class GuideCatalogTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class GuideCoverageTests(unittest.TestCase):
+    ROOT = Path(__file__).resolve().parents[1]
+
+    def test_every_help_link_in_templates_points_to_a_real_topic(self):
+        import re
+
+        from app.services.guide_catalog import TOPICS
+
+        used = set()
+        for path in (self.ROOT / "app/web/templates").rglob("*.html"):
+            used.update(re.findall(r"help=['\"]([a-z-]+)['\"]", path.read_text(encoding="utf-8")))
+        self.assertEqual(used - set(TOPICS), set())
+
+    def test_every_topic_has_a_source_page_a_built_page_and_a_nav_slot(self):
+        from app.services.guide_catalog import NAV_ORDER, TOPICS
+
+        for topic_id, meta in TOPICS.items():
+            with self.subTest(topic=topic_id):
+                self.assertTrue((self.ROOT / "docs/guide/pages" / f"{meta['slug']}.md").is_file())
+                self.assertTrue((self.ROOT / "app/web/static/guide" / meta["slug"] / "index.html").is_file())
+                self.assertIn(topic_id, NAV_ORDER)

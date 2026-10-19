@@ -80,7 +80,8 @@ class ShopIsolationWebPaymentsTests(unittest.TestCase):
             "پرداخت‌های فروشگاه فقط توسط نماینده همان فروشگاه تأیید می‌شود",
             src,
         )
-        self.assertIn("Order.reseller_id.is_(None)", src)
+        overview = (ROOT / "app/services/bot_overview.py").read_text(encoding="utf-8")
+        self.assertIn("Order.reseller_id.is_(None)", overview)
 
 
 class SecurityHardeningSourceTests(unittest.TestCase):

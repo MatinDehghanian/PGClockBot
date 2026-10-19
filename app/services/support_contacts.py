@@ -9,7 +9,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.button_styles import parse_item_button_style_raw, serialize_item_button_style
+from app.services.button_styles import serialize_item_button_style
 from app.services.users import get_setting, set_setting
 
 SETTING_KEY = "support_contacts"

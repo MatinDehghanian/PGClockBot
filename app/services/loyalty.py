@@ -1,7 +1,7 @@
 """Referral + Loyalty / Points engine.
 
 Extends existing referral_code / referred_by_id / referral_bonus wallet credit.
-Points ledger is the audit source of truth; BotUser.points_balance is a cache.
+Points ledger is the audit source of truth; BotUser.points_balance is the platform purse and ShopPoints holds each shop's.
 """
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any, Optional
+from typing import Any
 
 from sqlalchemy import Select, func, select, update
 from sqlalchemy.exc import IntegrityError
@@ -27,10 +27,12 @@ from app.db.models import (
     PointsTransaction,
     ReferralEvent,
     RewardRedemption,
+    ShopPoints,
     UserService,
 )
 from app.services.demo_users import non_demo_customer
 from app.services.formatting import bot_user_panel_label
+from app.services.service_scope import customer_may_use_service, service_shop_id
 
 logger = logging.getLogger(__name__)
 
@@ -310,6 +312,59 @@ async def record_referral_event(
     return ev
 
 
+async def points_balance(session: AsyncSession, user: BotUser, shop_id: int | None) -> int:
+    """The customer's points in one shop (None = the platform's ``BotUser.points_balance``)."""
+    if not shop_id:
+        return int(user.points_balance or 0)
+    balance = await session.scalar(
+        select(ShopPoints.balance).where(ShopPoints.user_id == int(user.id), ShopPoints.reseller_id == int(shop_id))
+    )
+    return int(balance or 0)
+
+
+async def _ensure_shop_points_row(session: AsyncSession, user_id: int, shop_id: int) -> None:
+    if await session.scalar(
+        select(ShopPoints.id).where(ShopPoints.user_id == user_id, ShopPoints.reseller_id == shop_id)
+    ):
+        return
+    try:
+        async with session.begin_nested():
+            session.add(ShopPoints(user_id=user_id, reseller_id=shop_id, balance=0))
+            await session.flush()
+    except IntegrityError:
+        logger.debug("shop points row already created user=%s shop=%s", user_id, shop_id)
+
+
+async def _apply_points_delta(
+    session: AsyncSession, user: BotUser, shop_id: int | None, delta: int, *, allow_negative: bool = False
+) -> int:
+    """Atomically move one purse by ``delta`` and return its new balance."""
+    with session.no_autoflush:
+        if shop_id:
+            await _ensure_shop_points_row(session, int(user.id), int(shop_id))
+            cond = [ShopPoints.user_id == int(user.id), ShopPoints.reseller_id == int(shop_id)]
+            if delta < 0 and not allow_negative:
+                cond.append(ShopPoints.balance >= -delta)
+            result = await session.execute(
+                update(ShopPoints).where(*cond).values(balance=ShopPoints.balance + delta)
+                .execution_options(synchronize_session=False)
+            )
+        else:
+            cond = [BotUser.id == int(user.id)]
+            if delta < 0 and not allow_negative:
+                cond.append(BotUser.points_balance >= -delta)
+            result = await session.execute(
+                update(BotUser).where(*cond).values(points_balance=BotUser.points_balance + delta)
+                .execution_options(synchronize_session=False)
+            )
+    if result.rowcount != 1:
+        if delta < 0:
+            raise ValueError("امتیاز کافی نیست")
+        raise ValueError("کاربر یافت نشد")
+    await session.refresh(user)
+    return await points_balance(session, user, shop_id)
+
+
 async def credit_points(
     session: AsyncSession,
     user: BotUser,
@@ -323,8 +378,9 @@ async def credit_points(
     meta: dict | None = None,
     created_by: str | None = None,
     commit: bool = True,
+    shop_id: int | None,
 ) -> PointsTransaction | None:
-    """Credit points idempotently. Returns existing tx if idempotency_key already used."""
+    """Credit one purse (``shop_id`` None = platform) idempotently; returns the existing tx on a repeat key."""
     if amount == 0:
         return None
     if amount < 0:
@@ -337,20 +393,12 @@ async def credit_points(
     if existing:
         return existing
 
-    with session.no_autoflush:
-        result = await session.execute(
-            update(BotUser)
-            .where(BotUser.id == user.id)
-            .values(points_balance=BotUser.points_balance + int(amount))
-            .execution_options(synchronize_session=False)
-        )
-    if result.rowcount != 1:
-        raise ValueError("کاربر یافت نشد")
-    await session.refresh(user)
+    balance_after = await _apply_points_delta(session, user, shop_id, int(amount))
     tx = PointsTransaction(
         user_id=user.id,
         amount=int(amount),
-        balance_after=int(user.points_balance),
+        balance_after=balance_after,
+        reseller_id=int(shop_id) if shop_id else None,
         tx_type=tx_type,
         source=source,
         reference=reference,
@@ -393,8 +441,9 @@ async def debit_points(
     created_by: str | None = None,
     commit: bool = True,
     allow_negative: bool = False,
+    shop_id: int | None,
 ) -> PointsTransaction | None:
-    """Debit points. Prevents negative balance unless allow_negative (admin debt policy)."""
+    """Debit one purse (``shop_id`` None = platform); no negative balance unless allow_negative (debt policy)."""
     if amount <= 0:
         raise ValueError("debit_points amount must be positive")
     existing = (
@@ -405,23 +454,12 @@ async def debit_points(
     if existing:
         return existing
 
-    cond = [BotUser.id == user.id]
-    if not allow_negative:
-        cond.append(BotUser.points_balance >= int(amount))
-    with session.no_autoflush:
-        result = await session.execute(
-            update(BotUser)
-            .where(*cond)
-            .values(points_balance=BotUser.points_balance - int(amount))
-            .execution_options(synchronize_session=False)
-        )
-    if result.rowcount != 1:
-        raise ValueError("امتیاز کافی نیست")
-    await session.refresh(user)
+    balance_after = await _apply_points_delta(session, user, shop_id, -int(amount), allow_negative=allow_negative)
     tx = PointsTransaction(
         user_id=user.id,
         amount=-int(amount),
-        balance_after=int(user.points_balance),
+        balance_after=balance_after,
+        reseller_id=int(shop_id) if shop_id else None,
         tx_type=tx_type,
         source=source,
         reference=reference,
@@ -488,6 +526,7 @@ async def reverse_points_tx(
             created_by=created_by,
             commit=commit,
             allow_negative=True,
+            shop_id=original.reseller_id,
         )
     return await credit_points(
         session,
@@ -501,6 +540,7 @@ async def reverse_points_tx(
         meta={"reversed_tx_id": original.id},
         created_by=created_by,
         commit=commit,
+        shop_id=original.reseller_id,
     )
 
 
@@ -511,13 +551,14 @@ async def admin_adjust_points(
     *,
     reason: str,
     admin_identity: str,
+    shop_id: int | None,
 ) -> PointsTransaction:
     if not reason or not str(reason).strip():
         raise ValueError("دلیل الزامی است")
     if delta == 0:
         raise ValueError("مقدار نمی‌تواند صفر باشد")
     key = f"admin_adjust:{user.id}:{admin_identity}:{int(datetime.now(timezone.utc).timestamp())}:{delta}:{reason.strip()[:40]}"
-    prev = int(user.points_balance or 0)
+    prev = await points_balance(session, user, shop_id)
     if delta > 0:
         tx = await credit_points(
             session,
@@ -531,6 +572,7 @@ async def admin_adjust_points(
             meta={"previous_balance": prev},
             created_by=admin_identity,
             commit=True,
+            shop_id=shop_id,
         )
     else:
         tx = await debit_points(
@@ -546,6 +588,7 @@ async def admin_adjust_points(
             created_by=admin_identity,
             commit=True,
             allow_negative=False,
+            shop_id=shop_id,
         )
     if tx is None:
         raise ValueError("تعدیل انجام نشد")
@@ -636,6 +679,7 @@ async def _rule_passes(
     order: Order | None,
     plan: Plan | None,
     gb: float,
+    balance: int,
 ) -> bool:
     if rule.plan_id and order and order.plan_id and int(rule.plan_id) != int(order.plan_id):
         return False
@@ -646,7 +690,7 @@ async def _rule_passes(
         return False
     if int(rule.min_purchase_gb or 0) > 0 and gb < float(rule.min_purchase_gb):
         return False
-    if int(rule.tier_min_points or 0) > 0 and int(user.points_balance or 0) < int(rule.tier_min_points):
+    if int(rule.tier_min_points or 0) > 0 and balance < int(rule.tier_min_points):
         return False
     if rule.first_time_only:
         prior = (
@@ -709,10 +753,11 @@ async def apply_event_rules(
     if not rules:
         return []
     gb = _plan_gb(plan)
-    tier = await get_tier_for_points(session, int(user.points_balance or 0))
+    balance = await points_balance(session, user, reseller_id)
+    tier = await get_tier_for_points(session, balance)
     out: list[PointsTransaction] = []
     for rule in rules:
-        if not await _rule_passes(session, rule, user=user, order=order, plan=plan, gb=gb):
+        if not await _rule_passes(session, rule, user=user, order=order, plan=plan, gb=gb, balance=balance):
             continue
         pts = _compute_rule_amount(rule, gb=gb, multiplier_bps=tier.multiplier_bps)
         if pts <= 0:
@@ -729,6 +774,7 @@ async def apply_event_rules(
             idempotency_key=key,
             meta={"event": event_key, "rule_id": rule.id},
             commit=True,
+            shop_id=reseller_id,
         )
         if tx:
             out.append(tx)
@@ -921,11 +967,13 @@ async def reverse_order_points(session: AsyncSession, order: Order, *, reason: s
 
 
 async def list_points_history(
-    session: AsyncSession, user_id: int, *, limit: int = 10, offset: int = 0
+    session: AsyncSession, user_id: int, *, shop_id: int | None, limit: int = 10, offset: int = 0
 ) -> list[PointsTransaction]:
+    """The customer's points entries in one shop (None = platform)."""
+    scope = PointsTransaction.reseller_id == int(shop_id) if shop_id else PointsTransaction.reseller_id.is_(None)
     result = await session.execute(
         select(PointsTransaction)
-        .where(PointsTransaction.user_id == user_id)
+        .where(PointsTransaction.user_id == user_id, scope)
         .order_by(PointsTransaction.id.desc())
         .offset(offset)
         .limit(limit)
@@ -985,7 +1033,9 @@ async def referral_stats(session: AsyncSession, user_id: int) -> dict[str, int]:
     return {"total": total, "qualified": qualified, "earned_points": earned}
 
 
-async def month_earned_points(session: AsyncSession, user_id: int) -> int:
+async def month_earned_points(session: AsyncSession, user_id: int, *, shop_id: int | None) -> int:
+    """Points the customer earned this month in one purse (None = platform)."""
+    purse = PointsTransaction.reseller_id == int(shop_id) if shop_id else PointsTransaction.reseller_id.is_(None)
     now = datetime.now(timezone.utc)
     start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     return int(
@@ -995,6 +1045,7 @@ async def month_earned_points(session: AsyncSession, user_id: int) -> int:
                     PointsTransaction.user_id == user_id,
                     PointsTransaction.amount > 0,
                     PointsTransaction.created_at >= start,
+                    purse,
                 )
             )
         ).scalar_one()
@@ -1017,19 +1068,7 @@ async def list_active_rewards(
         q = q.where(LoyaltyReward.reseller_id.is_(None))
     else:
         q = q.where(LoyaltyReward.reseller_id == int(reseller_id))
-    rows = list((await session.execute(q)).scalars().all())
-    if not rows and reseller_id is not None:
-        q2 = (
-            select(LoyaltyReward)
-            .where(
-                LoyaltyReward.enabled.is_(True),
-                LoyaltyReward.archived.is_(False),
-                LoyaltyReward.reseller_id.is_(None),
-            )
-            .order_by(LoyaltyReward.sort_order.asc(), LoyaltyReward.id.asc())
-        )
-        rows = list((await session.execute(q2)).scalars().all())
-    return rows
+    return list((await session.execute(q)).scalars().all())
 
 
 async def _user_redemption_count(session: AsyncSession, user_id: int, reward_id: int) -> int:
@@ -1058,6 +1097,8 @@ async def redeem_reward(
     idempotency_key: str | None = None,
 ) -> RewardRedemption:
     """Atomic redeem: lock reward + user, debit points, apply benefit, record redemption."""
+    from app.services.users import current_shop_reseller_id  # users imports loyalty lazily; avoid a cycle
+
     key = idempotency_key or f"redeem:{user.id}:{reward_id}:{int(datetime.now(timezone.utc).timestamp())}"
     existing = (
         await session.execute(
@@ -1078,15 +1119,11 @@ async def redeem_reward(
         reward = await session.get(LoyaltyReward, int(reward_id))
     if not reward or not reward.enabled or reward.archived:
         raise ValueError("این جایزه فعال نیست")
-    # Scope isolation: shop users cannot redeem another shop's rewards.
-    # Platform users may only redeem platform (reseller_id IS NULL) rewards.
-    # Shop users may redeem own-shop rewards or platform catalog (same as list_active_rewards).
-    user_rid = user.reseller_id
-    reward_rid = reward.reseller_id
-    if user_rid is None:
-        if reward_rid is not None:
-            raise ValueError("این جایزه فعال نیست")
-    elif reward_rid is not None and int(reward_rid) != int(user_rid):
+    # Scope isolation: a reward is redeemable only in the bot of the shop that owns it.
+    user_rid = current_shop_reseller_id()
+    # Points, reward and benefit all belong to one shop: a platform reward is not redeemable in
+    # a shop bot (its credit would come from the platform's wallet while the points are the shop's).
+    if (reward.reseller_id or None) != (user_rid or None):
         raise ValueError("این جایزه فعال نیست")
     if reward.max_redemptions_global is not None and int(reward.redemption_count) >= int(
         reward.max_redemptions_global
@@ -1100,7 +1137,7 @@ async def redeem_reward(
     cost = int(reward.points_cost)
     if cost <= 0:
         raise ValueError("هزینه جایزه نامعتبر است")
-    if int(user.points_balance or 0) < cost:
+    if await points_balance(session, user, user_rid) < cost:
         raise ValueError("امتیاز کافی نیست")
 
     rtype = reward.reward_type
@@ -1112,7 +1149,7 @@ async def redeem_reward(
         if not service_id:
             raise ValueError("یک سرویس فعال انتخاب کنید")
         service = await session.get(UserService, int(service_id))
-        if not service or int(service.bot_user_id) != int(user.id):
+        if not await customer_may_use_service(session, service, int(user.id), user_rid):
             raise ValueError("سرویس معتبر نیست")
         if not service.pg_user_id:
             raise ValueError("سرویس به پنل متصل نیست")
@@ -1137,6 +1174,7 @@ async def redeem_reward(
         idempotency_key=f"pts:{key}",
         meta={"reward_id": reward.id, "reward_type": rtype, "reward_value": rval},
         commit=False,
+        shop_id=user_rid,
     )
 
     try:
@@ -1152,7 +1190,7 @@ async def redeem_reward(
                 user,
                 rval,
                 wallet_reason,
-                shop_id=int(reward_rid) if reward_rid is not None else None,
+                shop_id=int(reward.reseller_id) if reward.reseller_id is not None else None,
                 commit=False,
             )
         reward.redemption_count = int(reward.redemption_count or 0) + 1
@@ -1290,8 +1328,13 @@ def _entitlement_expired(ent: LoyaltyDiscountEntitlement, *, now: datetime | Non
 
 
 async def list_available_discounts(
-    session: AsyncSession, user_id: int
+    session: AsyncSession, user_id: int, *, shop_id: int | None
 ) -> list[LoyaltyDiscountEntitlement]:
+    """Discount codes the customer holds from one shop (None = platform)."""
+    scope = (
+        LoyaltyDiscountEntitlement.reseller_id == int(shop_id)
+        if shop_id else LoyaltyDiscountEntitlement.reseller_id.is_(None)
+    )
     rows = list(
         (
             await session.execute(
@@ -1299,6 +1342,7 @@ async def list_available_discounts(
                 .where(
                     LoyaltyDiscountEntitlement.user_id == int(user_id),
                     LoyaltyDiscountEntitlement.status == "available",
+                    scope,
                 )
                 .order_by(LoyaltyDiscountEntitlement.id.desc())
             )
@@ -1475,13 +1519,13 @@ async def apply_service_reward(
     from app.services.pasarguard import get_pg, get_pg_for_reseller
     from app.services.users import current_shop_reseller_id
 
-    if user.reseller_id:
+    service_shop = await service_shop_id(session, service)
+    if service_shop != (current_shop_reseller_id() or None):
+        raise ValueError("سرویس متعلق به این فروشگاه نیست")
+    if service_shop:
         # Shop path: never fall back to Owner/platform PG credentials
-        pg = await get_pg_for_reseller(session, int(user.reseller_id))
+        pg = await get_pg_for_reseller(session, int(service_shop))
     else:
-        # Fail closed on shop bots — Owner token must never serve shop traffic
-        if current_shop_reseller_id():
-            raise ValueError("کاربر فروشگاه بدون مالک معتبر است؛ اعمال جایزه ممکن نیست")
         pg = get_pg()
 
     info = await pg.get_user_by_id(int(service.pg_user_id))
@@ -1547,64 +1591,41 @@ async def overview_metrics(
     )
     qualified = int((await session.execute(qual_q)).scalar_one() or 0)
 
-    pts_base = select(func.coalesce(func.sum(PointsTransaction.amount), 0)).where(
-        non_demo_customer(PointsTransaction.user_id),
+    # Points and redeemed credits belong to the shop whose purse or reward they are.
+    points_scope = (
+        PointsTransaction.reseller_id == int(reseller_id)
+        if reseller_id is not None
+        else PointsTransaction.reseller_id.is_(None)
     )
-    if reseller_id is not None:
-        pts_join = pts_base.select_from(PointsTransaction).join(
-            BotUser, BotUser.id == PointsTransaction.user_id
-        ).where(BotUser.reseller_id == int(reseller_id), PointsTransaction.amount > 0)
-        issued = int((await session.execute(pts_join)).scalar_one() or 0)
-        redeemed_q = (
-            select(func.coalesce(func.sum(PointsTransaction.amount), 0))
-            .select_from(PointsTransaction)
-            .join(BotUser, BotUser.id == PointsTransaction.user_id)
-            .where(
-                BotUser.reseller_id == int(reseller_id),
-                PointsTransaction.amount < 0,
-                PointsTransaction.tx_type == "redeem",
-                non_demo_customer(PointsTransaction.user_id),
+    points_sum = select(func.coalesce(func.sum(PointsTransaction.amount), 0)).where(
+        points_scope, non_demo_customer(PointsTransaction.user_id)
+    )
+    issued = int((await session.execute(points_sum.where(PointsTransaction.amount > 0))).scalar_one() or 0)
+    redeemed = int(
+        (
+            await session.execute(
+                points_sum.where(PointsTransaction.amount < 0, PointsTransaction.tx_type == "redeem")
             )
-        )
-        redeemed = int((await session.execute(redeemed_q)).scalar_one() or 0)
-    else:
-        issued = int(
-            (
-                await session.execute(
-                    pts_base.where(PointsTransaction.amount > 0)
-                )
-            ).scalar_one()
-            or 0
-        )
-        redeemed = int(
-            (
-                await session.execute(
-                    select(func.coalesce(func.sum(PointsTransaction.amount), 0)).where(
-                        PointsTransaction.amount < 0,
-                        PointsTransaction.tx_type == "redeem",
-                        non_demo_customer(PointsTransaction.user_id),
-                    )
-                )
-            ).scalar_one()
-            or 0
-        )
+        ).scalar_one()
+        or 0
+    )
 
-    red_q = select(func.coalesce(func.sum(RewardRedemption.reward_value), 0)).where(
-        RewardRedemption.reward_type == "wallet_credit",
-        RewardRedemption.status == "completed",
+    reward_scope = (
+        LoyaltyReward.reseller_id == int(reseller_id)
+        if reseller_id is not None
+        else LoyaltyReward.reseller_id.is_(None)
     )
-    if reseller_id is not None:
-        red_q = (
-            select(func.coalesce(func.sum(RewardRedemption.reward_value), 0))
-            .select_from(RewardRedemption)
-            .join(BotUser, BotUser.id == RewardRedemption.user_id)
-            .where(
-                RewardRedemption.reward_type == "wallet_credit",
-                RewardRedemption.status == "completed",
-                BotUser.reseller_id == int(reseller_id),
-            )
+    red_q = (
+        select(func.coalesce(func.sum(RewardRedemption.reward_value), 0))
+        .select_from(RewardRedemption)
+        .join(LoyaltyReward, LoyaltyReward.id == RewardRedemption.reward_id)
+        .where(
+            RewardRedemption.reward_type == "wallet_credit",
+            RewardRedemption.status == "completed",
+            reward_scope,
+            non_demo_customer(RewardRedemption.user_id),
         )
-    red_q = red_q.where(non_demo_customer(RewardRedemption.user_id))
+    )
     wallet_credits = int((await session.execute(red_q)).scalar_one() or 0)
 
     rw_q = select(func.count()).select_from(LoyaltyReward).where(

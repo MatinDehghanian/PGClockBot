@@ -14,6 +14,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.services.catalog_pricing import PriceTarget, active_discounts, annotate_prices, assert_expected_price, displayed_quote, quote_price, quote_product, sale_price
 from app.db.models import (
     BotUser,
     ChargeCode,
@@ -31,6 +32,7 @@ from app.db.models import (
 )
 from app.services.pasarguard import extract_sub_token, get_pg, user_subscription_url
 from app.services.purchase_contact import CONTACT_REQUIRED_MESSAGE, purchase_contact_needed, require_purchase_contact
+from app.services.shop_membership import ensure_member
 from app.services.provision_gate import (
     ProvisionError,
     assert_provision_create,
@@ -363,6 +365,7 @@ async def list_active_plans(
     plans = list(result.scalars().all())
     if not include_trial:
         plans = [p for p in plans if not p.is_trial]
+    await annotate_prices(session, plans, shop_id=rid)
     return plans
 
 
@@ -383,7 +386,21 @@ async def get_catalog_plan(session: AsyncSession, plan_id: int) -> Optional[Plan
             return None
     elif plan.owner_reseller_id is not None:
         return None
+    await quote_product(session, plan, shop_id=shop_rid)
     return plan
+
+
+def is_customer_order_in_current_shop(order: Order | None, user_id: int) -> bool:
+    """True when the order is this customer's and was placed in the bot being used.
+
+    A payment button can outlive the bot it was shown in; paying from another
+    shop's bot would send the money to that shop's card, gateway or review queue.
+    """
+    return (
+        order is not None
+        and int(order.user_id) == int(user_id)
+        and int(order.reseller_id or 0) == int(_shop_reseller_id() or 0)
+    )
 
 
 def _shop_reseller_id() -> int | None:
@@ -514,10 +531,12 @@ async def create_order(
     discount_code: str | None = None,
     trial_phone_hash: str | None = None,
     trial_telegram_id: int | None = None,
+    expected_price: int | None = None,
 ) -> Order:
     plan = await get_catalog_plan(session, plan_id)
     if not plan or not plan.is_active:
         raise ValueError("پلن یافت نشد")
+    assert_expected_price(displayed_quote(plan), expected_price)
     shop_rid = _shop_reseller_id()
     # Ignore sticky attribution from caller — shop bot context wins.
     _ = reseller_id
@@ -553,18 +572,19 @@ async def create_order(
         user_id=user_id,
         plan_id=plan.id,
         reseller_id=shop_rid,
-        amount=int(plan.price),
+        amount=sale_price(plan),
         discount_amount=0,
         status=OrderStatus.PENDING.value,
     )
     session.add(order)
     await session.flush()
+    await ensure_member(session, user_id, shop_rid)
     try:
-        discount, used_code = await _reserve_discount_code(session, discount_code, plan.price, order=order)
+        discount, used_code = await _reserve_discount_code(session, discount_code, sale_price(plan), order=order)
     except ValueError:
         await session.rollback()
         raise
-    order.amount = max(0, plan.price - discount)
+    order.amount = max(0, sale_price(plan) - discount)
     order.discount_amount = discount
     order.discount_code = used_code
     if plan.is_trial:
@@ -627,7 +647,7 @@ async def create_custom_order(
     gb = float(data_limit_gb)
     days = int(duration_days)
     if gb < min_gb or gb > max_gb:
-        raise ValueError(f"حجم باید بین {min_gb} تا {max_gb} گیگ باشد")
+        raise ValueError(f"حجم باید بین {min_gb} تا {max_gb} گیگابایت باشد")
     if days < min_days or days > max_days:
         raise ValueError(f"مدت باید بین {min_days} تا {max_days} روز باشد")
 
@@ -677,7 +697,7 @@ async def create_custom_order(
 
     plan = Plan(
         name="پلن دلخواه",
-        description=f"سفارشی {gb:g} گیگ / {days} روز",
+        description=f"سفارشی {gb:g} گیگابایت / {days} روز",
         price=amount,
         duration_days=days,
         data_limit_gb=gb,
@@ -694,6 +714,7 @@ async def create_custom_order(
     session.add(plan)
     await session.flush()
 
+    amount = quote_price(PriceTarget(amount, kind="custom"), await active_discounts(session, shop_id=shop_rid)).price
     order = Order(
         user_id=user_id,
         plan_id=plan.id,
@@ -705,6 +726,7 @@ async def create_custom_order(
     )
     session.add(order)
     await session.flush()
+    await ensure_member(session, user_id, shop_rid)
     try:
         discount, used_code = await _reserve_discount_code(session, discount_code, amount, order=order)
     except ValueError:
@@ -850,7 +872,7 @@ async def create_wholesale_order(
     tiers = parse_wholesale_tiers(ui.get("wholesale_tiers"))
     pct = wholesale_tier_percent(qty, tiers)
     amount, discount = calc_wholesale_price(
-        unit_price=plan.price, quantity=qty, percent=pct
+        unit_price=sale_price(plan), quantity=qty, percent=pct
     )
     shop_rid = _shop_reseller_id()
     _ = reseller_id
@@ -866,6 +888,7 @@ async def create_wholesale_order(
         note=f"wholesale:{qty}",
     )
     session.add(order)
+    await ensure_member(session, user_id, shop_rid)
     await session.commit()
     await session.refresh(order)
     return order
@@ -2033,13 +2056,7 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
 
         # Reseller shop orders must always quota-check + assign ownership.
         # Creating as owner without set_owner would bypass PasarGuard max_users.
-        profile: ResellerProfile | None = None
         if order.reseller_id:
-            profile = (
-                await session.execute(
-                    select(ResellerProfile).where(ResellerProfile.user_id == order.reseller_id)
-                )
-            ).scalar_one_or_none()
             try:
                 await assert_provision_create(
                     session,
@@ -2122,6 +2139,7 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
                 subscription_url=sub_url,
                 subscription_token=extract_sub_token(sub_url),
                 remark=f"order:{order.id}",
+                shop_id=order.reseller_id,
             )
             from app.services.bot_user_admin import sync_service_quota_cache
 
@@ -2139,6 +2157,7 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
                 )
             session.add(service)
             await session.flush()
+            await ensure_member(session, order.user_id, order.reseller_id)
             return service
 
         try:
@@ -2228,6 +2247,7 @@ async def renew_service_with_plan(
     plan: Plan,
     commit: bool = True,
     request_key: str | None = None,
+    expected_price: int | None = None,
 ) -> Order:
     """Create a pending renewal order. Caller shows pay_methods (or uses pay_with_wallet)."""
     from app.services.service_renewals import validate_renewal_selection
@@ -2245,10 +2265,12 @@ async def renew_service_with_plan(
         session, user_id=user_id, service=service, plan=plan, shop_id=shop_rid,
     )
 
+    quote = await quote_product(session, plan, shop_id=shop_rid)
+    assert_expected_price(quote, expected_price)
     order = Order(
         user_id=user_id,
         plan_id=plan.id,
-        amount=plan.price,
+        amount=quote.price,
         status=OrderStatus.PENDING.value,
         note=f"renew:{service.id}",
         service_id=service.id,

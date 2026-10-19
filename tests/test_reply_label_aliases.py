@@ -97,5 +97,41 @@ class ReplyLabelAliasesUnitTests(unittest.TestCase):
         self.assertTrue(any(x for x in shop))
 
 
+class RetiredDefaultLabelTests(unittest.TestCase):
+    """Keyboards still on customers' phones show labels from older code defaults."""
+
+    _OLD_STATUS_LABEL = "📡 وضعیت از دید سرور"
+
+    def _user_map(self, menu_order: str) -> dict[str, str]:
+        from app.services.users import DEFAULT_SETTINGS
+
+        ui = dict(DEFAULT_SETTINGS)
+        ui["menu_order"] = menu_order
+        return reply_action_map("user", ui=ui, include_submenus=False)
+
+    def test_old_status_button_label_still_opens_status(self):
+        mapping = self._user_map("shop,services,connection_status,wallet")
+        self.assertEqual(mapping.get(self._OLD_STATUS_LABEL), "connection_status")
+
+    def test_old_status_label_stays_unmapped_when_button_is_off(self):
+        mapping = self._user_map("shop,services,wallet")
+        self.assertNotIn(self._OLD_STATUS_LABEL, mapping)
+
+    def test_old_admin_connection_label_still_opens_the_connection_menu(self):
+        from app.services.users import DEFAULT_SETTINGS
+
+        mapping = reply_action_map("admin", ui=dict(DEFAULT_SETTINGS), include_submenus=True)
+        self.assertEqual(mapping.get("📡 تست و وضعیت اتصال"), "connection_status_admin")
+
+    def test_custom_label_matching_old_default_is_not_duplicated(self):
+        from app.services.users import DEFAULT_SETTINGS
+
+        ui = dict(DEFAULT_SETTINGS)
+        ui["menu_order"] = "connection_status"
+        ui["btn_connection_status"] = self._OLD_STATUS_LABEL
+        mapping = reply_action_map("user", ui=ui, include_submenus=False)
+        self.assertEqual(mapping.get(self._OLD_STATUS_LABEL), "connection_status")
+
+
 if __name__ == "__main__":
     unittest.main()
