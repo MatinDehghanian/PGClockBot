@@ -32,15 +32,28 @@ jobs:
       - name: Run curated security regression suite
         run: bash scripts/run_security_tests.sh
 
-  # The installer runs the panel on Python 3.11 or 3.12: newer-only syntax must not ship.
-  python-311-syntax:
+  # The installer runs the panel on Python 3.10–3.12: newer-only code must not ship.
+  oldest-python:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11"]
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: ${{ matrix.python-version }}
 
-      - name: Compile every module with Python 3.11
-        run: python -m compileall -q app alembic scripts run.py
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Compile every module and import the app
+        env:
+          DATABASE_URL: "sqlite+aiosqlite:///:memory:"
+        run: |
+          python -m compileall -q app alembic scripts run.py
+          python -c "import app.main, app.bot, app.api.app"
+
+      - name: Python compatibility tests
+        run: python -m pytest tests/test_py_compat.py -q -p no:cacheprovider

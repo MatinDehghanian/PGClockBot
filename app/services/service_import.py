@@ -27,7 +27,6 @@ import re
 import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from enum import StrEnum
 from typing import Any
 
 import httpx
@@ -37,6 +36,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.db.models import BotUser, ResellerProfile, ServiceImportAttempt, UserService
+from app.py_compat import StrEnum
 from app.services.pasarguard import (
     PasarGuardError,
     absolutize_subscription_url,
