@@ -891,34 +891,52 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         staff: dict = Depends(require_admin),
         session: AsyncSession = Depends(get_db),
     ):
-        """MVP: manual Billing credit by Super Admin only."""
+        """Manual increase or decrease of a PAYG shop wallet, Super Admin only."""
+        from app.services.billing import credit_topup, debit_adjustment
+        from app.services.bot_user_admin import (
+            MIN_ADMIN_WALLET_ADJUST,
+            parse_admin_wallet_amount,
+            parse_admin_wallet_mode,
+        )
+
         form = await request.form()
-        raw = str(form.get("amount") or "").strip().replace(",", "")
         note = str(form.get("note") or "").strip()
         try:
-            amount = int(float(raw))
-        except (TypeError, ValueError):
-            return _redirect_reseller_edit(user_id, err='مبلغ نامعتبر است')
-        if amount < 1000:
-            return _redirect_reseller_edit(user_id, err='حداقل شارژ ۱۰۰۰ تومان است')
-        from app.services.billing import credit_topup
-
-        actor = str(staff.get("username") or staff.get("role") or "admin")
+            amount = parse_admin_wallet_amount(str(form.get("amount") or "").replace(",", ""))
+            # Forms from before the decrease button carry no mode: they were always a charge.
+            mode = parse_admin_wallet_mode(str(form.get("mode") or "credit"))
+        except ValueError as e:
+            return _redirect_reseller_edit(user_id, err=str(e))
+        if amount < MIN_ADMIN_WALLET_ADJUST:
+            return _redirect_reseller_edit(user_id, err=f"حداقل مبلغ {MIN_ADMIN_WALLET_ADJUST:,} تومان است")
         nonce = str(form.get("nonce") or "").strip()
         if len(nonce) < 8:
             return _redirect_reseller_edit(user_id, err='فرم شارژ منقضی شده — صفحه را تازه کنید')
+        actor = str(staff.get("username") or staff.get("role") or "admin")
         try:
-            await credit_topup(
-                session,
-                int(user_id),
-                amount,
-                created_by=actor,
-                note=note or "شارژ دستی ادمین",
-                idempotency_key=f"manual:{user_id}:{amount}:{note}:{actor}:{nonce}",
-            )
+            if mode == "credit":
+                await credit_topup(
+                    session,
+                    int(user_id),
+                    amount,
+                    created_by=actor,
+                    note=note or "شارژ دستی ادمین",
+                    idempotency_key=f"manual:{user_id}:{amount}:{note}:{actor}:{nonce}",
+                )
+            else:
+                await debit_adjustment(
+                    session,
+                    int(user_id),
+                    amount,
+                    created_by=actor,
+                    note=note or "کسر دستی ادمین",
+                    idempotency_key=f"manual-debit:{user_id}:{amount}:{note}:{actor}:{nonce}",
+                )
         except ValueError as e:
             return _redirect_reseller_edit(user_id, err=str(e))
-        return _redirect_reseller_edit(user_id, ok=f'شارژ کیف پول به مبلغ {amount:,} تومان ثبت شد')
+        if mode == "credit":
+            return _redirect_reseller_edit(user_id, ok=f'شارژ کیف پول به مبلغ {amount:,} تومان ثبت شد')
+        return _redirect_reseller_edit(user_id, ok=f'از کیف پول {amount:,} تومان کسر شد')
 
     @app.post("/resellers/{user_id}/subscription/adjust")
     async def reseller_subscription_adjust(

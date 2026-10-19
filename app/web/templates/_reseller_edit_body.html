@@ -254,26 +254,32 @@
       <span class="payg-meta-value num-ratio">{{ (profile.billing_watermark_bytes or 0) | bytes }}</span>
     </li>
   </ul>
-  <p class="muted payg-help">مصرف ترافیک از کیف پول فروشگاه نماینده کم می‌شود و شارژ دستی هم به همان کیف پول می‌رود. ستون «مانده» موجودی بعد از هر تراکنش است.</p>
-  <form method="post" action="/resellers/{{ user.id }}/billing-topup" class="form-stack">
+  <p class="muted payg-help">مصرف ترافیک از کیف پول فروشگاه نماینده کم می‌شود و افزایش یا کاهش دستی هم روی همان کیف پول اعمال می‌شود؛ موجودی منفی مجاز نیست. ستون «مانده» موجودی بعد از هر تراکنش است.</p>
+  <form method="post" action="/resellers/{{ user.id }}/billing-topup" class="form-stack"
+        data-confirm="موجودی کیف پول این نماینده مطابق مبلغ و نوع انتخاب‌شده تغییر کند؟"
+        data-confirm-title="تأیید تنظیم کیف پول"
+        data-confirm-label="اعمال">
     <input type="hidden" name="nonce" value="{{ topup_nonce }}" />
-    <div class="form-row">
-      <div>
-        <label class="form-field">شارژ کیف پول (تومان)
-          <input name="amount" type="number" data-money min="{{ min_unsuspend or 1000 }}" step="1000" value="{{ min_unsuspend or '' }}" placeholder="مثلاً ۵۰,۰۰۰" required />
-          {% if min_unsuspend %}
-          <small class="muted">حداقل برای رفع مسدودی: <span dir="ltr">{{ (min_unsuspend) | money }}</span> تومان (۲× آستانه هشدار)</small>
-          {% endif %}
-        </label>
+    <div class="user-edit-fields">
+      <label class="form-field">مبلغ (تومان)
+        <input name="amount" type="number" data-money min="1000" step="1000" value="{{ min_unsuspend or '' }}" placeholder="مثلاً ۵۰,۰۰۰" inputmode="numeric" required />
+        {% if min_unsuspend %}
+        <small class="muted">حداقل شارژ برای رفع مسدودی: <span dir="ltr">{{ (min_unsuspend) | money }}</span> تومان (۲× آستانه هشدار)</small>
+        {% endif %}
+      </label>
+      <div class="wallet-adjust-modes" role="group" aria-label="نوع تنظیم کیف پول">
+        <button class="wallet-mode-btn wallet-mode-btn--debit" type="submit" name="mode" value="debit">
+          <span class="wallet-mode-swatch" aria-hidden="true"></span>
+          <span class="wallet-mode-label">کاهش</span>
+        </button>
+        <button class="wallet-mode-btn wallet-mode-btn--credit" type="submit" name="mode" value="credit">
+          <span class="wallet-mode-swatch" aria-hidden="true"></span>
+          <span class="wallet-mode-label">افزایش</span>
+        </button>
       </div>
-      <div>
-        <label class="form-field">یادداشت
-          <input name="note" type="text" maxlength="200" placeholder="اختیاری" />
-        </label>
-      </div>
-    </div>
-    <div class="actions">
-      <button class="btn" type="submit">ثبت شارژ کیف پول</button>
+      <label class="form-field">یادداشت
+        <input name="note" type="text" maxlength="200" placeholder="اختیاری" />
+      </label>
     </div>
   </form>
   {% if wallet_txs %}
@@ -308,7 +314,7 @@
       <li class="wallet-tx-item">
         <div class="wallet-tx-main">
           <span class="mono wallet-tx-amount {% if tx.amount < 0 %}is-debit{% else %}is-credit{% endif %}" dir="ltr">{{ tx.amount | money }}</span>
-          <span class="muted wallet-tx-reason">{{ tx.kind or '—' }}{% if tx.note %} · {{ tx.note }}{% endif %}</span>
+          <span class="muted wallet-tx-reason">{{ {'topup': 'شارژ', 'usage': 'مصرف', 'adjustment': 'تنظیم دستی'}.get(tx.kind, tx.kind or '—') }}{% if tx.note %} · {{ tx.note }}{% endif %}</span>
         </div>
         <div class="wallet-tx-side">
           <span class="mono muted">#{{ tx.id }}</span>
