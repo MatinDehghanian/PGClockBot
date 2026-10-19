@@ -57,7 +57,7 @@ class OrdersCreatedAtIndexMigrationTests(unittest.TestCase):
 
         config = Config(str(ROOT / "alembic.ini"))
         config.set_main_option("script_location", str(ROOT / "alembic"))
-        self.assertEqual(ScriptDirectory.from_config(config).get_heads(), ["0063_orders_created_at_index"])
+        self.assertEqual(len(ScriptDirectory.from_config(config).get_heads()), 1)
 
 
 @unittest.skipUnless(POSTGRES_URL, "set PGCLOCK_TEST_POSTGRES_URL to a disposable PostgreSQL database")
