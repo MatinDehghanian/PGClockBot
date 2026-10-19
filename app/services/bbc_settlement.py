@@ -46,6 +46,31 @@ logger = logging.getLogger(__name__)
 
 ENABLED_KEY = "pay_bbc_enabled"
 API_KEY = "bbc_api_key"
+# What a customer is told when the shop's gateway setup is incomplete; the cause goes to the log.
+CUSTOMER_UNAVAILABLE = "این روش پرداخت موقتاً در دسترس نیست؛ روش دیگری را انتخاب کنید."
+HTTPS_REQUIRED = "برای «بزن به کارت» آدرس عمومی پنل باید https باشد؛ SSL را روی پنل اصلی فعال کنید."
+
+
+class BbcNotReady(ValueError):
+    """The gateway cannot be used until its setup is fixed; customers only see ``CUSTOMER_UNAVAILABLE``."""
+
+
+def https_base_ready() -> bool:
+    """BezanBeCard calls back and returns over https only."""
+    return _public_base().startswith("https://")
+
+
+async def bbc_enable_error(session: AsyncSession, payload: dict[str, str], *, reseller_id: int | None) -> str | None:
+    """A message when a saved payment tab would newly switch the gateway on without an https address.
+
+    A gateway that is already on does not block unrelated payment settings from being saved.
+    """
+    if str(payload.get(ENABLED_KEY, "")).strip() != "1" or https_base_ready():
+        return None
+    from app.services.users import get_setting
+
+    already_on = _on(await get_setting(session, ENABLED_KEY, "0", reseller_id=reseller_id))
+    return None if already_on else HTTPS_REQUIRED
 POLL_BATCH = 40
 # Expired orders are still read for a while: staff may approve a late transfer in the dashboard.
 LATE_PAYMENT_WINDOW = timedelta(hours=48)
@@ -102,11 +127,18 @@ def checkout_of(settlement: PaymentSettlement) -> BbcCheckout | None:
 async def _shop_api_key(session: AsyncSession, shop_owner_id: int | None) -> str:
     ui = await get_all_settings(session, reseller_id=shop_owner_id)
     if not _on(ui.get(ENABLED_KEY)):
-        raise ValueError("درگاه بزن به کارت غیرفعال است")
+        raise BbcNotReady("درگاه بزن به کارت غیرفعال است")
     key = str(ui.get(API_KEY) or "").strip()
     if len(key) < 8:
-        raise ValueError("کلید API بزن به کارت تنظیم نشده")
+        raise BbcNotReady("کلید API بزن به کارت تنظیم نشده")
     return key
+
+
+async def ensure_gateway_ready(session: AsyncSession, shop_owner_id: int | None) -> None:
+    """Fail before any payment row is created when the shop's gateway cannot work."""
+    await _shop_api_key(session, shop_owner_id)
+    if not https_base_ready():
+        raise BbcNotReady(HTTPS_REQUIRED)
 
 
 # --- Create ------------------------------------------------------------------------
@@ -159,6 +191,8 @@ async def start_bbc_checkout(
     if reseller_id is not None and not _shop_ids_equal(shop_owner_id, int(reseller_id)):
         raise ValueError("پرداخت خارج از محدوده فروشگاه است")
     api_key = await _shop_api_key(session, shop_owner_id)
+    if not https_base_ready():
+        raise BbcNotReady(HTTPS_REQUIRED)
     settlement = await _settlement_for(session, payment, shop_owner_id)
     ready = checkout_of(settlement)
     if ready is not None:
@@ -249,8 +283,8 @@ def _new_request(
     settlement: PaymentSettlement, payment: Payment, description: str, data: dict[str, Any]
 ) -> bbc.BbcOrderRequest:
     base = _public_base()
-    if not base:
-        raise ValueError("آدرس عمومی ربات (PUBLIC_BASE_URL) برای درگاه تنظیم نشده")
+    if not base.startswith("https://"):
+        raise BbcNotReady(HTTPS_REQUIRED)
     link_token = secrets.token_urlsafe(24)
     data["link_token"] = link_token
     attempt = secrets.token_hex(4)

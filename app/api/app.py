@@ -108,6 +108,7 @@ from app.api.gift_code_pages import legacy_gift_modal_redirect, register_gift_co
 from app.api.bot_overview_pages import register_bot_overview_pages
 from app.api.dashboard_trend_pages import register_dashboard_trend_pages
 from app.services.backup_settings import apply_backup_retention, normalize_backup_payload
+from app.services.bbc_settlement import bbc_enable_error
 from app.api.home_pages import register_home_pages
 from app.api.pg_pages import register_pg_pages
 from app.api.service_import_pages import register_service_import_pages
@@ -5020,6 +5021,10 @@ def create_api_app(lifespan=None) -> FastAPI:
         backup_error = normalize_backup_payload(payload) if tab == "backup" else None
         if backup_error:
             return RedirectResponse("/settings?tab=backup&err=" + quote(backup_error), status_code=303)
+        gateway_error = await bbc_enable_error(session, payload, reseller_id=None) if tab == "payment" else None
+        if gateway_error:
+            back = safe_internal_next(request.query_params.get("next"), "") or "/settings?tab=payment"
+            return RedirectResponse(f"{back}{'&' if '?' in back else '?'}err=" + quote(gateway_error), status_code=303)
         if tab == SCREEN_TEXT_TAB:
             try:
                 validate_screen_text_settings(payload)

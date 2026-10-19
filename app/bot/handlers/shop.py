@@ -20,7 +20,7 @@ from app.bot.handlers.purchase_contact import prompt_purchase_contact_if_needed
 from app.bot.tg_utils import safe_edit_text
 from app.config import get_settings
 from app.db.models import BotUser, Order, PaymentMethod
-from app.services.bbc_settlement import start_bbc_checkout
+from app.services.bbc_settlement import CUSTOMER_UNAVAILABLE, BbcNotReady, ensure_gateway_ready, start_bbc_checkout
 from app.services.redact import user_safe_error
 from app.services.delivery import send_delivery_to_user
 from app.services.formatting import (
@@ -2446,8 +2446,13 @@ async def pay_bbc_cb(
         await callback.answer("این سفارش دیگر در دسترس نیست", show_alert=True)
         return
     try:
+        await ensure_gateway_ready(session, current_shop_reseller_id())
         payment = await start_method_payment(session, order, db_user.id, PaymentMethod.BBC.value)
         checkout = await start_bbc_checkout(session, payment, description=f"سفارش #{order.id}")
+    except BbcNotReady as exc:
+        logger.warning("bezanbecard checkout refused: %s", exc)
+        await callback.answer(CUSTOMER_UNAVAILABLE, show_alert=True)
+        return
     except ValueError as exc:
         await callback.answer(user_safe_error(exc), show_alert=True)
         return
