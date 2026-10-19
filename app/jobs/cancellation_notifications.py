@@ -68,7 +68,7 @@ async def _send_target(
                 continue
             logger.warning("cancellation notice rate limited request=%s chat=%s", notice.request_id, chat_id, exc_info=True)
             return False
-        except (TelegramAPIError, OSError, TimeoutError):
+        except (TelegramAPIError, OSError, asyncio.TimeoutError):
             # The other recipients may already have received this notice.
             logger.warning("cancellation notice delivery needs review request=%s chat=%s", notice.request_id, chat_id, exc_info=True)
             return False

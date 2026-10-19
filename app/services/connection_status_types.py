@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from enum import StrEnum
 
+from app.py_compat import StrEnum
 
 FRESHNESS = timedelta(seconds=180)
 SAMPLE_LIMIT = 5
