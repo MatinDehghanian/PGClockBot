@@ -10,7 +10,7 @@ from sqlalchemy import select
 from connection_monitor_support import MonitorDatabaseCase, monitor_access
 
 from app.db.models import ConnectionMonitorState, ConnectionMonitorTarget
-from app.services.connection_monitor_queue import queue_manual_check
+from app.services.connection_monitor_queue import QUEUE_RUNTIME_PENDING, QUEUE_UNAVAILABLE, queue_manual_check
 
 
 class MonitorQueueTests(MonitorDatabaseCase):
@@ -56,7 +56,30 @@ class MonitorQueueTests(MonitorDatabaseCase):
     async def test_stale_catalog_and_strict_numeric_bounds_reject_requests(self) -> None:
         async with self.Session() as session:
             for target_id in (True, -1, 0, 2147483648, "10"):
-                with self.subTest(target_id=target_id), self.assertRaises(ValueError):
+                with self.subTest(target_id=target_id), self.assertRaises(ValueError) as ctx:
                     await queue_manual_check(session, self.access, target_id=target_id, now=self.now)
-            with self.assertRaises(ValueError):
+                self.assertEqual(str(ctx.exception), QUEUE_UNAVAILABLE)
+            with self.assertRaises(ValueError) as ctx:
                 await queue_manual_check(session, self.access, target_id=10, now=self.now + timedelta(seconds=180))
+            self.assertEqual(str(ctx.exception), QUEUE_RUNTIME_PENDING)
+
+    async def test_unsynced_catalog_explains_runtime_pending_not_generic_queue_error(self) -> None:
+        async with self.Session() as session:
+            state = await session.scalar(select(ConnectionMonitorState).where(ConnectionMonitorState.reseller_id.is_(None)))
+            state.catalog_synced_at = None
+            await session.commit()
+        async with self.Session() as session:
+            with self.assertRaises(ValueError) as ctx:
+                await queue_manual_check(session, self.access, target_id=10, now=self.now)
+            self.assertEqual(str(ctx.exception), QUEUE_RUNTIME_PENDING)
+
+    async def test_cooldown_or_missing_target_keeps_generic_queue_unavailable(self) -> None:
+        async with self.Session() as session:
+            await queue_manual_check(session, self.access, target_id=10, now=self.now)
+        async with self.Session() as session:
+            with self.assertRaises(ValueError) as ctx:
+                await queue_manual_check(session, self.access, target_id=10, now=self.now)
+            self.assertEqual(str(ctx.exception), QUEUE_UNAVAILABLE)
+            with self.assertRaises(ValueError) as ctx:
+                await queue_manual_check(session, self.access, target_id=999, now=self.now)
+            self.assertEqual(str(ctx.exception), QUEUE_UNAVAILABLE)
