@@ -1074,6 +1074,17 @@
         }, true);
       }
       sel.addEventListener('change', syncLabel);
+      /* The real select's name moved to the hidden mirror, so a plain `select.value = x`
+         from page script changed nothing that gets submitted (an edited «زمان» pack was
+         saved as «حجم»). Keep the mirror and the label in step with script assignments. */
+      try {
+        const nativeValue = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value');
+        Object.defineProperty(sel, 'value', {
+          configurable: true,
+          get() { return nativeValue.get.call(this); },
+          set(next) { nativeValue.set.call(this, next); syncLabel(); },
+        });
+      } catch (e) {}
       /* Always rebuild custom menu when <option> list is rewritten (e.g. plans modal
          audience → kind options). Previously only settings forms were watched, so
          dynamic selects kept showing stale labels/options. */
