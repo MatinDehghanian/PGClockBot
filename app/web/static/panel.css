@@ -10683,7 +10683,9 @@ html[data-theme="light"] .ui-select-menu button[data-tone="danger"]:hover {
   align-items: end;
   gap: var(--space-2);
 }
-.guides-link-row > .guides-link-remove { margin-bottom: var(--space-1); }
+/* Labels lose the global bottom margin here, so the field and the remove circle share the row's bottom edge. */
+.guides-link-row > label { margin-bottom: 0; }
+.guides-link-row > .guides-link-remove { margin: 0; }
 .guides-links > .guides-link-add { padding: var(--space-1) var(--space-2); }
 .guides-links > .guides-link-add[hidden] { display: none; }
 .guides-link-row + .guides-link-row {
