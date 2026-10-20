@@ -1,8 +1,9 @@
 """Volume allocation gate for fixed-plan reseller shops.
 
 Ceiling comes from ``PgAdminSubscription`` (base_gb + extra_gb_purchased). Allocation is the SQL
-sum of non-cancelled ``UserService.quota_data_limit_bytes`` of the shop plus its live
-``VolumeHold`` rows. Unlimited (0) and unsynced (NULL) services count as zero and are listed as
+sum of non-cancelled ``UserService.quota_data_limit_bytes`` of the shop, its live
+``VolumeHold`` rows and ``ResellerProfile.external_allocated_bytes`` (panel users without a
+local row, counted by ``volume_allocation_external``). Unlimited (0) and unsynced (NULL) services count as zero and are listed as
 warnings. PAYG shops, shops with ``allow_volume_oversell`` and shops without a ceiling (no
 subscription, or an unlimited one) are not gated.
 
@@ -63,6 +64,8 @@ class VolumeAllocationError(Exception):
 class AllocationSnapshot:
     shop_id: int
     allocated_bytes: int
+    external_allocated_bytes: int
+    external_synced_at: datetime | None
     ceiling_bytes: int | None
     allow_oversell: bool
     is_payg: bool
@@ -148,9 +151,21 @@ async def sum_active_holds(session: AsyncSession, shop_id: int) -> int:
     return int(total or 0)
 
 
+async def sum_external_bytes(session: AsyncSession, shop_id: int) -> int:
+    """Last counted volume of the shop's panel users that have no local service row."""
+    total = await session.scalar(
+        select(ResellerProfile.external_allocated_bytes).where(ResellerProfile.user_id == int(shop_id))
+    )
+    return int(total or 0)
+
+
 async def sum_allocated_bytes(session: AsyncSession, shop_id: int) -> int:
-    """Everything that counts against the ceiling: services plus live holds."""
-    return await sum_service_bytes(session, shop_id) + await sum_active_holds(session, shop_id)
+    """Everything that counts against the ceiling: services, live holds and panel-only users."""
+    return (
+        await sum_service_bytes(session, shop_id)
+        + await sum_active_holds(session, shop_id)
+        + await sum_external_bytes(session, shop_id)
+    )
 
 
 async def sum_expired_held_bytes(session: AsyncSession, shop_id: int) -> int:
@@ -326,6 +341,8 @@ async def build_allocation_snapshot(
     return AllocationSnapshot(
         shop_id=int(shop_id),
         allocated_bytes=allocated,
+        external_allocated_bytes=int(profile.external_allocated_bytes or 0),
+        external_synced_at=profile.external_alloc_synced_at,
         ceiling_bytes=ceiling,
         allow_oversell=allow,
         is_payg=payg,
@@ -343,7 +360,9 @@ async def gated_allocations(session: AsyncSession, *, limit: int = GATED_SHOPS_B
     """``(shop_id, allocated_bytes, ceiling_bytes)`` of every gated shop with a ceiling, in 4 queries."""
     profiles = (
         await session.execute(
-            select(ResellerProfile.user_id, ResellerProfile.pg_admin_username)
+            select(
+                ResellerProfile.user_id, ResellerProfile.pg_admin_username, ResellerProfile.external_allocated_bytes
+            )
             .where(
                 ResellerProfile.is_active.is_(True),
                 ResellerProfile.allow_volume_oversell.is_(False),
@@ -359,7 +378,7 @@ async def gated_allocations(session: AsyncSession, *, limit: int = GATED_SHOPS_B
     subs = (
         await session.execute(
             select(PgAdminSubscription.pg_username, PgAdminSubscription.base_gb, PgAdminSubscription.extra_gb_purchased)
-            .where(PgAdminSubscription.pg_username.in_({str(u).strip() for _, u in profiles}))
+            .where(PgAdminSubscription.pg_username.in_({str(u).strip() for _, u, _ in profiles}))
         )
     ).all()
     ceiling_by_uname = {
@@ -367,7 +386,7 @@ async def gated_allocations(session: AsyncSession, *, limit: int = GATED_SHOPS_B
         for uname, base, extra in subs
         if int(base or 0) + int(extra or 0) > 0
     }
-    shop_ids = [int(sid) for sid, _ in profiles]
+    shop_ids = [int(sid) for sid, _, _ in profiles]
     service_sums = dict(
         (
             await session.execute(
@@ -391,10 +410,10 @@ async def gated_allocations(session: AsyncSession, *, limit: int = GATED_SHOPS_B
         ).all()
     )
     out: list[tuple[int, int, int]] = []
-    for sid, uname in profiles:
+    for sid, uname, external in profiles:
         ceiling = ceiling_by_uname.get(str(uname).strip())
         if ceiling is not None:
-            allocated = int(service_sums.get(sid) or 0) + int(hold_sums.get(sid) or 0)
+            allocated = int(service_sums.get(sid) or 0) + int(hold_sums.get(sid) or 0) + int(external or 0)
             out.append((int(sid), allocated, ceiling))
     return out
 

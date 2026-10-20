@@ -1,4 +1,4 @@
-"""External (panel-only) volume allocation sync (PR-B)."""
+"""Recount of panel-only users' volume: paging, matching, failures and scheduling order."""
 
 from __future__ import annotations
 
@@ -8,23 +8,26 @@ import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.db import Base
 from app.db.models import BotUser, PgAdminSubscription, ResellerProfile, Role, UserService
 from app.services.billing import GB
-from app.services.volume_allocation import assert_volume_delta_allowed, sum_allocated_bytes
+from app.services.volume_allocation import VolumeAllocationError, assert_volume_delta_allowed, sum_allocated_bytes
 from app.services.volume_allocation_external import (
+    IN_CHUNK,
+    PAGE_SIZE,
+    PanelListingIncomplete,
     compute_external_bytes,
+    due_shop_ids,
     external_sync_is_stale,
     list_panel_users_for_admin,
     run_external_allocation_sync,
-    sync_shop_external_allocation,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -75,137 +78,130 @@ class ExternalHarness(unittest.IsolatedAsyncioTestCase):
             return profile
 
 
+def _paged(users: list[dict], *, total: int | None = None):
+    async def get_users(*, admin, limit, offset):
+        body = {"users": users[offset : offset + limit]}
+        if total is not None:
+            body["total"] = total
+        return body
+
+    return get_users
+
+
+def _users(n: int, gb: int = 1, start: int = 1) -> list[dict]:
+    return [{"id": i, "username": f"p{i}", "data_limit": gb * GB} for i in range(start, start + n)]
+
+
 class PaginationAndMatchTests(ExternalHarness):
-    async def test_pagination_collects_all_pages(self) -> None:
-        pages = {
-            0: {
-                "users": [
-                    {"id": 1, "username": "a", "data_limit": GB},
-                    {"id": 2, "username": "b", "data_limit": 2 * GB},
-                ]
-            },
-            2: {
-                "users": [
-                    {"id": 3, "username": "c", "data_limit": 3 * GB},
-                ]
-            },
-        }
+    async def test_every_page_is_collected(self) -> None:
+        pg = AsyncMock(get_users=_paged(_users(PAGE_SIZE + 3), total=PAGE_SIZE + 3))
+        self.assertEqual(len(await list_panel_users_for_admin(pg, "admin10")), PAGE_SIZE + 3)
 
-        async def get_users(*, admin, limit, offset):
-            return pages.get(offset, {"users": []})
-
-        pg = AsyncMock()
-        pg.get_users = get_users
-        users = await list_panel_users_for_admin(pg, "admin10", page_size=2)
-        self.assertEqual(len(users), 3)
+    async def test_list_that_changes_while_paging_is_refused(self) -> None:
+        pg = AsyncMock(get_users=_paged(_users(PAGE_SIZE + 3), total=PAGE_SIZE + 9))
+        with self.assertRaises(PanelListingIncomplete):
+            await list_panel_users_for_admin(pg, "admin10")
 
     async def test_panel_only_users_count_as_external(self) -> None:
         await self._shop()
         async with self.Session() as session:
-            session.add(
-                BotUser(id=1, telegram_id=1, role=Role.USER.value, referral_code="u1")
-            )
-            session.add(
-                UserService(
-                    bot_user_id=1,
-                    pg_user_id=1,
-                    pg_username="local-one",
-                    shop_id=10,
-                    quota_data_limit_bytes=GB,
-                    quota_synced_at=datetime.now(timezone.utc),
-                )
+            session.add(BotUser(id=1, telegram_id=1, role=Role.USER.value, referral_code="u1"))
+            session.add_all(
+                [
+                    UserService(bot_user_id=1, pg_user_id=1, pg_username="local-one", shop_id=10,
+                                quota_data_limit_bytes=GB),
+                    # Saved before its panel id was known: matched by username.
+                    UserService(bot_user_id=1, pg_user_id=None, pg_username="Local-Two", shop_id=10,
+                                quota_data_limit_bytes=GB),
+                    # Another shop's service never hides this shop's panel user.
+                    UserService(bot_user_id=1, pg_user_id=99, pg_username="x", shop_id=20,
+                                quota_data_limit_bytes=GB),
+                ]
             )
             await session.commit()
             panel = [
                 {"id": 1, "username": "local-one", "data_limit": GB},
+                {"id": 2, "username": "local-two", "data_limit": GB},
                 {"id": 99, "username": "panel-only", "data_limit": 4 * GB},
                 {"id": 100, "username": "unlimited", "data_limit": 0},
             ]
-            external, unmatched = await compute_external_bytes(
-                session, shop_id=10, panel_users=panel
+            self.assertEqual(await compute_external_bytes(session, shop_id=10, panel_users=panel), 4 * GB)
+
+    async def test_large_lists_are_matched_in_chunks(self) -> None:
+        await self._shop()
+        async with self.Session() as session:
+            panel = _users(IN_CHUNK * 2 + 5)
+            self.assertEqual(
+                await compute_external_bytes(session, shop_id=10, panel_users=panel), (IN_CHUNK * 2 + 5) * GB
             )
-            self.assertEqual(unmatched, 2)
-            self.assertEqual(external, 4 * GB)
 
 
 class SyncBehaviourTests(ExternalHarness):
-    async def test_sync_stores_external_and_blocks_sell(self) -> None:
-        profile = await self._shop(ceiling_gb=5)
-        pg = AsyncMock()
-        pg.get_users = AsyncMock(
-            return_value={
-                "users": [
-                    {"id": 50, "username": "panel-x", "data_limit": 5 * GB},
-                ]
-            }
-        )
-        pg.get_admin = AsyncMock(return_value={"data_limit": 5 * GB})
-        async with self.Session() as session:
-            row = await session.get(ResellerProfile, profile.id)
-            result = await sync_shop_external_allocation(session, row, pg=pg)
-            await session.commit()
-            self.assertEqual(result.external_bytes, 5 * GB)
-            self.assertFalse(result.stale)
-            self.assertEqual(await sum_allocated_bytes(session, 10), 5 * GB)
-            with self.assertRaises(Exception):
-                await assert_volume_delta_allowed(
-                    session, shop_id=10, delta_bytes=GB, audience="admin"
-                )
+    async def _sync(self, pg_by_shop: dict[int, object]) -> list:
+        async def client(session, shop_id):
+            return pg_by_shop[shop_id]
 
-    async def test_panel_outage_keeps_previous_and_does_not_open_sell(self) -> None:
-        profile = await self._shop(ceiling_gb=5)
+        with patch("app.services.volume_allocation_external.get_pg_for_reseller", new=client):
+            return await run_external_allocation_sync(self.Session)
+
+    async def _external(self, shop_id: int) -> int:
         async with self.Session() as session:
-            row = await session.get(ResellerProfile, profile.id)
+            return int(
+                await session.scalar(
+                    select(ResellerProfile.external_allocated_bytes).where(ResellerProfile.user_id == shop_id)
+                )
+            )
+
+    async def test_sync_stores_external_and_blocks_sell(self) -> None:
+        await self._shop(ceiling_gb=5)
+        await self._sync({10: AsyncMock(get_users=_paged(_users(1, gb=5, start=50)))})
+        async with self.Session() as session:
+            self.assertEqual(await sum_allocated_bytes(session, 10), 5 * GB)
+            with self.assertRaises(VolumeAllocationError):
+                await assert_volume_delta_allowed(session, shop_id=10, delta_bytes=GB, audience="admin")
+
+    async def test_panel_outage_keeps_the_previous_total(self) -> None:
+        await self._shop(ceiling_gb=5)
+        async with self.Session() as session:
+            row = await session.scalar(select(ResellerProfile).where(ResellerProfile.user_id == 10))
             row.external_allocated_bytes = 5 * GB
             row.external_alloc_synced_at = datetime.now(timezone.utc) - timedelta(hours=2)
             await session.commit()
-        pg = AsyncMock()
-        pg.get_users = AsyncMock(side_effect=TimeoutError("panel down"))
-        async with self.Session() as session:
-            row = await session.get(ResellerProfile, profile.id)
-            result = await sync_shop_external_allocation(session, row, pg=pg)
-            self.assertTrue(result.stale)
-            self.assertEqual(result.external_bytes, 5 * GB)
-            self.assertEqual(int(row.external_allocated_bytes), 5 * GB)
-            with self.assertRaises(Exception):
-                await assert_volume_delta_allowed(
-                    session, shop_id=10, delta_bytes=GB, audience="admin"
-                )
+        results = await self._sync({10: AsyncMock(get_users=AsyncMock(side_effect=TimeoutError("panel down")))})
+        self.assertIsNotNone(results[0].error)
+        self.assertEqual(await self._external(10), 5 * GB)
 
     async def test_one_bad_shop_does_not_stop_others(self) -> None:
-        await self._shop(shop_id=10, ceiling_gb=10)
-        await self._shop(shop_id=20, ceiling_gb=10)
+        await self._shop(shop_id=10)
+        await self._shop(shop_id=20)
+        results = await self._sync(
+            {
+                10: AsyncMock(get_users=AsyncMock(side_effect=RuntimeError("boom"))),
+                20: AsyncMock(get_users=_paged(_users(1, gb=2, start=7))),
+            }
+        )
+        by_shop = {r.shop_id: r for r in results}
+        self.assertIsNotNone(by_shop[10].error)
+        self.assertEqual(by_shop[20].external_bytes, 2 * GB)
+        self.assertEqual(await self._external(20), 2 * GB)
 
-        async def factory(session, shop_id):
-            pg = AsyncMock()
-            if shop_id == 10:
-                pg.get_users = AsyncMock(side_effect=RuntimeError("boom"))
-            else:
-                pg.get_users = AsyncMock(
-                    return_value={
-                        "users": [{"id": 7, "username": "ok", "data_limit": 2 * GB}]
-                    }
-                )
-                pg.get_admin = AsyncMock(return_value={"data_limit": 10 * GB})
-            return pg
-
+    async def test_recently_counted_shops_wait_and_oldest_go_first(self) -> None:
+        now = datetime.now(timezone.utc)
+        for shop_id, synced in ((10, now), (20, now - timedelta(hours=3)), (30, None), (40, now - timedelta(hours=1))):
+            await self._shop(shop_id=shop_id)
+            async with self.Session() as session:
+                row = await session.scalar(select(ResellerProfile).where(ResellerProfile.user_id == shop_id))
+                row.external_alloc_synced_at = synced
+                await session.commit()
         async with self.Session() as session:
-            results = await run_external_allocation_sync(
-                session, concurrency=2, pg_factory=factory
-            )
-            by_shop = {r.shop_id: r for r in results}
-            self.assertTrue(by_shop[10].stale)
-            self.assertEqual(by_shop[20].external_bytes, 2 * GB)
-            self.assertFalse(by_shop[20].stale)
+            self.assertEqual(await due_shop_ids(session, period_minutes=15), [30, 20, 40])
+            self.assertEqual(await due_shop_ids(session, period_minutes=15, limit=1), [30])
 
     def test_stale_after_two_periods(self) -> None:
         now = datetime.now(timezone.utc)
-        self.assertTrue(
-            external_sync_is_stale(now - timedelta(minutes=31), period_minutes=15, now=now)
-        )
-        self.assertFalse(
-            external_sync_is_stale(now - timedelta(minutes=20), period_minutes=15, now=now)
-        )
+        self.assertTrue(external_sync_is_stale(now - timedelta(minutes=31), period_minutes=15, now=now))
+        self.assertFalse(external_sync_is_stale(now - timedelta(minutes=20), period_minutes=15, now=now))
+        self.assertTrue(external_sync_is_stale(None, period_minutes=15, now=now))
 
 
 class MigrationTests(unittest.TestCase):
