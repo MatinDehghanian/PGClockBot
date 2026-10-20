@@ -87,11 +87,14 @@ async def allocation_view_for_shop(
         "alloc_bytes_text": format_bytes(snap.allocated_bytes),
         "alloc_ceiling_text": ceiling_text,
         "alloc_ratio_text": f"{format_bytes(snap.allocated_bytes)} / {ceiling_text}",
+        "alloc_local_text": format_bytes(snap.local_allocated_bytes),
+        "alloc_external_text": format_bytes(snap.external_allocated_bytes),
         "alloc_expired_held_text": format_bytes(snap.expired_held_bytes),
         "alloc_unlimited": snap.unlimited_services,
         "alloc_is_oversold": snap.is_oversold,
         "alloc_allow_oversell": snap.allow_oversell,
         "alloc_is_payg": snap.is_payg,
+        "alloc_external_stale": snap.external_sync_stale,
     }
 
 

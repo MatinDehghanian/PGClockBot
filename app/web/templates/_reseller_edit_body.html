@@ -189,6 +189,14 @@
       <span class="payg-meta-value num-ratio">{{ pg_subscription.alloc_ratio_text }}</span>
     </li>
     <li>
+      <span class="payg-meta-label">تخصیص محلی</span>
+      <span class="payg-meta-value num-ratio">{{ pg_subscription.alloc_local_text }}</span>
+    </li>
+    <li>
+      <span class="payg-meta-label">تخصیص بیرونی (پنل)</span>
+      <span class="payg-meta-value num-ratio">{{ pg_subscription.alloc_external_text }}</span>
+    </li>
+    <li>
       <span class="payg-meta-label">حجم در اختیار منقضی‌ها</span>
       <span class="payg-meta-value num-ratio">{{ pg_subscription.alloc_expired_held_text }}</span>
     </li>
@@ -210,6 +218,12 @@
   </ul>
   {% if pg_subscription.alloc_is_oversold %}
   <div class="flash warn">تخصیص حجم این نماینده از سقف بیشتر است. افزایش حجم تا کاهش یا حذف سرویس‌ها مسدود است.</div>
+  {% endif %}
+  {% if pg_subscription.alloc_external_stale %}
+  <div class="flash warn">همگام‌سازی تخصیص بیرونی (یوزرهای ساخته‌شده مستقیم در پاسارگارد) قدیمی است؛ آخرین مقدار ذخیره‌شده استفاده می‌شود و فروش به‌خاطر قطعی پنل باز نمی‌شود.</div>
+  {% endif %}
+  {% if pg_subscription.ceiling_mismatch_text %}
+  <div class="flash warn">اختلاف سقف ادمین در پاسارگارد با سقف محلی: {{ pg_subscription.ceiling_mismatch_text }} (خودکار اصلاح نمی‌شود).</div>
   {% endif %}
   {% if pg_subscription.alloc_unlimited %}
   <div class="flash warn">

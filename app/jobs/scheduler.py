@@ -817,6 +817,18 @@ def start_scheduler(bot: Bot) -> None:
         run_panel_alert_notifications, "interval", minutes=5, args=[bot], id="panel_alert_notifications",
         max_instances=1, coalesce=True, misfire_grace_time=300, replace_existing=True,
     )
+    from app.jobs.volume_external_sync import run_volume_external_sync
+
+    scheduler.add_job(
+        run_volume_external_sync,
+        "interval",
+        minutes=15,
+        id="volume_external_sync",
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=600,
+        replace_existing=True,
+    )
     scheduler.add_job(
         run_targeted_campaigns_tick, "interval", minutes=1, args=[bot], id="targeted_campaigns",
         max_instances=1, coalesce=True, misfire_grace_time=120, replace_existing=True,

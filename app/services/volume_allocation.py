@@ -68,12 +68,16 @@ class VolumeAllocationError(Exception):
 class AllocationSnapshot:
     shop_id: int
     allocated_bytes: int
+    local_allocated_bytes: int
+    external_allocated_bytes: int
     ceiling_bytes: int | None
     allow_oversell: bool
     is_payg: bool
     expired_held_bytes: int
     unlimited_services: list[dict[str, Any]]
     is_oversold: bool
+    external_sync_stale: bool
+    ceiling_mismatch_bytes: int | None = None
 
 
 def _utcnow() -> datetime:
@@ -155,7 +159,7 @@ async def ceiling_bytes_for_profile(
     return int(total_gb) * int(GB)
 
 
-async def sum_allocated_bytes(session: AsyncSession, shop_id: int) -> int:
+async def sum_local_allocated_bytes(session: AsyncSession, shop_id: int) -> int:
     """SQL aggregate of counted volume for non-cancelled services of this shop."""
     # Positive limits only; NULL and 0 do not add. Cancelled rows are excluded.
     total = await session.scalar(
@@ -167,6 +171,17 @@ async def sum_allocated_bytes(session: AsyncSession, shop_id: int) -> int:
         )
     )
     return int(total or 0)
+
+
+async def sum_allocated_bytes(session: AsyncSession, shop_id: int) -> int:
+    """Local UserService allocation plus last-known external (panel-only) allocation."""
+    local = await sum_local_allocated_bytes(session, shop_id)
+    external = await session.scalar(
+        select(ResellerProfile.external_allocated_bytes).where(
+            ResellerProfile.user_id == int(shop_id)
+        )
+    )
+    return int(local) + int(external or 0)
 
 
 async def sum_expired_held_bytes(session: AsyncSession, shop_id: int) -> int:
@@ -230,7 +245,9 @@ async def build_allocation_snapshot(
         return None
     payg = is_payg(profile)
     ceiling = await ceiling_bytes_for_profile(session, profile)
-    allocated = await sum_allocated_bytes(session, shop_id)
+    local = await sum_local_allocated_bytes(session, shop_id)
+    external = int(getattr(profile, "external_allocated_bytes", 0) or 0)
+    allocated = local + external
     expired_held = await sum_expired_held_bytes(session, shop_id)
     unlimited = await list_unlimited_or_unsynced_services(session, shop_id)
     allow = bool(getattr(profile, "allow_volume_oversell", True))
@@ -240,15 +257,27 @@ async def build_allocation_snapshot(
         and ceiling is not None
         and allocated > ceiling
     )
+    from app.services.volume_allocation_external import (
+        external_sync_is_stale,
+        get_external_sync_minutes,
+    )
+
+    period = await get_external_sync_minutes(session)
+    stale = (not payg) and (not allow) and external_sync_is_stale(
+        getattr(profile, "external_alloc_synced_at", None), period_minutes=period
+    )
     return AllocationSnapshot(
         shop_id=int(shop_id),
         allocated_bytes=allocated,
+        local_allocated_bytes=local,
+        external_allocated_bytes=external,
         ceiling_bytes=ceiling,
         allow_oversell=allow,
         is_payg=payg,
         expired_held_bytes=expired_held,
         unlimited_services=unlimited,
         is_oversold=oversold,
+        external_sync_stale=stale,
     )
 
 
@@ -295,14 +324,17 @@ async def list_oversold_shop_ids(
             .group_by(UserService.shop_id)
         )
     ).all()
-    allocated_by_shop = {int(sid): int(total or 0) for sid, total in sums if sid is not None}
+    local_by_shop = {int(sid): int(total or 0) for sid, total in sums if sid is not None}
     oversold: list[int] = []
     for profile in profiles:
         uname = (profile.pg_admin_username or "").strip()
         ceiling = ceiling_by_uname.get(uname)
         if ceiling is None:
             continue
-        if allocated_by_shop.get(int(profile.user_id), 0) > ceiling:
+        total = local_by_shop.get(int(profile.user_id), 0) + int(
+            getattr(profile, "external_allocated_bytes", 0) or 0
+        )
+        if total > ceiling:
             oversold.append(int(profile.user_id))
     return oversold
 

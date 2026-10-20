@@ -664,12 +664,22 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
                 from app.services.reseller_capacity_view import allocation_view_for_shop
 
                 alloc = await allocation_view_for_shop(session, int(user_id))
+                live = live_capacity_from_overview(pg_limits)
+                # Report panel admin data_limit vs local subscription ceiling (do not auto-fix).
+                if live is not None and live.gb > 0:
+                    local_gb = int(sub.base_gb or 0) + int(sub.extra_gb_purchased or 0)
+                    if local_gb > 0 and live.gb != local_gb:
+                        from app.services.formatting import format_gb
+
+                        alloc["ceiling_mismatch_text"] = (
+                            f"{format_gb(live.gb)} در پنل در برابر {format_gb(local_gb)} محلی"
+                        )
                 pg_subscription = {
                     "expires_at": format_expire_short(exp) if exp else None,
                     **build_capacity_view(
                         sub,
                         current_capacity=is_current_capacity_plan(plan),
-                        live=live_capacity_from_overview(pg_limits),
+                        live=live,
                         allocation=alloc,
                     ),
                 }
