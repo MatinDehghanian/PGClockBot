@@ -33,6 +33,7 @@ from app.services.pasarguard import (
     user_subscription_url,
 )
 from app.services.pg_quota import PgQuotaError, assert_can_create_user
+from app.services.provision_gate import finish_staff_edit, hold_staff_create, hold_staff_edit, settle_failed_hold
 from app.services.redact import user_safe_error
 from app.services import bot_feedback_texts as feedback
 
@@ -1356,6 +1357,7 @@ async def pg_create_username(
     except PgQuotaError as qe:
         await message.answer(f"❌ {qe.message}")
         return
+    hold = None
     try:
         payload = sanitize_pg_user_write_payload(
             {
@@ -1364,8 +1366,14 @@ async def pg_create_username(
                 "note": f"telegram admin · {db_user.telegram_id}",
             }
         )
+        if session is not None:
+            hold = await hold_staff_create(
+                session, gate.staff, pg=gate.pg_client, template_id=int(tid), data_limit=None
+            )
         user = await gate.pg_client.create_user_from_template(payload)
     except Exception as e:
+        if session is not None:
+            await settle_failed_hold(session, hold, e, panel_touched=True)
         # Keep create_username so the operator can retry with another name
         # (duplicate username must not look like a missing-template failure).
         await message.answer(f"❌ {_err_msg(e)}\nنام دیگری بفرستید یا لغو کنید.")
@@ -1536,9 +1544,16 @@ async def pg_create_days(
     except PgQuotaError as qe:
         await message.answer(f"❌ {qe.message}")
         return
+    hold = None
     try:
+        if session is not None:
+            hold = await hold_staff_create(
+                session, gate.staff, pg=gate.pg_client, template_id=None, data_limit=data_limit
+            )
         user = await gate.pg_client.create_user(payload)
     except Exception as e:
+        if session is not None:
+            await settle_failed_hold(session, hold, e, panel_touched=True)
         # Recoverable (e.g. duplicate username): go back to username step.
         await state.set_state(PgUserStates.create_username)
         from app.bot.nav_input import ask_text
@@ -1793,6 +1808,8 @@ async def pg_edit_gb_save(
     if not uid:
         await state.clear()
         return
+    hold = None
+    new_limit = int(gb * (1024**3)) if gb > 0 else 0
     try:
         current = gate.pg_user or {}
         groups = user_group_ids(current if isinstance(current, dict) else {})
@@ -1801,12 +1818,19 @@ async def pg_edit_gb_save(
             build_user_modify_payload(
                 username=str(uname) if uname else None,
                 group_ids=groups or None,
-                data_limit=int(gb * (1024**3)) if gb > 0 else 0,
+                data_limit=new_limit,
                 status=str((current or {}).get("status") or "") or None if isinstance(current, dict) else None,
             )
         )
+        if session is not None:
+            current_limit = current.get("data_limit") if isinstance(current, dict) else None
+            hold = await hold_staff_edit(session, gate.staff, current_limit=current_limit, new_limit=new_limit)
         await gate.pg_client.modify_user_by_id(uid, payload)
+        if session is not None:
+            await finish_staff_edit(session, hold, pg_user_id=uid, data_limit=new_limit)
     except Exception as e:
+        if session is not None:
+            await settle_failed_hold(session, hold, e, panel_touched=True)
         await message.answer(f"❌ {_err_msg(e)}")
         return
     await state.clear()

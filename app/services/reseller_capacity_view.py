@@ -9,6 +9,8 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import PgAdminSubscription, ResellerPlan, ResellerProfile
+from app.services.formatting import format_bytes
+from app.services.volume_allocation import build_allocation_snapshot
 from app.services.pg_admin_subscription import (
     PgCapacityUnreadable,
     get_subscription,
@@ -74,9 +76,6 @@ async def allocation_view_for_shop(
     session: AsyncSession, shop_id: int
 ) -> dict[str, Any]:
     """Allocation / ceiling block for the reseller capacity page."""
-    from app.services.formatting import format_bytes
-    from app.services.volume_allocation import build_allocation_snapshot
-
     snap = await build_allocation_snapshot(session, int(shop_id))
     if snap is None:
         return {}
@@ -87,14 +86,11 @@ async def allocation_view_for_shop(
         "alloc_bytes_text": format_bytes(snap.allocated_bytes),
         "alloc_ceiling_text": ceiling_text,
         "alloc_ratio_text": f"{format_bytes(snap.allocated_bytes)} / {ceiling_text}",
-        "alloc_local_text": format_bytes(snap.local_allocated_bytes),
-        "alloc_external_text": format_bytes(snap.external_allocated_bytes),
         "alloc_expired_held_text": format_bytes(snap.expired_held_bytes),
         "alloc_unlimited": snap.unlimited_services,
         "alloc_is_oversold": snap.is_oversold,
         "alloc_allow_oversell": snap.allow_oversell,
         "alloc_is_payg": snap.is_payg,
-        "alloc_external_stale": snap.external_sync_stale,
     }
 
 

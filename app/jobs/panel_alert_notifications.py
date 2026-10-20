@@ -29,6 +29,7 @@ from app.services.panel_alert_notifications import (
     update_signal,
 )
 from app.services.users import get_all_settings
+from app.services.volume_allocation import volume_threshold_signals
 
 logger = logging.getLogger(__name__)
 
@@ -120,14 +121,7 @@ async def run_panel_alert_notifications(bot: Bot) -> None:
             gate = asyncio.Semaphore(CAPACITY_READ_CONCURRENCY)
             for shop_id in await capacity_due(session, list(shops)):
                 await _check_capacity(session, bot, shop_id, shops[shop_id], gate)
-            # Local volume-allocation thresholds (80% / 100%), once per threshold.
-            try:
-                from app.services.volume_allocation import maybe_warn_volume_thresholds
-
-                for shop_id in list(shops)[:50]:
-                    for signal in await maybe_warn_volume_thresholds(session, shop_id=int(shop_id)):
-                        await announce(bot, session, signal)
-            except Exception:  # noqa: BLE001 - allocation warns must not stop other alerts
-                logger.warning("panel alerts: volume allocation warn failed", exc_info=True)
+            for signal in await volume_threshold_signals(session):
+                await announce(bot, session, signal)
     except Exception:  # noqa: BLE001 - a failed batch is logged and retried on the next tick
         logger.exception("panel alert notification batch failed")
