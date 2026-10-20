@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import switch, row_actions, page_title, modal_title %}
+{% from "macros.html" import switch, oversell_create_switch, row_actions, page_title, modal_title %}
 {% block title %}ادمین{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -290,6 +290,7 @@
       </label>
       <div class="ui-switch-list">
         {{ switch('confirm_billing_mode_change', 'تأیید تغییر نوع پرداخت', checked=false, help='فقط اگر این ادمین از قبل نماینده است و نوع پلن جدید فرق دارد') }}
+        {% if owner_can_toggle_oversell %}{{ oversell_create_switch() }}{% endif %}
       </div>
       <div class="flash warn">پلن پیش‌فرض «ظرفیت فعلی» سقف حجم/کاربر همین ادمین در پاسارگارد را حفظ می‌کند و صفر نمی‌کند. برای سقف ثابت پلن دیگری انتخاب کنید.</div>
       <label class="form-field">رمز عبور مشترک
@@ -356,6 +357,7 @@
         <input name="note" placeholder="نماینده فروش" />
         <small class="muted">اختیاری</small>
       </label>
+      {% if owner_can_toggle_oversell %}<div class="ui-switch-list">{{ oversell_create_switch() }}</div>{% endif %}
       <div class="actions">
         <button class="btn" type="submit" {% if not grant_plans %}disabled{% endif %}>اعطای دسترسی نماینده</button>
         <button type="button" class="btn btn-ghost" data-modal-close>انصراف</button>
@@ -455,6 +457,7 @@
         </div>
         <div class="ui-switch-list">
           {{ switch('share_pg_panel_url', 'ارسال لینک و یوزر/رمز پنل پاسارگارد', checked=false, help='اگر خاموش باشد، نماینده فقط از وب‌پنل ربات مدیریت می‌کند', id='create-share-pg') }}
+          {% if owner_can_toggle_oversell %}{{ oversell_create_switch() }}{% endif %}
         </div>
       </div>
       <div class="ui-switch-list" id="create-staff-web-wrap">

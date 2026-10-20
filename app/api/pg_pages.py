@@ -37,7 +37,9 @@ from app.services.provision_gate import (
     hold_staff_edit,
     settle_failed_hold,
 )
+from app.services.platform_identity import is_explicit_owner_staff
 from app.services.shop_scope import is_platform_admin, shop_owner_id
+from app.services.volume_allocation import apply_create_form_oversell
 
 
 logger = logging.getLogger(__name__)
@@ -1894,6 +1896,7 @@ def register_pg_pages(
                 admin_usage=admin_usage,
                 reseller_plans=reseller_plans,
                 feature_perms=FEATURE_PERMS,
+                owner_can_toggle_oversell=is_explicit_owner_staff(staff),
                 flash_err=err,
                 flash_ok=ok,
                 active="pg_admins",
@@ -2047,6 +2050,10 @@ def register_pg_pages(
                     f"/pg/admins?err={_q(f'{msg} — {werr}')}",
                     status_code=303,
                 )
+            await apply_create_form_oversell(
+                session, _profile.user_id if _profile else None,
+                form_value=form.get("allow_volume_oversell"), actor_is_owner=is_explicit_owner_staff(staff),
+            )
             msg += " و به‌عنوان نماینده (پنل ربات + پاسارگارد) فعال شد"
             if hint:
                 msg += " — ربات شخصی را از تنظیمات فروشگاه راه‌اندازی کنید"
@@ -2307,6 +2314,10 @@ def register_pg_pages(
         )
         if err:
             return RedirectResponse(f"/pg/admins?err={_q(err)}", status_code=303)
+        await apply_create_form_oversell(
+            session, profile.user_id if profile else None,
+            form_value=form.get("allow_volume_oversell"), actor_is_owner=is_explicit_owner_staff(staff),
+        )
         uname = profile.web_username if profile else web_username
         msg = (
             f"دسترسی وب‌پنل «{uname}» با پلن نمایندگی فعال شد — "
@@ -2345,6 +2356,10 @@ def register_pg_pages(
         )
         if err:
             return RedirectResponse(f"/pg/admins?err={_q(err)}", status_code=303)
+        await apply_create_form_oversell(
+            session, _profile.user_id if _profile else None,
+            form_value=form.get("allow_volume_oversell"), actor_is_owner=is_explicit_owner_staff(staff),
+        )
         msg = (
             f"ادمین فرعی «{pg_u}» به نماینده تبدیل شد "
             "(دسترسی ادمین فرعی حذف و پنل ربات/فروشگاه فعال شد)"
