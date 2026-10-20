@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import BotUser, ResellerPlan, ResellerProfile
 from app.services.billing import GB, is_payg
 from app.services.formatting import format_toman
+from app.services.volume_allocation_cascade import assert_child_growth_fits
 
 logger = logging.getLogger(__name__)
 
@@ -166,6 +167,8 @@ async def buy_extra_gb(
         raise ValueError("ادمین پاسارگارد برای این نماینده تنظیم نشده است")
 
     total = price * gb_n
+    # Before the charge and the panel call; the parent stays locked until this purchase commits.
+    await assert_child_growth_fits(session, pg_username=uname, add_gb=gb_n)
     from app.services.wallet import credit_wallet, debit_wallet
 
     await debit_wallet(

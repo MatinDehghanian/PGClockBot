@@ -23,6 +23,7 @@ from app.db.models import (
 )
 from app.services.billing import GB, is_payg
 from app.services.formatting import format_toman
+from app.services.volume_allocation_cascade import assert_child_growth_fits, assert_parent_has_room
 
 logger = logging.getLogger(__name__)
 
@@ -137,6 +138,10 @@ def _parse_id_list(raw: str | None) -> list[int]:
 
 def _dump_id_list(ids: list[int]) -> str:
     return json.dumps([int(x) for x in ids], separators=(",", ":"))
+
+
+def _total_gb(sub: PgAdminSubscription | None) -> int:
+    return int(sub.base_gb or 0) + int(sub.extra_gb_purchased or 0) if sub is not None else 0
 
 
 def _utcnow() -> datetime:
@@ -403,6 +408,7 @@ async def start_or_refresh_subscription(
     # PAYG: no time clock (current_capacity is always fixed billing)
     if str(getattr(plan, "billing_mode", "") or "").lower() == "payg" and not preserve:
         sub = await get_or_create_subscription(session, pg_username)
+        previous_gb = _total_gb(sub)
         sub.plan_id = int(plan.id)
         sub.access_status = STATUS_ACTIVE
         sub.expires_at = None
@@ -413,12 +419,14 @@ async def start_or_refresh_subscription(
             sub.extra_users_purchased = 0
         sub.started_at = sub.started_at or _utcnow()
         await session.flush()
+        await assert_parent_has_room(session, pg_username=sub.pg_username, previous_total_gb=previous_gb)
         if apply_pg_limits and (sub.base_gb or sub.base_users):
             await sync_pg_capacity_from_sub(session, sub)
         return sub
 
     base_gb, base_users = await _resolve_base()
     sub = await get_or_create_subscription(session, pg_username)
+    previous_gb = _total_gb(sub)
     now = _utcnow()
     days = max(0, int(getattr(plan, "duration_days", 0) or 0))
     sub.plan_id = int(plan.id)
@@ -439,6 +447,7 @@ async def start_or_refresh_subscription(
     await session.flush()
     # A current_capacity grant records what the admin already has; it does not sell anything new.
     if not preserve:
+        await assert_parent_has_room(session, pg_username=sub.pg_username, previous_total_gb=previous_gb)
         await _assert_owner_capacity_budget(
             session,
             target_pg_username=sub.pg_username,
@@ -608,6 +617,12 @@ async def renew_subscription(
     if claimed.rowcount != 1:
         raise ValueError("تمدید هم‌زمان در حال انجام است — کمی بعد دوباره تلاش کنید")
     await session.refresh(sub)
+    if not is_current_capacity_plan(plan):
+        # Checked before the charge; the parent stays locked until this renewal commits.
+        await assert_child_growth_fits(
+            session, pg_username=sub.pg_username,
+            add_gb=max(0, int(getattr(plan, "included_gb", 0) or 0)) - int(sub.base_gb or 0),
+        )
 
     invoice = compute_renew_invoice(plan, sub)
     amount = int(invoice["total"])
@@ -723,6 +738,8 @@ async def apply_addon_plan(
             raise ValueError("تعداد کاربر بسته نامعتبر است")
         add_gb = 0
 
+    # Checked before the charge; the parent stays locked until this purchase commits.
+    await assert_child_growth_fits(session, pg_username=sub.pg_username, add_gb=add_gb)
     price = max(0, int(getattr(addon_plan, "price", 0) or 0))
     if charge_wallet:
         if payer is None:
@@ -788,11 +805,13 @@ async def record_unit_extra(
     if not uname:
         return None
     sub = await get_or_create_subscription(session, uname)
+    previous_gb = _total_gb(sub)
     if gb:
         sub.extra_gb_purchased = int(sub.extra_gb_purchased or 0) + max(0, int(gb))
     if users:
         sub.extra_users_purchased = int(sub.extra_users_purchased or 0) + max(0, int(users))
     await session.flush()
+    await assert_parent_has_room(session, pg_username=sub.pg_username, previous_total_gb=previous_gb)
     await _assert_owner_capacity_budget(
         session,
         target_pg_username=sub.pg_username,
@@ -969,6 +988,7 @@ async def admin_adjust_reseller_subscription(
         else:
             sub.expires_at = cur_exp + timedelta(days=days_n)
 
+    previous_gb = _total_gb(sub)
     if gb_n != 0:
         base = max(0, int(sub.base_gb or 0))
         extra = max(0, int(sub.extra_gb_purchased or 0))
@@ -983,6 +1003,7 @@ async def admin_adjust_reseller_subscription(
                 sub.base_gb = max(0, base - remain)
 
     await session.flush()
+    await assert_parent_has_room(session, pg_username=sub.pg_username, previous_total_gb=previous_gb)
     await _assert_owner_capacity_budget(
         session,
         target_pg_username=sub.pg_username,
