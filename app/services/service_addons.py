@@ -717,8 +717,27 @@ async def _apply_pack_to_service(
             current = 0
         if current <= 0:
             raise ValueError("این سرویس حجم نامحدود دارد — بسته حجم قابل اعمال نیست")
+        if order_reseller_id:
+            from app.services.volume_allocation import (
+                VolumeAllocationError,
+                assert_volume_delta_allowed,
+            )
+
+            try:
+                await assert_volume_delta_allowed(
+                    session,
+                    shop_id=int(order_reseller_id),
+                    delta_bytes=int(add_bytes),
+                    audience="customer",
+                )
+            except VolumeAllocationError as e:
+                raise ValueError(e.user_message()) from e
         data_limit_bytes = current + add_bytes
         payload["data_limit"] = data_limit_bytes
+        # Local reservation before panel write (counts in SUM immediately).
+        prior_limit = getattr(service, "quota_data_limit_bytes", None)
+        service.quota_data_limit_bytes = int(data_limit_bytes)
+        await session.flush()
         if is_on_hold_status(info.get("status")):
             # Switching to active does not start PG's pending expiration timer.
             expire_ts = await _on_hold_activation_expire_ts(
@@ -726,6 +745,7 @@ async def _apply_pack_to_service(
             )
             payload["expire"] = expire_ts
     elif kind == KIND_DURATION:
+        prior_limit = None
         days = int(float(amount))
         if days <= 0:
             raise ValueError("مدت نامعتبر است")
@@ -755,7 +775,15 @@ async def _apply_pack_to_service(
     else:
         raise ValueError("نوع بسته پشتیبانی نمی‌شود")
 
-    await pg.modify_user_by_id(int(service.pg_user_id), payload)
+    try:
+        await pg.modify_user_by_id(int(service.pg_user_id), payload)
+    except Exception as exc:
+        from app.services.volume_allocation import is_hard_panel_rejection
+
+        if kind == KIND_VOLUME and is_hard_panel_rejection(exc):
+            service.quota_data_limit_bytes = prior_limit
+            await session.flush()
+        raise
     # Cache sync is best-effort — PG already mutated. Never fail the delivery
     # claim here or a retry would double-apply the same addon.
     try:

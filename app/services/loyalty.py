@@ -1535,7 +1535,26 @@ async def apply_service_reward(
         current = info.get("data_limit")
         if current is None or int(current or 0) <= 0:
             raise ValueError("سرویس نامحدود است؛ جایزه ترافیک قابل اعمال نیست")
+        if service_shop:
+            from app.services.volume_allocation import (
+                VolumeAllocationError,
+                assert_volume_delta_allowed,
+            )
+
+            try:
+                await assert_volume_delta_allowed(
+                    session,
+                    shop_id=int(service_shop),
+                    delta_bytes=int(add_bytes),
+                    audience="customer",
+                )
+            except VolumeAllocationError as e:
+                raise ValueError(e.user_message()) from e
         payload["data_limit"] = int(current) + add_bytes
+        # Reserve locally before the panel write so concurrent grants see the delta.
+        prior_limit = getattr(service, "quota_data_limit_bytes", None)
+        service.quota_data_limit_bytes = int(payload["data_limit"])
+        await session.flush()
     elif reward_type == "time_days":
         add_sec = int(reward_value) * 86400
         expire = info.get("expire")
@@ -1553,7 +1572,18 @@ async def apply_service_reward(
             except Exception:
                 pass
         payload["expire"] = base + add_sec
-    await pg.modify_user_by_id(int(service.pg_user_id), payload)
+        prior_limit = None
+    else:
+        prior_limit = None
+    try:
+        await pg.modify_user_by_id(int(service.pg_user_id), payload)
+    except Exception as exc:
+        from app.services.volume_allocation import is_hard_panel_rejection
+
+        if reward_type == "traffic_gb" and is_hard_panel_rejection(exc):
+            service.quota_data_limit_bytes = prior_limit
+            await session.flush()
+        raise
 
 
 async def overview_metrics(

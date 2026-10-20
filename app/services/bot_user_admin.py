@@ -766,6 +766,26 @@ async def admin_set_service_quota(
     if not service.pg_user_id:
         raise ValueError("سرویس به پاسارگارد وصل نیست")
     assert_staff_pg_user_action(staff, "update")
+    shop_rid = getattr(service, "shop_id", None)
+    if shop_rid is not None and data_limit_bytes is not None:
+        from app.services.volume_allocation import (
+            VolumeAllocationError,
+            assert_new_limit_allowed,
+        )
+
+        try:
+            await assert_new_limit_allowed(
+                session,
+                shop_id=int(shop_rid),
+                current_limit_bytes=getattr(service, "quota_data_limit_bytes", None),
+                new_limit_bytes=int(data_limit_bytes),
+                audience="admin",
+            )
+        except VolumeAllocationError as e:
+            raise ValueError(e.user_message()) from e
+        # Reserve the new absolute limit locally before the panel write.
+        service.quota_data_limit_bytes = int(data_limit_bytes)
+        await session.flush()
     pg = await _pg_client_for_bot_service(session, service)
     # Reset is a separate PG ACL (users.reset_usage). Without it, still allow
     # quota update — never use Owner token to bypass a missing reset right.

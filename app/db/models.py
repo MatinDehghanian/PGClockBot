@@ -733,6 +733,11 @@ class ResellerProfile(Base):
     capacity_warned_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # When False, allocated UserService volume cannot exceed PgAdminSubscription ceiling.
+    # Migration default True keeps existing shops open; new profiles set False in code.
+    allow_volume_oversell: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("1")
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

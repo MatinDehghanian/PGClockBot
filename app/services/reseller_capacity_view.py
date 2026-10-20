@@ -43,14 +43,18 @@ def _amount(value: int, unit: str) -> str:
 
 
 def build_capacity_view(
-    sub: PgAdminSubscription, *, current_capacity: bool, live: LiveCapacity | None
+    sub: PgAdminSubscription,
+    *,
+    current_capacity: bool,
+    live: LiveCapacity | None,
+    allocation: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Stored capacity as text («نامحدود» for zero), and how it differs from the live panel limits."""
     base_gb, base_users = int(sub.base_gb or 0), int(sub.base_users or 0)
     extra_gb, extra_users = int(sub.extra_gb_purchased or 0), int(sub.extra_users_purchased or 0)
     total_gb, total_users = base_gb + extra_gb, base_users + extra_users
     differs = bool(current_capacity and live is not None and (live.gb != total_gb or live.users != total_users))
-    return {
+    view: dict[str, Any] = {
         "total_gb_text": _amount(total_gb, "گیگ"),
         "extra_gb_text": f"{extra_gb} گیگ",
         "total_users_text": _amount(total_users, "کاربر"),
@@ -60,6 +64,34 @@ def build_capacity_view(
         "live_known": live is not None,
         "differs": differs,
         "can_sync": bool(current_capacity),
+    }
+    if allocation:
+        view.update(allocation)
+    return view
+
+
+async def allocation_view_for_shop(
+    session: AsyncSession, shop_id: int
+) -> dict[str, Any]:
+    """Allocation / ceiling block for the reseller capacity page."""
+    from app.services.formatting import format_bytes
+    from app.services.volume_allocation import build_allocation_snapshot
+
+    snap = await build_allocation_snapshot(session, int(shop_id))
+    if snap is None:
+        return {}
+    ceiling_text = (
+        format_bytes(snap.ceiling_bytes) if snap.ceiling_bytes is not None else "نامشخص"
+    )
+    return {
+        "alloc_bytes_text": format_bytes(snap.allocated_bytes),
+        "alloc_ceiling_text": ceiling_text,
+        "alloc_ratio_text": f"{format_bytes(snap.allocated_bytes)} / {ceiling_text}",
+        "alloc_expired_held_text": format_bytes(snap.expired_held_bytes),
+        "alloc_unlimited": snap.unlimited_services,
+        "alloc_is_oversold": snap.is_oversold,
+        "alloc_allow_oversell": snap.allow_oversell,
+        "alloc_is_payg": snap.is_payg,
     }
 
 
