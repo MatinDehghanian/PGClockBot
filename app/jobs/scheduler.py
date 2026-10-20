@@ -13,6 +13,7 @@ from app.db.session import SessionLocal
 from app.jobs.cancellation_notifications import run_cancellation_notifications
 from app.jobs.connection_status import run_connection_status
 from app.jobs.panel_alert_notifications import run_panel_alert_notifications
+from app.jobs.volume_external_sync import run_volume_external_sync
 from app.services.formatting import format_bytes_ratio, parse_expire
 from app.services.pasarguard import get_pg
 
@@ -789,6 +790,8 @@ def start_background_scheduler() -> None:
         ("scheduled_backup", run_scheduled_backup, {"minutes": 30}, 3600),
         ("connection_status", run_connection_status, {"seconds": 60}, 60),
         ("bbc_settlement_poll", run_bbc_settlement_poll, {"seconds": 45}, 90),
+        # Ticks often; each shop is recounted on the period set in volume_external_sync_minutes.
+        ("volume_external_sync", run_volume_external_sync, {"minutes": 1}, 120),
     )
     for job_id, func, interval, grace in jobs:
         if scheduler.get_job(job_id) is None:
@@ -816,18 +819,6 @@ def start_scheduler(bot: Bot) -> None:
     scheduler.add_job(
         run_panel_alert_notifications, "interval", minutes=5, args=[bot], id="panel_alert_notifications",
         max_instances=1, coalesce=True, misfire_grace_time=300, replace_existing=True,
-    )
-    from app.jobs.volume_external_sync import run_volume_external_sync
-
-    scheduler.add_job(
-        run_volume_external_sync,
-        "interval",
-        minutes=15,
-        id="volume_external_sync",
-        max_instances=1,
-        coalesce=True,
-        misfire_grace_time=600,
-        replace_existing=True,
     )
     scheduler.add_job(
         run_targeted_campaigns_tick, "interval", minutes=1, args=[bot], id="targeted_campaigns",

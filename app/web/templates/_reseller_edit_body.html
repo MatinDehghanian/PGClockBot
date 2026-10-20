@@ -124,7 +124,8 @@
       {{ switch('is_active', 'نماینده فعال', checked=profile.is_active) }}
       {{ switch('share_pg_panel_url', 'ارسال لینک پنل پاسارگارد', checked=profile.share_pg_panel_url, help='اگر خاموش باشد، فقط وب‌پنل ربات برای مدیریت استفاده می‌شود') }}
       {% if owner_can_toggle_oversell and not is_payg %}
-      {{ switch('allow_volume_oversell', 'اجازه فروش بیش از سقف حجم', checked=profile.allow_volume_oversell, help='اگر خاموش باشد، مجموع حجم سرویس‌های فروشگاه نمی‌تواند از سقف اشتراک بیشتر شود. فقط مالک سیستم می‌تواند این سوییچ را عوض کند.') }}
+      <input type="hidden" name="volume_oversell_shown" value="1" />
+      {{ switch('allow_volume_oversell', 'اجازه فروش بیش از سقف حجم', checked=profile.allow_volume_oversell, help='اگر خاموش باشد، مجموع حجم سرویس‌های فروشگاه از سقف اشتراک بیشتر نمی‌شود. نماینده‌ای که اشتراک یا سقف حجم ندارد محدود نمی‌شود.') }}
       {% endif %}
     </div>
 
@@ -189,11 +190,7 @@
       <span class="payg-meta-value num-ratio">{{ pg_subscription.alloc_ratio_text }}</span>
     </li>
     <li>
-      <span class="payg-meta-label">تخصیص محلی</span>
-      <span class="payg-meta-value num-ratio">{{ pg_subscription.alloc_local_text }}</span>
-    </li>
-    <li>
-      <span class="payg-meta-label">تخصیص بیرونی (پنل)</span>
+      <span class="payg-meta-label">ساخته‌شده مستقیم در پاسارگارد</span>
       <span class="payg-meta-value num-ratio">{{ pg_subscription.alloc_external_text }}</span>
     </li>
     <li>
@@ -220,10 +217,7 @@
   <div class="flash warn">تخصیص حجم این نماینده از سقف بیشتر است. افزایش حجم تا کاهش یا حذف سرویس‌ها مسدود است.</div>
   {% endif %}
   {% if pg_subscription.alloc_external_stale %}
-  <div class="flash warn">همگام‌سازی تخصیص بیرونی (یوزرهای ساخته‌شده مستقیم در پاسارگارد) قدیمی است؛ آخرین مقدار ذخیره‌شده استفاده می‌شود و فروش به‌خاطر قطعی پنل باز نمی‌شود.</div>
-  {% endif %}
-  {% if pg_subscription.ceiling_mismatch_text %}
-  <div class="flash warn">اختلاف سقف ادمین در پاسارگارد با سقف محلی: {{ pg_subscription.ceiling_mismatch_text }} (خودکار اصلاح نمی‌شود).</div>
+  <div class="flash warn">کاربرانی که مستقیم در پاسارگارد ساخته شده‌اند مدتی است شمرده نشده‌اند؛ آخرین مقدار شمرده‌شده حساب می‌شود. اتصال پنل را بررسی کنید.</div>
   {% endif %}
   {% if pg_subscription.alloc_unlimited %}
   <div class="flash warn">

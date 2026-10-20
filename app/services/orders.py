@@ -37,6 +37,16 @@ from app.services.provision_gate import (
     ProvisionError,
     assert_provision_create,
     assert_provision_renew,
+    hold_limit_change,
+    hold_plan_create,
+    settle_failed_hold,
+    template_limit_if_gated,
+)
+from app.services.volume_allocation import (
+    HeldVolume,
+    VolumeAllocationError,
+    assert_volume_delta_allowed,
+    release_volume_hold,
 )
 from app.services.wallet import credit_wallet, debit_wallet
 
@@ -568,23 +578,7 @@ async def create_order(
                 await session.flush()
         except IntegrityError as exc:
             raise ValueError("پلن تست رایگان را قبلاً دریافت کرده‌اید") from exc
-    if shop_rid is not None:
-        from app.services.volume_allocation import VolumeAllocationError, assert_volume_delta_allowed
-
-        data_limit = None
-        if plan.data_limit_gb is not None:
-            data_limit = int(float(plan.data_limit_gb) * (1024**3))
-        try:
-            await assert_volume_delta_allowed(
-                session,
-                shop_id=int(shop_rid),
-                delta_bytes=data_limit if data_limit is not None else (None if plan.pg_template_id else 0),
-                audience="customer",
-                allow_unlimited=bool(data_limit and data_limit > 0),
-            )
-        except VolumeAllocationError as e:
-            raise ValueError(e.user_message()) from e
-
+    await _assert_plan_volume_available(session, shop_rid, plan)
     order = Order(
         user_id=user_id,
         plan_id=plan.id,
@@ -711,17 +705,6 @@ async def create_custom_order(
             raise ValueError(
                 "برای پلن دلخواه، تمپلیت یا گروه پاسارگارد اختصاصی فروشگاه را در تنظیمات مشخص کنید"
             )
-        from app.services.volume_allocation import VolumeAllocationError, assert_volume_delta_allowed
-
-        try:
-            await assert_volume_delta_allowed(
-                session,
-                shop_id=int(shop_rid),
-                delta_bytes=int(math.ceil(gb) * (1024**3)),
-                audience="customer",
-            )
-        except VolumeAllocationError as e:
-            raise ValueError(e.user_message()) from e
 
     plan = Plan(
         name="پلن دلخواه",
@@ -854,6 +837,42 @@ def wholesale_description(ui: dict | None) -> str:
     return "\n".join(lines)
 
 
+def plan_limit_bytes(plan: Plan) -> int:
+    """Per-user limit of a non-template plan in bytes; 0 is unlimited (same rounding as delivery)."""
+    return int(plan.data_limit_gb * (1024**3)) if plan.data_limit_gb is not None else 0
+
+
+async def _assert_plan_volume_available(
+    session: AsyncSession, shop_rid: int | None, plan: Plan, *, quantity: int = 1
+) -> None:
+    """Refuse an order the shop cannot deliver within its volume ceiling; delivery holds it again.
+
+    A template plan's volume lives in the panel and is read at delivery, so it is not checked here.
+    """
+    if shop_rid is None or plan.pg_template_id:
+        return
+    per_user = plan_limit_bytes(plan)
+    try:
+        await assert_volume_delta_allowed(
+            session, shop_id=int(shop_rid), delta_bytes=per_user * max(1, int(quantity)), audience="customer",
+        )
+    except VolumeAllocationError as e:
+        raise ValueError(e.user_message()) from e
+
+
+async def _hold_delivery_volume(
+    session: AsyncSession, order: Order, plan: Plan, pg, *, data_limit: int | None, quantity: int
+) -> HeldVolume | None:
+    """Hold the volume of a shop delivery before its panel calls; None for the platform."""
+    try:
+        return await hold_plan_create(
+            session, shop_id=order.reseller_id, pg=pg, template_id=plan.pg_template_id,
+            data_limit=data_limit, quantity=quantity, key=f"order:{int(order.id)}", audience="customer",
+        )
+    except ProvisionError as e:
+        raise ValueError(e.message) from e
+
+
 def order_quantity(order: Order) -> int:
     qty = getattr(order, "quantity", None)
     n: int | None
@@ -904,6 +923,7 @@ async def create_wholesale_order(
     )
     shop_rid = _shop_reseller_id()
     _ = reseller_id
+    await _assert_plan_volume_available(session, shop_rid, plan, quantity=qty)
     order = Order(
         user_id=user_id,
         plan_id=plan.id,
@@ -2095,33 +2115,11 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
                     expire_ts=expire,
                     from_template=bool(plan.pg_template_id),
                     quantity=qty,
-                    audience="customer",
                 )
             except ProvisionError as e:
-                from app.services.volume_allocation import refund_volume_gate_once
-
-                # Idempotent refund when the volume gate rejects at delivery.
-                if order.amount > 0:
-                    user = order.user or await session.get(BotUser, int(order.user_id))
-                    if user is not None:
-                        await refund_volume_gate_once(
-                            session,
-                            user=user,
-                            amount=int(order.amount),
-                            order_id=order_id,
-                            shop_id=int(order.reseller_id) if order.reseller_id else None,
-                        )
-                        await session.commit()
                 raise ValueError(e.message) from e
 
         from app.services.pasarguard import build_user_create_payload, parse_group_ids
-        from app.services.volume_allocation import (
-            finalize_creating_service,
-            is_hard_panel_rejection,
-            mark_service_review,
-            release_creating_service,
-            reserve_creating_service,
-        )
 
         group_ids = None
         if not plan.pg_template_id:
@@ -2131,13 +2129,12 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
                     "هیچ گروهی برای ساخت کاربر انتخاب نشده — در وب‌پنل برای پلن، گروه پاسارگارد را انتخاب کنید"
                 )
 
+        volume_hold = await _hold_delivery_volume(session, order, plan, pg, data_limit=data_limit, quantity=qty)
         created_pg_ids: list[int] = []
         services: list[UserService] = []
-        reserved: list[UserService] = []
-        panel_write_attempted = False
+        panel = {"touched": False}
 
         async def _create_one(index: int) -> UserService:
-            nonlocal panel_write_attempted
             # ``{id}`` = order id (catalog); ``buyer_id`` resolves ``{username}``.
             username = await generate_pg_username(
                 session,
@@ -2150,29 +2147,7 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
             note = f"PGClockBot order #{order.id}"
             if qty > 1:
                 note = f"{note} ({index}/{qty})"
-
-            # Shop path: reserve volume in a short TX before the panel call.
-            service: UserService | None = None
-            if order.reseller_id and data_limit is not None and int(data_limit) > 0:
-                from datetime import datetime, timezone
-
-                expire_at = (
-                    datetime.fromtimestamp(int(expire), tz=timezone.utc) if expire else None
-                )
-                service = await reserve_creating_service(
-                    session,
-                    bot_user_id=int(order.user_id),
-                    shop_id=int(order.reseller_id),
-                    plan_id=int(plan.id) if plan.id else None,
-                    pg_username=username,
-                    data_limit_bytes=int(data_limit),
-                    remark=f"order:{order.id}",
-                    expire_at=expire_at,
-                )
-                reserved.append(service)
-                await session.commit()
-
-            panel_write_attempted = True
+            panel["touched"] = True
             if plan.pg_template_id:
                 payload = {
                     "username": username,
@@ -2207,53 +2182,32 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
                 raise ValueError("ساخت کاربر پاسارگارد شناسه برنگرداند — تحویل لغو شد")
 
             sub_url = user_subscription_url(pg_user if isinstance(pg_user, dict) else None)
+            service = UserService(
+                bot_user_id=order.user_id,
+                plan_id=plan.id,
+                pg_user_id=pg_uid,
+                pg_username=pg_user.get("username", username),
+                subscription_url=sub_url,
+                subscription_token=extract_sub_token(sub_url),
+                remark=f"order:{order.id}",
+                shop_id=order.reseller_id,
+            )
             from app.services.bot_user_admin import sync_service_quota_cache
 
             plan_days = int(getattr(plan, "duration_days", 0) or 0) or None
-            if service is not None:
-                await finalize_creating_service(
-                    session,
-                    service,
-                    pg_user_id=int(pg_uid) if pg_uid else None,
-                    pg_username=pg_user.get("username", username),
-                    subscription_url=sub_url,
-                    subscription_token=extract_sub_token(sub_url),
+            if isinstance(pg_user, dict):
+                sync_service_quota_cache(
+                    service, pg_user, fallback_duration_days=plan_days
                 )
-                if isinstance(pg_user, dict):
-                    sync_service_quota_cache(
-                        service, pg_user, fallback_duration_days=plan_days
-                    )
-                else:
-                    sync_service_quota_cache(
-                        service,
-                        expire_ts=expire,
-                        data_limit_bytes=data_limit,
-                        fallback_duration_days=plan_days,
-                    )
             else:
-                service = UserService(
-                    bot_user_id=order.user_id,
-                    plan_id=plan.id,
-                    pg_user_id=pg_uid,
-                    pg_username=pg_user.get("username", username),
-                    subscription_url=sub_url,
-                    subscription_token=extract_sub_token(sub_url),
-                    remark=f"order:{order.id}",
-                    shop_id=order.reseller_id,
+                sync_service_quota_cache(
+                    service,
+                    expire_ts=expire,
+                    data_limit_bytes=data_limit,
+                    fallback_duration_days=plan_days,
                 )
-                if isinstance(pg_user, dict):
-                    sync_service_quota_cache(
-                        service, pg_user, fallback_duration_days=plan_days
-                    )
-                else:
-                    sync_service_quota_cache(
-                        service,
-                        expire_ts=expire,
-                        data_limit_bytes=data_limit,
-                        fallback_duration_days=plan_days,
-                    )
-                session.add(service)
-                await session.flush()
+            session.add(service)
+            await session.flush()
             await ensure_member(session, order.user_id, order.reseller_id)
             return service
 
@@ -2266,37 +2220,23 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
                 try:
                     await pg.delete_user_by_id(int(pg_uid))
                 except Exception:
-                    logger.debug("rollback PG user failed uid=%s", pg_uid, exc_info=True)
-            if panel_write_attempted and not is_hard_panel_rejection(exc) and reserved:
-                # Unknown outcome: keep reservations and flag for review.
-                for svc in reserved:
-                    try:
-                        await mark_service_review(session, svc)
-                    except Exception:
-                        logger.warning(
-                            "mark review failed svc=%s", getattr(svc, "id", None), exc_info=True
-                        )
-                await session.commit()
-                raise
-            # Hard failure / pre-panel: release creating reservations.
-            for svc in list(reserved):
-                try:
-                    await release_creating_service(session, svc)
-                except Exception:
-                    logger.debug("release creating failed", exc_info=True)
+                    pass
+            # Drop flushed UserService rows so _release_delivery_claim() commit
+            # cannot leave orphans pointing at deleted PG users.
             for svc in list(services):
-                if svc not in reserved:
-                    try:
-                        await session.delete(svc)
-                    except Exception:
-                        logger.debug("delete flushed service failed", exc_info=True)
+                try:
+                    await session.delete(svc)
+                except Exception:
+                    pass
             services.clear()
-            reserved.clear()
-            await session.commit()
+            # After the deletes, so this commit cannot persist services of deleted panel users.
+            await settle_failed_hold(session, volume_hold, exc, panel_touched=panel["touched"])
             raise
 
         order.service_id = services[0].id if services else None
         order.status = OrderStatus.DELIVERED.value
+        # The services now carry the volume; drop the hold in the same commit.
+        await release_volume_hold(session, volume_hold)
         await session.commit()
         await session.refresh(order)
         try:
@@ -2521,7 +2461,6 @@ async def _renewal_targets(pg, service: UserService, plan: Plan, snapshot: dict 
 async def _assert_renewal_provision_gate(
     session: AsyncSession, order: Order, plan: Plan, run: _RenewalRun,
     *, data_limit: int | None, gate_expire: int | None,
-    current_data_limit: int | None = None,
 ) -> None:
     if not order.reseller_id:
         return
@@ -2535,8 +2474,6 @@ async def _assert_renewal_provision_gate(
             data_limit=data_limit,
             expire_ts=gate_expire,
             from_template=bool(plan.pg_template_id) if run.snapshot is None else False,
-            current_data_limit=current_data_limit,
-            audience="customer",
         )
     except ProvisionError as e:
         raise ValueError(e.message) from e
@@ -2651,6 +2588,27 @@ async def _release_failed_renewal(session: AsyncSession, order: Order, run: _Ren
     return run.snapshot is not None and run.write_attempted
 
 
+async def _hold_renewal_volume(
+    session: AsyncSession, order: Order, service: UserService, plan: Plan, pg, run: _RenewalRun,
+    *, data_limit: int | None,
+) -> HeldVolume | None:
+    """Hold the volume a renewal adds on top of the service's current limit."""
+    if not order.reseller_id:
+        return None
+    new_limit = data_limit
+    if run.snapshot is None and plan.pg_template_id:
+        new_limit = await template_limit_if_gated(session, int(order.reseller_id), pg, int(plan.pg_template_id))
+    elif new_limit is None:
+        new_limit = 0
+    try:
+        return await hold_limit_change(
+            session, shop_id=int(order.reseller_id), current_limit=service.quota_data_limit_bytes,
+            new_limit=new_limit, key=f"renew:{int(order.id)}", audience="customer",
+        )
+    except ProvisionError as e:
+        raise ValueError(e.message) from e
+
+
 async def apply_renewal(
     session: AsyncSession, order: Order, service: UserService, plan: Plan,
     *, reset_traffic: bool = False,
@@ -2666,18 +2624,14 @@ async def apply_renewal(
 
     had_saved_target = bool(snapshot and snapshot.get("target"))
     run = _RenewalRun(snapshot=snapshot, had_saved_target=had_saved_target, write_attempted=had_saved_target)
+    volume_hold: HeldVolume | None = None
+    panel_touched = had_saved_target
     try:
         pg = await _renewal_panel_client(session, order, service)
         payload, data_limit, expire, gate_expire = await _renewal_targets(pg, service, plan, snapshot)
-        await _assert_renewal_provision_gate(
-            session,
-            order,
-            plan,
-            run,
-            data_limit=data_limit,
-            gate_expire=gate_expire,
-            current_data_limit=getattr(service, "quota_data_limit_bytes", None),
-        )
+        await _assert_renewal_provision_gate(session, order, plan, run, data_limit=data_limit, gate_expire=gate_expire)
+        volume_hold = await _hold_renewal_volume(session, order, service, plan, pg, run, data_limit=data_limit)
+        panel_touched = True
         if snapshot is not None:
             pg_user = await _write_renewal_target(session, order, pg, service, run, payload)
         else:
@@ -2687,11 +2641,14 @@ async def apply_renewal(
         _record_renewed_service(service, plan, pg_user, run, data_limit=data_limit, expire=expire)
         order.status = OrderStatus.DELIVERED.value
         order.service_mutation_pending = False
+        await release_volume_hold(session, volume_hold)
         await session.commit()
         await session.refresh(order)
         await _notify_renewal_delivered(session, order)
         return order
     except Exception as exc:
-        if await _release_failed_renewal(session, order, run, exc):
+        pending_review = await _release_failed_renewal(session, order, run, exc)
+        await settle_failed_hold(session, volume_hold, exc, panel_touched=panel_touched)
+        if pending_review:
             raise RenewalPendingReview() from exc
         raise

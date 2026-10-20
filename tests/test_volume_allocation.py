@@ -1,7 +1,8 @@
-"""Volume allocation gate for fixed-plan L1 shops (PR-A)."""
+"""Volume ceiling of fixed-plan shops: holds, delivery and add-on paths, and the oversell switch."""
 
 from __future__ import annotations
 
+import asyncio
 import importlib.util
 import os
 import tempfile
@@ -13,29 +14,38 @@ from unittest.mock import AsyncMock, patch
 
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.schema import CreateTable
 
 from app.db import Base
 from app.db.models import (
     BotUser,
+    Order,
+    OrderStatus,
     PgAdminSubscription,
+    Plan,
     ResellerProfile,
     Role,
     UserService,
+    VolumeHold,
     WalletTransaction,
 )
 from app.services.billing import GB
+from app.services.pasarguard import PasarGuardError
+from app.services.provision_gate import ProvisionError, hold_create_volume, hold_limit_change
 from app.services.volume_allocation import (
     CUSTOMER_UNAVAILABLE_MSG,
     VolumeAllocationError,
+    apply_oversell_switch,
     assert_volume_delta_allowed,
     build_allocation_snapshot,
+    hold_volume,
     list_oversold_shop_ids,
-    refund_volume_gate_once,
-    reserve_creating_service,
-    set_allow_volume_oversell,
+    release_volume_hold,
     sum_allocated_bytes,
+    threshold_level,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -238,14 +248,10 @@ class GateBehaviourTests(VolumeHarness):
                 session, shop_id=shop, delta_bytes=10 * GB, audience="admin"
             )
 
-    async def test_unknown_ceiling_fail_closed(self) -> None:
+    async def test_shop_without_ceiling_is_not_gated(self) -> None:
         shop = await self._shop(ceiling_gb=0, allow_oversell=False)
         async with self.Session() as session:
-            # No subscription row / zero ceiling → unknown
-            with self.assertRaises(VolumeAllocationError):
-                await assert_volume_delta_allowed(
-                    session, shop_id=shop, delta_bytes=GB, audience="admin"
-                )
+            await assert_volume_delta_allowed(session, shop_id=shop, delta_bytes=50 * GB, audience="admin")
 
     async def test_tenancy_other_shop_not_counted(self) -> None:
         a = await self._shop(shop_id=10, ceiling_gb=5, allow_oversell=False)
@@ -259,20 +265,23 @@ class GateBehaviourTests(VolumeHarness):
                 session, shop_id=b, delta_bytes=3 * GB, audience="admin"
             )
 
-    async def test_reseller_cannot_enable_oversell(self) -> None:
-        await self._shop(shop_id=10, ceiling_gb=5, allow_oversell=False)
-        async with self.Session() as session:
-            profile = await session.scalar(
-                select(ResellerProfile).where(ResellerProfile.user_id == 10)
-            )
-            with self.assertRaises(VolumeAllocationError):
-                await set_allow_volume_oversell(
-                    session, profile, allow=True, actor_is_owner=False
-                )
-            await set_allow_volume_oversell(
-                session, profile, allow=True, actor_is_owner=True
-            )
-            self.assertTrue(profile.allow_volume_oversell)
+    async def test_only_owner_changes_oversell_switch(self) -> None:
+        profile = SimpleNamespace(allow_volume_oversell=False)
+        apply_oversell_switch(profile, shown=True, allow=True, actor_is_owner=False)
+        self.assertFalse(profile.allow_volume_oversell)
+        apply_oversell_switch(profile, shown=True, allow=True, actor_is_owner=True)
+        self.assertTrue(profile.allow_volume_oversell)
+        # The switch can be turned off: an unchecked box posts only the marker.
+        apply_oversell_switch(profile, shown=True, allow=False, actor_is_owner=True)
+        self.assertFalse(profile.allow_volume_oversell)
+        # A form without the switch leaves it alone.
+        apply_oversell_switch(profile, shown=False, allow=True, actor_is_owner=True)
+        self.assertFalse(profile.allow_volume_oversell)
+
+    def test_threshold_levels(self) -> None:
+        self.assertEqual(threshold_level(79 * GB, 100 * GB), 0)
+        self.assertEqual(threshold_level(80 * GB, 100 * GB), 1)
+        self.assertEqual(threshold_level(100 * GB, 100 * GB), 2)
 
 
 class PathGateTests(VolumeHarness):
@@ -290,7 +299,7 @@ class PathGateTests(VolumeHarness):
                     new=AsyncMock(),
                 ),
                 patch(
-                    "app.services.service_scope.service_shop_id",
+                    "app.services.loyalty.service_shop_id",
                     new=AsyncMock(return_value=shop),
                 ),
                 patch(
@@ -379,89 +388,226 @@ class PathGateTests(VolumeHarness):
             pg.modify_admin.assert_awaited()
 
 
-class ConcurrencyAndRefundTests(VolumeHarness):
-    async def test_second_reservation_fails_after_first_commits(self) -> None:
-        shop = await self._shop(ceiling_gb=5, allow_oversell=False)
+class HoldTests(VolumeHarness):
+    async def _hold_rows(self) -> list[tuple[str, int]]:
         async with self.Session() as session:
-            session.add(
-                BotUser(id=1, telegram_id=1, role=Role.USER.value, referral_code="u1")
-            )
-            await session.flush()
-            await assert_volume_delta_allowed(
-                session, shop_id=shop, delta_bytes=5 * GB, audience="admin"
-            )
-            await reserve_creating_service(
-                session,
-                bot_user_id=1,
-                shop_id=shop,
-                plan_id=None,
-                pg_username="pending-a",
-                data_limit_bytes=5 * GB,
-                remark="order:1",
-            )
-            await session.commit()
+            rows = await session.execute(select(VolumeHold.hold_key, VolumeHold.bytes).order_by(VolumeHold.id))
+            return [(k, int(b)) for k, b in rows.all()]
+
+    async def test_second_hold_is_refused_while_the_first_is_live(self) -> None:
+        shop = await self._shop(ceiling_gb=5)
+        async with self.Session() as session:
+            await hold_volume(session, shop_id=shop, delta_bytes=4 * GB, key="a")
         async with self.Session() as session:
             with self.assertRaises(VolumeAllocationError):
-                await assert_volume_delta_allowed(
-                    session, shop_id=shop, delta_bytes=1 * GB, audience="admin"
-                )
+                await hold_volume(session, shop_id=shop, delta_bytes=2 * GB, key="b")
+        self.assertEqual(await self._hold_rows(), [("a", 4 * GB)])
 
-    async def test_unknown_panel_keeps_reservation(self) -> None:
-        from app.services.volume_allocation import (
-            mark_service_review,
-            QUOTA_STATUS_REVIEW,
-        )
+    async def test_concurrent_holds_cannot_both_fit(self) -> None:
+        shop = await self._shop(ceiling_gb=5)
 
-        shop = await self._shop(ceiling_gb=10, allow_oversell=False)
+        async def take(key: str) -> bool:
+            async with self.Session() as session:
+                try:
+                    await hold_volume(session, shop_id=shop, delta_bytes=3 * GB, key=key)
+                except VolumeAllocationError:
+                    return False
+                return True
+
+        results = await asyncio.gather(take("a"), take("b"))
+        self.assertEqual(sorted(results), [False, True])
+        self.assertEqual(len(await self._hold_rows()), 1)
+
+    async def test_retry_with_the_same_key_does_not_count_twice(self) -> None:
+        shop = await self._shop(ceiling_gb=5)
+        for _ in range(2):
+            async with self.Session() as session:
+                await hold_volume(session, shop_id=shop, delta_bytes=3 * GB, key="order:1")
         async with self.Session() as session:
-            session.add(
-                BotUser(id=1, telegram_id=1, role=Role.USER.value, referral_code="u1b")
-            )
-            svc = await reserve_creating_service(
-                session,
-                bot_user_id=1,
-                shop_id=shop,
-                plan_id=None,
-                pg_username="pending-b",
-                data_limit_bytes=3 * GB,
-                remark="order:2",
-            )
-            await mark_service_review(session, svc)
-            await session.commit()
-            self.assertEqual(svc.quota_status, QUOTA_STATUS_REVIEW)
             self.assertEqual(await sum_allocated_bytes(session, shop), 3 * GB)
 
-    async def test_delivery_refund_exactly_once(self) -> None:
-        shop = await self._shop(ceiling_gb=1, allow_oversell=False)
+    async def test_expired_hold_stops_counting(self) -> None:
+        shop = await self._shop(ceiling_gb=5)
         async with self.Session() as session:
-            user = await session.get(BotUser, shop)
-            user.wallet_balance = 0
-            await session.commit()
-        async with self.Session() as session:
-            user = await session.get(BotUser, shop)
-            first = await refund_volume_gate_once(
-                session, user=user, amount=5000, order_id=42, shop_id=None
-            )
-            await session.commit()
-            second = await refund_volume_gate_once(
-                session, user=user, amount=5000, order_id=42, shop_id=None
-            )
-            await session.commit()
-            self.assertTrue(first)
-            self.assertFalse(second)
-            await session.refresh(user)
-            self.assertEqual(int(user.wallet_balance), 5000)
-            reasons = (
-                await session.execute(
-                    select(WalletTransaction.reason).where(
-                        WalletTransaction.user_id == shop
-                    )
+            session.add(
+                VolumeHold(
+                    shop_id=shop, hold_key="old", bytes=5 * GB,
+                    expires_at=datetime.now(timezone.utc) - timedelta(minutes=1),
                 )
-            ).scalars().all()
-            self.assertEqual(reasons, ["volume_gate_refund:order:42"])
+            )
+            await session.commit()
+            self.assertEqual(await sum_allocated_bytes(session, shop), 0)
+            await hold_volume(session, shop_id=shop, delta_bytes=5 * GB, key="new")
+        self.assertEqual(await self._hold_rows(), [("new", 5 * GB)])
+
+    async def test_release_frees_the_volume(self) -> None:
+        shop = await self._shop(ceiling_gb=5)
+        async with self.Session() as session:
+            hold = await hold_volume(session, shop_id=shop, delta_bytes=5 * GB, key="a")
+            await release_volume_hold(session, hold)
+            await session.commit()
+            self.assertEqual(await sum_allocated_bytes(session, shop), 0)
+
+    async def test_other_shops_holds_are_not_counted(self) -> None:
+        a = await self._shop(shop_id=10, ceiling_gb=5)
+        b = await self._shop(shop_id=20, ceiling_gb=5)
+        async with self.Session() as session:
+            await hold_volume(session, shop_id=a, delta_bytes=5 * GB, key="a")
+            await hold_volume(session, shop_id=b, delta_bytes=5 * GB, key="b")
+            self.assertEqual(await sum_allocated_bytes(session, b), 5 * GB)
+
+    async def test_limit_change_holds_only_the_increase(self) -> None:
+        shop = await self._shop(ceiling_gb=5)
+        async with self.Session() as session:
+            self.assertIsNone(
+                await hold_limit_change(session, shop_id=shop, current_limit=3 * GB, new_limit=2 * GB, key="down")
+            )
+            await hold_limit_change(session, shop_id=shop, current_limit=2 * GB, new_limit=5 * GB, key="up")
+            self.assertEqual(await sum_allocated_bytes(session, shop), 3 * GB)
+            with self.assertRaises(ProvisionError):
+                await hold_limit_change(session, shop_id=shop, current_limit=2 * GB, new_limit=0, key="unlimited")
+            with self.assertRaises(ProvisionError):
+                await hold_limit_change(session, shop_id=shop, current_limit=2 * GB, new_limit=None, key="unknown")
+
+    async def test_quantity_is_held_in_full(self) -> None:
+        shop = await self._shop(ceiling_gb=5)
+        async with self.Session() as session:
+            with self.assertRaises(ProvisionError) as ctx:
+                await hold_create_volume(
+                    session, shop_id=shop, data_limit=2 * GB, quantity=3, key="bulk", audience="customer"
+                )
+            self.assertEqual(ctx.exception.message, CUSTOMER_UNAVAILABLE_MSG)
+
+
+class DeliveryHoldTests(VolumeHarness):
+    async def _order(self, shop: int, *, gb: int = 3) -> int:
+        async with self.Session() as session:
+            session.add(BotUser(id=500, telegram_id=500, role=Role.USER.value, referral_code="c500", reseller_id=shop))
+            plan = Plan(name="p", price=1000, data_limit_gb=gb, duration_days=30, pg_group_ids="1")
+            session.add(plan)
+            await session.flush()
+            order = Order(user_id=500, plan_id=plan.id, reseller_id=shop, amount=1000, status=OrderStatus.PAID.value)
+            session.add(order)
+            await session.commit()
+            return int(order.id)
+
+    async def _deliver(self, order_id: int, create_user: AsyncMock) -> SimpleNamespace:
+        from app.services.orders import deliver_order
+
+        pg = SimpleNamespace(
+            _login_username="admin10", create_user=create_user, delete_user_by_id=AsyncMock(),
+        )
+        async with self.Session() as session:
+            order = await session.get(Order, order_id)
+            with (
+                patch("app.services.pasarguard.get_pg_for_reseller", new=AsyncMock(return_value=pg)),
+                patch("app.services.orders._reseller_pg_link", new=AsyncMock(return_value=("admin10", None))),
+                patch("app.services.orders.assert_provision_create", new=AsyncMock()),
+                patch("app.services.orders.generate_pg_username", new=AsyncMock(return_value="u77")),
+            ):
+                try:
+                    await deliver_order(session, order)
+                except Exception as exc:  # the outcome is read back from the database below
+                    pg.error = exc
+        return pg
+
+    async def _state(self, order_id: int) -> tuple[str, int, int]:
+        async with self.Session() as session:
+            status = (await session.get(Order, order_id)).status
+            held = await session.scalar(select(func.coalesce(func.sum(VolumeHold.bytes), 0)))
+            refunds = await session.scalar(select(func.count()).select_from(WalletTransaction))
+            return status, int(held), int(refunds)
+
+    async def test_success_moves_the_volume_from_hold_to_service(self) -> None:
+        shop = await self._shop(ceiling_gb=5)
+        order_id = await self._order(shop)
+        await self._deliver(order_id, AsyncMock(return_value={"id": 77, "username": "u77", "data_limit": 3 * GB}))
+        self.assertEqual(await self._state(order_id), (OrderStatus.DELIVERED.value, 0, 0))
+        async with self.Session() as session:
+            self.assertEqual(await sum_allocated_bytes(session, shop), 3 * GB)
+
+    async def test_unknown_panel_outcome_keeps_the_hold_and_refunds_nothing(self) -> None:
+        shop = await self._shop(ceiling_gb=5)
+        order_id = await self._order(shop)
+        await self._deliver(order_id, AsyncMock(side_effect=PasarGuardError("timeout", status_code=None)))
+        self.assertEqual(await self._state(order_id), (OrderStatus.PAID.value, 3 * GB, 0))
+
+    async def test_panel_refusal_releases_the_hold(self) -> None:
+        shop = await self._shop(ceiling_gb=5)
+        order_id = await self._order(shop)
+        await self._deliver(order_id, AsyncMock(side_effect=PasarGuardError("bad", status_code=422)))
+        self.assertEqual(await self._state(order_id), (OrderStatus.PAID.value, 0, 0))
+
+    async def test_full_shop_never_calls_the_panel(self) -> None:
+        shop = await self._shop(ceiling_gb=5)
+        await self._service(shop, bytes_=4 * GB)
+        order_id = await self._order(shop)
+        create_user = AsyncMock()
+        pg = await self._deliver(order_id, create_user)
+        create_user.assert_not_awaited()
+        self.assertEqual(str(pg.error), CUSTOMER_UNAVAILABLE_MSG)
+        self.assertEqual(await self._state(order_id), (OrderStatus.PAID.value, 0, 0))
+
+
+class RenewalHoldTests(VolumeHarness):
+    async def test_renewal_holds_only_what_it_adds(self) -> None:
+        from app.services.orders import _hold_renewal_volume, _RenewalRun
+
+        shop = await self._shop(ceiling_gb=5)
+        svc_id = await self._service(shop, bytes_=2 * GB)
+        order = SimpleNamespace(id=8, reseller_id=shop)
+        plan = SimpleNamespace(pg_template_id=None)
+        run = _RenewalRun(snapshot=None, had_saved_target=False, write_attempted=False)
+        async with self.Session() as session:
+            service = await session.get(UserService, svc_id)
+            await _hold_renewal_volume(session, order, service, plan, None, run, data_limit=4 * GB)
+            self.assertEqual(await sum_allocated_bytes(session, shop), 4 * GB)
+            with self.assertRaises(ValueError) as ctx:
+                await _hold_renewal_volume(session, order, service, plan, None, run, data_limit=8 * GB)
+            self.assertEqual(str(ctx.exception), CUSTOMER_UNAVAILABLE_MSG)
+
+
+class AddonHoldTests(VolumeHarness):
+    async def _apply(self, shop: int, svc_id: int, modify: AsyncMock) -> None:
+        from app.services.service_addons import KIND_VOLUME, _apply_pack_to_service
+
+        pg = SimpleNamespace(
+            get_user_by_id=AsyncMock(return_value={"data_limit": 2 * GB, "status": "active"}),
+            modify_user_by_id=modify,
+        )
+        async with self.Session() as session:
+            service = await session.get(UserService, svc_id)
+            with patch("app.services.pasarguard.get_pg_for_reseller", new=AsyncMock(return_value=pg)):
+                try:
+                    await _apply_pack_to_service(
+                        session, service, kind=KIND_VOLUME, amount=1.0, order_reseller_id=shop, order_id=5,
+                    )
+                    await session.commit()
+                except PasarGuardError:
+                    await session.rollback()
+
+    async def test_success_counts_once(self) -> None:
+        shop = await self._shop(ceiling_gb=5)
+        svc_id = await self._service(shop, bytes_=2 * GB)
+        await self._apply(shop, svc_id, AsyncMock(return_value={}))
+        async with self.Session() as session:
+            self.assertEqual(await sum_allocated_bytes(session, shop), 3 * GB)
+
+    async def test_unknown_outcome_keeps_the_hold(self) -> None:
+        shop = await self._shop(ceiling_gb=5)
+        svc_id = await self._service(shop, bytes_=2 * GB)
+        await self._apply(shop, svc_id, AsyncMock(side_effect=PasarGuardError("timeout", status_code=None)))
+        async with self.Session() as session:
+            self.assertEqual(await sum_allocated_bytes(session, shop), 3 * GB)
+            self.assertEqual(await session.scalar(select(VolumeHold.hold_key)), "addon:5")
 
 
 class OversoldListAndMigrationTests(VolumeHarness):
+    def test_postgres_default_is_a_boolean_literal(self) -> None:
+        ddl = str(CreateTable(ResellerProfile.__table__).compile(dialect=postgresql.dialect()))
+        self.assertIn("allow_volume_oversell BOOLEAN DEFAULT true", ddl)
+
+
     async def test_owner_oversold_list(self) -> None:
         a = await self._shop(shop_id=10, ceiling_gb=5, allow_oversell=False)
         b = await self._shop(shop_id=20, ceiling_gb=5, allow_oversell=False)
@@ -498,9 +644,11 @@ class OversoldListAndMigrationTests(VolumeHarness):
                     text("SELECT allow_volume_oversell FROM reseller_profiles")
                 ).one()
                 self.assertEqual(int(row[0]), 1)
+                self.assertIn("volume_holds", sa.inspect(conn).get_table_names())
                 migration.downgrade()
                 cols = {c["name"] for c in sa.inspect(conn).get_columns("reseller_profiles")}
                 self.assertNotIn("allow_volume_oversell", cols)
+                self.assertNotIn("volume_holds", sa.inspect(conn).get_table_names())
                 self.assertEqual(
                     conn.execute(text("SELECT user_id FROM reseller_profiles")).scalar(),
                     10,

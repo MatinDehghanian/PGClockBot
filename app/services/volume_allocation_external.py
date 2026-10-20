@@ -1,42 +1,57 @@
-"""Sync volume allocated to PasarGuard users that are not local UserService rows.
+"""Count the volume of a shop's panel users that have no local service row.
 
-Total shop allocation = local SUM(UserService) + ``ResellerProfile.external_allocated_bytes``.
-A stale or failed sync never opens the gate: the last known external total is kept.
+Users made in PasarGuard outside a bot sale (panel pages, the panel itself) are not
+``UserService`` rows. A background job lists each gated shop's panel users, sums the positive
+limits of the ones without a local row, and stores the total on the shop profile, where
+``volume_allocation`` counts it. A failed or incomplete listing keeps the previous total, so a
+panel outage never frees volume. Each shop is read with its own short database sessions and
+no transaction is open while the panel is called.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import func, or_, select, update
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.db.models import PgAdminSubscription, ResellerProfile, UserService
-from app.services.billing import GB, BILLING_MODE_PAYG
+from app.db.models import ResellerProfile, UserService
 from app.py_compat import timeout as asyncio_timeout
+from app.services.billing import BILLING_MODE_PAYG
+from app.services.db_safe import rollback_quiet
+from app.services.list_query import extract_list_total
+from app.services.pasarguard import get_pg_for_reseller
 
 logger = logging.getLogger(__name__)
 
 SETTING_SYNC_MINUTES = "volume_external_sync_minutes"
 DEFAULT_SYNC_MINUTES = 15
+MAX_SYNC_MINUTES = 1440
+# A count older than this many periods is shown as stale on the capacity page.
 STALE_PERIODS = 2
 PAGE_SIZE = 200
-MAX_OFFSET = 50_000
-SYNC_TIMEOUT_SECONDS = 60.0
-DEFAULT_CONCURRENCY = 3
+# A shop with more panel users than this is not counted (kept at its last total) and logged.
+MAX_PANEL_USERS = 50_000
+SHOP_TIMEOUT_SECONDS = 120.0
+CONCURRENCY = 3
+DUE_BATCH = 100
+# Keeps IN lists well under the asyncpg and SQLite bound-parameter limits.
+IN_CHUNK = 500
+
+
+class PanelListingIncomplete(Exception):
+    """The panel's user list could not be read in full; the old total stays."""
 
 
 @dataclass(frozen=True, slots=True)
 class ExternalSyncResult:
     shop_id: int
-    external_bytes: int
-    panel_user_count: int
-    unmatched_count: int
-    ceiling_mismatch_bytes: int | None
-    stale: bool
+    external_bytes: int | None
     error: str | None = None
 
 
@@ -44,330 +59,175 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _as_int(value: Any, default: int = 0) -> int:
+def sync_period_minutes(raw: str | None) -> int:
     try:
-        return int(value)
-    except (TypeError, ValueError):
-        return default
+        minutes = int(str(raw or "").strip())
+    except ValueError:
+        return DEFAULT_SYNC_MINUTES
+    return max(1, min(MAX_SYNC_MINUTES, minutes))
 
 
 async def get_external_sync_minutes(session: AsyncSession) -> int:
+    # Function-local: app.services.users imports the order flow, which imports the volume gate.
     from app.services.users import get_setting
 
-    raw = await get_setting(session, SETTING_SYNC_MINUTES, str(DEFAULT_SYNC_MINUTES))
-    mins = _as_int(raw, DEFAULT_SYNC_MINUTES)
-    return max(1, min(1440, mins))
+    return sync_period_minutes(await get_setting(session, SETTING_SYNC_MINUTES, str(DEFAULT_SYNC_MINUTES)))
 
 
-def external_sync_is_stale(
-    synced_at: datetime | None, *, period_minutes: int, now: datetime | None = None
-) -> bool:
+def external_sync_is_stale(synced_at: datetime | None, *, period_minutes: int, now: datetime | None = None) -> bool:
     if synced_at is None:
         return True
-    now = now or _utcnow()
     if synced_at.tzinfo is None:
         synced_at = synced_at.replace(tzinfo=timezone.utc)
-    return now - synced_at > timedelta(minutes=int(period_minutes) * STALE_PERIODS)
+    return (now or _utcnow()) - synced_at > timedelta(minutes=int(period_minutes) * STALE_PERIODS)
 
 
 def panel_user_limit_bytes(user: dict[str, Any]) -> int:
-    """Positive finite data_limit only; 0 / missing = unlimited → counts as zero."""
+    """Positive finite limit; unlimited (0) and missing count as zero, like local services."""
     raw = user.get("data_limit")
-    if raw is None:
+    if isinstance(raw, bool) or not isinstance(raw, int):
         return 0
-    n = _as_int(raw, 0)
-    return n if n > 0 else 0
+    return raw if raw > 0 else 0
 
 
-async def list_panel_users_for_admin(
-    pg: Any, admin_username: str, *, page_size: int = PAGE_SIZE
-) -> list[dict[str, Any]]:
-    """Paginated panel users owned by ``admin_username`` (one batch call per page)."""
-    out: list[dict[str, Any]] = []
+def _page_users(data: Any) -> list[dict[str, Any]]:
+    users = (data.get("users") or data.get("items") or []) if isinstance(data, dict) else data
+    return [row for row in users if isinstance(row, dict)] if isinstance(users, list) else []
+
+
+async def list_panel_users_for_admin(pg: Any, admin_username: str) -> list[dict[str, Any]]:
+    """Every panel user owned by ``admin_username``; raise when the list cannot be read in full.
+
+    Users created or deleted while paging can shift offsets, so the result is checked against
+    the panel's own total and refused when they disagree.
+    """
+    by_id: dict[int, dict[str, Any]] = {}
+    total: int | None = None
     offset = 0
-    uname = (admin_username or "").strip()
-    if not uname:
-        return out
-    while True:
-        data = await pg.get_users(admin=uname, limit=page_size, offset=offset)
-        users: list[Any]
-        if isinstance(data, dict):
-            users = data.get("users") or data.get("items") or []
-        elif isinstance(data, list):
-            users = data
-        else:
-            users = []
-        if not isinstance(users, list) or not users:
+    while offset <= MAX_PANEL_USERS:
+        data = await pg.get_users(admin=admin_username, limit=PAGE_SIZE, offset=offset)
+        if total is None:
+            total = extract_list_total(data) if isinstance(data, dict) else None
+        page = _page_users(data)
+        for row in page:
+            uid = row.get("id")
+            if isinstance(uid, int) and not isinstance(uid, bool):
+                by_id[uid] = row
+        if len(page) < PAGE_SIZE:
             break
-        for row in users:
-            if isinstance(row, dict):
-                out.append(row)
-        if len(users) < page_size:
-            break
-        offset += page_size
-        if offset > MAX_OFFSET:
-            break
-    return out
+        offset += PAGE_SIZE
+    else:
+        raise PanelListingIncomplete("too many panel users")
+    if total is not None and total != len(by_id):
+        raise PanelListingIncomplete("panel list changed while paging")
+    return list(by_id.values())
 
 
-async def compute_external_bytes(
-    session: AsyncSession,
-    *,
-    shop_id: int,
-    panel_users: list[dict[str, Any]],
-) -> tuple[int, int]:
-    """Return (external_bytes, unmatched_count) for panel users not in UserService."""
-    if not panel_users:
-        return 0, 0
-    ids: list[int] = []
-    names: list[str] = []
-    for row in panel_users:
-        uid = row.get("id")
-        try:
-            ids.append(int(uid))
-        except (TypeError, ValueError):
-            pass
-        uname = str(row.get("username") or "").strip().lower()
-        if uname:
-            names.append(uname)
+def _chunks(values: list[Any]) -> list[list[Any]]:
+    return [values[i : i + IN_CHUNK] for i in range(0, len(values), IN_CHUNK)]
+
+
+async def _local_matches(session: AsyncSession, shop_id: int, ids: list[int], names: list[str]) -> tuple[set[int], set[str]]:
+    """Panel ids and lower-case usernames that the shop has as non-cancelled local services."""
     local_ids: set[int] = set()
     local_names: set[str] = set()
-    if ids:
-        rows = (
-            await session.execute(
-                select(UserService.pg_user_id, UserService.pg_username).where(
-                    UserService.shop_id == int(shop_id),
-                    UserService.is_cancelled.is_(False),
-                    UserService.pg_user_id.in_(ids),
-                )
-            )
-        ).all()
-        for pg_uid, pg_name in rows:
-            if pg_uid is not None:
-                local_ids.add(int(pg_uid))
-            if pg_name:
-                local_names.add(str(pg_name).strip().lower())
-    if names:
-        # Also match by username when pg_user_id was never synced.
-        name_rows = (
-            await session.execute(
-                select(func.lower(UserService.pg_username)).where(
-                    UserService.shop_id == int(shop_id),
-                    UserService.is_cancelled.is_(False),
-                    func.lower(UserService.pg_username).in_(names),
-                )
-            )
-        ).scalars().all()
-        local_names.update(str(n).strip().lower() for n in name_rows if n)
+    live = (UserService.shop_id == int(shop_id), UserService.is_cancelled.is_(False))
+    for chunk in _chunks(ids):
+        rows = await session.scalars(select(UserService.pg_user_id).where(*live, UserService.pg_user_id.in_(chunk)))
+        local_ids.update(int(x) for x in rows if x is not None)
+    for chunk in _chunks(names):
+        # Services saved before their panel id was known are matched by username.
+        rows = await session.scalars(
+            select(func.lower(UserService.pg_username)).where(*live, func.lower(UserService.pg_username).in_(chunk))
+        )
+        local_names.update(str(x) for x in rows if x)
+    return local_ids, local_names
+
+
+async def compute_external_bytes(session: AsyncSession, *, shop_id: int, panel_users: list[dict[str, Any]]) -> int:
+    """Sum of limits of the panel users the shop has no local service for."""
+    ids = [int(row["id"]) for row in panel_users if isinstance(row.get("id"), int)]
+    names = sorted({str(row.get("username") or "").strip().lower() for row in panel_users} - {""})
+    local_ids, local_names = await _local_matches(session, shop_id, ids, names)
     external = 0
-    unmatched = 0
     for row in panel_users:
-        uid = row.get("id")
-        try:
-            uid_i = int(uid)
-        except (TypeError, ValueError):
-            uid_i = None
-        uname = str(row.get("username") or "").strip().lower()
-        if (uid_i is not None and uid_i in local_ids) or (uname and uname in local_names):
+        name = str(row.get("username") or "").strip().lower()
+        if row.get("id") in local_ids or (name and name in local_names):
             continue
-        unmatched += 1
         external += panel_user_limit_bytes(row)
-    return int(external), int(unmatched)
+    return external
 
 
-async def read_panel_admin_data_limit(pg: Any, admin_username: str) -> int | None:
-    """Live admin data_limit in bytes, or None when unreadable / unlimited."""
-    try:
-        admin = await pg.get_admin((admin_username or "").strip())
-    except Exception:
-        logger.debug("external sync: get_admin failed", exc_info=True)
-        return None
-    if not isinstance(admin, dict):
-        return None
-    n = _as_int(admin.get("data_limit"), 0)
-    return n if n > 0 else None
+async def due_shop_ids(session: AsyncSession, *, period_minutes: int, limit: int = DUE_BATCH) -> list[int]:
+    """Gated shops whose count is older than half a period, never-counted and oldest first."""
+    cutoff = _utcnow() - timedelta(minutes=period_minutes) / 2
+    synced = ResellerProfile.external_alloc_synced_at
+    rows = await session.scalars(
+        select(ResellerProfile.user_id)
+        .where(
+            ResellerProfile.is_active.is_(True),
+            ResellerProfile.allow_volume_oversell.is_(False),
+            func.lower(ResellerProfile.billing_mode) != BILLING_MODE_PAYG,
+            ResellerProfile.pg_admin_username.is_not(None),
+            or_(synced.is_(None), synced <= cutoff),
+        )
+        .order_by(synced.is_not(None), synced, ResellerProfile.user_id)
+        .limit(int(limit))
+    )
+    return [int(x) for x in rows]
+
+
+async def _read_panel_users(sessions: async_sessionmaker[AsyncSession], shop_id: int) -> list[dict[str, Any]] | None:
+    async with sessions() as session:
+        uname = (
+            await session.scalar(select(ResellerProfile.pg_admin_username).where(ResellerProfile.user_id == shop_id))
+            or ""
+        ).strip()
+        if not uname:
+            return None
+        pg = await get_pg_for_reseller(session, shop_id)
+    # The session is closed here: nothing is held while the panel is paged.
+    async with asyncio_timeout(SHOP_TIMEOUT_SECONDS):
+        return await list_panel_users_for_admin(pg, uname)
 
 
 async def sync_shop_external_allocation(
-    session: AsyncSession,
-    profile: ResellerProfile,
-    *,
-    pg: Any | None = None,
+    sessions: async_sessionmaker[AsyncSession], shop_id: int
 ) -> ExternalSyncResult:
-    """Refresh external allocation for one shop. On panel failure keep the previous total."""
-    shop_id = int(profile.user_id)
-    uname = (profile.pg_admin_username or "").strip()
-    period = await get_external_sync_minutes(session)
-    stale_before = external_sync_is_stale(
-        getattr(profile, "external_alloc_synced_at", None), period_minutes=period
-    )
-    if not uname:
-        return ExternalSyncResult(
-            shop_id=shop_id,
-            external_bytes=int(getattr(profile, "external_allocated_bytes", 0) or 0),
-            panel_user_count=0,
-            unmatched_count=0,
-            ceiling_mismatch_bytes=None,
-            stale=True,
-            error="no_pg_admin",
-        )
-    if pg is None:
-        from app.services.pasarguard import get_pg_for_reseller
-
-        try:
-            pg = await get_pg_for_reseller(session, shop_id)
-        except Exception as exc:
-            logger.warning(
-                "external volume sync: client failed shop=%s", shop_id, exc_info=True
-            )
-            return ExternalSyncResult(
-                shop_id=shop_id,
-                external_bytes=int(getattr(profile, "external_allocated_bytes", 0) or 0),
-                panel_user_count=0,
-                unmatched_count=0,
-                ceiling_mismatch_bytes=None,
-                stale=True,
-                error=str(exc)[:120],
-            )
+    """Recount one shop and store the total; on any failure keep the previous total."""
     try:
-        async with asyncio_timeout(SYNC_TIMEOUT_SECONDS):
-            panel_users = await list_panel_users_for_admin(pg, uname)
-            external, unmatched = await compute_external_bytes(
-                session, shop_id=shop_id, panel_users=panel_users
-            )
-            live_admin = await read_panel_admin_data_limit(pg, uname)
+        panel_users = await _read_panel_users(sessions, shop_id)
     except Exception as exc:
-        logger.warning(
-            "external volume sync failed shop=%s — keeping previous total",
-            shop_id,
-            exc_info=True,
-        )
-        return ExternalSyncResult(
-            shop_id=shop_id,
-            external_bytes=int(getattr(profile, "external_allocated_bytes", 0) or 0),
-            panel_user_count=0,
-            unmatched_count=0,
-            ceiling_mismatch_bytes=None,
-            stale=True,
-            error=str(exc)[:120],
-        )
-
-    profile.external_allocated_bytes = int(external)
-    profile.external_alloc_synced_at = _utcnow()
-
-    ceiling_mismatch: int | None = None
-    sub = await session.scalar(
-        select(PgAdminSubscription).where(PgAdminSubscription.pg_username == uname)
-    )
-    if sub is not None and live_admin is not None:
-        local_ceiling = (
-            int(sub.base_gb or 0) + int(sub.extra_gb_purchased or 0)
-        ) * int(GB)
-        if local_ceiling > 0 and live_admin != local_ceiling:
-            ceiling_mismatch = int(live_admin) - int(local_ceiling)
-            logger.warning(
-                "volume ceiling mismatch shop=%s admin=%s panel=%s local=%s delta=%s",
-                shop_id,
-                uname,
-                live_admin,
-                local_ceiling,
-                ceiling_mismatch,
-            )
-
-    return ExternalSyncResult(
-        shop_id=shop_id,
-        external_bytes=int(external),
-        panel_user_count=len(panel_users),
-        unmatched_count=unmatched,
-        ceiling_mismatch_bytes=ceiling_mismatch,
-        stale=False,
-        error=None,
-    )
-
-
-async def shops_needing_external_sync(
-    session: AsyncSession, *, limit: int = 200
-) -> list[ResellerProfile]:
-    """Fixed-plan shops with oversell off that are due for an external sync."""
-    period = await get_external_sync_minutes(session)
-    cutoff = _utcnow() - timedelta(minutes=period)
-    profiles = list(
-        (
+        # Unreachable panel, bad credentials or a shifting list: the old total keeps counting.
+        logger.warning("external volume sync: panel read failed shop=%s", shop_id, exc_info=True)
+        return ExternalSyncResult(shop_id=shop_id, external_bytes=None, error=type(exc).__name__)
+    if panel_users is None:
+        return ExternalSyncResult(shop_id=shop_id, external_bytes=None, error="no_pg_admin")
+    async with sessions() as session:
+        try:
+            external = await compute_external_bytes(session, shop_id=shop_id, panel_users=panel_users)
             await session.execute(
-                select(ResellerProfile)
-                .where(
-                    ResellerProfile.is_active.is_(True),
-                    ResellerProfile.billing_mode != BILLING_MODE_PAYG,
-                    ResellerProfile.pg_admin_username.is_not(None),
-                    ResellerProfile.allow_volume_oversell.is_(False),
-                )
-                .order_by(ResellerProfile.id.asc())
-                .limit(int(limit) * 2)
+                update(ResellerProfile)
+                .where(ResellerProfile.user_id == shop_id)
+                .values(external_allocated_bytes=external, external_alloc_synced_at=_utcnow())
             )
-        ).scalars().all()
-    )
-    due: list[ResellerProfile] = []
-    for profile in profiles:
-        synced = getattr(profile, "external_alloc_synced_at", None)
-        if synced is not None and synced.tzinfo is None:
-            synced = synced.replace(tzinfo=timezone.utc)
-        if synced is None or synced <= cutoff:
-            due.append(profile)
-        if len(due) >= int(limit):
-            break
-    return due
+            await session.commit()
+        except SQLAlchemyError as exc:
+            logger.warning("external volume sync: store failed shop=%s", shop_id, exc_info=True)
+            await rollback_quiet(session)
+            return ExternalSyncResult(shop_id=shop_id, external_bytes=None, error=type(exc).__name__)
+    return ExternalSyncResult(shop_id=shop_id, external_bytes=external)
 
 
-async def run_external_allocation_sync(
-    session: AsyncSession,
-    *,
-    concurrency: int = DEFAULT_CONCURRENCY,
-    pg_factory: Any | None = None,
-) -> list[ExternalSyncResult]:
-    """Sync every gated shop; one bad shop must not stop the rest."""
-    import asyncio
+async def run_external_allocation_sync(sessions: async_sessionmaker[AsyncSession]) -> list[ExternalSyncResult]:
+    """Recount the due shops, a few at a time; one failing shop never stops the others."""
+    async with sessions() as session:
+        period = await get_external_sync_minutes(session)
+        shop_ids = await due_shop_ids(session, period_minutes=period)
+    gate = asyncio.Semaphore(CONCURRENCY)
 
-    profiles = await shops_needing_external_sync(session)
-    if not profiles:
-        return []
-    gate = asyncio.Semaphore(max(1, int(concurrency)))
-    results: list[ExternalSyncResult] = []
-
-    async def _one(profile: ResellerProfile) -> ExternalSyncResult:
+    async def one(shop_id: int) -> ExternalSyncResult:
         async with gate:
-            try:
-                # Re-load in this session context after concurrent work.
-                row = await session.get(ResellerProfile, int(profile.id))
-                if row is None:
-                    return ExternalSyncResult(
-                        shop_id=int(profile.user_id),
-                        external_bytes=0,
-                        panel_user_count=0,
-                        unmatched_count=0,
-                        ceiling_mismatch_bytes=None,
-                        stale=True,
-                        error="missing",
-                    )
-                pg = None
-                if pg_factory is not None:
-                    pg = await pg_factory(session, int(row.user_id))
-                return await sync_shop_external_allocation(session, row, pg=pg)
-            except Exception as exc:
-                logger.exception(
-                    "external volume sync crashed shop=%s", getattr(profile, "user_id", None)
-                )
-                return ExternalSyncResult(
-                    shop_id=int(getattr(profile, "user_id", 0) or 0),
-                    external_bytes=int(getattr(profile, "external_allocated_bytes", 0) or 0),
-                    panel_user_count=0,
-                    unmatched_count=0,
-                    ceiling_mismatch_bytes=None,
-                    stale=True,
-                    error=str(exc)[:120],
-                )
+            return await sync_shop_external_allocation(sessions, shop_id)
 
-    # Sequential gather under semaphore — avoid N+1 by loading profiles once above.
-    for profile in profiles:
-        results.append(await _one(profile))
-    await session.commit()
-    return results
+    return list(await asyncio.gather(*(one(sid) for sid in shop_ids)))
