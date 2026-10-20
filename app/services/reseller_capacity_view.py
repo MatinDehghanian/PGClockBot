@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import PgAdminSubscription, ResellerPlan, ResellerProfile
 from app.services.formatting import format_bytes
 from app.services.volume_allocation import build_allocation_snapshot
+from app.services.volume_allocation_external import external_sync_is_stale, get_external_sync_minutes
 from app.services.pg_admin_subscription import (
     PgCapacityUnreadable,
     get_subscription,
@@ -79,6 +80,8 @@ async def allocation_view_for_shop(
     snap = await build_allocation_snapshot(session, int(shop_id))
     if snap is None:
         return {}
+    gated = not snap.is_payg and not snap.allow_oversell and snap.ceiling_bytes is not None
+    period = await get_external_sync_minutes(session)
     ceiling_text = (
         format_bytes(snap.ceiling_bytes) if snap.ceiling_bytes is not None else "نامشخص"
     )
@@ -91,6 +94,8 @@ async def allocation_view_for_shop(
         "alloc_is_oversold": snap.is_oversold,
         "alloc_allow_oversell": snap.allow_oversell,
         "alloc_is_payg": snap.is_payg,
+        "alloc_external_text": format_bytes(snap.external_allocated_bytes),
+        "alloc_external_stale": gated and external_sync_is_stale(snap.external_synced_at, period_minutes=period),
     }
 
 

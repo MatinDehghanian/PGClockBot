@@ -1087,6 +1087,7 @@ DEFAULT_SETTINGS = {
     "billing_low_balance": "10000",
     "billing_on_empty": "block_provision",
     "billing_tick_minutes": "15",
+    "volume_external_sync_minutes": "15",
     # UX20 ops
     "shop_maintenance_enabled": "0",
     "shop_maintenance_text": (
