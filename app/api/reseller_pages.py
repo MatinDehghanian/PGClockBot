@@ -19,7 +19,7 @@ from app.services.shop_scope import ShopScopeError, assert_bot_user_in_scope
 from app.services.db_safe import rollback_quiet
 from app.services.platform_identity import is_explicit_owner_staff
 from app.services.reseller_capacity_view import allocation_view_for_shop
-from app.services.volume_allocation import apply_oversell_switch, list_oversold_shop_ids
+from app.services.volume_allocation import apply_create_form_oversell, apply_oversell_switch, list_oversold_shop_ids
 from app.services.billing import require_positive_payg_rate
 from app.services.pasarguard import get_pg
 from app.services.pg_quota import limit_snapshot_cards, load_staff_limit_snapshot
@@ -488,6 +488,10 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             )
         except Exception as e:
             return RedirectResponse(f"/resellers?err={_q(str(e))}", status_code=303)
+        await apply_create_form_oversell(
+            session, int(user.id), form_value=form.get("allow_volume_oversell"),
+            actor_is_owner=is_explicit_owner_staff(staff),
+        )
 
         try:
             from app.bot import create_bot

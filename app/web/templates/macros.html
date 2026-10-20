@@ -85,6 +85,10 @@
 </label>
 {%- endmacro %}
 
+{% macro oversell_create_switch() -%}
+{{ switch('allow_volume_oversell', 'اجازه فروش بیش از سقف حجم', checked=false, help='خاموش: فروش این نماینده از سقف حجم اشتراکش بیشتر نمی‌شود. روشن: محدودیتی نیست. برای پلن PAYG اثری ندارد. بعداً از صفحهٔ ویرایش نماینده هم قابل تغییر است.') }}
+{%- endmacro %}
+
 {% macro switch_chip(name, label, checked=false, value='1') -%}
 <label class="ui-switch-chip">
   <span class="ui-switch-copy"><strong>{{ label }}</strong></span>

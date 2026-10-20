@@ -33,6 +33,8 @@ from app.services.pasarguard import get_pg
 from app.services.tickets import get_ticket, reply_ticket
 from app.services.updates import local_version
 from app.services.users import get_all_settings, get_setting, on, set_setting
+from app.services.billing import is_payg
+from app.services.volume_allocation import set_shop_oversell
 from app.bot.nav_inline import with_inline_back
 from app.bot.nav_input import form_origin
 from app.bot.tg_utils import parse_bot_float, parse_bot_int, safe_edit_text
@@ -3826,6 +3828,17 @@ async def adm_resellers_list(callback: CallbackQuery, session: AsyncSession, db_
 
 RESELLER_SVCS_PAGE_SIZE = 10
 
+
+def _oversell_button_state(profile) -> bool | None:
+    return None if profile is None or is_payg(profile) else bool(profile.allow_volume_oversell)
+
+
+def _oversell_line(profile) -> str:
+    state = _oversell_button_state(profile)
+    if state is None:
+        return ""
+    return "فروش بیش از سقف حجم: " + ("روشن (بدون محدودیت)" if state else "خاموش (تا سقف اشتراک)") + "\n"
+
 async def _render_reseller_card(
     message: Message,
     session: AsyncSession,
@@ -3858,13 +3871,15 @@ async def _render_reseller_card(
         f"حالت پرداخت: {html.escape(mode)}\n"
         f"نمایندگی: {active}{suspended}\n"
         f"ربات اختصاصی: {html.escape(bot_uname)}\n"
-        f"سرویس‌های فروشگاه: {shop_svc_count}\n\n"
+        f"سرویس‌های فروشگاه: {shop_svc_count}\n"
+        f"{_oversell_line(profile)}\n"
         f"<i>سرویس‌های پاسارگارد = کاربران VPN زیر ادمین نماینده</i>"
     )
     markup = kb.admin_reseller_actions(
         user.id,
         has_shop_services=int(shop_svc_count) > 0,
         color_tag=effective_color_tag(user),
+        oversell=_oversell_button_state(profile),
     )
     if edit:
         try:
@@ -3961,6 +3976,35 @@ async def adm_resellers_tag_set(
     apply_color_tag(user, key)
     await session.commit()
     await callback.answer(f"ذخیره شد: {bot_tag_button_label(key)}"[:180])
+    if callback.message:
+        await _render_reseller_card(callback.message, session, user, edit=True)
+
+@router.callback_query(F.data.regexp(r"^adm:resellers:osell:\d+$"))
+@require_bot_owner_handler
+@require_platform_rep_mgmt
+async def adm_resellers_oversell_toggle(
+    callback: CallbackQuery, session: AsyncSession, db_user: BotUser
+):
+    """Flip a reseller's volume-oversell switch from the reseller card."""
+    try:
+        uid = int((callback.data or "").rsplit(":", 1)[-1])
+    except ValueError:
+        await callback.answer(feedback.INVALID, show_alert=True)
+        return
+    user = await session.get(BotUser, uid)
+    profile = await load_reseller_profile(session, uid) if user and user.role == Role.RESELLER.value else None
+    if profile is None:
+        await callback.answer("نماینده یافت نشد", show_alert=True)
+        return
+    try:
+        # The decorator already admitted only the Owner.
+        allow = await set_shop_oversell(
+            session, uid, allow=not bool(profile.allow_volume_oversell), actor_is_owner=True
+        )
+    except ValueError as e:
+        await callback.answer(str(e), show_alert=True)
+        return
+    await callback.answer("فروش بیش از سقف روشن شد" if allow else "فروش تا سقف اشتراک محدود شد")
     if callback.message:
         await _render_reseller_card(callback.message, session, user, edit=True)
 
@@ -4073,6 +4117,7 @@ async def adm_resellers_capacity_adjust(
         from app.services.color_tags import effective_color_tag
 
         reseller_user = await session.get(BotUser, user_id)
+        reseller_profile = await load_reseller_profile(session, user_id)
         if callback.message:
             await safe_edit_text(
                 callback.message,
@@ -4081,6 +4126,7 @@ async def adm_resellers_capacity_adjust(
                     user_id,
                     has_shop_services=int(shop_count) > 0,
                     color_tag=effective_color_tag(reseller_user) if reseller_user else None,
+                    oversell=_oversell_button_state(reseller_profile),
                 ),
             )
         return

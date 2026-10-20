@@ -2035,8 +2035,12 @@ def admin_reseller_actions(
     *,
     has_shop_services: bool = False,
     color_tag: str | None = None,
+    oversell: bool | None = None,
 ) -> InlineKeyboardMarkup:
-    """Reseller card actions — PG-owned services are primary; optional shop UserServices link."""
+    """Reseller card actions — PG-owned services are primary; optional shop UserServices link.
+
+    ``oversell`` is the volume-oversell switch; None hides it (PAYG shops have no ceiling).
+    """
     from app.services.color_tags import bot_tag_button_label
 
     tag_label = bot_tag_button_label(color_tag)
@@ -2063,6 +2067,15 @@ def admin_reseller_actions(
             )
         ],
     ]
+    if oversell is not None:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=f"📈 فروش بیش از سقف حجم: {'روشن' if oversell else 'خاموش'}",
+                    callback_data=f"adm:resellers:osell:{user_id}",
+                )
+            ]
+        )
     if has_shop_services:
         rows.append(
             [

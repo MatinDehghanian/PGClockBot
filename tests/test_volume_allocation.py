@@ -38,12 +38,14 @@ from app.services.provision_gate import ProvisionError, hold_create_volume, hold
 from app.services.volume_allocation import (
     CUSTOMER_UNAVAILABLE_MSG,
     VolumeAllocationError,
+    apply_create_form_oversell,
     apply_oversell_switch,
     assert_volume_delta_allowed,
     build_allocation_snapshot,
     hold_volume,
     list_oversold_shop_ids,
     release_volume_hold,
+    set_shop_oversell,
     sum_allocated_bytes,
     threshold_level,
 )
@@ -282,6 +284,60 @@ class GateBehaviourTests(VolumeHarness):
         self.assertEqual(threshold_level(79 * GB, 100 * GB), 0)
         self.assertEqual(threshold_level(80 * GB, 100 * GB), 1)
         self.assertEqual(threshold_level(100 * GB, 100 * GB), 2)
+
+
+class OversellSwitchTests(VolumeHarness):
+    async def _allow(self, shop_id: int) -> bool:
+        async with self.Session() as session:
+            return bool(
+                await session.scalar(
+                    select(ResellerProfile.allow_volume_oversell).where(ResellerProfile.user_id == shop_id)
+                )
+            )
+
+    async def test_checked_create_switch_turns_oversell_on_for_the_owner_only(self) -> None:
+        await self._shop(shop_id=10)
+        await self._shop(shop_id=20)
+        async with self.Session() as session:
+            await apply_create_form_oversell(session, 10, form_value="1", actor_is_owner=True)
+            await apply_create_form_oversell(session, 20, form_value="1", actor_is_owner=False)
+        self.assertTrue(await self._allow(10))
+        self.assertFalse(await self._allow(20))
+
+    async def test_unchecked_create_switch_and_payg_change_nothing(self) -> None:
+        await self._shop(shop_id=10)
+        await self._shop(shop_id=20, payg=True)
+        async with self.Session() as session:
+            await apply_create_form_oversell(session, 10, form_value=None, actor_is_owner=True)
+            await apply_create_form_oversell(session, 20, form_value="1", actor_is_owner=True)
+            await apply_create_form_oversell(session, None, form_value="1", actor_is_owner=True)
+        self.assertFalse(await self._allow(10))
+        self.assertFalse(await self._allow(20))
+
+    async def test_bot_toggle_sets_both_ways_and_refuses_payg_and_non_owner(self) -> None:
+        await self._shop(shop_id=10)
+        await self._shop(shop_id=20, payg=True)
+        async with self.Session() as session:
+            self.assertTrue(await set_shop_oversell(session, 10, allow=True, actor_is_owner=True))
+            self.assertTrue(await self._allow(10))
+            self.assertFalse(await set_shop_oversell(session, 10, allow=False, actor_is_owner=True))
+            self.assertFalse(await self._allow(10))
+            with self.assertRaises(ValueError):
+                await set_shop_oversell(session, 10, allow=True, actor_is_owner=False)
+            with self.assertRaises(ValueError):
+                await set_shop_oversell(session, 20, allow=True, actor_is_owner=True)
+            with self.assertRaises(ValueError):
+                await set_shop_oversell(session, 99, allow=True, actor_is_owner=True)
+
+    def test_reseller_card_button_shows_state_and_hides_for_payg(self) -> None:
+        from app.bot import keyboards as kb
+
+        def labels(markup) -> dict[str, str]:
+            return {b.callback_data: b.text for row in markup.inline_keyboard for b in row}
+
+        self.assertIn("خاموش", labels(kb.admin_reseller_actions(7, oversell=False))["adm:resellers:osell:7"])
+        self.assertIn("روشن", labels(kb.admin_reseller_actions(7, oversell=True))["adm:resellers:osell:7"])
+        self.assertNotIn("adm:resellers:osell:7", labels(kb.admin_reseller_actions(7, oversell=None)))
 
 
 class PathGateTests(VolumeHarness):

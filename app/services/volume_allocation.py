@@ -496,6 +496,41 @@ def apply_oversell_switch(profile: ResellerProfile, *, shown: bool, allow: bool,
         profile.allow_volume_oversell = bool(allow)
 
 
+OVERSELL_OWNER_ONLY_MSG = "فقط مالک سیستم می‌تواند فروش بیش از سقف حجم را تغییر دهد"
+OVERSELL_PAYG_MSG = "نمایندهٔ PAYG سقف حجم ندارد"
+
+
+async def set_shop_oversell(session: AsyncSession, shop_id: int, *, allow: bool, actor_is_owner: bool) -> bool:
+    """Set and commit a shop's oversell switch (create form, bot card); return the new value."""
+    if not actor_is_owner:
+        raise ValueError(OVERSELL_OWNER_ONLY_MSG)
+    profile = await session.scalar(select(ResellerProfile).where(ResellerProfile.user_id == int(shop_id)))
+    if profile is None:
+        raise ValueError("نماینده یافت نشد")
+    if is_payg(profile):
+        raise ValueError(OVERSELL_PAYG_MSG)
+    profile.allow_volume_oversell = bool(allow)
+    await session.commit()
+    return bool(allow)
+
+
+async def apply_create_form_oversell(
+    session: AsyncSession, shop_id: int | None, *, form_value: object, actor_is_owner: bool
+) -> None:
+    """Turn oversell on for a shop just created from a form whose switch was checked.
+
+    New shops start with oversell off, so an unchecked switch, a non-owner actor or a PAYG
+    shop changes nothing.
+    """
+    if shop_id is None or not form_value or not actor_is_owner:
+        return
+    profile = await session.scalar(select(ResellerProfile).where(ResellerProfile.user_id == int(shop_id)))
+    if profile is None or is_payg(profile):
+        return
+    profile.allow_volume_oversell = True
+    await session.commit()
+
+
 VOLUME_ALERT = "volume_alloc"
 
 
