@@ -1,41 +1,38 @@
 """Volume allocation gate for fixed-plan reseller shops.
 
-Ceiling comes from ``PgAdminSubscription`` (base_gb + extra_gb_purchased).
-Allocated volume is the SQL sum of non-cancelled ``UserService.quota_data_limit_bytes``
-scoped by ``shop_id``. Unlimited (0 + synced) and unsynced (NULL) count as zero and
-are listed as warnings. PAYG shops are exempt. When ``allow_volume_oversell`` is on,
-the gate is a no-op.
+Ceiling comes from ``PgAdminSubscription`` (base_gb + extra_gb_purchased). Allocation is the SQL
+sum of non-cancelled ``UserService.quota_data_limit_bytes`` of the shop plus its live
+``VolumeHold`` rows. Unlimited (0) and unsynced (NULL) services count as zero and are listed as
+warnings. PAYG shops, shops with ``allow_volume_oversell`` and shops without a ceiling (no
+subscription, or an unlimited one) are not gated.
 
-Reservation is the service row itself (``quota_status=creating`` with the intended
-bytes). No separate ledger. Callers: lock → check → reserve/update → commit → panel.
+A sale that is about to call the panel takes a hold first (``hold_volume``): lock, insert the
+hold, check the total including it, commit. The hold is released in the same commit that writes
+the service's new limit, or right away on a definite panel failure. A hold whose panel outcome
+is unknown is left to expire, so a timeout never frees volume the panel may have granted.
 """
 
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Literal
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import (
-    BotUser,
-    PgAdminSubscription,
-    ResellerProfile,
-    UserService,
-    WalletTransaction,
-)
-from app.services.billing import GB, BILLING_MODE_PAYG, is_payg
+from app.db.models import PgAdminSubscription, ResellerProfile, UserService, VolumeHold
+from app.services.billing import BILLING_MODE_PAYG, GB, is_payg
+from app.services.formatting import format_bytes
 
 logger = logging.getLogger(__name__)
 
-QUOTA_STATUS_CREATING = "creating"
-QUOTA_STATUS_REVIEW = "review"
+# Longer than any panel call plus a delivery retry; an unknown outcome is counted until then.
+HOLD_TTL = timedelta(hours=2)
 
 CUSTOMER_UNAVAILABLE_MSG = "فعلاً موجود نیست"
-CEILING_UNKNOWN_MSG = "سقف حجم این نماینده مشخص نیست"
+LIMIT_UNKNOWN_MSG = "حجم این سرویس مشخص نیست؛ فروش بیش از سقف خاموش است و بدون حجم مشخص نمی‌شود فروخت"
 UNLIMITED_BLOCKED_MSG = "ساخت یا تبدیل به سرویس نامحدود وقتی فروش بیش از سقف خاموش است مجاز نیست"
 
 Audience = Literal["admin", "customer"]
@@ -59,9 +56,7 @@ class VolumeAllocationError(Exception):
         super().__init__(message)
 
     def user_message(self) -> str:
-        if self.for_customer:
-            return CUSTOMER_UNAVAILABLE_MSG
-        return self.message
+        return CUSTOMER_UNAVAILABLE_MSG if self.for_customer else self.message
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,110 +71,97 @@ class AllocationSnapshot:
     is_oversold: bool
 
 
+@dataclass(frozen=True, slots=True)
+class HeldVolume:
+    """Handle of a committed hold, passed back to ``release_volume_hold``."""
+
+    shop_id: int
+    key: str
+
+
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def bytes_toward_allocation(limit_bytes: int | None, *, synced: bool) -> int:
-    """Bytes that count against the shop ceiling.
-
-    NULL (never synced) and 0 with a sync stamp (unlimited) count as zero.
-    Positive limits always count, including expired non-cancelled services.
-    """
-    if limit_bytes is None:
-        return 0
-    try:
-        n = int(limit_bytes)
-    except (TypeError, ValueError):
-        return 0
-    if n <= 0:
-        return 0
-    if not synced and n <= 0:
-        return 0
-    return n
-
-
 def format_allocation_full_message(*, allocated_bytes: int, ceiling_bytes: int) -> str:
     """Admin/reseller-facing full message (never shown to end customers)."""
-    from app.services.formatting import format_bytes
-
-    return (
-        f"سقف حجم پر است: {format_bytes(allocated_bytes)} از {format_bytes(ceiling_bytes)}"
-    )
+    return f"سقف حجم پر است: {format_bytes(allocated_bytes)} از {format_bytes(ceiling_bytes)}"
 
 
-def _gate_message(
-    *,
-    allocated_bytes: int,
-    ceiling_bytes: int,
-    audience: Audience,
-) -> str:
-    if audience == "customer":
-        return CUSTOMER_UNAVAILABLE_MSG
-    return format_allocation_full_message(
-        allocated_bytes=allocated_bytes, ceiling_bytes=ceiling_bytes
-    )
+def _rejection(message: str, audience: Audience, **numbers: int) -> VolumeAllocationError:
+    return VolumeAllocationError(message, for_customer=(audience == "customer"), **numbers)
 
 
-async def lock_reseller_profile(
-    session: AsyncSession, shop_id: int
-) -> ResellerProfile | None:
-    """Row-lock the shop profile (FOR UPDATE on PostgreSQL; SQLite serializes writers)."""
+async def lock_reseller_profile(session: AsyncSession, shop_id: int) -> ResellerProfile | None:
+    """Row-lock the shop profile (FOR UPDATE on PostgreSQL; no-op on SQLite)."""
     return await session.scalar(
-        select(ResellerProfile)
-        .where(ResellerProfile.user_id == int(shop_id))
-        .with_for_update()
+        select(ResellerProfile).where(ResellerProfile.user_id == int(shop_id)).with_for_update()
     )
 
 
-async def ceiling_bytes_for_profile(
-    session: AsyncSession, profile: ResellerProfile
-) -> int | None:
-    """Return ceiling in bytes, or None when unknown (fail closed).
-
-    PAYG is signaled by the caller via ``is_payg``; this still returns the
-    subscription total when present so the capacity page can show numbers.
-    """
+async def ceiling_bytes_for_profile(session: AsyncSession, profile: ResellerProfile) -> int | None:
+    """The shop's ceiling in bytes; None when it has none (no subscription, or unlimited)."""
     uname = (profile.pg_admin_username or "").strip()
     if not uname:
         return None
-    sub = await session.scalar(
-        select(PgAdminSubscription).where(PgAdminSubscription.pg_username == uname)
-    )
+    sub = await session.scalar(select(PgAdminSubscription).where(PgAdminSubscription.pg_username == uname))
     if sub is None:
         return None
     total_gb = int(sub.base_gb or 0) + int(sub.extra_gb_purchased or 0)
-    if total_gb <= 0:
-        # Zero means unlimited on the subscription clock — unknown for our gate.
+    return total_gb * int(GB) if total_gb > 0 else None
+
+
+async def _gated_ceiling(session: AsyncSession, shop_id: int, *, lock: bool) -> int | None:
+    """The ceiling when the gate applies to this shop, else None."""
+    if lock:
+        profile = await lock_reseller_profile(session, shop_id)
+    else:
+        profile = await session.scalar(select(ResellerProfile).where(ResellerProfile.user_id == int(shop_id)))
+    if profile is None or is_payg(profile) or bool(profile.allow_volume_oversell):
         return None
-    return int(total_gb) * int(GB)
+    return await ceiling_bytes_for_profile(session, profile)
 
 
-async def sum_allocated_bytes(session: AsyncSession, shop_id: int) -> int:
-    """SQL aggregate of counted volume for non-cancelled services of this shop."""
-    # Positive limits only; NULL and 0 do not add. Cancelled rows are excluded.
+async def shop_is_gated(session: AsyncSession, shop_id: int) -> bool:
+    """Whether sales of this shop are held against a volume ceiling."""
+    return await _gated_ceiling(session, int(shop_id), lock=False) is not None
+
+
+async def sum_service_bytes(session: AsyncSession, shop_id: int) -> int:
+    """SQL aggregate of positive limits of the shop's non-cancelled services."""
     total = await session.scalar(
         select(func.coalesce(func.sum(UserService.quota_data_limit_bytes), 0)).where(
             UserService.shop_id == int(shop_id),
             UserService.is_cancelled.is_(False),
-            UserService.quota_data_limit_bytes.is_not(None),
             UserService.quota_data_limit_bytes > 0,
         )
     )
     return int(total or 0)
 
 
+async def sum_active_holds(session: AsyncSession, shop_id: int) -> int:
+    total = await session.scalar(
+        select(func.coalesce(func.sum(VolumeHold.bytes), 0)).where(
+            VolumeHold.shop_id == int(shop_id), VolumeHold.expires_at > _utcnow()
+        )
+    )
+    return int(total or 0)
+
+
+async def sum_allocated_bytes(session: AsyncSession, shop_id: int) -> int:
+    """Everything that counts against the ceiling: services plus live holds."""
+    return await sum_service_bytes(session, shop_id) + await sum_active_holds(session, shop_id)
+
+
 async def sum_expired_held_bytes(session: AsyncSession, shop_id: int) -> int:
     """Volume still held by expired (but not cancelled) services."""
-    now = _utcnow()
     total = await session.scalar(
         select(func.coalesce(func.sum(UserService.quota_data_limit_bytes), 0)).where(
             UserService.shop_id == int(shop_id),
             UserService.is_cancelled.is_(False),
-            UserService.quota_data_limit_bytes.is_not(None),
             UserService.quota_data_limit_bytes > 0,
             UserService.quota_expire_at.is_not(None),
-            UserService.quota_expire_at < now,
+            UserService.quota_expire_at < _utcnow(),
         )
     )
     return int(total or 0)
@@ -191,33 +173,134 @@ async def list_unlimited_or_unsynced_services(
     """Services that count as zero and should be warned about on the capacity page."""
     rows = (
         await session.execute(
-            select(UserService)
+            select(UserService.id, UserService.pg_username, UserService.quota_data_limit_bytes)
             .where(
                 UserService.shop_id == int(shop_id),
                 UserService.is_cancelled.is_(False),
-                or_(
-                    UserService.quota_data_limit_bytes.is_(None),
-                    UserService.quota_data_limit_bytes == 0,
-                ),
+                or_(UserService.quota_data_limit_bytes.is_(None), UserService.quota_data_limit_bytes == 0),
             )
             .order_by(UserService.id.desc())
             .limit(int(limit))
         )
-    ).scalars().all()
-    out: list[dict[str, Any]] = []
-    for svc in rows:
-        synced = getattr(svc, "quota_synced_at", None) is not None
-        limit_b = getattr(svc, "quota_data_limit_bytes", None)
-        kind = "unsynced" if limit_b is None else "unlimited"
-        out.append(
-            {
-                "id": int(svc.id),
-                "pg_username": str(svc.pg_username or ""),
-                "kind": kind,
-                "synced": synced,
-            }
+    ).all()
+    return [
+        {"id": int(sid), "pg_username": str(uname or ""), "kind": "unsynced" if limit_b is None else "unlimited"}
+        for sid, uname, limit_b in rows
+    ]
+
+
+def _intended_delta(
+    delta_bytes: int | None, *, allow_unlimited: bool, audience: Audience
+) -> int:
+    """Validate the requested change: None is unknown, 0 is an unlimited service."""
+    if delta_bytes is None:
+        raise _rejection(LIMIT_UNKNOWN_MSG, audience)
+    if isinstance(delta_bytes, bool) or not isinstance(delta_bytes, int):
+        raise _rejection(LIMIT_UNKNOWN_MSG, audience)
+    if delta_bytes == 0 and not allow_unlimited:
+        raise _rejection(UNLIMITED_BLOCKED_MSG, audience)
+    return delta_bytes
+
+
+def _assert_fits(allocated: int, ceiling: int, audience: Audience) -> None:
+    if allocated > ceiling:
+        raise _rejection(
+            format_allocation_full_message(allocated_bytes=allocated, ceiling_bytes=ceiling),
+            audience,
+            allocated_bytes=allocated,
+            ceiling_bytes=ceiling,
         )
-    return out
+
+
+async def assert_volume_delta_allowed(
+    session: AsyncSession,
+    *,
+    shop_id: int | None,
+    delta_bytes: int | None,
+    audience: Audience = "admin",
+    allow_unlimited: bool = False,
+    lock: bool = False,
+) -> None:
+    """Check without a hold: before an order is created, or with ``lock`` inside a caller's
+    transaction that writes the new limit before it commits.
+
+    ``delta_bytes`` None is an unknown limit and 0 an unlimited service; both are refused while
+    the gate applies. Negative deltas (shrink) always pass.
+    """
+    if shop_id is None:
+        return
+    ceiling = await _gated_ceiling(session, int(shop_id), lock=lock)
+    if ceiling is None:
+        return
+    delta = _intended_delta(delta_bytes, allow_unlimited=allow_unlimited, audience=audience)
+    if delta <= 0:
+        return
+    _assert_fits(await sum_allocated_bytes(session, int(shop_id)) + delta, ceiling, audience)
+
+
+async def hold_volume(
+    session: AsyncSession,
+    *,
+    shop_id: int | None,
+    delta_bytes: int | None,
+    key: str,
+    audience: Audience = "admin",
+    allow_unlimited: bool = False,
+    ttl: timedelta = HOLD_TTL,
+) -> HeldVolume | None:
+    """Reserve ``delta_bytes`` for an upcoming panel call and commit; None when nothing is held.
+
+    The hold row is inserted before the total is read, so on SQLite its write lock and on
+    PostgreSQL the profile row lock make concurrent holds of one shop take turns. Re-using
+    ``key`` replaces the earlier hold (a retried delivery does not count twice).
+    """
+    if shop_id is None:
+        return None
+    sid = int(shop_id)
+    ceiling = await _gated_ceiling(session, sid, lock=True)
+    if ceiling is None:
+        return None
+    delta = _intended_delta(delta_bytes, allow_unlimited=allow_unlimited, audience=audience)
+    if delta <= 0:
+        return None
+    now = _utcnow()
+    hold_key = key[:96]
+    # Savepoint: a refused hold rolls back only itself, never the caller's pending work.
+    try:
+        async with session.begin_nested():
+            await session.execute(
+                delete(VolumeHold).where(
+                    or_(VolumeHold.hold_key == hold_key, (VolumeHold.shop_id == sid) & (VolumeHold.expires_at <= now))
+                )
+            )
+            session.add(VolumeHold(shop_id=sid, hold_key=hold_key, bytes=delta, expires_at=now + ttl))
+            await session.flush()
+            _assert_fits(await sum_allocated_bytes(session, sid), ceiling, audience)
+    finally:
+        # Ends the profile lock either way; a refusal keeps only the caller's own pending work.
+        await session.commit()
+    return HeldVolume(shop_id=sid, key=hold_key)
+
+
+async def release_volume_hold(session: AsyncSession, hold: HeldVolume | None) -> None:
+    """Drop a hold; the caller commits it together with the service's new limit."""
+    if hold is not None:
+        await session.execute(delete(VolumeHold).where(VolumeHold.hold_key == hold.key))
+
+
+async def record_service_limit(session: AsyncSession, *, shop_id: int, pg_user_id: int, data_limit: int) -> bool:
+    """Write a limit just set on the panel into the shop's local service row; False if none."""
+    result = await session.execute(
+        update(UserService)
+        .where(
+            UserService.shop_id == int(shop_id),
+            UserService.pg_user_id == int(pg_user_id),
+            UserService.is_cancelled.is_(False),
+        )
+        .values(quota_data_limit_bytes=max(0, int(data_limit)))
+        .execution_options(synchronize_session=False)
+    )
+    return bool(result.rowcount)
 
 
 async def build_allocation_snapshot(
@@ -252,188 +335,73 @@ async def build_allocation_snapshot(
     )
 
 
-async def list_oversold_shop_ids(
-    session: AsyncSession, *, limit: int = 200
-) -> list[int]:
-    """Shop ids whose local allocation exceeds their fixed-plan ceiling (Owner dashboard)."""
+# Gated shops are few (one per reseller); this bounds one batch of the dashboard and the alerts.
+GATED_SHOPS_BATCH = 1000
+
+
+async def gated_allocations(session: AsyncSession, *, limit: int = GATED_SHOPS_BATCH) -> list[tuple[int, int, int]]:
+    """``(shop_id, allocated_bytes, ceiling_bytes)`` of every gated shop with a ceiling, in 4 queries."""
     profiles = (
         await session.execute(
-            select(ResellerProfile).where(
+            select(ResellerProfile.user_id, ResellerProfile.pg_admin_username)
+            .where(
                 ResellerProfile.is_active.is_(True),
                 ResellerProfile.allow_volume_oversell.is_(False),
-                ResellerProfile.billing_mode != BILLING_MODE_PAYG,
+                func.lower(ResellerProfile.billing_mode) != BILLING_MODE_PAYG,
                 ResellerProfile.pg_admin_username.is_not(None),
-            ).limit(int(limit))
-        )
-    ).scalars().all()
-    if not profiles:
-        return []
-    unames = [str(p.pg_admin_username).strip() for p in profiles if p.pg_admin_username]
-    subs = (
-        await session.execute(
-            select(PgAdminSubscription).where(PgAdminSubscription.pg_username.in_(unames))
-        )
-    ).scalars().all()
-    ceiling_by_uname = {
-        str(s.pg_username): (int(s.base_gb or 0) + int(s.extra_gb_purchased or 0)) * int(GB)
-        for s in subs
-        if (int(s.base_gb or 0) + int(s.extra_gb_purchased or 0)) > 0
-    }
-    shop_ids = [int(p.user_id) for p in profiles]
-    sums = (
-        await session.execute(
-            select(
-                UserService.shop_id,
-                func.coalesce(func.sum(UserService.quota_data_limit_bytes), 0),
             )
-            .where(
-                UserService.shop_id.in_(shop_ids),
-                UserService.is_cancelled.is_(False),
-                UserService.quota_data_limit_bytes.is_not(None),
-                UserService.quota_data_limit_bytes > 0,
-            )
-            .group_by(UserService.shop_id)
+            .order_by(ResellerProfile.user_id)
+            .limit(int(limit))
         )
     ).all()
-    allocated_by_shop = {int(sid): int(total or 0) for sid, total in sums if sid is not None}
-    oversold: list[int] = []
-    for profile in profiles:
-        uname = (profile.pg_admin_username or "").strip()
-        ceiling = ceiling_by_uname.get(uname)
-        if ceiling is None:
-            continue
-        if allocated_by_shop.get(int(profile.user_id), 0) > ceiling:
-            oversold.append(int(profile.user_id))
-    return oversold
-
-
-async def assert_volume_delta_allowed(
-    session: AsyncSession,
-    *,
-    shop_id: int | None,
-    delta_bytes: int | None,
-    audience: Audience = "admin",
-    lock: bool = True,
-    allow_unlimited: bool = False,
-) -> None:
-    """Raise ``VolumeAllocationError`` when a positive delta would exceed the ceiling.
-
-    ``delta_bytes`` None means the intended limit is unknown → fail closed when gated.
-    ``delta_bytes`` 0 with ``allow_unlimited=False`` rejects unlimited create/convert.
-    Negative or zero deltas (shrink / delete) always pass.
-    """
-    if shop_id is None:
-        return
-    sid = int(shop_id)
-
-    if delta_bytes is not None:
-        try:
-            delta = int(delta_bytes)
-        except (TypeError, ValueError) as exc:
-            raise VolumeAllocationError(
-                CEILING_UNKNOWN_MSG if audience == "admin" else CUSTOMER_UNAVAILABLE_MSG,
-                for_customer=(audience == "customer"),
-            ) from exc
-    else:
-        delta = None
-
-    profile = (
-        await lock_reseller_profile(session, sid)
-        if lock
-        else await session.scalar(
-            select(ResellerProfile).where(ResellerProfile.user_id == sid)
+    if not profiles:
+        return []
+    subs = (
+        await session.execute(
+            select(PgAdminSubscription.pg_username, PgAdminSubscription.base_gb, PgAdminSubscription.extra_gb_purchased)
+            .where(PgAdminSubscription.pg_username.in_({str(u).strip() for _, u in profiles}))
         )
+    ).all()
+    ceiling_by_uname = {
+        str(uname): (int(base or 0) + int(extra or 0)) * int(GB)
+        for uname, base, extra in subs
+        if int(base or 0) + int(extra or 0) > 0
+    }
+    shop_ids = [int(sid) for sid, _ in profiles]
+    service_sums = dict(
+        (
+            await session.execute(
+                select(UserService.shop_id, func.coalesce(func.sum(UserService.quota_data_limit_bytes), 0))
+                .where(
+                    UserService.shop_id.in_(shop_ids),
+                    UserService.is_cancelled.is_(False),
+                    UserService.quota_data_limit_bytes > 0,
+                )
+                .group_by(UserService.shop_id)
+            )
+        ).all()
     )
-    if profile is None:
-        return
-    if is_payg(profile):
-        return
-    if bool(getattr(profile, "allow_volume_oversell", True)):
-        return
-
-    if delta is None:
-        raise VolumeAllocationError(
-            CEILING_UNKNOWN_MSG if audience == "admin" else CUSTOMER_UNAVAILABLE_MSG,
-            for_customer=(audience == "customer"),
-        )
-    if delta == 0 and not allow_unlimited:
-        raise VolumeAllocationError(
-            UNLIMITED_BLOCKED_MSG if audience == "admin" else CUSTOMER_UNAVAILABLE_MSG,
-            for_customer=(audience == "customer"),
-        )
-    if delta <= 0:
-        return
-
-    ceiling = await ceiling_bytes_for_profile(session, profile)
-    if ceiling is None:
-        raise VolumeAllocationError(
-            CEILING_UNKNOWN_MSG if audience == "admin" else CUSTOMER_UNAVAILABLE_MSG,
-            for_customer=(audience == "customer"),
-        )
-
-    allocated = await sum_allocated_bytes(session, sid)
-    if allocated + delta > ceiling:
-        raise VolumeAllocationError(
-            _gate_message(
-                allocated_bytes=allocated, ceiling_bytes=ceiling, audience=audience
-            ),
-            allocated_bytes=allocated,
-            ceiling_bytes=ceiling,
-            for_customer=(audience == "customer"),
-        )
-
-
-async def assert_new_limit_allowed(
-    session: AsyncSession,
-    *,
-    shop_id: int | None,
-    current_limit_bytes: int | None,
-    new_limit_bytes: int | None,
-    audience: Audience = "admin",
-    lock: bool = True,
-) -> None:
-    """Gate an absolute limit change using the positive delta only."""
-    if shop_id is None:
-        return
-    if new_limit_bytes is None:
-        await assert_volume_delta_allowed(
-            session,
-            shop_id=shop_id,
-            delta_bytes=None,
-            audience=audience,
-            lock=lock,
-        )
-        return
-    try:
-        new_b = int(new_limit_bytes)
-    except (TypeError, ValueError) as exc:
-        raise VolumeAllocationError(
-            CEILING_UNKNOWN_MSG if audience == "admin" else CUSTOMER_UNAVAILABLE_MSG,
-            for_customer=(audience == "customer"),
-        ) from exc
-    if new_b == 0:
-        await assert_volume_delta_allowed(
-            session,
-            shop_id=shop_id,
-            delta_bytes=0,
-            audience=audience,
-            lock=lock,
-            allow_unlimited=False,
-        )
-        return
-    cur = bytes_toward_allocation(
-        current_limit_bytes,
-        synced=current_limit_bytes is not None,
+    hold_sums = dict(
+        (
+            await session.execute(
+                select(VolumeHold.shop_id, func.coalesce(func.sum(VolumeHold.bytes), 0))
+                .where(VolumeHold.shop_id.in_(shop_ids), VolumeHold.expires_at > _utcnow())
+                .group_by(VolumeHold.shop_id)
+            )
+        ).all()
     )
-    delta = max(0, new_b - cur)
-    await assert_volume_delta_allowed(
-        session,
-        shop_id=shop_id,
-        delta_bytes=delta,
-        audience=audience,
-        lock=lock,
-        allow_unlimited=True,
-    )
+    out: list[tuple[int, int, int]] = []
+    for sid, uname in profiles:
+        ceiling = ceiling_by_uname.get(str(uname).strip())
+        if ceiling is not None:
+            allocated = int(service_sums.get(sid) or 0) + int(hold_sums.get(sid) or 0)
+            out.append((int(sid), allocated, ceiling))
+    return out
+
+
+async def list_oversold_shop_ids(session: AsyncSession, *, limit: int = GATED_SHOPS_BATCH) -> list[int]:
+    """Gated shops whose allocation already exceeds their ceiling (Owner dashboard)."""
+    return [sid for sid, allocated, ceiling in await gated_allocations(session, limit=limit) if allocated > ceiling]
 
 
 def is_hard_panel_rejection(exc: BaseException) -> bool:
@@ -450,167 +418,45 @@ def is_hard_panel_rejection(exc: BaseException) -> bool:
     )
 
 
-async def reserve_creating_service(
-    session: AsyncSession,
-    *,
-    bot_user_id: int,
-    shop_id: int,
-    plan_id: int | None,
-    pg_username: str,
-    data_limit_bytes: int,
-    remark: str,
-    expire_at: datetime | None = None,
-) -> UserService:
-    """Insert a creating-row reservation that counts toward allocation immediately."""
-    service = UserService(
-        bot_user_id=int(bot_user_id),
-        plan_id=plan_id,
-        pg_username=str(pg_username)[:128],
-        remark=remark[:255] if remark else None,
-        shop_id=int(shop_id),
-        quota_data_limit_bytes=int(data_limit_bytes),
-        quota_expire_at=expire_at,
-        quota_synced_at=_utcnow(),
-        quota_status=QUOTA_STATUS_CREATING,
-    )
-    session.add(service)
-    await session.flush()
-    return service
+def apply_oversell_switch(profile: ResellerProfile, *, shown: bool, allow: bool, actor_is_owner: bool) -> None:
+    """Apply the edit form's oversell switch; only the platform Owner may change it."""
+    if shown and actor_is_owner:
+        profile.allow_volume_oversell = bool(allow)
 
 
-async def release_creating_service(session: AsyncSession, service: UserService) -> None:
-    """Drop a creating reservation after a definitive panel failure."""
-    if getattr(service, "quota_status", None) != QUOTA_STATUS_CREATING:
-        return
-    await session.delete(service)
-    await session.flush()
+VOLUME_ALERT = "volume_alloc"
 
 
-async def mark_service_review(session: AsyncSession, service: UserService) -> None:
-    """Keep the reservation and flag the row for operator review (unknown panel outcome)."""
-    service.quota_status = QUOTA_STATUS_REVIEW
-    service.shop_needs_review = True
-    await session.flush()
+def threshold_level(allocated_bytes: int, ceiling_bytes: int) -> int:
+    """0 below 80%, 1 from 80%, 2 from 100% (integer maths, no float)."""
+    if allocated_bytes * 100 >= ceiling_bytes * 100:
+        return 2
+    return 1 if allocated_bytes * 100 >= ceiling_bytes * 80 else 0
 
 
-async def finalize_creating_service(
-    session: AsyncSession,
-    service: UserService,
-    *,
-    pg_user_id: int | None,
-    pg_username: str,
-    subscription_url: str | None,
-    subscription_token: str | None,
-    quota_status: str | None = "active",
-) -> None:
-    service.pg_user_id = int(pg_user_id) if pg_user_id is not None else None
-    service.pg_username = str(pg_username)[:128]
-    service.subscription_url = subscription_url
-    service.subscription_token = subscription_token
-    service.quota_status = (quota_status or "active")[:32]
-    service.shop_needs_review = False
-    await session.flush()
+def _threshold_text(level: int, allocated_bytes: int, ceiling_bytes: int) -> str:
+    amounts = f"({format_bytes(allocated_bytes)} از {format_bytes(ceiling_bytes)})"
+    if level >= 2:
+        return f"⛔ سقف حجم فروشگاه شما پر شد {amounts}؛ تا آزاد شدن یا افزایش سقف، فروش جدید ممکن نیست."
+    return f"⚠️ ۸۰٪ سقف حجم فروشگاه شما فروخته شده است {amounts}."
 
 
-async def refund_volume_gate_once(
-    session: AsyncSession,
-    *,
-    user: BotUser,
-    amount: int,
-    order_id: int,
-    shop_id: int | None,
-) -> bool:
-    """Idempotent wallet credit when delivery is rejected by the volume gate.
+async def volume_threshold_signals(session: AsyncSession) -> list[Any]:
+    """One alert per gated shop; it is announced when it reaches 80% or 100% and resets below 80%.
 
-    Returns True when a new credit was written. Uses a unique reason string and
-    checks the ledger before crediting so a double call cannot mint money twice.
-    """
-    if amount <= 0:
-        return False
-    reason = f"volume_gate_refund:order:{int(order_id)}"
-    existing = await session.scalar(
-        select(WalletTransaction.id).where(
-            WalletTransaction.user_id == int(user.id),
-            WalletTransaction.reason == reason,
-        ).limit(1)
-    )
-    if existing is not None:
-        return False
-    from app.services.wallet import credit_wallet
-
-    await credit_wallet(
-        session,
-        user,
-        int(amount),
-        reason,
-        shop_id=shop_id,
-        commit=False,
-    )
-    return True
-
-
-async def set_allow_volume_oversell(
-    session: AsyncSession,
-    profile: ResellerProfile,
-    *,
-    allow: bool,
-    actor_is_owner: bool,
-) -> None:
-    """Only the platform Owner may change the oversell switch."""
-    if not actor_is_owner:
-        raise VolumeAllocationError("فقط مالک سیستم می‌تواند فروش بیش از سقف حجم را تغییر دهد")
-    profile.allow_volume_oversell = bool(allow)
-
-
-async def maybe_warn_volume_thresholds(
-    session: AsyncSession,
-    *,
-    shop_id: int,
-) -> list[Any]:
-    """Build panel-alert signals for 80% and 100% allocation (once per threshold).
-
-    Reuses ``PanelAlertState`` / ``claim_signal``. Callers send via the existing
-    notification dispatch. Returns zero, one or two ``Signal`` objects.
+    ``count`` is the level, so ``claim_signal`` announces each level once and a level-0 signal
+    clears the state for the next time the shop fills up.
     """
     from app.services.panel_alert_notifications import Signal
 
-    snap = await build_allocation_snapshot(session, shop_id)
-    if snap is None or snap.is_payg or snap.allow_oversell or snap.ceiling_bytes is None:
-        return []
-    if snap.ceiling_bytes <= 0:
-        return []
-    pct = (100.0 * snap.allocated_bytes) / float(snap.ceiling_bytes)
-    from app.services.formatting import format_bytes
-
-    signals: list[Signal] = []
-    if pct >= 100.0:
-        signals.append(
-            Signal(
-                shop_id=int(shop_id),
-                alert="volume_alloc_100",
-                notify_key="notify_panel_capacity",
-                count=1,
-                text=(
-                    "⛔ سقف تخصیص حجم فروشگاه پر شد "
-                    f"({format_bytes(snap.allocated_bytes)} از {format_bytes(snap.ceiling_bytes)})."
-                ),
-                path="/resellers",
-                fingerprint="100",
-            )
+    return [
+        Signal(
+            shop_id=sid,
+            alert=VOLUME_ALERT,
+            notify_key="notify_panel_capacity",
+            count=(level := threshold_level(allocated, ceiling)),
+            text=_threshold_text(level, allocated, ceiling),
+            path="/resellers",
         )
-    elif pct >= 80.0:
-        signals.append(
-            Signal(
-                shop_id=int(shop_id),
-                alert="volume_alloc_80",
-                notify_key="notify_panel_capacity",
-                count=1,
-                text=(
-                    "⚠️ تخصیص حجم فروشگاه به ۸۰٪ سقف رسید "
-                    f"({format_bytes(snap.allocated_bytes)} از {format_bytes(snap.ceiling_bytes)})."
-                ),
-                path="/resellers",
-                fingerprint="80",
-            )
-        )
-    return signals
+        for sid, allocated, ceiling in await gated_allocations(session)
+    ]

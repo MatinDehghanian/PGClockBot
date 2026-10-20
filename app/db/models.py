@@ -533,6 +533,25 @@ class PanelAlertState(Base):
     checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class VolumeHold(Base):
+    """Volume a shop has promised but not yet recorded on a service, while a panel call runs.
+
+    Counted in the shop's allocation until released or expired, so two concurrent sales cannot
+    both fit into the same free volume. A hold whose panel outcome is unknown simply expires;
+    the service row or the panel sync counts the volume from then on.
+    """
+
+    __tablename__ = "volume_holds"
+    __table_args__ = (Index("ix_volume_holds_shop_expires", "shop_id", "expires_at"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    shop_id: Mapped[int] = mapped_column(Integer)
+    hold_key: Mapped[str] = mapped_column(String(96), unique=True)
+    bytes: Mapped[int] = mapped_column(BigInteger)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class ServiceAutomation(Base):
     """Per-service wallet consent; deleted catalog choices become NULL."""
 
@@ -736,7 +755,7 @@ class ResellerProfile(Base):
     # When False, allocated UserService volume cannot exceed PgAdminSubscription ceiling.
     # Migration default True keeps existing shops open; new profiles set False in code.
     allow_volume_oversell: Mapped[bool] = mapped_column(
-        Boolean, default=False, server_default=text("1")
+        Boolean, default=False, server_default=text("true")
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

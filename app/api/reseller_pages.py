@@ -10,11 +10,16 @@ from urllib.parse import quote
 from fastapi import Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings, normalize_pg_base_url
 from app.db.models import BotUser, ResellerPlan, ResellerProfile, Role
 from app.services.shop_scope import ShopScopeError, assert_bot_user_in_scope
+from app.services.db_safe import rollback_quiet
+from app.services.platform_identity import is_explicit_owner_staff
+from app.services.reseller_capacity_view import allocation_view_for_shop
+from app.services.volume_allocation import apply_oversell_switch, list_oversold_shop_ids
 from app.services.billing import require_positive_payg_rate
 from app.services.pasarguard import get_pg
 from app.services.pg_quota import limit_snapshot_cards, load_staff_limit_snapshot
@@ -102,9 +107,6 @@ def _redirect_reseller_edit(user_id: int, *, ok: str | None = None, err: str | N
 def _feature_perms_from_form(form) -> str:
     selected = []
     for key, _ in FEATURE_PERMS:
-        # Owner toggles oversell on the profile; never store this as a shop ACL.
-        if key == "manage_volume_oversell":
-            continue
         if form.get(f"perm_{key}"):
             selected.append(key)
     return normalize_feature_perms(join_perms(selected) or DEFAULT_FEATURE_PERMS)
@@ -361,14 +363,11 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         oversold_shop_ids: list[int] = []
         if owner_view:
             try:
-                from app.services.volume_allocation import list_oversold_shop_ids
-
                 oversold_shop_ids = await list_oversold_shop_ids(session)
-            except Exception:
-                logging.getLogger(__name__).debug(
-                    "oversold shop list failed", exc_info=True
-                )
-                oversold_shop_ids = []
+            except SQLAlchemyError:
+                # The warning is optional; the list page still renders without it.
+                logging.getLogger(__name__).warning("oversold shop list failed", exc_info=True)
+                await rollback_quiet(session)
         return render(
             request,
             "resellers.html",
@@ -661,8 +660,6 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             if sub is not None:
                 plan = await session.get(ResellerPlan, int(sub.plan_id)) if sub.plan_id else None
                 exp = sub.expires_at
-                from app.services.reseller_capacity_view import allocation_view_for_shop
-
                 alloc = await allocation_view_for_shop(session, int(user_id))
                 pg_subscription = {
                     "expires_at": format_expire_short(exp) if exp else None,
@@ -675,17 +672,11 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
                 }
         from app.services.color_tags import color_tags_for_ui
 
-        from app.services.platform_identity import is_explicit_owner_staff as _is_owner_edit
-
-        # Hide Owner-only ACL keys from the shop permission checklist.
-        edit_feature_perms = [
-            pair for pair in FEATURE_PERMS if pair[0] != "manage_volume_oversell"
-        ]
         ctx = {
             "staff": staff,
             "user": user,
             "profile": profile,
-            "feature_perms": edit_feature_perms,
+            "feature_perms": FEATURE_PERMS,
             "selected_perms": perms,
             "pg_roles": roles,
             "is_payg": is_payg(profile),
@@ -702,7 +693,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             "flash_err": request.query_params.get("err"),
             "color_tags": color_tags_for_ui(),
             "pg_api_key_ready": False,
-            "owner_can_toggle_oversell": _is_owner_edit(staff),
+            "owner_can_toggle_oversell": is_explicit_owner_staff(staff),
         }
         if (getattr(profile, "pg_api_key_enc", None) or "").strip():
             ctx["pg_api_key_ready"] = True
@@ -829,22 +820,13 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         profile.can_approve_receipts = "payments" in parse_perms(perms)
         profile.is_active = bool(form.get("is_active"))
         profile.share_pg_panel_url = bool(form.get("share_pg_panel_url"))
-        from app.services.platform_identity import is_explicit_owner_staff
-        from app.services.volume_allocation import (
-            VolumeAllocationError,
-            set_allow_volume_oversell,
+        # An unchecked switch is not posted; the marker says the switch was on the form.
+        apply_oversell_switch(
+            profile,
+            shown=bool(form.get("volume_oversell_shown")),
+            allow=bool(form.get("allow_volume_oversell")),
+            actor_is_owner=is_explicit_owner_staff(staff),
         )
-
-        if "allow_volume_oversell" in form:
-            try:
-                await set_allow_volume_oversell(
-                    session,
-                    profile,
-                    allow=bool(form.get("allow_volume_oversell")),
-                    actor_is_owner=is_explicit_owner_staff(staff),
-                )
-            except VolumeAllocationError as e:
-                return _redirect_reseller_edit(user_id, err=e.user_message())
         pg_role_raw = str(form.get("pg_role_id") or "").strip()
         new_pg_role_id = int(pg_role_raw) if pg_role_raw.isdigit() else None
         profile.pg_role_id = new_pg_role_id

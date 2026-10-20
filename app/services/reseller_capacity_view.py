@@ -9,6 +9,8 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import PgAdminSubscription, ResellerPlan, ResellerProfile
+from app.services.formatting import format_bytes
+from app.services.volume_allocation import build_allocation_snapshot
 from app.services.pg_admin_subscription import (
     PgCapacityUnreadable,
     get_subscription,
@@ -74,9 +76,6 @@ async def allocation_view_for_shop(
     session: AsyncSession, shop_id: int
 ) -> dict[str, Any]:
     """Allocation / ceiling block for the reseller capacity page."""
-    from app.services.formatting import format_bytes
-    from app.services.volume_allocation import build_allocation_snapshot
-
     snap = await build_allocation_snapshot(session, int(shop_id))
     if snap is None:
         return {}

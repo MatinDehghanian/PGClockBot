@@ -41,8 +41,6 @@ FEATURE_PERMS: list[tuple[str, str]] = [
     ("connection_status", "مشاهدهٔ وضعیت اتصال"),
     ("connection_status_manage", "مدیریت تست اتصال"),
     ("service_import", "تأیید افزودن سرویس قبلی"),
-    # Owner-only toggle on the reseller edit page; never grant to the shop itself.
-    ("manage_volume_oversell", "اجازه فروش بیش از سقف حجم"),
 ]
 
 DEFAULT_FEATURE_PERMS = "dashboard,plans,orders,payments,tickets,stats,shop_settings,campaigns,loyalty,service_import"

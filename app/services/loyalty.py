@@ -33,6 +33,7 @@ from app.db.models import (
 from app.services.demo_users import non_demo_customer
 from app.services.formatting import bot_user_panel_label
 from app.services.service_scope import customer_may_use_service, service_shop_id
+from app.services.volume_allocation import VolumeAllocationError, assert_volume_delta_allowed
 
 logger = logging.getLogger(__name__)
 
@@ -1536,25 +1537,8 @@ async def apply_service_reward(
         if current is None or int(current or 0) <= 0:
             raise ValueError("سرویس نامحدود است؛ جایزه ترافیک قابل اعمال نیست")
         if service_shop:
-            from app.services.volume_allocation import (
-                VolumeAllocationError,
-                assert_volume_delta_allowed,
-            )
-
-            try:
-                await assert_volume_delta_allowed(
-                    session,
-                    shop_id=int(service_shop),
-                    delta_bytes=int(add_bytes),
-                    audience="customer",
-                )
-            except VolumeAllocationError as e:
-                raise ValueError(e.user_message()) from e
+            await _assert_reward_volume_fits(session, int(service_shop), add_bytes)
         payload["data_limit"] = int(current) + add_bytes
-        # Reserve locally before the panel write so concurrent grants see the delta.
-        prior_limit = getattr(service, "quota_data_limit_bytes", None)
-        service.quota_data_limit_bytes = int(payload["data_limit"])
-        await session.flush()
     elif reward_type == "time_days":
         add_sec = int(reward_value) * 86400
         expire = info.get("expire")
@@ -1572,18 +1556,24 @@ async def apply_service_reward(
             except Exception:
                 pass
         payload["expire"] = base + add_sec
-        prior_limit = None
-    else:
-        prior_limit = None
-    try:
-        await pg.modify_user_by_id(int(service.pg_user_id), payload)
-    except Exception as exc:
-        from app.services.volume_allocation import is_hard_panel_rejection
+    await pg.modify_user_by_id(int(service.pg_user_id), payload)
+    if "data_limit" in payload:
+        # Counted in the shop's allocation from the caller's commit on.
+        service.quota_data_limit_bytes = int(payload["data_limit"])
 
-        if reward_type == "traffic_gb" and is_hard_panel_rejection(exc):
-            service.quota_data_limit_bytes = prior_limit
-            await session.flush()
-        raise
+
+async def _assert_reward_volume_fits(session: AsyncSession, shop_id: int, add_bytes: int) -> None:
+    """Check a traffic reward against the shop's ceiling under the profile lock.
+
+    The caller keeps one transaction (the points debit rolls back with a failed grant), so no
+    separate hold is committed here: the lock serialises grants until the new limit is written.
+    """
+    try:
+        await assert_volume_delta_allowed(
+            session, shop_id=shop_id, delta_bytes=add_bytes, audience="customer", lock=True,
+        )
+    except VolumeAllocationError as e:
+        raise ValueError(e.user_message()) from e
 
 
 async def overview_metrics(
