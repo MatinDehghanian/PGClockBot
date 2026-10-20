@@ -4002,7 +4002,7 @@ async def adm_resellers_oversell_toggle(
             session, uid, allow=not bool(profile.allow_volume_oversell), actor_is_owner=True
         )
     except ValueError as e:
-        await callback.answer(str(e), show_alert=True)
+        await callback.answer(user_safe_error(e, limit=160), show_alert=True)
         return
     await callback.answer("فروش بیش از سقف روشن شد" if allow else "فروش تا سقف اشتراک محدود شد")
     if callback.message:
