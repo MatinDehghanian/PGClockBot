@@ -2,8 +2,9 @@
 
 Ceiling comes from ``PgAdminSubscription`` (base_gb + extra_gb_purchased). Allocation is the SQL
 sum of non-cancelled ``UserService.quota_data_limit_bytes`` of the shop, its live
-``VolumeHold`` rows and ``ResellerProfile.external_allocated_bytes`` (panel users without a
-local row, counted by ``volume_allocation_external``). Unlimited (0) and unsynced (NULL) services count as zero and are listed as
+``VolumeHold`` rows, ``ResellerProfile.external_allocated_bytes`` (panel users without a
+local row, counted by ``volume_allocation_external``) and, for a level-1 shop, the ceilings of
+its active level-2 child shops (their subscription totals; see ``volume_allocation_cascade``). Unlimited (0) and unsynced (NULL) services count as zero and are listed as
 warnings. PAYG shops, shops with ``allow_volume_oversell`` and shops without a ceiling (no
 subscription, or an unlimited one) are not gated.
 
@@ -20,12 +21,14 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Literal
 
-from sqlalchemy import delete, func, or_, select, update
+from sqlalchemy import Select, delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
-from app.db.models import PgAdminSubscription, ResellerProfile, UserService, VolumeHold
+from app.db.models import OrgPrincipal, PgAdminSubscription, ResellerProfile, UserService, VolumeHold
 from app.services.billing import BILLING_MODE_PAYG, GB, is_payg
 from app.services.formatting import format_bytes
+from app.services.org_principals import DEPTH_TWO, STATUS_ACTIVE
 
 logger = logging.getLogger(__name__)
 
@@ -130,6 +133,11 @@ async def shop_is_gated(session: AsyncSession, shop_id: int) -> bool:
     return await _gated_ceiling(session, int(shop_id), lock=False) is not None
 
 
+async def gated_ceiling_locked(session: AsyncSession, shop_id: int) -> int | None:
+    """Lock the shop profile for the caller's transaction and return its ceiling when gated."""
+    return await _gated_ceiling(session, int(shop_id), lock=True)
+
+
 async def sum_service_bytes(session: AsyncSession, shop_id: int) -> int:
     """SQL aggregate of positive limits of the shop's non-cancelled services."""
     total = await session.scalar(
@@ -159,12 +167,51 @@ async def sum_external_bytes(session: AsyncSession, shop_id: int) -> int:
     return int(total or 0)
 
 
+def child_ceilings_query(parent_shop_ids: list[int]) -> Select[Any]:
+    """``(parent_shop_id, child_shop_id, child_ceiling_gb)`` of the active level-2 children.
+
+    A child's ceiling is its own subscription total; a child without one (or with 0) is
+    uncapped: it adds nothing to the parent and is listed as a warning instead.
+    """
+    child, parent = aliased(OrgPrincipal), aliased(OrgPrincipal)
+    child_profile, parent_profile = aliased(ResellerProfile), aliased(ResellerProfile)
+    total_gb = func.coalesce(PgAdminSubscription.base_gb, 0) + func.coalesce(PgAdminSubscription.extra_gb_purchased, 0)
+    return (
+        select(parent_profile.user_id, child_profile.user_id, total_gb)
+        .select_from(child)
+        .join(parent, parent.id == child.parent_id)
+        .join(parent_profile, parent_profile.id == parent.reseller_profile_id)
+        .join(child_profile, child_profile.id == child.reseller_profile_id)
+        .outerjoin(PgAdminSubscription, PgAdminSubscription.pg_username == child_profile.pg_admin_username)
+        .where(
+            child.depth == DEPTH_TWO,
+            child.status == STATUS_ACTIVE,
+            parent_profile.user_id.in_([int(x) for x in parent_shop_ids]),
+        )
+    )
+
+
+async def child_ceiling_gb_by_parent(session: AsyncSession, parent_shop_ids: list[int]) -> dict[int, int]:
+    """Sum of capped children's ceilings in GB per parent shop (one query)."""
+    totals: dict[int, int] = {}
+    for parent_id, _child_id, gb in (await session.execute(child_ceilings_query(parent_shop_ids))).all():
+        if int(gb or 0) > 0:
+            totals[int(parent_id)] = totals.get(int(parent_id), 0) + int(gb)
+    return totals
+
+
+async def sum_child_ceiling_bytes(session: AsyncSession, shop_id: int) -> int:
+    """Volume a level-1 shop has passed on to its active level-2 children."""
+    return (await child_ceiling_gb_by_parent(session, [int(shop_id)])).get(int(shop_id), 0) * int(GB)
+
+
 async def sum_allocated_bytes(session: AsyncSession, shop_id: int) -> int:
-    """Everything that counts against the ceiling: services, live holds and panel-only users."""
+    """Everything that counts against the ceiling: services, holds, panel-only users, children."""
     return (
         await sum_service_bytes(session, shop_id)
         + await sum_active_holds(session, shop_id)
         + await sum_external_bytes(session, shop_id)
+        + await sum_child_ceiling_bytes(session, shop_id)
     )
 
 
@@ -357,7 +404,7 @@ GATED_SHOPS_BATCH = 1000
 
 
 async def gated_allocations(session: AsyncSession, *, limit: int = GATED_SHOPS_BATCH) -> list[tuple[int, int, int]]:
-    """``(shop_id, allocated_bytes, ceiling_bytes)`` of every gated shop with a ceiling, in 4 queries."""
+    """``(shop_id, allocated_bytes, ceiling_bytes)`` of every gated shop with a ceiling, in 5 queries."""
     profiles = (
         await session.execute(
             select(
@@ -409,11 +456,17 @@ async def gated_allocations(session: AsyncSession, *, limit: int = GATED_SHOPS_B
             )
         ).all()
     )
+    child_gb = await child_ceiling_gb_by_parent(session, shop_ids)
     out: list[tuple[int, int, int]] = []
     for sid, uname, external in profiles:
         ceiling = ceiling_by_uname.get(str(uname).strip())
         if ceiling is not None:
-            allocated = int(service_sums.get(sid) or 0) + int(hold_sums.get(sid) or 0) + int(external or 0)
+            allocated = (
+                int(service_sums.get(sid) or 0)
+                + int(hold_sums.get(sid) or 0)
+                + int(external or 0)
+                + child_gb.get(int(sid), 0) * int(GB)
+            )
             out.append((int(sid), allocated, ceiling))
     return out
 

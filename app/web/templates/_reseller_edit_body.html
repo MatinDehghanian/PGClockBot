@@ -194,6 +194,10 @@
       <span class="payg-meta-value num-ratio">{{ pg_subscription.alloc_external_text }}</span>
     </li>
     <li>
+      <span class="payg-meta-label">واگذارشده به زیرنماینده‌ها</span>
+      <span class="payg-meta-value num-ratio">{{ pg_subscription.alloc_children_text }}</span>
+    </li>
+    <li>
       <span class="payg-meta-label">حجم در اختیار منقضی‌ها</span>
       <span class="payg-meta-value num-ratio">{{ pg_subscription.alloc_expired_held_text }}</span>
     </li>
@@ -219,22 +223,22 @@
   {% if pg_subscription.alloc_external_stale %}
   <div class="flash warn">کاربرانی که مستقیم در پاسارگارد ساخته شده‌اند مدتی است شمرده نشده‌اند؛ آخرین مقدار شمرده‌شده حساب می‌شود. اتصال پنل را بررسی کنید.</div>
   {% endif %}
+  {% if pg_subscription.alloc_uncapped_children %}
+  <div class="flash warn">
+    زیرنماینده‌های بدون سقف حجم (از حجم این نماینده کم نمی‌کنند و محدود هم نمی‌شوند):
+    <ul class="muted">
+      {% for c in pg_subscription.alloc_uncapped_children %}
+      <li dir="ltr">#{{ c.shop_id }} {{ c.pg_username }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
   {% if pg_subscription.alloc_unlimited %}
   <div class="flash warn">
     سرویس‌های نامحدود یا همگام‌نشده (در تخصیص صفر حساب می‌شوند):
     <ul class="muted">
       {% for u in pg_subscription.alloc_unlimited %}
       <li dir="ltr">#{{ u.id }} {{ u.pg_username }} ({{ u.kind }})</li>
-      {% endfor %}
-    </ul>
-  </div>
-  {% endif %}
-  {% if pg_subscription.alloc_unlimited_children %}
-  <div class="flash warn">
-    فرزندان بدون سقف حجم (در بودجهٔ والد صفر حساب می‌شوند):
-    <ul class="muted">
-      {% for c in pg_subscription.alloc_unlimited_children %}
-      <li dir="ltr">principal #{{ c.principal_id }} {{ c.pg_username }}</li>
       {% endfor %}
     </ul>
   </div>

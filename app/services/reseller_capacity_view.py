@@ -10,7 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import PgAdminSubscription, ResellerPlan, ResellerProfile
 from app.services.formatting import format_bytes
-from app.services.volume_allocation import build_allocation_snapshot
+from app.services.volume_allocation import build_allocation_snapshot, sum_child_ceiling_bytes
+from app.services.volume_allocation_cascade import list_uncapped_children
 from app.services.volume_allocation_external import external_sync_is_stale, get_external_sync_minutes
 from app.services.pg_admin_subscription import (
     PgCapacityUnreadable,
@@ -96,6 +97,8 @@ async def allocation_view_for_shop(
         "alloc_is_payg": snap.is_payg,
         "alloc_external_text": format_bytes(snap.external_allocated_bytes),
         "alloc_external_stale": gated and external_sync_is_stale(snap.external_synced_at, period_minutes=period),
+        "alloc_children_text": format_bytes(await sum_child_ceiling_bytes(session, int(shop_id))),
+        "alloc_uncapped_children": await list_uncapped_children(session, int(shop_id)),
     }
 
 
