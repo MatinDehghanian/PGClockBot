@@ -10,11 +10,16 @@ from urllib.parse import quote
 from fastapi import Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings, normalize_pg_base_url
 from app.db.models import BotUser, ResellerPlan, ResellerProfile, Role
 from app.services.shop_scope import ShopScopeError, assert_bot_user_in_scope
+from app.services.db_safe import rollback_quiet
+from app.services.platform_identity import is_explicit_owner_staff
+from app.services.reseller_capacity_view import allocation_view_for_shop
+from app.services.volume_allocation import apply_oversell_switch, list_oversold_shop_ids
 from app.services.billing import require_positive_payg_rate
 from app.services.pasarguard import get_pg
 from app.services.pg_quota import limit_snapshot_cards, load_staff_limit_snapshot
@@ -355,6 +360,14 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             reseller_plans = await list_active_reseller_plans(session)
         except Exception:
             reseller_plans = []
+        oversold_shop_ids: list[int] = []
+        if owner_view:
+            try:
+                oversold_shop_ids = await list_oversold_shop_ids(session)
+            except SQLAlchemyError:
+                # The warning is optional; the list page still renders without it.
+                logging.getLogger(__name__).warning("oversold shop list failed", exc_info=True)
+                await rollback_quiet(session)
         return render(
             request,
             "resellers.html",
@@ -362,6 +375,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
                 "staff": staff,
                 "rows": rows,
                 "reseller_usage": reseller_usage,
+                "oversold_shop_ids": oversold_shop_ids,
                 "tabs": _tabs("list"),
                 "tab": "list",
                 "feature_perms": FEATURE_PERMS,
@@ -646,12 +660,14 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             if sub is not None:
                 plan = await session.get(ResellerPlan, int(sub.plan_id)) if sub.plan_id else None
                 exp = sub.expires_at
+                alloc = await allocation_view_for_shop(session, int(user_id))
                 pg_subscription = {
                     "expires_at": format_expire_short(exp) if exp else None,
                     **build_capacity_view(
                         sub,
                         current_capacity=is_current_capacity_plan(plan),
                         live=live_capacity_from_overview(pg_limits),
+                        allocation=alloc,
                     ),
                 }
         from app.services.color_tags import color_tags_for_ui
@@ -677,6 +693,7 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
             "flash_err": request.query_params.get("err"),
             "color_tags": color_tags_for_ui(),
             "pg_api_key_ready": False,
+            "owner_can_toggle_oversell": is_explicit_owner_staff(staff),
         }
         if (getattr(profile, "pg_api_key_enc", None) or "").strip():
             ctx["pg_api_key_ready"] = True
@@ -803,6 +820,13 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         profile.can_approve_receipts = "payments" in parse_perms(perms)
         profile.is_active = bool(form.get("is_active"))
         profile.share_pg_panel_url = bool(form.get("share_pg_panel_url"))
+        # An unchecked switch is not posted; the marker says the switch was on the form.
+        apply_oversell_switch(
+            profile,
+            shown=bool(form.get("volume_oversell_shown")),
+            allow=bool(form.get("allow_volume_oversell")),
+            actor_is_owner=is_explicit_owner_staff(staff),
+        )
         pg_role_raw = str(form.get("pg_role_id") or "").strip()
         new_pg_role_id = int(pg_role_raw) if pg_role_raw.isdigit() else None
         profile.pg_role_id = new_pg_role_id

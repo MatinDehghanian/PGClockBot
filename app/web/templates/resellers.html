@@ -106,6 +106,15 @@
 </div>
 {% endif %}
 
+{% if owner_view and oversold_shop_ids %}
+<div class="flash warn">
+  نمایندگانی که تخصیص حجمشان از سقف بیشتر است:
+  {% for sid in oversold_shop_ids %}
+  <a href="/resellers/{{ sid }}/edit">#{{ sid }}</a>{% if not loop.last %}، {% endif %}
+  {% endfor %}
+</div>
+{% endif %}
+
 <div class="card card-flush">
   <h2>لیست نمایندگان</h2>
   <form method="get" action="/resellers" class="search-bar search-bar--with-tag">
@@ -168,6 +177,9 @@
               {% set tag = color_tag_meta(u.color_tag) if color_tag_meta is defined else none %}
               <span class="cell-name-text">{{ u.full_name or u.username or '—' }}</span>
               {% if tag %}<span class="badge badge-risk-tag" style="--tag-color: {{ tag.hex }}">{{ tag.title_fa }}</span>{% endif %}
+              {% if owner_view and oversold_shop_ids and u.id in oversold_shop_ids %}
+              <span class="badge rejected">تجاوز از سقف حجم</span>
+              {% endif %}
             </span>
           </div>
         </td>

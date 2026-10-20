@@ -221,3 +221,4 @@ tests/test_backup_retention_telegram.py
 tests/test_reseller_wallet_debit.py
 tests/test_py_compat.py
 tests/test_bbc_https_requirement.py
+tests/test_volume_allocation.py

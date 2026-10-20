@@ -123,6 +123,10 @@
     <div class="ui-switch-list">
       {{ switch('is_active', 'نماینده فعال', checked=profile.is_active) }}
       {{ switch('share_pg_panel_url', 'ارسال لینک پنل پاسارگارد', checked=profile.share_pg_panel_url, help='اگر خاموش باشد، فقط وب‌پنل ربات برای مدیریت استفاده می‌شود') }}
+      {% if owner_can_toggle_oversell and not is_payg %}
+      <input type="hidden" name="volume_oversell_shown" value="1" />
+      {{ switch('allow_volume_oversell', 'اجازه فروش بیش از سقف حجم', checked=profile.allow_volume_oversell, help='اگر خاموش باشد، مجموع حجم سرویس‌های فروشگاه از سقف اشتراک بیشتر نمی‌شود. نماینده‌ای که اشتراک یا سقف حجم ندارد محدود نمی‌شود.') }}
+      {% endif %}
     </div>
 
     <div class="actions">
@@ -180,6 +184,16 @@
       <span class="payg-meta-label">حجم اضافه</span>
       <span class="payg-meta-value num-ratio">{{ pg_subscription.extra_gb_text }}</span>
     </li>
+    {% if pg_subscription.alloc_ratio_text %}
+    <li>
+      <span class="payg-meta-label">تخصیص / سقف</span>
+      <span class="payg-meta-value num-ratio">{{ pg_subscription.alloc_ratio_text }}</span>
+    </li>
+    <li>
+      <span class="payg-meta-label">حجم در اختیار منقضی‌ها</span>
+      <span class="payg-meta-value num-ratio">{{ pg_subscription.alloc_expired_held_text }}</span>
+    </li>
+    {% endif %}
     <li>
       <span class="payg-meta-label">کاربران کل</span>
       <span class="payg-meta-value num-ratio">{{ pg_subscription.total_users_text }}</span>
@@ -195,6 +209,19 @@
     </li>
     {% endif %}
   </ul>
+  {% if pg_subscription.alloc_is_oversold %}
+  <div class="flash warn">تخصیص حجم این نماینده از سقف بیشتر است. افزایش حجم تا کاهش یا حذف سرویس‌ها مسدود است.</div>
+  {% endif %}
+  {% if pg_subscription.alloc_unlimited %}
+  <div class="flash warn">
+    سرویس‌های نامحدود یا همگام‌نشده (در تخصیص صفر حساب می‌شوند):
+    <ul class="muted">
+      {% for u in pg_subscription.alloc_unlimited %}
+      <li dir="ltr">#{{ u.id }} {{ u.pg_username }} ({{ u.kind }})</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
   {% if pg_subscription.can_sync %}
   {% if pg_subscription.differs %}
   <div class="flash warn">ظرفیت ثبت‌شده با سقف فعلی ادمین در پاسارگارد یکی نیست. اگر سقف پاسارگارد درست است، «همگام‌سازی از پاسارگارد» را بزنید.</div>

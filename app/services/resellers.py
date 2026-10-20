@@ -722,6 +722,7 @@ async def make_reseller(
             web_permissions=perms,
             bot_permissions=perms,
             plan_id=plan_id,
+            allow_volume_oversell=False,
         )
         session.add(profile)
 

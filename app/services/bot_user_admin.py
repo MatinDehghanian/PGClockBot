@@ -38,6 +38,14 @@ from app.services.pasarguard import (
 from app.services.wallet import credit_wallet, debit_wallet, list_transactions
 from app.services.service_scope import assert_service_in_shop, service_shop_id, shop_services_clause
 from app.services.shop_membership import ensure_member
+from app.services.provision_gate import (
+    ProvisionError,
+    hold_limit_change,
+    hold_plan_create,
+    new_hold_key,
+    settle_failed_hold,
+)
+from app.services.volume_allocation import HeldVolume, is_hard_panel_rejection, release_volume_hold
 
 logger = logging.getLogger(__name__)
 
@@ -397,7 +405,7 @@ async def admin_provision_service(
         parse_group_ids,
     )
     from app.services.plans_catalog import plan_belongs_to_staff
-    from app.services.provision_gate import ProvisionError, assert_provision_create
+    from app.services.provision_gate import assert_provision_create
 
     if not plan.is_active:
         raise ValueError("پلن غیرفعال است")
@@ -464,6 +472,7 @@ async def admin_provision_service(
         reseller_id=shop_rid,
     )
 
+    hold = await _hold_assign_volume(session, shop_rid, pg, plan, data_limit)
     pg_uid: int | None = None
     try:
         if plan.pg_template_id:
@@ -523,6 +532,7 @@ async def admin_provision_service(
             )
         session.add(service)
         await ensure_member(session, int(user.id), shop_rid)
+        await release_volume_hold(session, hold)
         await session.commit()
         await session.refresh(service)
         return service
@@ -535,6 +545,7 @@ async def admin_provision_service(
                     "rollback PG user failed uid=%s", pg_uid, exc_info=True
                 )
         await session.rollback()
+        await settle_failed_hold(session, hold, exc, panel_touched=True)
         from app.services.pasarguard import PasarGuardError
 
         if isinstance(exc, PasarGuardError):
@@ -752,6 +763,47 @@ def sync_service_quota_cache(
         service.quota_synced_at = datetime.now(timezone.utc)
 
 
+async def _hold_assign_volume(
+    session: AsyncSession, shop_rid: int | None, pg: Any, plan: Plan, data_limit: int | None
+) -> HeldVolume | None:
+    """Hold a manual assignment's volume in the shop's ceiling before the panel create."""
+    try:
+        return await hold_plan_create(
+            session, shop_id=shop_rid, pg=pg, template_id=plan.pg_template_id,
+            data_limit=data_limit, key=new_hold_key("assign"),
+        )
+    except ProvisionError as e:
+        raise ValueError(e.message) from e
+
+
+async def _hold_quota_change(
+    session: AsyncSession, service: UserService, data_limit_bytes: int | None
+) -> HeldVolume | None:
+    """Hold a staff quota increase in the shop's volume ceiling before the panel write."""
+    if data_limit_bytes is None or service.shop_id is None:
+        return None
+    try:
+        return await hold_limit_change(
+            session, shop_id=int(service.shop_id), current_limit=service.quota_data_limit_bytes,
+            new_limit=int(data_limit_bytes), key=new_hold_key("svc-quota"),
+        )
+    except ProvisionError as e:
+        raise ValueError(e.message) from e
+
+
+async def _modify_with_hold(
+    session: AsyncSession, pg: Any, service: UserService, payload: dict[str, Any], hold: HeldVolume | None
+) -> Any:
+    try:
+        return await pg.modify_user_by_id(int(service.pg_user_id), payload)
+    except Exception as exc:
+        # A refused write granted nothing; an unknown outcome keeps the hold until it expires.
+        if is_hard_panel_rejection(exc):
+            await release_volume_hold(session, hold)
+            await session.commit()
+        raise
+
+
 async def admin_set_service_quota(
     session: AsyncSession,
     service: UserService,
@@ -767,6 +819,7 @@ async def admin_set_service_quota(
         raise ValueError("سرویس به پاسارگارد وصل نیست")
     assert_staff_pg_user_action(staff, "update")
     pg = await _pg_client_for_bot_service(session, service)
+    hold = await _hold_quota_change(session, service, data_limit_bytes)
     # Reset is a separate PG ACL (users.reset_usage). Without it, still allow
     # quota update — never use Owner token to bypass a missing reset right.
     do_reset = bool(reset_traffic)
@@ -789,7 +842,7 @@ async def admin_set_service_quota(
         raise ValueError("تغییری برای اعمال نیست")
     info: dict | None = None
     if payload:
-        info = await pg.modify_user_by_id(int(service.pg_user_id), payload)
+        info = await _modify_with_hold(session, pg, service, payload, hold)
         if isinstance(info, dict):
             live = user_subscription_url(info)
             if live:
@@ -817,6 +870,7 @@ async def admin_set_service_quota(
             logger.debug("quota cache refresh failed uid=%s", service.pg_user_id, exc_info=True)
     service.notified_expire = False
     service.notified_traffic = False
+    await release_volume_hold(session, hold)
     await session.commit()
     snap = await service_snapshot(session, service)
     # Persist any cache refresh from the live snapshot read

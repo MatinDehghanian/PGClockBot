@@ -32,6 +32,10 @@ from app.services.provision_gate import (
     ProvisionError,
     assert_provision_create,
     assert_provision_modify,
+    finish_staff_edit,
+    hold_staff_create,
+    hold_staff_edit,
+    settle_failed_hold,
 )
 from app.services.shop_scope import is_platform_admin, shop_owner_id
 
@@ -704,6 +708,7 @@ def register_pg_pages(
                 "ادمین پاسارگارد برای این حساب تنظیم نشده است",
                 modal="create",
             )
+        hold = None
         try:
             if mode == "template":
                 raw_tid = str(form.get("template_id") or form.get("pg_template_id") or "").strip()
@@ -719,6 +724,7 @@ def register_pg_pages(
                 except (ProvisionError, PgQuotaError) as qe:
                     return _pg_form_err(getattr(qe, "message", str(qe)), modal="create")
                 pg, as_owner = await _staff_pg(session, staff)
+                hold = await hold_staff_create(session, staff, pg=pg, template_id=tid, data_limit=None)
                 await pg.create_user_from_template(
                     {
                         "username": uname,
@@ -786,6 +792,7 @@ def register_pg_pages(
                     return _pg_form_err(getattr(qe, "message", str(qe)), modal="create")
 
                 pg, as_owner = await _staff_pg(session, staff)
+                hold = await hold_staff_create(session, staff, pg=pg, template_id=None, data_limit=data_limit)
                 await pg.create_user(
                     build_user_create_payload(
                         username=uname,
@@ -802,6 +809,7 @@ def register_pg_pages(
             # second owner-token transfer — that path bypassed staff ACL.
             _ = as_owner
         except Exception as e:
+            await settle_failed_hold(session, hold, e, panel_touched=True)
             msg = e.user_message(fallback="خطا در ساخت کاربر") if isinstance(e, PasarGuardError) else str(e)
             return _pg_form_err(msg, modal="create")
         return RedirectResponse(f"/pg/users?ok={_q(f'کاربر {uname} ساخته شد')}", status_code=303)
@@ -886,6 +894,7 @@ def register_pg_pages(
             else:
                 hwid_limit = 0  # unlimited
 
+        hold = None
         try:
             current = await _assert_owned_user(staff, user_id, session=session)
             if current is None:
@@ -913,9 +922,14 @@ def register_pg_pages(
                 status=str(current.get("status") or "") or None,
             )
             pg, _as_owner = await _staff_pg(session, staff)
+            hold = await hold_staff_edit(
+                session, staff, current_limit=current.get("data_limit"), new_limit=data_limit
+            )
             await pg.modify_user_by_id(user_id, payload)
+            await finish_staff_edit(session, hold, pg_user_id=user_id, data_limit=data_limit)
             uname = str(current.get("username") or user_id)
         except Exception as e:
+            await settle_failed_hold(session, hold, e, panel_touched=True)
             msg = e.user_message(fallback="خطا در ویرایش") if isinstance(e, PasarGuardError) else str(e)
             return _pg_form_err(msg, modal="edit", uid=user_id)
         return RedirectResponse(f"/pg/users?ok={_q(f'کاربر {uname} ویرایش شد')}", status_code=303)
