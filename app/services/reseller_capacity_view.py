@@ -83,7 +83,7 @@ async def allocation_view_for_shop(
     ceiling_text = (
         format_bytes(snap.ceiling_bytes) if snap.ceiling_bytes is not None else "نامشخص"
     )
-    return {
+    view = {
         "alloc_bytes_text": format_bytes(snap.allocated_bytes),
         "alloc_ceiling_text": ceiling_text,
         "alloc_ratio_text": f"{format_bytes(snap.allocated_bytes)} / {ceiling_text}",
@@ -95,7 +95,34 @@ async def allocation_view_for_shop(
         "alloc_allow_oversell": snap.allow_oversell,
         "alloc_is_payg": snap.is_payg,
         "alloc_external_stale": snap.external_sync_stale,
+        "alloc_unlimited_children": [],
     }
+    # L1 parents: children without a cascade ceiling count as zero (warn).
+    try:
+        from app.db.models import OrgPrincipal
+        from app.services.org_principals import DEPTH_ONE, STATUS_ACTIVE
+        from app.services.volume_allocation_cascade import cascade_warn_items_for_parent
+        from sqlalchemy import select
+
+        profile = await session.scalar(
+            select(ResellerProfile).where(ResellerProfile.user_id == int(shop_id))
+        )
+        if profile is not None:
+            principal = await session.scalar(
+                select(OrgPrincipal).where(
+                    OrgPrincipal.reseller_profile_id == int(profile.id),
+                    OrgPrincipal.depth == DEPTH_ONE,
+                    OrgPrincipal.status == STATUS_ACTIVE,
+                )
+            )
+            if principal is not None:
+                view["alloc_unlimited_children"] = await cascade_warn_items_for_parent(
+                    session, int(principal.id)
+                )
+    except Exception:
+        import logging
+        logging.getLogger(__name__).debug("unlimited children warn failed", exc_info=True)
+    return view
 
 
 async def sync_reseller_capacity(session: AsyncSession, profile: ResellerProfile) -> tuple[int, int]:

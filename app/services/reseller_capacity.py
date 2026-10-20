@@ -166,7 +166,18 @@ async def buy_extra_gb(
         raise ValueError("ادمین پاسارگارد برای این نماینده تنظیم نشده است")
 
     total = price * gb_n
+    from app.services.volume_allocation_cascade import (
+        CascadeBudgetError,
+        assert_l2_extra_gb_against_parent,
+    )
     from app.services.wallet import credit_wallet, debit_wallet
+
+    try:
+        await assert_l2_extra_gb_against_parent(
+            session, child_profile=profile, add_gb=gb_n
+        )
+    except CascadeBudgetError as e:
+        raise ValueError(e.user_message()) from e
 
     await debit_wallet(
         session, user, total, reason=f"reseller_extra_gb:{gb_n}:{uname}", commit=False

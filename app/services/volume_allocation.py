@@ -413,6 +413,17 @@ async def assert_volume_delta_allowed(
             ceiling_bytes=ceiling,
             for_customer=(audience == "customer"),
         )
+    # L1 parents: children ceilings also consume the same budget.
+    from app.services.volume_allocation_cascade import include_children_in_gate
+
+    try:
+        await include_children_in_gate(
+            session, shop_id=sid, delta_bytes=delta, audience=audience
+        )
+    except VolumeAllocationError:
+        raise
+    except Exception:
+        logger.debug("cascade gate skipped shop=%s", sid, exc_info=True)
 
 
 async def assert_new_limit_allowed(

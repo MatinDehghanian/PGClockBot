@@ -1060,6 +1060,8 @@ class OrgPrincipalProvision(Base):
         ForeignKey("org_principals.id"), nullable=False, index=True
     )
     status: Mapped[str] = mapped_column(String(32), default="completed", nullable=False)
+    # Parent-assigned volume ceiling (GB). NULL = no cascade ceiling (legacy unlimited).
+    volume_ceiling_gb: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

@@ -235,6 +235,16 @@
     </ul>
   </div>
   {% endif %}
+  {% if pg_subscription.alloc_unlimited_children %}
+  <div class="flash warn">
+    فرزندان بدون سقف حجم (در بودجهٔ والد صفر حساب می‌شوند):
+    <ul class="muted">
+      {% for c in pg_subscription.alloc_unlimited_children %}
+      <li dir="ltr">principal #{{ c.principal_id }} {{ c.pg_username }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
   {% if pg_subscription.can_sync %}
   {% if pg_subscription.differs %}
   <div class="flash warn">ظرفیت ثبت‌شده با سقف فعلی ادمین در پاسارگارد یکی نیست. اگر سقف پاسارگارد درست است، «همگام‌سازی از پاسارگارد» را بزنید.</div>

@@ -54,6 +54,8 @@ class Level2ProvisionRequest:
     idempotency_key: str
     pg_role_id: int | None = None
     note: str | None = None
+    # Parent-assigned volume ceiling in GB; None = no cascade ceiling (legacy).
+    volume_ceiling_gb: int | None = None
     # Accepted only so callers/tests prove they cannot override hierarchy:
     parent_id: Any = None
     depth: Any = None
@@ -447,6 +449,38 @@ async def provision_level2_child(
             bot_user_id=None,
             status=STATUS_ACTIVE,
         )
+        ceiling_gb = request.volume_ceiling_gb
+        if ceiling_gb is not None:
+            try:
+                ceiling_gb = int(ceiling_gb)
+            except (TypeError, ValueError) as exc:
+                raise ChildProvisionError(
+                    "سقف حجم فرزند نامعتبر است", code="ceiling_invalid"
+                ) from exc
+            if ceiling_gb <= 0:
+                raise ChildProvisionError(
+                    "سقف حجم فرزند باید مثبت باشد", code="ceiling_invalid"
+                )
+            from app.services.volume_allocation_cascade import (
+                CascadeBudgetError,
+                assert_parent_can_grant_child_ceiling,
+                shop_id_for_principal,
+            )
+
+            parent_shop = await shop_id_for_principal(session, parent)
+            if parent_shop is not None:
+                try:
+                    await assert_parent_can_grant_child_ceiling(
+                        session,
+                        parent_shop_id=int(parent_shop),
+                        parent_principal_id=parent_id,
+                        child_principal_id=None,
+                        new_ceiling_gb=int(ceiling_gb),
+                        previous_ceiling_gb=None,
+                    )
+                except CascadeBudgetError as exc:
+                    raise ChildProvisionError(exc.message, code="parent_budget") from exc
+
         session.add(
             OrgPrincipalProvision(
                 idempotency_key=scoped_key,
@@ -455,6 +489,7 @@ async def provision_level2_child(
                 pg_role_id=role_id,
                 created_by_principal_id=parent_id,
                 status=PROVISION_STATUS_COMPLETED,
+                volume_ceiling_gb=int(ceiling_gb) if ceiling_gb else None,
             )
         )
         await session.flush()
@@ -479,6 +514,25 @@ async def provision_level2_child(
         await attach_shop_package_to_child_principal(
             session, child, pg_username=uname
         )
+        if ceiling_gb:
+            from app.db.models import PgAdminSubscription
+
+            existing_sub = await session.scalar(
+                select(PgAdminSubscription).where(
+                    PgAdminSubscription.pg_username == uname
+                )
+            )
+            if existing_sub is None:
+                session.add(
+                    PgAdminSubscription(
+                        pg_username=uname,
+                        base_gb=int(ceiling_gb),
+                        base_users=0,
+                    )
+                )
+            else:
+                existing_sub.base_gb = int(ceiling_gb)
+            await session.flush()
     except ChildProvisionError:
         if pg_created:
             await _compensate_delete_pg_admin(parent_pg, uname)
