@@ -130,6 +130,93 @@ def _api_error_text(data: Any) -> str:
     return "درخواست سان‌پی ناموفق بود"
 
 
+def _parse_verified_payment(
+    data: dict[str, Any],
+    *,
+    token: str,
+    expected_amount: int,
+) -> VerifyResult | tuple[dict[str, Any], int]:
+    """Return paid (result, amount) or a failed VerifyResult."""
+    if not _is_success_flag(data.get("success")):
+        return VerifyResult(
+            ok=False,
+            external_ref=token,
+            message=_api_error_text(data),
+            raw=data,
+        )
+    result = data.get("data") if isinstance(data.get("data"), dict) else {}
+    try:
+        paid_amount = _safe_int((result or {}).get("amount"), field="مبلغ")
+    except ValueError:
+        return VerifyResult(
+            ok=False,
+            external_ref=token,
+            message="مبلغ تأییدشده نامعتبر است",
+            raw=data,
+        )
+    if paid_amount != expected_amount:
+        logger.warning(
+            "sunpay verify amount mismatch token=%s expected=%s paid=%s",
+            token[:16],
+            expected_amount,
+            paid_amount,
+        )
+        return VerifyResult(
+            ok=False,
+            external_ref=token,
+            amount=paid_amount,
+            message="مبلغ تأییدشده با سفارش هم‌خوانی ندارد",
+            raw=data,
+        )
+    return (result or {}), paid_amount
+
+
+def _invoice_matches_settlement(
+    result: dict[str, Any],
+    *,
+    token: str,
+    paid_amount: int,
+    data: dict[str, Any],
+    expected_invoice_id: int | None,
+) -> VerifyResult | None:
+    """None when ok; otherwise a failed VerifyResult."""
+    if expected_invoice_id is None:
+        return None
+    raw_invoice = result.get("invoice_id")
+    if raw_invoice is None or str(raw_invoice).strip() == "":
+        return VerifyResult(
+            ok=False,
+            external_ref=token,
+            amount=paid_amount,
+            message="شناسه فاکتور در پاسخ درگاه نیست",
+            raw=data,
+        )
+    try:
+        if _safe_int(raw_invoice, field="invoice_id") != int(expected_invoice_id):
+            logger.warning(
+                "sunpay verify invoice mismatch token=%s expected=%s got=%s",
+                token[:16],
+                expected_invoice_id,
+                raw_invoice,
+            )
+            return VerifyResult(
+                ok=False,
+                external_ref=token,
+                amount=paid_amount,
+                message="شناسه فاکتور با تسویه هم‌خوانی ندارد",
+                raw=data,
+            )
+    except ValueError as exc:
+        return VerifyResult(
+            ok=False,
+            external_ref=token,
+            amount=paid_amount,
+            message=str(exc),
+            raw=data,
+        )
+    return None
+
+
 class SunPayAdapter:
     name = "sunpay"
 
@@ -269,63 +356,31 @@ class SunPayAdapter:
                 message="پاسخ نامعتبر درگاه سان‌پی",
             )
 
-        if not isinstance(data, dict) or not _is_success_flag(data.get("success")):
+        if not isinstance(data, dict):
             return VerifyResult(
                 ok=False,
                 external_ref=token,
-                message=_api_error_text(data),
-                raw=data if isinstance(data, dict) else None,
+                message="پاسخ نامعتبر درگاه سان‌پی",
             )
 
-        result = data.get("data") if isinstance(data.get("data"), dict) else {}
-        try:
-            paid_amount = _safe_int((result or {}).get("amount"), field="مبلغ")
-        except ValueError:
-            return VerifyResult(
-                ok=False,
-                external_ref=token,
-                message="مبلغ تأییدشده نامعتبر است",
-                raw=data,
-            )
-        if paid_amount != expected_amount:
-            return VerifyResult(
-                ok=False,
-                external_ref=token,
-                amount=paid_amount,
-                message="مبلغ تأییدشده با سفارش هم‌خوانی ندارد",
-                raw=data,
-            )
+        parsed = _parse_verified_payment(
+            data, token=token, expected_amount=expected_amount
+        )
+        if isinstance(parsed, VerifyResult):
+            return parsed
+        result, paid_amount = parsed
 
-        # invoice_id from the gateway must match our settlement id (not attacker callback).
-        raw_invoice = (result or {}).get("invoice_id")
-        if expected_invoice_id is not None:
-            if raw_invoice is None or str(raw_invoice).strip() == "":
-                return VerifyResult(
-                    ok=False,
-                    external_ref=token,
-                    amount=paid_amount,
-                    message="شناسه فاکتور در پاسخ درگاه نیست",
-                    raw=data,
-                )
-            try:
-                if _safe_int(raw_invoice, field="invoice_id") != int(expected_invoice_id):
-                    return VerifyResult(
-                        ok=False,
-                        external_ref=token,
-                        amount=paid_amount,
-                        message="شناسه فاکتور با تسویه هم‌خوانی ندارد",
-                        raw=data,
-                    )
-            except ValueError as exc:
-                return VerifyResult(
-                    ok=False,
-                    external_ref=token,
-                    amount=paid_amount,
-                    message=str(exc),
-                    raw=data,
-                )
+        invoice_err = _invoice_matches_settlement(
+            result,
+            token=token,
+            paid_amount=paid_amount,
+            data=data,
+            expected_invoice_id=expected_invoice_id,
+        )
+        if invoice_err is not None:
+            return invoice_err
 
-        reference = str((result or {}).get("reference") or "").strip()
+        reference = str(result.get("reference") or "").strip()
         return VerifyResult(
             ok=True,
             external_ref=token,

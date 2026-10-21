@@ -881,7 +881,12 @@ async def complete_psp_return(
         # or "not paid yet" must leave AWAITING so the real payer can finish and
         # verify (read-only) can be retried. Only settle_and_approve amount/tenant
         # mismatches permanently fail a settlement.
-        raise ValueError(verified.message or "تأیید درگاه ناموفق بود")
+        # Persist last error for admin visibility while staying AWAITING (no poller yet).
+        msg = (verified.message or "تأیید درگاه ناموفق بود")[:500]
+        if settlement.status == SettlementStatus.AWAITING.value:
+            settlement.error_message = msg
+            await session.commit()
+        raise ValueError(msg)
 
     paid_amount = verified.amount if verified.amount is not None else settlement.amount
     await settle_and_approve(
