@@ -28,11 +28,15 @@ from app.services.payment_providers import get_psp_adapter
 from app.services.payment_providers.base import CheckoutRequest
 from app.services.payment_providers import sunpay as sunpay_mod
 from app.services.payment_providers.sunpay import (
+    CUSTOMER_REQUEST_FAILED,
     SunPayAdapter,
+    SunPayGatewayError,
     close_client,
     ensure_sunpay_pay_host_public,
+    normalize_request_method,
     validate_sunpay_pay_url,
 )
+from app.services import public_https as pub
 from app.services.payment_settlement import (
     PSP_POLL_WINDOW,
     callback_indicates_user_abort,
@@ -62,6 +66,26 @@ def _patch_sunpay_http(handler):
     http_patch = patch.object(sunpay_mod, "_http", return_value=client)
     dns_patch = _patch_public_dns()
     return http_patch, dns_patch, client
+
+
+def _patch_https_public_base(base: str = "https://bot.test"):
+    return patch.object(pub, "https_public_base", return_value=base)
+
+
+def _capture_sunpay_warnings():
+    """Patch ``logger.warning`` — more reliable than ``assertLogs`` in large suites."""
+    records: list[str] = []
+
+    def _warning(msg: object, *args: object, **_kwargs: object) -> None:
+        text = str(msg)
+        if args:
+            try:
+                text = text % args
+            except (TypeError, ValueError):
+                text = f"{text} {' '.join(str(a) for a in args)}"
+        records.append(text)
+
+    return records, patch.object(sunpay_mod.logger, "warning", side_effect=_warning)
 
 
 def _checkout_req(*, settlement_id: int = 42, amount: int = 100_000) -> CheckoutRequest:
@@ -173,11 +197,115 @@ class SunPayClientTests(unittest.IsolatedAsyncioTestCase):
         http_p, dns_p, client = _patch_sunpay_http(handler)
         with http_p, dns_p:
             adapter = SunPayAdapter(api_key=API_KEY, pay_url=PAY_URL)
-            with self.assertRaises(ValueError) as caught:
+            with self.assertRaises(SunPayGatewayError) as caught:
                 await adapter.create_checkout(_checkout_req())
         await client.aclose()
-        self.assertIn("BAD_KEY", str(caught.exception))
+        self.assertEqual(str(caught.exception), CUSTOMER_REQUEST_FAILED)
+        self.assertIn("BAD_KEY", caught.exception.admin_detail)
         self.assertNotIn("secret", str(caught.exception))
+        self.assertNotIn("<b>", caught.exception.admin_detail)
+
+    async def test_request_post_method_when_configured(self) -> None:
+        seen: list[str] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen.append(request.method)
+            return httpx.Response(200, json={"success": 1, "data": {"token": TOKEN}})
+
+        http_p, dns_p, client = _patch_sunpay_http(handler)
+        with http_p, dns_p:
+            adapter = SunPayAdapter(
+                api_key=API_KEY, pay_url=PAY_URL, request_method="POST"
+            )
+            await adapter.create_checkout(_checkout_req())
+        await client.aclose()
+        self.assertEqual(seen, ["POST"])
+        self.assertEqual(normalize_request_method("post"), "POST")
+        self.assertEqual(normalize_request_method("nope"), "GET")
+
+    async def test_success_zero_without_error_code_logs_body_not_api_key(self) -> None:
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={"success": 0, "message": "gateway busy", "api_key": "LEAK"},
+            )
+
+        records, warn_p = _capture_sunpay_warnings()
+        http_p, dns_p, client = _patch_sunpay_http(handler)
+        with http_p, dns_p, warn_p:
+            adapter = SunPayAdapter(api_key=API_KEY, pay_url=PAY_URL)
+            with self.assertRaises(SunPayGatewayError) as caught:
+                await adapter.create_checkout(_checkout_req())
+        await client.aclose()
+        self.assertEqual(str(caught.exception), CUSTOMER_REQUEST_FAILED)
+        joined = "\n".join(records)
+        self.assertTrue(records, "expected sunpay warning log")
+        self.assertIn("status=200", joined)
+        self.assertIn("gateway busy", joined)
+        self.assertNotIn(API_KEY, joined)
+        self.assertNotIn("LEAK", joined)
+
+    async def test_http_405_json_and_non_json_are_logged_distinctly(self) -> None:
+        async def run(body, *, json_mode: bool) -> str:
+            def handler(_request: httpx.Request) -> httpx.Response:
+                if json_mode:
+                    return httpx.Response(405, json=body)
+                return httpx.Response(422, text=str(body))
+
+            records, warn_p = _capture_sunpay_warnings()
+            http_p, dns_p, client = _patch_sunpay_http(handler)
+            with http_p, dns_p, warn_p:
+                adapter = SunPayAdapter(api_key=API_KEY, pay_url=PAY_URL)
+                with self.assertRaises(SunPayGatewayError):
+                    await adapter.create_checkout(_checkout_req())
+            await client.aclose()
+            self.assertTrue(records, "expected sunpay warning log")
+            return "\n".join(records)
+
+        out_json = await run({"error": "method not allowed"}, json_mode=True)
+        self.assertIn("status=405", out_json)
+        self.assertIn("method not allowed", out_json)
+        out_text = await run("plain failure", json_mode=False)
+        self.assertIn("status=422", out_text)
+        self.assertIn("non-json", out_text)
+
+    async def test_error_as_string_is_logged_safely(self) -> None:
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200, json={"success": 0, "error": "<script>api_key=steal</script>"}
+            )
+
+        records, warn_p = _capture_sunpay_warnings()
+        http_p, dns_p, client = _patch_sunpay_http(handler)
+        with http_p, dns_p, warn_p:
+            adapter = SunPayAdapter(api_key=API_KEY, pay_url=PAY_URL)
+            with self.assertRaises(SunPayGatewayError) as caught:
+                await adapter.create_checkout(_checkout_req())
+        await client.aclose()
+        self.assertEqual(str(caught.exception), CUSTOMER_REQUEST_FAILED)
+        self.assertIn("api_key=<redacted>", "\n".join(records))
+
+    async def test_own_api_key_value_is_scrubbed_even_without_field_name(self) -> None:
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={
+                    "success": 0,
+                    "message": f"rejected key {API_KEY} please rotate",
+                },
+            )
+
+        records, warn_p = _capture_sunpay_warnings()
+        http_p, dns_p, client = _patch_sunpay_http(handler)
+        with http_p, dns_p, warn_p:
+            adapter = SunPayAdapter(api_key=API_KEY, pay_url=PAY_URL)
+            with self.assertRaises(SunPayGatewayError):
+                await adapter.create_checkout(_checkout_req())
+        await client.aclose()
+        joined = "\n".join(records)
+        self.assertTrue(records, "expected sunpay warning log")
+        self.assertNotIn(API_KEY, joined)
+        self.assertIn("<redacted>", joined)
 
     async def test_verify_posts_token_and_matches_amount_and_invoice(self) -> None:
         seen: list[httpx.Request] = []
@@ -404,6 +532,7 @@ class SunPaySettlementFlowTests(unittest.IsolatedAsyncioTestCase):
         with (
             http_p,
             dns_p,
+            _patch_https_public_base("https://bot.test"),
             patch(
                 "app.services.payment_settlement._public_base",
                 return_value="https://bot.test",
@@ -414,6 +543,9 @@ class SunPaySettlementFlowTests(unittest.IsolatedAsyncioTestCase):
                 assert payment is not None
                 settlement = await create_psp_checkout(session, payment)
                 self.assertEqual(settlement.status, SettlementStatus.AWAITING.value)
+                self.assertTrue(
+                    (settlement.checkout_url or "").startswith("https://pay.sunpay.test/")
+                )
                 sid = int(settlement.id)
         await client.aclose()
         return sid
@@ -432,6 +564,7 @@ class SunPaySettlementFlowTests(unittest.IsolatedAsyncioTestCase):
         with (
             http_p,
             dns_p,
+            _patch_https_public_base("https://bot.test"),
             patch(
                 "app.services.payment_settlement._public_base",
                 return_value="https://bot.test",
@@ -494,6 +627,7 @@ class SunPaySettlementFlowTests(unittest.IsolatedAsyncioTestCase):
         with (
             http_p,
             dns_p,
+            _patch_https_public_base("https://bot.test"),
             patch(
                 "app.services.payment_settlement._public_base",
                 return_value="https://bot.test",
@@ -567,6 +701,7 @@ class SunPaySettlementFlowTests(unittest.IsolatedAsyncioTestCase):
         with (
             http_p,
             dns_p,
+            _patch_https_public_base("https://bot.test"),
             patch(
                 "app.services.payment_settlement._public_base",
                 return_value="https://bot.test",
@@ -610,6 +745,7 @@ class SunPaySettlementFlowTests(unittest.IsolatedAsyncioTestCase):
         with (
             http_p,
             dns_p,
+            _patch_https_public_base("https://bot.test"),
             patch(
                 "app.services.payment_settlement._public_base",
                 return_value="https://bot.test",
@@ -660,6 +796,7 @@ class SunPaySettlementFlowTests(unittest.IsolatedAsyncioTestCase):
         with (
             http_p,
             dns_p,
+            _patch_https_public_base("https://bot.test"),
             patch(
                 "app.services.payment_settlement._public_base",
                 return_value="https://bot.test",
@@ -674,6 +811,81 @@ class SunPaySettlementFlowTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(row.status, SettlementStatus.AWAITING.value)
         await client.aclose()
         self.assertEqual(verify_calls["n"], 0)
+
+    async def test_callback_uses_live_https_when_env_is_http(self) -> None:
+        seen_callbacks: list[str] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.url.path.endswith("/api/request"):
+                body = json.loads(request.content)
+                seen_callbacks.append(body.get("callback", ""))
+                return httpx.Response(200, json={"success": 1, "data": {"token": TOKEN}})
+            return httpx.Response(404)
+
+        async with self.Session() as session:
+            await self._configure_platform_sunpay(session)
+            payment = await self._seed_wallet_topup(session)
+            payment_id = int(payment.id)
+
+        http_p, dns_p, client = _patch_sunpay_http(handler)
+        with (
+            http_p,
+            dns_p,
+            patch.object(pub, "https_is_active", return_value=True),
+            patch.object(
+                pub, "public_panel_base_url", return_value="https://panel.live.example"
+            ),
+            patch.object(pub, "env_public_base", return_value="http://203.0.113.5:9000"),
+            patch(
+                "app.services.payment_settlement._public_base",
+                return_value="http://203.0.113.5:9000",
+            ),
+        ):
+            # https_public_base is a real function — don't stub it; let TLS win.
+            async with self.Session() as session:
+                payment = await session.get(Payment, payment_id)
+                assert payment is not None
+                settlement = await create_psp_checkout(session, payment)
+                self.assertEqual(settlement.status, SettlementStatus.AWAITING.value)
+        await client.aclose()
+        self.assertEqual(len(seen_callbacks), 1)
+        self.assertTrue(
+            seen_callbacks[0].startswith(
+                "https://panel.live.example/payments/settlement/psp/sunpay/return/"
+            )
+        )
+
+    async def test_sunpay_refuses_without_https_before_network(self) -> None:
+        calls = {"n": 0}
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            calls["n"] += 1
+            return httpx.Response(500)
+
+        async with self.Session() as session:
+            await self._configure_platform_sunpay(session)
+            payment = await self._seed_wallet_topup(session)
+            payment_id = int(payment.id)
+
+        http_p, dns_p, client = _patch_sunpay_http(handler)
+        with (
+            http_p,
+            dns_p,
+            patch.object(pub, "https_is_active", return_value=False),
+            patch.object(pub, "env_public_base", return_value="http://203.0.113.5:9000"),
+            patch(
+                "app.services.payment_settlement._public_base",
+                return_value="http://203.0.113.5:9000",
+            ),
+        ):
+            async with self.Session() as session:
+                payment = await session.get(Payment, payment_id)
+                assert payment is not None
+                with self.assertRaises(ValueError) as caught:
+                    await create_psp_checkout(session, payment)
+                self.assertIn("در دسترس نیست", str(caught.exception))
+        await client.aclose()
+        self.assertEqual(calls["n"], 0)
 
     async def test_deliver_psp_once_notifies_only_once(self) -> None:
         async with self.Session() as session:
@@ -690,6 +902,7 @@ class SunPaySettlementFlowTests(unittest.IsolatedAsyncioTestCase):
         with (
             http_p,
             dns_p,
+            _patch_https_public_base("https://bot.test"),
             patch(
                 "app.services.payment_settlement._public_base",
                 return_value="https://bot.test",

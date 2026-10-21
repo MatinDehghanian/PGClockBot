@@ -23,5 +23,6 @@ def get_psp_adapter(provider: str, *, ui: dict, public_base_url: str) -> PspAdap
         return SunPayAdapter(
             api_key=str(ui.get("psp_merchant_id") or ""),
             pay_url=str(ui.get("psp_pay_url") or ""),
+            request_method=str(ui.get("psp_sunpay_request_method") or "GET"),
         )
     raise ValueError(f"unknown psp provider: {name}")

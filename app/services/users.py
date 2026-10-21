@@ -1044,6 +1044,7 @@ DEFAULT_SETTINGS = {
     "psp_provider": "zarinpal",
     "psp_merchant_id": "",
     "psp_pay_url": "",
+    "psp_sunpay_request_method": "GET",
     "psp_sandbox": "1",
     "psp_pay_text": (
         "مبلغ قابل پرداخت: <b>{amount}</b>\n"
@@ -1669,6 +1670,14 @@ SETTING_GROUPS = {
             "text",
             "فقط سان‌پی و فقط https عمومی: مثلاً https://pay.example.com — "
             "http و localhost/IP خصوصی رد می‌شوند",
+        ),
+        (
+            "psp_sunpay_request_method",
+            "روش درخواست سان‌پی (/api/request)",
+            "select",
+            "پیش‌فرض GET مطابق مستند؛ اگر درگاه بدنهٔ GET را نخواند POST را امتحان کنید "
+            "(تا تأیید با درگاه واقعی نهایی نیست)",
+            [("GET", "GET (مستند)"), ("POST", "POST")],
         ),
         (
             "psp_sandbox",
