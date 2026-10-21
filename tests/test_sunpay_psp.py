@@ -264,6 +264,26 @@ class SunPayClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(str(caught.exception), CUSTOMER_REQUEST_FAILED)
         self.assertIn("api_key=<redacted>", "\n".join(logs.output))
 
+    async def test_own_api_key_value_is_scrubbed_even_without_field_name(self) -> None:
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={
+                    "success": 0,
+                    "message": f"rejected key {API_KEY} please rotate",
+                },
+            )
+
+        http_p, dns_p, client = _patch_sunpay_http(handler)
+        with http_p, dns_p, self.assertLogs(sunpay_mod.logger, level="WARNING") as logs:
+            adapter = SunPayAdapter(api_key=API_KEY, pay_url=PAY_URL)
+            with self.assertRaises(SunPayGatewayError):
+                await adapter.create_checkout(_checkout_req())
+        await client.aclose()
+        joined = "\n".join(logs.output)
+        self.assertNotIn(API_KEY, joined)
+        self.assertIn("<redacted>", joined)
+
     async def test_verify_posts_token_and_matches_amount_and_invoice(self) -> None:
         seen: list[httpx.Request] = []
 

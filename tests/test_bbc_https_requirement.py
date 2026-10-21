@@ -28,9 +28,6 @@ class HttpsRequirementTests(_Db):
             patcher = patch.object(pub, name, return_value=value)
             patcher.start()
             self.addCleanup(patcher.stop)
-        patcher = patch.object(flow, "_public_base", return_value="http://203.0.113.5:9000")
-        patcher.start()
-        self.addCleanup(patcher.stop)
 
     async def test_checkout_on_a_plain_http_panel_is_refused_before_any_record_is_created(self) -> None:
         self.http_only()

@@ -39,7 +39,7 @@ from app.services.payment_settlement import (
     settle_and_approve,
     tenant_key_for,
 )
-from app.services.public_https import env_public_base, https_public_base
+from app.services.public_https import https_public_base
 from app.services.users import get_all_settings
 
 logger = logging.getLogger(__name__)
@@ -64,9 +64,6 @@ def https_base_ready() -> bool:
     """BezanBeCard calls back and returns over https only."""
     return bool(https_base())
 
-
-# Compat alias for tests that still patch ``bbc_settlement._public_base``.
-_public_base = env_public_base
 
 
 async def bbc_enable_error(session: AsyncSession, payload: dict[str, str], *, reseller_id: int | None) -> str | None:
