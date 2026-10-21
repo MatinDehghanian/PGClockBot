@@ -16,7 +16,7 @@ import hmac
 import json
 import logging
 import secrets
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
@@ -1046,6 +1046,8 @@ async def mock_psp_pay(
 
 
 PSP_POLL_BATCH = 40
+# Abandoned checkouts (closed tab, never paid) must age out; matches bbc late window.
+PSP_POLL_WINDOW = timedelta(hours=48)
 _PSP_POLLABLE = frozenset({"sunpay", "zarinpal"})
 
 
@@ -1126,7 +1128,12 @@ async def _poll_one_psp_settlement(
 
 
 async def poll_psp_settlements(session: AsyncSession, *, limit: int = PSP_POLL_BATCH) -> int:
-    """Background backup for browser return: re-verify open sunpay/zarinpal settlements."""
+    """Background backup for browser return: re-verify open sunpay/zarinpal settlements.
+
+    Only rows created within ``PSP_POLL_WINDOW`` are considered so abandoned
+    checkouts cannot grow an unbounded verify queue (and delay fresh payers).
+    """
+    since = datetime.now(timezone.utc) - PSP_POLL_WINDOW
     rows = (
         await session.execute(
             select(PaymentSettlement)
@@ -1135,6 +1142,7 @@ async def poll_psp_settlements(session: AsyncSession, *, limit: int = PSP_POLL_B
                 PaymentSettlement.status == SettlementStatus.AWAITING.value,
                 PaymentSettlement.external_ref.is_not(None),
                 PaymentSettlement.provider.in_(tuple(_PSP_POLLABLE)),
+                PaymentSettlement.created_at >= since,
             )
             .order_by(PaymentSettlement.updated_at.asc(), PaymentSettlement.id.asc())
             .limit(max(1, min(100, int(limit))))

@@ -34,10 +34,12 @@ from app.services.payment_providers.sunpay import (
     validate_sunpay_pay_url,
 )
 from app.services.payment_settlement import (
+    PSP_POLL_WINDOW,
     callback_indicates_user_abort,
     callback_invoice_matches_settlement,
     complete_psp_return,
     create_psp_checkout,
+    deliver_psp_once,
     poll_psp_settlements,
 )
 from app.services.users import clear_settings_cache, set_setting
@@ -625,6 +627,91 @@ class SunPaySettlementFlowTests(unittest.IsolatedAsyncioTestCase):
                 assert row is not None
                 self.assertEqual(row.status, SettlementStatus.SETTLED.value)
                 approve.assert_awaited()
+        await client.aclose()
+
+    async def test_poller_skips_settlements_older_than_window(self) -> None:
+        from datetime import datetime, timezone
+
+        async with self.Session() as session:
+            await self._configure_platform_sunpay(session)
+            payment = await self._seed_wallet_topup(session)
+            payment_id = int(payment.id)
+
+        sid = await self._checkout(payment_id)
+        self._verify_invoice_id = sid
+
+        async with self.Session() as session:
+            from datetime import timedelta
+
+            row = await session.get(PaymentSettlement, sid)
+            assert row is not None
+            # Just outside the window so created_at >= since fails.
+            row.created_at = datetime.now(timezone.utc) - PSP_POLL_WINDOW - timedelta(seconds=30)
+            await session.commit()
+
+        verify_calls = {"n": 0}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.url.path.endswith("/api/verified"):
+                verify_calls["n"] += 1
+            return httpx.Response(500, text="should not be called")
+
+        http_p, dns_p, client = _patch_sunpay_http(handler)
+        with (
+            http_p,
+            dns_p,
+            patch(
+                "app.services.payment_settlement._public_base",
+                return_value="https://bot.test",
+            ),
+            patch("app.services.payment_settlement.approve_payment", AsyncMock()),
+        ):
+            async with self.Session() as session:
+                n = await poll_psp_settlements(session)
+                self.assertEqual(n, 0)
+                row = await session.get(PaymentSettlement, sid)
+                assert row is not None
+                self.assertEqual(row.status, SettlementStatus.AWAITING.value)
+        await client.aclose()
+        self.assertEqual(verify_calls["n"], 0)
+
+    async def test_deliver_psp_once_notifies_only_once(self) -> None:
+        async with self.Session() as session:
+            await self._configure_platform_sunpay(session)
+            payment = await self._seed_wallet_topup(session)
+            payment_id = int(payment.id)
+
+        sid = await self._checkout(payment_id)
+        self._verify_invoice_id = sid
+
+        notify = AsyncMock()
+        approve = AsyncMock(return_value=None)
+        http_p, dns_p, client = _patch_sunpay_http(self._request_handler())
+        with (
+            http_p,
+            dns_p,
+            patch(
+                "app.services.payment_settlement._public_base",
+                return_value="https://bot.test",
+            ),
+            patch("app.services.payment_settlement.approve_payment", approve),
+            patch("app.services.payment_settlement.notify_after_settlement", notify),
+        ):
+            async with self.Session() as session:
+                settled = await complete_psp_return(
+                    session,
+                    provider="sunpay",
+                    settlement_id=sid,
+                    callback_params={
+                        "success": "1",
+                        "invoice_id": str(sid),
+                        "token": TOKEN,
+                    },
+                    reseller_id=None,
+                )
+                await deliver_psp_once(session, settled)
+                await deliver_psp_once(session, settled)
+                self.assertEqual(notify.await_count, 1)
         await client.aclose()
 
 
