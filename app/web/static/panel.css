@@ -11432,6 +11432,99 @@ html[data-theme="light"] .panel-status-card {
 .panel-status[data-status="403"] .panel-status-watermark {
   color: color-mix(in srgb, var(--caution, var(--primary)) 10%, transparent);
 }
+
+/* Payment / public outcomes — same stage language as 404, tone by kind */
+.panel-status[data-status="ok"] .panel-status-orb-a {
+  background: color-mix(in srgb, var(--success, #16a34a) 32%, transparent);
+}
+.panel-status[data-status="ok"] .panel-status-orb-b {
+  background: color-mix(in srgb, var(--success, #16a34a) 16%, transparent);
+}
+.panel-status[data-status="ok"] .panel-status-card-accent {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--success, #16a34a) 18%, transparent),
+    var(--success, #16a34a) 50%,
+    color-mix(in srgb, var(--primary) 55%, var(--success, #16a34a)) 100%
+  );
+}
+.panel-status[data-status="ok"] .panel-status-badge {
+  background: color-mix(in srgb, var(--success, #16a34a) 14%, var(--control-bg));
+  color: var(--success, #16a34a);
+  border-color: color-mix(in srgb, var(--success, #16a34a) 32%, var(--border));
+}
+.panel-status[data-status="ok"] .panel-status-watermark {
+  color: color-mix(in srgb, var(--success, #16a34a) 11%, transparent);
+}
+
+.panel-status[data-status="warn"] .panel-status-orb-a,
+.panel-status[data-status="pending"] .panel-status-orb-a {
+  background: color-mix(in srgb, var(--caution, #d97706) 28%, transparent);
+}
+.panel-status[data-status="warn"] .panel-status-orb-b,
+.panel-status[data-status="pending"] .panel-status-orb-b {
+  background: color-mix(in srgb, var(--caution, #d97706) 14%, transparent);
+}
+.panel-status[data-status="warn"] .panel-status-card-accent,
+.panel-status[data-status="pending"] .panel-status-card-accent {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--caution, #d97706) 18%, transparent),
+    var(--caution, #d97706) 50%,
+    color-mix(in srgb, var(--primary) 50%, var(--caution, #d97706)) 100%
+  );
+}
+.panel-status[data-status="warn"] .panel-status-badge,
+.panel-status[data-status="pending"] .panel-status-badge {
+  background: color-mix(in srgb, var(--caution, #d97706) 12%, var(--control-bg));
+  color: var(--caution, #d97706);
+  border-color: color-mix(in srgb, var(--caution, #d97706) 30%, var(--border));
+}
+.panel-status[data-status="warn"] .panel-status-watermark,
+.panel-status[data-status="pending"] .panel-status-watermark {
+  color: color-mix(in srgb, var(--caution, #d97706) 10%, transparent);
+}
+
+.panel-status[data-status="error"] .panel-status-orb-a {
+  background: color-mix(in srgb, var(--destructive) 28%, transparent);
+}
+.panel-status[data-status="error"] .panel-status-orb-b {
+  background: color-mix(in srgb, var(--caution) 18%, transparent);
+}
+.panel-status[data-status="error"] .panel-status-card-accent {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--destructive) 20%, transparent),
+    var(--destructive-fg, var(--destructive)) 50%,
+    color-mix(in srgb, var(--caution) 75%, var(--destructive)) 100%
+  );
+}
+.panel-status[data-status="error"] .panel-status-badge {
+  background: color-mix(in srgb, var(--destructive) 12%, var(--control-bg));
+  color: var(--destructive-fg, var(--destructive));
+  border-color: color-mix(in srgb, var(--destructive) 28%, var(--border));
+}
+.panel-status[data-status="error"] .panel-status-watermark {
+  color: color-mix(in srgb, var(--destructive) 9%, transparent);
+}
+
+.panel-status-body-html {
+  position: relative;
+  margin-top: var(--space-2);
+  font-size: 14.5px;
+  line-height: 1.75;
+}
+.panel-status-body-html form {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-1_5);
+  margin-top: var(--space-1_5);
+}
+.panel-status-body-html .muted {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
 .panel-status-guide {
   position: relative;
   margin-top: var(--space-2_5);

@@ -158,7 +158,7 @@ templates.env.globals["template_variable_specs"] = template_variable_specs
 def render_panel_status(
     request: Request,
     *,
-    code: int,
+    code: int | str,
     title: str,
     message: str,
     ref: str | None = None,
@@ -171,38 +171,33 @@ def render_panel_status(
     code_block: str | None = None,
     guide_note: str | None = None,
     footer: str | None = None,
+    http_status: int | None = None,
+    watermark: str | None = None,
+    kicker: str | None = None,
+    body_html: str = "",
 ):
-    """Shared branded status page (404 / 403 / 500 / setup gate)."""
-    from app.version import __version__ as _ver
+    """Shared branded status page (404 / 403 / 500 / setup gate / payment returns)."""
+    from app.api.status_render import render_status_page
 
-    try:
-        from app.services.pwa import panel_display_name
-
-        pname = panel_display_name()
-    except Exception:
-        pname = "MrClockBot"
-    return templates.TemplateResponse(
+    return render_status_page(
         request,
-        "panel_status.html",
-        {
-            "code": int(code),
-            "title": title,
-            "message": message,
-            "ref": ref,
-            "primary_href": primary_href or "",
-            "primary_label": primary_label,
-            "secondary_href": secondary_href or "",
-            "secondary_label": secondary_label,
-            "guide_heading": guide_heading or "",
-            "guide_steps": guide_steps or [],
-            "code_block": code_block or "",
-            "guide_note": guide_note or "",
-            "footer": footer
-            or "اگر مشکل ادامه داشت، از حساب خارج شوید و دوباره وارد شوید.",
-            "app_version": _ver,
-            "pwa_name": pname,
-        },
-        status_code=int(code),
+        kind=code,
+        title=title,
+        message=message,
+        http_status=http_status,
+        watermark=watermark,
+        kicker=kicker,
+        ref=ref,
+        primary_href=primary_href,
+        primary_label=primary_label,
+        secondary_href=secondary_href,
+        secondary_label=secondary_label,
+        guide_heading=guide_heading,
+        guide_steps=guide_steps,
+        code_block=code_block,
+        guide_note=guide_note,
+        body_html=body_html,
+        footer=footer,
     )
 
 
