@@ -421,8 +421,15 @@ class ShopWalletIsolationTests(unittest.IsolatedAsyncioTestCase):
         _ = (app, _db, _staff_platform, RedirectResponse, register_ux20_pages)
 
     async def test_psp_nok_does_not_burn_settlement_source(self):
+        from app.services.payment_settlement import callback_indicates_user_abort
+
+        # Soft abort must leave the open settlement retryable (Zarinpal NOK / SunPay success=0).
+        self.assertTrue(callback_indicates_user_abort({"Status": "NOK"}))
+        self.assertTrue(callback_indicates_user_abort({"success": "0"}))
+        self.assertFalse(callback_indicates_user_abort({"Status": "OK"}))
+        self.assertFalse(callback_indicates_user_abort({"success": "1"}))
         src = (ROOT / "app/services/payment_settlement.py").read_text(encoding="utf-8")
-        self.assertIn('cb_status != "OK"', src)
+        self.assertIn("callback_indicates_user_abort", src)
         self.assertIn("Soft cancel", src)
 
     async def test_linked_service_delete_and_renew_guards(self):
