@@ -1043,6 +1043,7 @@ DEFAULT_SETTINGS = {
     "pay_discount_enabled": "1",
     "psp_provider": "zarinpal",
     "psp_merchant_id": "",
+    "psp_pay_url": "",
     "psp_sandbox": "1",
     "psp_pay_text": (
         "مبلغ قابل پرداخت: <b>{amount}</b>\n"
@@ -1556,7 +1557,12 @@ SETTING_GROUPS = {
         ("pay_wallet_enabled", "کیف پول داخلی", "toggle", "پرداخت از موجودی کیف پول کاربر"),
         ("pay_card_enabled", "کارت به کارت", "toggle", ""),
         ("pay_gateway_enabled", "درگاه پرداخت (لینک + رسید)", "toggle", "لینک درگاه خارجی + ارسال رسید — روش قبلی حفظ می‌شود"),
-        ("pay_psp_enabled", "درگاه آنلاین API", "toggle", "درگاه واقعی request→verify (Mock بدون مرچنت / زرین‌پال با مرچنت)"),
+        (
+            "pay_psp_enabled",
+            "درگاه آنلاین API",
+            "toggle",
+            "درگاه واقعی request→verify (زرین‌پال / سان‌پی / Mock فقط با ALLOW_SETTLEMENT_MOCK)",
+        ),
         (
             "pay_bbc_enabled",
             "بزن به کارت",
@@ -1644,20 +1650,30 @@ SETTING_GROUPS = {
             "psp_provider",
             "ارائه‌دهنده",
             "select",
-            "zarinpal = درگاه واقعی؛ mock فقط با ALLOW_SETTLEMENT_MOCK=1 روی سرور",
-            [("zarinpal", "زرین‌پال"), ("mock", "Mock (فقط تست محلی)")],
+            "zarinpal / sunpay = درگاه واقعی؛ mock فقط با ALLOW_SETTLEMENT_MOCK=1 روی سرور",
+            [
+                ("zarinpal", "زرین‌پال"),
+                ("sunpay", "سان‌پی (SunPay)"),
+                ("mock", "Mock (فقط تست محلی)"),
+            ],
         ),
         (
             "psp_merchant_id",
-            "مرچنت آیدی",
+            "مرچنت / کلید API",
             "password",
-            "خالی بماند = بدون تغییر. برای mock لازم نیست",
+            "زرین‌پال: Merchant ID — سان‌پی: api_key. خالی بماند = بدون تغییر. برای mock لازم نیست",
+        ),
+        (
+            "psp_pay_url",
+            "آدرس پایه درگاه (PAY_URL)",
+            "text",
+            "فقط سان‌پی: مثلاً https://pay.example.com — بدون اسلش پایانی",
         ),
         (
             "psp_sandbox",
             "حالت سندباکس",
             "toggle",
-            "روشن = محیط آزمایشی زرین‌پال",
+            "روشن = محیط آزمایشی زرین‌پال (برای سان‌پی اثر ندارد)",
         ),
         (
             "psp_pay_text",

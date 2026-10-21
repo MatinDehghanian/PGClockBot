@@ -1,7 +1,7 @@
 """Payment Settlement Core — additive, fail-closed, tenant-isolated, idempotent.
 
 Channels:
-  - psp: Iranian/online gateway (mock gated by env / zarinpal / …)
+  - psp: Iranian/online gateway (mock gated by env / zarinpal / sunpay / …)
   - card_auto: signed webhook from card-confirm providers (per-tenant secret)
   - bbc: BezanBeCard card-to-card match (see ``bbc_settlement``)
 
@@ -64,6 +64,55 @@ def _public_base() -> str:
 
 def _on(val: str | None) -> bool:
     return str(val or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def callback_indicates_user_abort(callback_params: dict[str, Any]) -> bool:
+    """True when the browser return clearly means the payer left without paying.
+
+    Must NOT treat a missing flag as abort: after success=1 / Status=OK a failed
+    verify API call should still mark the settlement failed (not retry forever).
+    """
+    if not callback_params:
+        return False
+    # Zarinpal-style Status=OK / NOK
+    status = str(
+        callback_params.get("Status") or callback_params.get("status") or ""
+    ).strip().upper()
+    if status and status not in {"OK", "PAID", "SUCCESS"}:
+        return True
+    # SunPay-style success=1 / 0 (only when the key is present)
+    if "success" in callback_params:
+        raw = callback_params.get("success")
+        if raw is True:
+            return False
+        if raw is False:
+            return True
+        if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+            return int(raw) != 1
+        text = str(raw).strip().lower()
+        if text in {"1", "true", "yes", "ok", "success"}:
+            return False
+        return True
+    return False
+
+
+def callback_invoice_matches_settlement(
+    callback_params: dict[str, Any], *, settlement_id: int
+) -> None:
+    """When the gateway echoes invoice_id, it must equal our settlement row id."""
+    if "invoice_id" not in callback_params:
+        return
+    raw = callback_params.get("invoice_id")
+    if raw is None or str(raw).strip() == "":
+        return
+    if isinstance(raw, bool):
+        raise ValueError("شناسه فاکتور نامعتبر است")
+    try:
+        invoice_id = int(raw)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("شناسه فاکتور نامعتبر است") from exc
+    if invoice_id != int(settlement_id):
+        raise ValueError("شناسه فاکتور با تسویه هم‌خوانی ندارد")
 
 
 def settlement_mock_allowed() -> bool:
@@ -285,7 +334,7 @@ async def create_psp_checkout(
     provider = str(ui.get("psp_provider") or "zarinpal").strip().lower() or "zarinpal"
     if provider == "mock" and not settlement_mock_allowed():
         raise ValueError(
-            "درگاه mock فقط با ALLOW_SETTLEMENT_MOCK=1 فعال است — provider را zarinpal بگذارید"
+            "درگاه mock فقط با ALLOW_SETTLEMENT_MOCK=1 فعال است — provider را zarinpal یا sunpay بگذارید"
         )
 
     base = _public_base()
@@ -804,9 +853,13 @@ async def complete_psp_return(
 
     base = _public_base() or "http://127.0.0.1:8000"
     adapter = get_psp_adapter(provider, ui=ui, public_base_url=base)
+    callback_invoice_matches_settlement(
+        callback_params, settlement_id=int(settlement.id)
+    )
     external_ref = settlement.external_ref or str(
         callback_params.get("Authority")
         or callback_params.get("authority")
+        or callback_params.get("token")
         or callback_params.get("external_ref")
         or ""
     )
@@ -822,13 +875,10 @@ async def complete_psp_return(
         callback_params=callback_params,
     )
     if not verified.ok:
-        # Soft cancel (Status=NOK / user backed out) must NOT burn the settlement.
-        # Anyone can hit the public return URL with Status=NOK and otherwise
-        # permanently FAIL a pending checkout before the real payer finishes.
-        cb_status = str(
-            callback_params.get("Status") or callback_params.get("status") or ""
-        ).strip().upper()
-        if cb_status and cb_status != "OK":
+        # Soft cancel (Status=NOK / success=0 / user backed out) must NOT burn
+        # the settlement. Anyone can hit the public return URL with a failure
+        # flag and otherwise permanently FAIL a pending checkout early.
+        if callback_indicates_user_abort(callback_params):
             raise ValueError(verified.message or "پرداخت توسط کاربر تکمیل نشد")
         settlement.status = SettlementStatus.FAILED.value
         settlement.error_message = (verified.message or "verify failed")[:500]
