@@ -115,8 +115,8 @@ def register_settlement_pages(app, *, get_db):
         session: AsyncSession = Depends(get_db),
     ):
         from app.services.payment_settlement import (
+            deliver_psp_once,
             mock_psp_pay,
-            notify_after_settlement,
             settlement_mock_allowed,
         )
 
@@ -136,15 +136,11 @@ def register_settlement_pages(app, *, get_db):
                 ok=False,
                 status_code=400,
             )
-        payment = await session.get(Payment, int(settlement.payment_id))
-        order = None
-        if payment and payment.order_id:
-            order = await session.get(Order, payment.order_id)
-        if payment:
+        if settlement.status == SettlementStatus.SETTLED.value:
             try:
-                await notify_after_settlement(session, payment, order)
+                await deliver_psp_once(session, settlement)
             except Exception:
-                logger.exception("mock pay notify failed payment=%s", payment.id)
+                logger.exception("mock pay notify failed settlement=%s", settlement.id)
         return _html_page(
             "موفق",
             "<h1>پرداخت آزمایشی تأیید شد</h1>"
@@ -161,7 +157,7 @@ def register_settlement_pages(app, *, get_db):
         from app.db.models import PaymentSettlement
         from app.services.payment_settlement import (
             complete_psp_return,
-            notify_after_settlement,
+            deliver_psp_once,
             settlement_mock_allowed,
         )
 
@@ -196,15 +192,11 @@ def register_settlement_pages(app, *, get_db):
                 ok=False,
                 status_code=400,
             )
-        payment = await session.get(Payment, int(settlement.payment_id))
-        order = None
-        if payment and payment.order_id:
-            order = await session.get(Order, payment.order_id)
-        if payment and settlement.status == SettlementStatus.SETTLED.value:
+        if settlement.status == SettlementStatus.SETTLED.value:
             try:
-                await notify_after_settlement(session, payment, order)
+                await deliver_psp_once(session, settlement)
             except Exception:
-                logger.exception("psp return notify failed payment=%s", payment.id)
+                logger.exception("psp return notify failed settlement=%s", settlement.id)
         return _html_page(
             "موفق",
             "<h1>پرداخت تأیید شد</h1><p>می‌توانید به تلگرام برگردید.</p>",

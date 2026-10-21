@@ -1,7 +1,7 @@
 """Payment Settlement Core — additive, fail-closed, tenant-isolated, idempotent.
 
 Channels:
-  - psp: Iranian/online gateway (mock gated by env / zarinpal / …)
+  - psp: Iranian/online gateway (mock gated by env / zarinpal / sunpay / …)
   - card_auto: signed webhook from card-confirm providers (per-tenant secret)
   - bbc: BezanBeCard card-to-card match (see ``bbc_settlement``)
 
@@ -16,7 +16,7 @@ import hmac
 import json
 import logging
 import secrets
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
@@ -64,6 +64,55 @@ def _public_base() -> str:
 
 def _on(val: str | None) -> bool:
     return str(val or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def callback_indicates_user_abort(callback_params: dict[str, Any]) -> bool:
+    """True when the browser return clearly means the payer left without paying.
+
+    Missing flags are NOT an abort (and must not burn the settlement either —
+    see complete_psp_return). Used for messaging / tests only.
+    """
+    if not callback_params:
+        return False
+    # Zarinpal-style Status=OK / NOK
+    status = str(
+        callback_params.get("Status") or callback_params.get("status") or ""
+    ).strip().upper()
+    if status and status not in {"OK", "PAID", "SUCCESS"}:
+        return True
+    # SunPay-style success=1 / 0 (only when the key is present)
+    if "success" in callback_params:
+        raw = callback_params.get("success")
+        if raw is True:
+            return False
+        if raw is False:
+            return True
+        if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+            return int(raw) != 1
+        text = str(raw).strip().lower()
+        if text in {"1", "true", "yes", "ok", "success"}:
+            return False
+        return True
+    return False
+
+
+def callback_invoice_matches_settlement(
+    callback_params: dict[str, Any], *, settlement_id: int
+) -> None:
+    """When the gateway echoes invoice_id, it must equal our settlement row id."""
+    if "invoice_id" not in callback_params:
+        return
+    raw = callback_params.get("invoice_id")
+    if raw is None or str(raw).strip() == "":
+        return
+    if isinstance(raw, bool):
+        raise ValueError("شناسه فاکتور نامعتبر است")
+    try:
+        invoice_id = int(raw)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("شناسه فاکتور نامعتبر است") from exc
+    if invoice_id != int(settlement_id):
+        raise ValueError("شناسه فاکتور با تسویه هم‌خوانی ندارد")
 
 
 def settlement_mock_allowed() -> bool:
@@ -285,7 +334,7 @@ async def create_psp_checkout(
     provider = str(ui.get("psp_provider") or "zarinpal").strip().lower() or "zarinpal"
     if provider == "mock" and not settlement_mock_allowed():
         raise ValueError(
-            "درگاه mock فقط با ALLOW_SETTLEMENT_MOCK=1 فعال است — provider را zarinpal بگذارید"
+            "درگاه mock فقط با ALLOW_SETTLEMENT_MOCK=1 فعال است — provider را zarinpal یا sunpay بگذارید"
         )
 
     base = _public_base()
@@ -804,9 +853,13 @@ async def complete_psp_return(
 
     base = _public_base() or "http://127.0.0.1:8000"
     adapter = get_psp_adapter(provider, ui=ui, public_base_url=base)
+    callback_invoice_matches_settlement(
+        callback_params, settlement_id=int(settlement.id)
+    )
     external_ref = settlement.external_ref or str(
         callback_params.get("Authority")
         or callback_params.get("authority")
+        or callback_params.get("token")
         or callback_params.get("external_ref")
         or ""
     )
@@ -820,20 +873,21 @@ async def complete_psp_return(
         external_ref=external_ref,
         amount=int(settlement.amount),
         callback_params=callback_params,
+        expected_invoice_id=int(settlement.id),
     )
     if not verified.ok:
-        # Soft cancel (Status=NOK / user backed out) must NOT burn the settlement.
-        # Anyone can hit the public return URL with Status=NOK and otherwise
-        # permanently FAIL a pending checkout before the real payer finishes.
-        cb_status = str(
-            callback_params.get("Status") or callback_params.get("status") or ""
-        ).strip().upper()
-        if cb_status and cb_status != "OK":
-            raise ValueError(verified.message or "پرداخت توسط کاربر تکمیل نشد")
-        settlement.status = SettlementStatus.FAILED.value
-        settlement.error_message = (verified.message or "verify failed")[:500]
-        await session.commit()
-        raise ValueError(verified.message or "تأیید درگاه ناموفق بود")
+        # Public return URL is unauthenticated and settlement ids are sequential.
+        # Never mark FAILED here: missing params, user abort, network/timeout,
+        # or "not paid yet" must leave AWAITING so the real payer can finish and
+        # verify (read-only) can be retried. Only settle_and_approve amount/tenant
+        # mismatches permanently fail a settlement.
+        # Persist last error for admin visibility while staying AWAITING;
+        # the PSP poller retries verify without needing the browser return.
+        msg = (verified.message or "تأیید درگاه ناموفق بود")[:500]
+        if settlement.status == SettlementStatus.AWAITING.value:
+            settlement.error_message = msg
+            await session.commit()
+        raise ValueError(msg)
 
     paid_amount = verified.amount if verified.amount is not None else settlement.amount
     await settle_and_approve(
@@ -989,6 +1043,116 @@ async def mock_psp_pay(
         },
         reseller_id=settlement.shop_owner_id,
     )
+
+
+PSP_POLL_BATCH = 40
+# Abandoned checkouts (closed tab, never paid) must age out; matches bbc late window.
+PSP_POLL_WINDOW = timedelta(hours=48)
+_PSP_POLLABLE = frozenset({"sunpay", "zarinpal"})
+
+
+def _psp_poll_callback_params(settlement: PaymentSettlement) -> dict[str, Any] | None:
+    """Trusted server-side params so adapters will call the read-only verify API."""
+    provider = (settlement.provider or "").strip().lower()
+    token = (settlement.external_ref or "").strip()
+    if not token or provider not in _PSP_POLLABLE:
+        return None
+    if provider == "sunpay":
+        return {
+            "success": "1",
+            "token": token,
+            "invoice_id": str(int(settlement.id)),
+        }
+    # zarinpal
+    return {"Status": "OK", "Authority": token}
+
+
+async def claim_psp_delivery_notice(
+    session: AsyncSession, settlement: PaymentSettlement
+) -> bool:
+    """True for exactly one caller once SETTLED; that caller sends Telegram delivery."""
+    claimed = await session.execute(
+        update(PaymentSettlement)
+        .where(
+            PaymentSettlement.id == int(settlement.id),
+            PaymentSettlement.status == SettlementStatus.SETTLED.value,
+            PaymentSettlement.notified_at.is_(None),
+        )
+        .values(notified_at=datetime.now(timezone.utc))
+    )
+    await session.commit()
+    return claimed.rowcount == 1
+
+
+async def deliver_psp_once(session: AsyncSession, settlement: PaymentSettlement) -> None:
+    if not await claim_psp_delivery_notice(session, settlement):
+        return
+    payment = await session.get(Payment, int(settlement.payment_id))
+    if payment is None:
+        return
+    order = await session.get(Order, int(payment.order_id)) if payment.order_id else None
+    try:
+        await notify_after_settlement(session, payment, order)
+    except Exception:
+        logger.exception("psp delivery notice failed payment=%s", payment.id)
+
+
+async def _poll_one_psp_settlement(
+    session: AsyncSession, settlement: PaymentSettlement
+) -> bool:
+    """Re-verify one open PSP row. True when it became SETTLED in this pass."""
+    params = _psp_poll_callback_params(settlement)
+    if params is None:
+        return False
+    try:
+        updated = await complete_psp_return(
+            session,
+            provider=str(settlement.provider),
+            settlement_id=int(settlement.id),
+            callback_params=params,
+            reseller_id=settlement.shop_owner_id,
+        )
+    except ValueError:
+        logger.info("psp poll verify not ready settlement=%s", settlement.id)
+        return False
+    except Exception:
+        logger.exception("psp poll failed settlement=%s", settlement.id)
+        from app.services.db_safe import rollback_quiet
+
+        await rollback_quiet(session)
+        return False
+    if updated.status != SettlementStatus.SETTLED.value:
+        return False
+    await deliver_psp_once(session, updated)
+    return True
+
+
+async def poll_psp_settlements(session: AsyncSession, *, limit: int = PSP_POLL_BATCH) -> int:
+    """Background backup for browser return: re-verify open sunpay/zarinpal settlements.
+
+    Only rows created within ``PSP_POLL_WINDOW`` are considered so abandoned
+    checkouts cannot grow an unbounded verify queue (and delay fresh payers).
+    """
+    since = datetime.now(timezone.utc) - PSP_POLL_WINDOW
+    rows = (
+        await session.execute(
+            select(PaymentSettlement)
+            .where(
+                PaymentSettlement.channel == CHANNEL_PSP,
+                PaymentSettlement.status == SettlementStatus.AWAITING.value,
+                PaymentSettlement.external_ref.is_not(None),
+                PaymentSettlement.provider.in_(tuple(_PSP_POLLABLE)),
+                PaymentSettlement.created_at >= since,
+            )
+            .order_by(PaymentSettlement.updated_at.asc(), PaymentSettlement.id.asc())
+            .limit(max(1, min(100, int(limit))))
+        )
+    ).scalars().all()
+    settled = 0
+    for settlement in rows:
+        if await _poll_one_psp_settlement(session, settlement):
+            settled += 1
+    return settled
 
 
 async def notify_after_settlement(
