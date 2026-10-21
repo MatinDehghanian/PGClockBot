@@ -72,6 +72,22 @@ def _patch_https_public_base(base: str = "https://bot.test"):
     return patch.object(pub, "https_public_base", return_value=base)
 
 
+def _capture_sunpay_warnings():
+    """Patch ``logger.warning`` — more reliable than ``assertLogs`` in large suites."""
+    records: list[str] = []
+
+    def _warning(msg: object, *args: object, **_kwargs: object) -> None:
+        text = str(msg)
+        if args:
+            try:
+                text = text % args
+            except (TypeError, ValueError):
+                text = f"{text} {' '.join(str(a) for a in args)}"
+        records.append(text)
+
+    return records, patch.object(sunpay_mod.logger, "warning", side_effect=_warning)
+
+
 def _checkout_req(*, settlement_id: int = 42, amount: int = 100_000) -> CheckoutRequest:
     return CheckoutRequest(
         settlement_id=settlement_id,
@@ -214,14 +230,16 @@ class SunPayClientTests(unittest.IsolatedAsyncioTestCase):
                 json={"success": 0, "message": "gateway busy", "api_key": "LEAK"},
             )
 
+        records, warn_p = _capture_sunpay_warnings()
         http_p, dns_p, client = _patch_sunpay_http(handler)
-        with http_p, dns_p, self.assertLogs(sunpay_mod.logger, level="WARNING") as logs:
+        with http_p, dns_p, warn_p:
             adapter = SunPayAdapter(api_key=API_KEY, pay_url=PAY_URL)
             with self.assertRaises(SunPayGatewayError) as caught:
                 await adapter.create_checkout(_checkout_req())
         await client.aclose()
         self.assertEqual(str(caught.exception), CUSTOMER_REQUEST_FAILED)
-        joined = "\n".join(logs.output)
+        joined = "\n".join(records)
+        self.assertTrue(records, "expected sunpay warning log")
         self.assertIn("status=200", joined)
         self.assertIn("gateway busy", joined)
         self.assertNotIn(API_KEY, joined)
@@ -234,13 +252,15 @@ class SunPayClientTests(unittest.IsolatedAsyncioTestCase):
                     return httpx.Response(405, json=body)
                 return httpx.Response(422, text=str(body))
 
+            records, warn_p = _capture_sunpay_warnings()
             http_p, dns_p, client = _patch_sunpay_http(handler)
-            with http_p, dns_p, self.assertLogs(sunpay_mod.logger, level="WARNING") as logs:
+            with http_p, dns_p, warn_p:
                 adapter = SunPayAdapter(api_key=API_KEY, pay_url=PAY_URL)
                 with self.assertRaises(SunPayGatewayError):
                     await adapter.create_checkout(_checkout_req())
             await client.aclose()
-            return "\n".join(logs.output)
+            self.assertTrue(records, "expected sunpay warning log")
+            return "\n".join(records)
 
         out_json = await run({"error": "method not allowed"}, json_mode=True)
         self.assertIn("status=405", out_json)
@@ -255,14 +275,15 @@ class SunPayClientTests(unittest.IsolatedAsyncioTestCase):
                 200, json={"success": 0, "error": "<script>api_key=steal</script>"}
             )
 
+        records, warn_p = _capture_sunpay_warnings()
         http_p, dns_p, client = _patch_sunpay_http(handler)
-        with http_p, dns_p, self.assertLogs(sunpay_mod.logger, level="WARNING") as logs:
+        with http_p, dns_p, warn_p:
             adapter = SunPayAdapter(api_key=API_KEY, pay_url=PAY_URL)
             with self.assertRaises(SunPayGatewayError) as caught:
                 await adapter.create_checkout(_checkout_req())
         await client.aclose()
         self.assertEqual(str(caught.exception), CUSTOMER_REQUEST_FAILED)
-        self.assertIn("api_key=<redacted>", "\n".join(logs.output))
+        self.assertIn("api_key=<redacted>", "\n".join(records))
 
     async def test_own_api_key_value_is_scrubbed_even_without_field_name(self) -> None:
         def handler(_request: httpx.Request) -> httpx.Response:
@@ -274,13 +295,15 @@ class SunPayClientTests(unittest.IsolatedAsyncioTestCase):
                 },
             )
 
+        records, warn_p = _capture_sunpay_warnings()
         http_p, dns_p, client = _patch_sunpay_http(handler)
-        with http_p, dns_p, self.assertLogs(sunpay_mod.logger, level="WARNING") as logs:
+        with http_p, dns_p, warn_p:
             adapter = SunPayAdapter(api_key=API_KEY, pay_url=PAY_URL)
             with self.assertRaises(SunPayGatewayError):
                 await adapter.create_checkout(_checkout_req())
         await client.aclose()
-        joined = "\n".join(logs.output)
+        joined = "\n".join(records)
+        self.assertTrue(records, "expected sunpay warning log")
         self.assertNotIn(API_KEY, joined)
         self.assertIn("<redacted>", joined)
 
