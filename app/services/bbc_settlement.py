@@ -32,7 +32,6 @@ from app.services.payment_settlement import (
     _get_by_idem,
     _insert_settlement_race_safe,
     _on,
-    _public_base,
     _shop_ids_equal,
     idem_key_bbc,
     notify_after_settlement,
@@ -40,7 +39,7 @@ from app.services.payment_settlement import (
     settle_and_approve,
     tenant_key_for,
 )
-from app.services.ssl_certs import https_is_active, public_panel_base_url
+from app.services.public_https import env_public_base, https_public_base
 from app.services.users import get_all_settings
 
 logger = logging.getLogger(__name__)
@@ -57,22 +56,17 @@ class BbcNotReady(ValueError):
 
 
 def https_base() -> str:
-    """The https origin for BezanBeCard callbacks, or an empty string when there is none.
-
-    TLS enabled from the panel is stored with the certificate, not in ``.env``, so the live
-    panel address wins over ``PUBLIC_BASE_URL`` / ``WEBHOOK_URL``.
-    """
-    if https_is_active():
-        live = public_panel_base_url().strip().rstrip("/")
-        if live.startswith("https://"):
-            return live
-    configured = _public_base()
-    return configured if configured.startswith("https://") else ""
+    """The https origin for BezanBeCard callbacks, or an empty string when there is none."""
+    return https_public_base()
 
 
 def https_base_ready() -> bool:
     """BezanBeCard calls back and returns over https only."""
     return bool(https_base())
+
+
+# Compat alias for tests that still patch ``bbc_settlement._public_base``.
+_public_base = env_public_base
 
 
 async def bbc_enable_error(session: AsyncSession, payload: dict[str, str], *, reseller_id: int | None) -> str | None:

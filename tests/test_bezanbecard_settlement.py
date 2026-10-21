@@ -140,6 +140,8 @@ class _Db(unittest.IsolatedAsyncioTestCase):
         clear_settings_cache()
         for patcher in (
             patch.object(flow, "_public_base", return_value="https://bot.test"),
+            patch("app.services.public_https.env_public_base", return_value="https://bot.test"),
+            patch("app.services.public_https.https_is_active", return_value=False),
             patch.object(flow, "notify_after_settlement", AsyncMock()),
             patch("app.services.notifications.notify_settlement_review", AsyncMock(return_value=1)),
         ):

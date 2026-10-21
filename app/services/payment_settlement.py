@@ -337,11 +337,25 @@ async def create_psp_checkout(
             "درگاه mock فقط با ALLOW_SETTLEMENT_MOCK=1 فعال است — provider را zarinpal یا sunpay بگذارید"
         )
 
-    base = _public_base()
-    if not base and provider != "mock":
-        raise ValueError("PUBLIC_BASE_URL برای بازگشت درگاه تنظیم نشده")
-    if not base:
-        base = "http://127.0.0.1:8000"
+    # SunPay requires a public https callback (same resolution as BezanBeCard).
+    # Zarinpal/mock keep the previous env-based base (http allowed for local/mock).
+    if provider == "sunpay":
+        from app.services.public_https import https_public_base
+        from app.services.payment_providers.sunpay import CUSTOMER_UNAVAILABLE
+
+        base = https_public_base()
+        if not base:
+            logger.warning(
+                "sunpay checkout refused: no https public base "
+                "(enable panel TLS or set PUBLIC_BASE_URL/WEBHOOK_URL to https)"
+            )
+            raise ValueError(CUSTOMER_UNAVAILABLE)
+    else:
+        base = _public_base()
+        if not base and provider != "mock":
+            raise ValueError("PUBLIC_BASE_URL برای بازگشت درگاه تنظیم نشده")
+        if not base:
+            base = "http://127.0.0.1:8000"
 
     idem = idem_key_psp(int(payment.id))
     existing = await _get_by_idem(session, idem)
@@ -439,8 +453,11 @@ async def create_psp_checkout(
     try:
         result = await adapter.create_checkout(req)
     except Exception as exc:
+        from app.services.payment_providers.sunpay import SunPayGatewayError
+
         settlement.status = SettlementStatus.FAILED.value
-        settlement.error_message = str(exc)[:500]
+        detail = getattr(exc, "admin_detail", None) if isinstance(exc, SunPayGatewayError) else None
+        settlement.error_message = (str(detail or exc))[:500]
         await session.commit()
         raise
 
