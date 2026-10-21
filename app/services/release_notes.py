@@ -15,6 +15,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.4.26": [
+        "پرداخت: درگاه آنلاین SunPay به‌عنوان PSP واقعی (درخواست → هدایت → تأیید) با همان مسیر تسویه؛ بازگشت ناموفق عمومی تسویه را نمی‌سوزاند و poller تسویه‌های باز را دوباره verify می‌کند (#893)",
+        "پرداخت: آدرس PAY_URL فقط https و بدون هدف خصوصی/DNS داخلی پذیرفته می‌شود؛ تحویل موفق یک‌بار اعلام می‌شود (#893)",
+        "ریستور: backup/dev-pre-v0.4.26 (commit ca841eac)",
+    ],
     "0.4.25": [
         "نماینده: سوییچ «فروش بیش از سقف حجم» هنگام ساخت نماینده (و مسیرهای معادل ادمین پاسارگارد) قابل تنظیم است و در کارت ربات هم روشن/خاموش می‌شود (#891)",
         "ریستور: backup/dev-pre-v0.4.25 (commit ebd27e71)",
