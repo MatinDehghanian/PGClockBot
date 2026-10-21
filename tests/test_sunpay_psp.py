@@ -30,6 +30,7 @@ from app.services.payment_providers import sunpay as sunpay_mod
 from app.services.payment_providers.sunpay import (
     SunPayAdapter,
     close_client,
+    ensure_sunpay_pay_host_public,
     validate_sunpay_pay_url,
 )
 from app.services.payment_settlement import (
@@ -37,6 +38,7 @@ from app.services.payment_settlement import (
     callback_invoice_matches_settlement,
     complete_psp_return,
     create_psp_checkout,
+    poll_psp_settlements,
 )
 from app.services.users import clear_settings_cache, set_setting
 
@@ -45,9 +47,19 @@ API_KEY = "sunpay-test-key-abcdef"
 TOKEN = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
 
 
+def _patch_public_dns(*addrs: str):
+    # Use a globally routed address — TEST-NET (203.0.113/24) is is_private on Py3.12+.
+    return patch.object(
+        sunpay_mod, "_resolve_host_addresses", return_value=list(addrs) or ["8.8.8.8"]
+    )
+
+
 def _patch_sunpay_http(handler):
+    """HTTP mock + public DNS so outbound host checks pass in unit tests."""
     client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-    return patch.object(sunpay_mod, "_http", return_value=client), client
+    http_patch = patch.object(sunpay_mod, "_http", return_value=client)
+    dns_patch = _patch_public_dns()
+    return http_patch, dns_patch, client
 
 
 def _checkout_req(*, settlement_id: int = 42, amount: int = 100_000) -> CheckoutRequest:
@@ -63,7 +75,7 @@ def _checkout_req(*, settlement_id: int = 42, amount: int = 100_000) -> Checkout
     )
 
 
-class SunPayUrlValidationTests(unittest.TestCase):
+class SunPayUrlValidationTests(unittest.IsolatedAsyncioTestCase):
     def test_https_public_ok(self) -> None:
         self.assertEqual(
             validate_sunpay_pay_url("https://pay.example.com/"),
@@ -91,6 +103,15 @@ class SunPayUrlValidationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             adapter._require_config()
 
+    async def test_dns_private_resolution_rejected(self) -> None:
+        with _patch_public_dns("10.1.2.3"):
+            with self.assertRaises(ValueError):
+                await ensure_sunpay_pay_host_public("evil.example.com")
+
+    async def test_dns_public_resolution_ok(self) -> None:
+        with _patch_public_dns("1.1.1.1"):
+            await ensure_sunpay_pay_host_public("pay.example.com")
+
 
 class SunPayClientTests(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self) -> None:
@@ -103,8 +124,8 @@ class SunPayClientTests(unittest.IsolatedAsyncioTestCase):
             seen.append(request)
             return httpx.Response(200, json={"success": 1, "data": {"token": TOKEN}})
 
-        patcher, client = _patch_sunpay_http(handler)
-        with patcher:
+        http_p, dns_p, client = _patch_sunpay_http(handler)
+        with http_p, dns_p:
             adapter = SunPayAdapter(api_key=API_KEY, pay_url=PAY_URL)
             result = await adapter.create_checkout(_checkout_req())
         await client.aclose()
@@ -120,20 +141,22 @@ class SunPayClientTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_request_rejects_amount_below_minimum_and_bool(self) -> None:
         adapter = SunPayAdapter(api_key=API_KEY, pay_url=PAY_URL)
-        with self.assertRaises(ValueError):
-            await adapter.create_checkout(_checkout_req(amount=999))
-        with self.assertRaises(ValueError):
-            await adapter.create_checkout(_checkout_req(amount=True))  # type: ignore[arg-type]
+        with _patch_public_dns():
+            with self.assertRaises(ValueError):
+                await adapter.create_checkout(_checkout_req(amount=999))
+            with self.assertRaises(ValueError):
+                await adapter.create_checkout(_checkout_req(amount=True))  # type: ignore[arg-type]
 
     async def test_request_fail_closed_without_credentials(self) -> None:
-        with self.assertRaises(ValueError):
-            await SunPayAdapter(api_key="", pay_url=PAY_URL).create_checkout(
-                _checkout_req()
-            )
-        with self.assertRaises(ValueError):
-            await SunPayAdapter(api_key=API_KEY, pay_url="").create_checkout(
-                _checkout_req()
-            )
+        with _patch_public_dns():
+            with self.assertRaises(ValueError):
+                await SunPayAdapter(api_key="", pay_url=PAY_URL).create_checkout(
+                    _checkout_req()
+                )
+            with self.assertRaises(ValueError):
+                await SunPayAdapter(api_key=API_KEY, pay_url="").create_checkout(
+                    _checkout_req()
+                )
 
     async def test_request_maps_api_error_without_raw_message(self) -> None:
         def handler(_request: httpx.Request) -> httpx.Response:
@@ -145,8 +168,8 @@ class SunPayClientTests(unittest.IsolatedAsyncioTestCase):
                 },
             )
 
-        patcher, client = _patch_sunpay_http(handler)
-        with patcher:
+        http_p, dns_p, client = _patch_sunpay_http(handler)
+        with http_p, dns_p:
             adapter = SunPayAdapter(api_key=API_KEY, pay_url=PAY_URL)
             with self.assertRaises(ValueError) as caught:
                 await adapter.create_checkout(_checkout_req())
@@ -173,8 +196,8 @@ class SunPayClientTests(unittest.IsolatedAsyncioTestCase):
                 },
             )
 
-        patcher, client = _patch_sunpay_http(handler)
-        with patcher:
+        http_p, dns_p, client = _patch_sunpay_http(handler)
+        with http_p, dns_p:
             adapter = SunPayAdapter(api_key=API_KEY, pay_url=PAY_URL)
             verified = await adapter.verify(
                 external_ref=TOKEN,
@@ -203,8 +226,8 @@ class SunPayClientTests(unittest.IsolatedAsyncioTestCase):
                 },
             )
 
-        patcher, client = _patch_sunpay_http(handler)
-        with patcher:
+        http_p, dns_p, client = _patch_sunpay_http(handler)
+        with http_p, dns_p:
             adapter = SunPayAdapter(api_key=API_KEY, pay_url=PAY_URL)
             # Attacker-controlled callback invoice matches settlement, but gateway says 99.
             verified = await adapter.verify(
@@ -224,8 +247,8 @@ class SunPayClientTests(unittest.IsolatedAsyncioTestCase):
             calls["n"] += 1
             return httpx.Response(500, text="nope")
 
-        patcher, client = _patch_sunpay_http(handler)
-        with patcher:
+        http_p, dns_p, client = _patch_sunpay_http(handler)
+        with http_p, dns_p:
             adapter = SunPayAdapter(api_key=API_KEY, pay_url=PAY_URL)
             verified = await adapter.verify(
                 external_ref=TOKEN,
@@ -252,8 +275,8 @@ class SunPayClientTests(unittest.IsolatedAsyncioTestCase):
                 },
             )
 
-        patcher, client = _patch_sunpay_http(handler)
-        with patcher:
+        http_p, dns_p, client = _patch_sunpay_http(handler)
+        with http_p, dns_p:
             adapter = SunPayAdapter(api_key=API_KEY, pay_url=PAY_URL)
             verified = await adapter.verify(
                 external_ref=TOKEN,
@@ -375,9 +398,10 @@ class SunPaySettlementFlowTests(unittest.IsolatedAsyncioTestCase):
         return handler
 
     async def _checkout(self, payment_id: int) -> int:
-        patcher, client = _patch_sunpay_http(self._request_handler())
+        http_p, dns_p, client = _patch_sunpay_http(self._request_handler())
         with (
-            patcher,
+            http_p,
+            dns_p,
             patch(
                 "app.services.payment_settlement._public_base",
                 return_value="https://bot.test",
@@ -402,9 +426,10 @@ class SunPaySettlementFlowTests(unittest.IsolatedAsyncioTestCase):
         self._verify_invoice_id = sid
 
         approve = AsyncMock(return_value=None)
-        patcher, client = _patch_sunpay_http(self._request_handler())
+        http_p, dns_p, client = _patch_sunpay_http(self._request_handler())
         with (
-            patcher,
+            http_p,
+            dns_p,
             patch(
                 "app.services.payment_settlement._public_base",
                 return_value="https://bot.test",
@@ -463,9 +488,10 @@ class SunPaySettlementFlowTests(unittest.IsolatedAsyncioTestCase):
                 raise httpx.ConnectTimeout("slow")
             return httpx.Response(404)
 
-        patcher, client = _patch_sunpay_http(handler)
+        http_p, dns_p, client = _patch_sunpay_http(handler)
         with (
-            patcher,
+            http_p,
+            dns_p,
             patch(
                 "app.services.payment_settlement._public_base",
                 return_value="https://bot.test",
@@ -535,9 +561,10 @@ class SunPaySettlementFlowTests(unittest.IsolatedAsyncioTestCase):
             shop_id = int(shop.id)
             payment_id = int(payment.id)
 
-        patcher, client = _patch_sunpay_http(self._request_handler())
+        http_p, dns_p, client = _patch_sunpay_http(self._request_handler())
         with (
-            patcher,
+            http_p,
+            dns_p,
             patch(
                 "app.services.payment_settlement._public_base",
                 return_value="https://bot.test",
@@ -564,6 +591,40 @@ class SunPaySettlementFlowTests(unittest.IsolatedAsyncioTestCase):
                         },
                         reseller_id=999999,
                     )
+        await client.aclose()
+
+    async def test_poller_settles_without_browser_return(self) -> None:
+        """Background poll re-verifies AWAITING rows after the customer closes the tab."""
+        async with self.Session() as session:
+            await self._configure_platform_sunpay(session)
+            payment = await self._seed_wallet_topup(session)
+            payment_id = int(payment.id)
+
+        sid = await self._checkout(payment_id)
+        self._verify_invoice_id = sid
+
+        approve = AsyncMock(return_value=None)
+        http_p, dns_p, client = _patch_sunpay_http(self._request_handler())
+        with (
+            http_p,
+            dns_p,
+            patch(
+                "app.services.payment_settlement._public_base",
+                return_value="https://bot.test",
+            ),
+            patch("app.services.payment_settlement.approve_payment", approve),
+            patch(
+                "app.services.payment_settlement.notify_after_settlement",
+                AsyncMock(),
+            ),
+        ):
+            async with self.Session() as session:
+                n = await poll_psp_settlements(session)
+                self.assertEqual(n, 1)
+                row = await session.get(PaymentSettlement, sid)
+                assert row is not None
+                self.assertEqual(row.status, SettlementStatus.SETTLED.value)
+                approve.assert_awaited()
         await client.aclose()
 
 

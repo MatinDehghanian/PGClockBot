@@ -11,8 +11,10 @@ Unknown / transport failures must leave the settlement open for retry.
 
 from __future__ import annotations
 
+import asyncio
 import ipaddress
 import logging
+import socket
 from typing import Any
 from urllib.parse import urlparse
 
@@ -78,18 +80,16 @@ def _host_is_blocked(host: str) -> bool:
         ip = ipaddress.ip_address(name)
     except ValueError:
         return False
-    return bool(
-        ip.is_private
-        or ip.is_loopback
-        or ip.is_link_local
-        or ip.is_reserved
-        or ip.is_multicast
-        or ip.is_unspecified
-    )
+    return _ip_is_blocked(ip)
+
+
+def _ip_is_blocked(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    # Non-global covers private, loopback, link-local, multicast, and reserved docs ranges.
+    return not bool(ip.is_global)
 
 
 def validate_sunpay_pay_url(value: str) -> str:
-    """Normalize PAY_URL: https only, no localhost/private targets (SSRF / cleartext key)."""
+    """Normalize PAY_URL: https only, no localhost/private literals (SSRF / cleartext key)."""
     raw = (value or "").strip().rstrip("/")
     if not raw:
         raise ValueError("آدرس پایه سان‌پی (PAY_URL) تنظیم نشده")
@@ -105,6 +105,39 @@ def validate_sunpay_pay_url(value: str) -> str:
     if _host_is_blocked(host):
         raise ValueError("آدرس پایه سان‌پی به میزبان داخلی مجاز نیست")
     return raw
+
+
+def _resolve_host_addresses(host: str) -> list[str]:
+    """Blocking DNS lookup — call via asyncio.to_thread from async paths."""
+    infos = socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM)
+    addrs: list[str] = []
+    seen: set[str] = set()
+    for info in infos:
+        addr = str(info[4][0])
+        if addr not in seen:
+            seen.add(addr)
+            addrs.append(addr)
+    return addrs
+
+
+async def ensure_sunpay_pay_host_public(host: str) -> None:
+    """Reject hosts whose current DNS answers include a non-public address."""
+    name = (host or "").strip().lower().rstrip(".")
+    if not name or _host_is_blocked(name):
+        raise ValueError("آدرس پایه سان‌پی به میزبان داخلی مجاز نیست")
+    try:
+        addrs = await asyncio.to_thread(_resolve_host_addresses, name)
+    except OSError as exc:
+        raise ValueError("آدرس پایه سان‌پی قابل resolve نیست") from exc
+    if not addrs:
+        raise ValueError("آدرس پایه سان‌پی قابل resolve نیست")
+    for addr in addrs:
+        try:
+            ip = ipaddress.ip_address(addr)
+        except ValueError:
+            continue
+        if _ip_is_blocked(ip):
+            raise ValueError("آدرس پایه سان‌پی به میزبان داخلی مجاز نیست")
 
 
 def _safe_int(value: Any, *, field: str) -> int:
@@ -230,6 +263,11 @@ class SunPayAdapter:
             raise ValueError("کلید API سان‌پی تنظیم نشده")
         self.pay_url = validate_sunpay_pay_url(self.pay_url)
 
+    async def _require_outbound_ready(self) -> None:
+        self._require_config()
+        host = (urlparse(self.pay_url).hostname or "").strip().lower()
+        await ensure_sunpay_pay_host_public(host)
+
     def _request_url(self) -> str:
         return f"{self.pay_url}/api/request"
 
@@ -240,7 +278,7 @@ class SunPayAdapter:
         return f"{self.pay_url}/pay/{token}"
 
     async def create_checkout(self, req: CheckoutRequest) -> CheckoutResult:
-        self._require_config()
+        await self._require_outbound_ready()
         amount = _safe_int(req.amount, field="مبلغ")
         if amount < MIN_AMOUNT_TOMAN:
             raise ValueError(f"حداقل مبلغ سان‌پی {MIN_AMOUNT_TOMAN} تومان است")
@@ -327,7 +365,7 @@ class SunPayAdapter:
             return VerifyResult(ok=False, external_ref=token, message=str(exc))
 
         try:
-            self._require_config()
+            await self._require_outbound_ready()
         except ValueError as exc:
             return VerifyResult(ok=False, external_ref=token, message=str(exc))
 

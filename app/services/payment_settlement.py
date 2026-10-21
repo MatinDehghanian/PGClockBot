@@ -881,7 +881,8 @@ async def complete_psp_return(
         # or "not paid yet" must leave AWAITING so the real payer can finish and
         # verify (read-only) can be retried. Only settle_and_approve amount/tenant
         # mismatches permanently fail a settlement.
-        # Persist last error for admin visibility while staying AWAITING (no poller yet).
+        # Persist last error for admin visibility while staying AWAITING;
+        # the PSP poller retries verify without needing the browser return.
         msg = (verified.message or "تأیید درگاه ناموفق بود")[:500]
         if settlement.status == SettlementStatus.AWAITING.value:
             settlement.error_message = msg
@@ -1042,6 +1043,108 @@ async def mock_psp_pay(
         },
         reseller_id=settlement.shop_owner_id,
     )
+
+
+PSP_POLL_BATCH = 40
+_PSP_POLLABLE = frozenset({"sunpay", "zarinpal"})
+
+
+def _psp_poll_callback_params(settlement: PaymentSettlement) -> dict[str, Any] | None:
+    """Trusted server-side params so adapters will call the read-only verify API."""
+    provider = (settlement.provider or "").strip().lower()
+    token = (settlement.external_ref or "").strip()
+    if not token or provider not in _PSP_POLLABLE:
+        return None
+    if provider == "sunpay":
+        return {
+            "success": "1",
+            "token": token,
+            "invoice_id": str(int(settlement.id)),
+        }
+    # zarinpal
+    return {"Status": "OK", "Authority": token}
+
+
+async def claim_psp_delivery_notice(
+    session: AsyncSession, settlement: PaymentSettlement
+) -> bool:
+    """True for exactly one caller once SETTLED; that caller sends Telegram delivery."""
+    claimed = await session.execute(
+        update(PaymentSettlement)
+        .where(
+            PaymentSettlement.id == int(settlement.id),
+            PaymentSettlement.status == SettlementStatus.SETTLED.value,
+            PaymentSettlement.notified_at.is_(None),
+        )
+        .values(notified_at=datetime.now(timezone.utc))
+    )
+    await session.commit()
+    return claimed.rowcount == 1
+
+
+async def deliver_psp_once(session: AsyncSession, settlement: PaymentSettlement) -> None:
+    if not await claim_psp_delivery_notice(session, settlement):
+        return
+    payment = await session.get(Payment, int(settlement.payment_id))
+    if payment is None:
+        return
+    order = await session.get(Order, int(payment.order_id)) if payment.order_id else None
+    try:
+        await notify_after_settlement(session, payment, order)
+    except Exception:
+        logger.exception("psp delivery notice failed payment=%s", payment.id)
+
+
+async def _poll_one_psp_settlement(
+    session: AsyncSession, settlement: PaymentSettlement
+) -> bool:
+    """Re-verify one open PSP row. True when it became SETTLED in this pass."""
+    params = _psp_poll_callback_params(settlement)
+    if params is None:
+        return False
+    try:
+        updated = await complete_psp_return(
+            session,
+            provider=str(settlement.provider),
+            settlement_id=int(settlement.id),
+            callback_params=params,
+            reseller_id=settlement.shop_owner_id,
+        )
+    except ValueError:
+        logger.info("psp poll verify not ready settlement=%s", settlement.id)
+        return False
+    except Exception:
+        logger.exception("psp poll failed settlement=%s", settlement.id)
+        from app.services.db_safe import rollback_quiet
+
+        await rollback_quiet(session)
+        return False
+    if updated.status != SettlementStatus.SETTLED.value:
+        return False
+    await deliver_psp_once(session, updated)
+    return True
+
+
+async def poll_psp_settlements(session: AsyncSession, *, limit: int = PSP_POLL_BATCH) -> int:
+    """Background backup for browser return: re-verify open sunpay/zarinpal settlements."""
+    rows = (
+        await session.execute(
+            select(PaymentSettlement)
+            .where(
+                PaymentSettlement.channel == CHANNEL_PSP,
+                PaymentSettlement.status == SettlementStatus.AWAITING.value,
+                PaymentSettlement.external_ref.is_not(None),
+                PaymentSettlement.provider.in_(tuple(_PSP_POLLABLE)),
+            )
+            .order_by(PaymentSettlement.updated_at.asc(), PaymentSettlement.id.asc())
+            .limit(max(1, min(100, int(limit))))
+        )
+    ).scalars().all()
+    settled = 0
+    for settlement in rows:
+        if await _poll_one_psp_settlement(session, settlement):
+            settled += 1
+    return settled
 
 
 async def notify_after_settlement(

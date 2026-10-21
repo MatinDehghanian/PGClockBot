@@ -781,6 +781,19 @@ async def run_bbc_settlement_poll() -> None:
             logger.exception("bbc settlement poll failed")
 
 
+async def run_psp_settlement_poll() -> None:
+    """Re-verify open SunPay/Zarinpal settlements when the browser never returns."""
+    from app.services.payment_settlement import poll_psp_settlements
+
+    async with SessionLocal() as session:
+        try:
+            n = await poll_psp_settlements(session)
+            if n:
+                logger.info("psp settlement poll settled=%s", n)
+        except Exception:
+            logger.exception("psp settlement poll failed")
+
+
 def start_background_scheduler() -> None:
     """Run financial and maintenance jobs as soon as the database is ready."""
     jobs = (
@@ -790,6 +803,7 @@ def start_background_scheduler() -> None:
         ("scheduled_backup", run_scheduled_backup, {"minutes": 30}, 3600),
         ("connection_status", run_connection_status, {"seconds": 60}, 60),
         ("bbc_settlement_poll", run_bbc_settlement_poll, {"seconds": 45}, 90),
+        ("psp_settlement_poll", run_psp_settlement_poll, {"seconds": 45}, 90),
         # Ticks often; each shop is recounted on the period set in volume_external_sync_minutes.
         ("volume_external_sync", run_volume_external_sync, {"minutes": 1}, 120),
     )
