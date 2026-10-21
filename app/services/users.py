@@ -1667,7 +1667,8 @@ SETTING_GROUPS = {
             "psp_pay_url",
             "آدرس پایه درگاه (PAY_URL)",
             "text",
-            "فقط سان‌پی: مثلاً https://pay.example.com — بدون اسلش پایانی",
+            "فقط سان‌پی و فقط https عمومی: مثلاً https://pay.example.com — "
+            "http و localhost/IP خصوصی رد می‌شوند",
         ),
         (
             "psp_sandbox",

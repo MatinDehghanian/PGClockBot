@@ -19,6 +19,7 @@ def get_psp_adapter(provider: str, *, ui: dict, public_base_url: str) -> PspAdap
         )
     if name == "sunpay":
         # Credential reuses psp_merchant_id (مرچنت/کلید API); PAY_URL is psp_pay_url.
+        # validate_sunpay_pay_url runs inside the adapter (https-only, no private hosts).
         return SunPayAdapter(
             api_key=str(ui.get("psp_merchant_id") or ""),
             pay_url=str(ui.get("psp_pay_url") or ""),

@@ -69,8 +69,8 @@ def _on(val: str | None) -> bool:
 def callback_indicates_user_abort(callback_params: dict[str, Any]) -> bool:
     """True when the browser return clearly means the payer left without paying.
 
-    Must NOT treat a missing flag as abort: after success=1 / Status=OK a failed
-    verify API call should still mark the settlement failed (not retry forever).
+    Missing flags are NOT an abort (and must not burn the settlement either —
+    see complete_psp_return). Used for messaging / tests only.
     """
     if not callback_params:
         return False
@@ -873,16 +873,14 @@ async def complete_psp_return(
         external_ref=external_ref,
         amount=int(settlement.amount),
         callback_params=callback_params,
+        expected_invoice_id=int(settlement.id),
     )
     if not verified.ok:
-        # Soft cancel (Status=NOK / success=0 / user backed out) must NOT burn
-        # the settlement. Anyone can hit the public return URL with a failure
-        # flag and otherwise permanently FAIL a pending checkout early.
-        if callback_indicates_user_abort(callback_params):
-            raise ValueError(verified.message or "پرداخت توسط کاربر تکمیل نشد")
-        settlement.status = SettlementStatus.FAILED.value
-        settlement.error_message = (verified.message or "verify failed")[:500]
-        await session.commit()
+        # Public return URL is unauthenticated and settlement ids are sequential.
+        # Never mark FAILED here: missing params, user abort, network/timeout,
+        # or "not paid yet" must leave AWAITING so the real payer can finish and
+        # verify (read-only) can be retried. Only settle_and_approve amount/tenant
+        # mismatches permanently fail a settlement.
         raise ValueError(verified.message or "تأیید درگاه ناموفق بود")
 
     paid_amount = verified.amount if verified.amount is not None else settlement.amount

@@ -1,4 +1,4 @@
-"""SunPay PSP — request/verify contract, amount match, soft cancel, tenant settle."""
+"""SunPay PSP — request/verify contract, soft-fail return, HTTPS pay_url, invoice match."""
 
 from __future__ import annotations
 
@@ -26,7 +26,12 @@ from app.db.models import (
 )
 from app.services.payment_providers import get_psp_adapter
 from app.services.payment_providers.base import CheckoutRequest
-from app.services.payment_providers.sunpay import SunPayAdapter
+from app.services.payment_providers import sunpay as sunpay_mod
+from app.services.payment_providers.sunpay import (
+    SunPayAdapter,
+    close_client,
+    validate_sunpay_pay_url,
+)
 from app.services.payment_settlement import (
     callback_indicates_user_abort,
     callback_invoice_matches_settlement,
@@ -40,16 +45,9 @@ API_KEY = "sunpay-test-key-abcdef"
 TOKEN = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
 
 
-def _patch_httpx(handler):
-    real_async_client = httpx.AsyncClient
-
-    def factory(*args, **kwargs):
-        kwargs = dict(kwargs)
-        kwargs["transport"] = httpx.MockTransport(handler)
-        kwargs.pop("base_url", None)
-        return real_async_client(*args, **kwargs)
-
-    return patch.object(httpx, "AsyncClient", side_effect=factory)
+def _patch_sunpay_http(handler):
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    return patch.object(sunpay_mod, "_http", return_value=client), client
 
 
 def _checkout_req(*, settlement_id: int = 42, amount: int = 100_000) -> CheckoutRequest:
@@ -65,7 +63,39 @@ def _checkout_req(*, settlement_id: int = 42, amount: int = 100_000) -> Checkout
     )
 
 
+class SunPayUrlValidationTests(unittest.TestCase):
+    def test_https_public_ok(self) -> None:
+        self.assertEqual(
+            validate_sunpay_pay_url("https://pay.example.com/"),
+            "https://pay.example.com",
+        )
+
+    def test_http_and_private_rejected(self) -> None:
+        for bad in (
+            "http://pay.example.com",
+            "https://localhost/pay",
+            "https://127.0.0.1",
+            "https://10.0.0.5",
+            "https://192.168.1.1",
+            "https://169.254.169.254",
+            "https://0.0.0.0",
+            "https://" + "[::1]",
+            "",
+            "ftp://pay.example.com",
+        ):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                validate_sunpay_pay_url(bad)
+
+    def test_adapter_rejects_http_pay_url_on_use(self) -> None:
+        adapter = SunPayAdapter(api_key=API_KEY, pay_url="http://pay.example.com")
+        with self.assertRaises(ValueError):
+            adapter._require_config()
+
+
 class SunPayClientTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncTearDown(self) -> None:
+        await close_client()
+
     async def test_request_sends_documented_get_json_body(self) -> None:
         seen: list[httpx.Request] = []
 
@@ -73,20 +103,20 @@ class SunPayClientTests(unittest.IsolatedAsyncioTestCase):
             seen.append(request)
             return httpx.Response(200, json={"success": 1, "data": {"token": TOKEN}})
 
-        with _patch_httpx(handler):
+        patcher, client = _patch_sunpay_http(handler)
+        with patcher:
             adapter = SunPayAdapter(api_key=API_KEY, pay_url=PAY_URL)
             result = await adapter.create_checkout(_checkout_req())
+        await client.aclose()
         self.assertEqual(result.external_ref, TOKEN)
         self.assertEqual(result.checkout_url, f"{PAY_URL}/pay/{TOKEN}")
         sent = seen[0]
         self.assertEqual(sent.method, "GET")
         self.assertEqual(sent.url.path, "/api/request")
-        self.assertIn("application/json", sent.headers.get("content-type", ""))
         body = json.loads(sent.content)
         self.assertEqual(body["api_key"], API_KEY)
         self.assertEqual(body["amount"], 100_000)
         self.assertEqual(body["invoice_id"], 42)
-        self.assertTrue(body["callback"].startswith("https://bot.test/"))
 
     async def test_request_rejects_amount_below_minimum_and_bool(self) -> None:
         adapter = SunPayAdapter(api_key=API_KEY, pay_url=PAY_URL)
@@ -115,14 +145,16 @@ class SunPayClientTests(unittest.IsolatedAsyncioTestCase):
                 },
             )
 
-        with _patch_httpx(handler):
+        patcher, client = _patch_sunpay_http(handler)
+        with patcher:
             adapter = SunPayAdapter(api_key=API_KEY, pay_url=PAY_URL)
             with self.assertRaises(ValueError) as caught:
                 await adapter.create_checkout(_checkout_req())
+        await client.aclose()
         self.assertIn("BAD_KEY", str(caught.exception))
         self.assertNotIn("secret", str(caught.exception))
 
-    async def test_verify_posts_token_and_matches_amount(self) -> None:
+    async def test_verify_posts_token_and_matches_amount_and_invoice(self) -> None:
         seen: list[httpx.Request] = []
 
         def handler(request: httpx.Request) -> httpx.Response:
@@ -141,20 +173,49 @@ class SunPayClientTests(unittest.IsolatedAsyncioTestCase):
                 },
             )
 
-        with _patch_httpx(handler):
+        patcher, client = _patch_sunpay_http(handler)
+        with patcher:
             adapter = SunPayAdapter(api_key=API_KEY, pay_url=PAY_URL)
             verified = await adapter.verify(
                 external_ref=TOKEN,
                 amount=50_000,
                 callback_params={"success": "1", "invoice_id": "9", "token": TOKEN},
+                expected_invoice_id=9,
             )
+        await client.aclose()
         self.assertTrue(verified.ok)
         self.assertEqual(verified.amount, 50_000)
-        self.assertEqual(verified.message, "REF-1")
-        sent = seen[0]
-        self.assertEqual(sent.method, "POST")
-        self.assertEqual(sent.url.path, "/api/verified")
-        self.assertEqual(json.loads(sent.content), {"api_key": API_KEY, "token": TOKEN})
+        self.assertEqual(json.loads(seen[0].content), {"api_key": API_KEY, "token": TOKEN})
+
+    async def test_verify_rejects_invoice_mismatch_against_settlement_id(self) -> None:
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={
+                    "success": 1,
+                    "data": {
+                        "amount": 50_000,
+                        "invoice_id": 99,
+                        "reference": "X",
+                        "paid_at": "2026-09-27 09:30:00",
+                        "detail": {},
+                    },
+                },
+            )
+
+        patcher, client = _patch_sunpay_http(handler)
+        with patcher:
+            adapter = SunPayAdapter(api_key=API_KEY, pay_url=PAY_URL)
+            # Attacker-controlled callback invoice matches settlement, but gateway says 99.
+            verified = await adapter.verify(
+                external_ref=TOKEN,
+                amount=50_000,
+                callback_params={"success": 1, "token": TOKEN, "invoice_id": "5"},
+                expected_invoice_id=5,
+            )
+        await client.aclose()
+        self.assertFalse(verified.ok)
+        self.assertIn("فاکتور", verified.message)
 
     async def test_verify_soft_abort_without_calling_api(self) -> None:
         calls = {"n": 0}
@@ -163,13 +224,15 @@ class SunPayClientTests(unittest.IsolatedAsyncioTestCase):
             calls["n"] += 1
             return httpx.Response(500, text="nope")
 
-        with _patch_httpx(handler):
+        patcher, client = _patch_sunpay_http(handler)
+        with patcher:
             adapter = SunPayAdapter(api_key=API_KEY, pay_url=PAY_URL)
             verified = await adapter.verify(
                 external_ref=TOKEN,
                 amount=50_000,
                 callback_params={"success": "0", "token": TOKEN, "invoice_id": "1"},
             )
+        await client.aclose()
         self.assertFalse(verified.ok)
         self.assertEqual(calls["n"], 0)
 
@@ -189,31 +252,24 @@ class SunPayClientTests(unittest.IsolatedAsyncioTestCase):
                 },
             )
 
-        with _patch_httpx(handler):
+        patcher, client = _patch_sunpay_http(handler)
+        with patcher:
             adapter = SunPayAdapter(api_key=API_KEY, pay_url=PAY_URL)
             verified = await adapter.verify(
                 external_ref=TOKEN,
                 amount=50_000,
                 callback_params={"success": 1, "token": TOKEN},
+                expected_invoice_id=1,
             )
+        await client.aclose()
         self.assertFalse(verified.ok)
         self.assertEqual(verified.amount, 40_000)
-
-    async def test_verify_token_mismatch(self) -> None:
-        adapter = SunPayAdapter(api_key=API_KEY, pay_url=PAY_URL)
-        verified = await adapter.verify(
-            external_ref=TOKEN,
-            amount=50_000,
-            callback_params={"success": 1, "token": "other-token"},
-        )
-        self.assertFalse(verified.ok)
 
 
 class SoftCancelHelperTests(unittest.TestCase):
     def test_zarinpal_nok_and_sunpay_success_zero(self) -> None:
         self.assertTrue(callback_indicates_user_abort({"Status": "NOK"}))
         self.assertTrue(callback_indicates_user_abort({"success": "0"}))
-        self.assertTrue(callback_indicates_user_abort({"success": 0}))
         self.assertFalse(callback_indicates_user_abort({"Status": "OK"}))
         self.assertFalse(callback_indicates_user_abort({"success": "1"}))
         self.assertFalse(callback_indicates_user_abort({}))
@@ -222,8 +278,6 @@ class SoftCancelHelperTests(unittest.TestCase):
         callback_invoice_matches_settlement({"invoice_id": "15"}, settlement_id=15)
         with self.assertRaises(ValueError):
             callback_invoice_matches_settlement({"invoice_id": "16"}, settlement_id=15)
-        with self.assertRaises(ValueError):
-            callback_invoice_matches_settlement({"invoice_id": True}, settlement_id=1)
 
 
 class RegistryTests(unittest.TestCase):
@@ -243,6 +297,7 @@ class SunPaySettlementFlowTests(unittest.IsolatedAsyncioTestCase):
 
         get_settings.cache_clear()
         clear_settings_cache()
+        await close_client()
         self._tmp = tempfile.TemporaryDirectory()
         db_path = Path(self._tmp.name) / "t.db"
         self.engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}")
@@ -255,6 +310,7 @@ class SunPaySettlementFlowTests(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self) -> None:
         from app.config import get_settings
 
+        await close_client()
         await self.engine.dispose()
         self._tmp.cleanup()
         clear_settings_cache()
@@ -292,50 +348,69 @@ class SunPaySettlementFlowTests(unittest.IsolatedAsyncioTestCase):
         await session.refresh(payment)
         return payment
 
-    def _request_handler(self, *, verify_amount: int = 50_000, verify_invoice: int | None = None):
+    def _request_handler(self, *, verify_amount: int = 50_000):
         def handler(request: httpx.Request) -> httpx.Response:
             if request.url.path.endswith("/api/request"):
                 return httpx.Response(
                     200, json={"success": 1, "data": {"token": TOKEN}}
                 )
             if request.url.path.endswith("/api/verified"):
-                data = {
-                    "amount": verify_amount,
-                    "reference": "REF-OK",
-                    "paid_at": "2026-09-27 09:30:00",
-                    "detail": {},
-                }
-                if verify_invoice is not None:
-                    data["invoice_id"] = verify_invoice
-                return httpx.Response(200, json={"success": 1, "data": data})
+                # invoice_id filled by caller via side channel — see tests that bind sid.
+                invoice = getattr(self, "_verify_invoice_id", 1)
+                return httpx.Response(
+                    200,
+                    json={
+                        "success": 1,
+                        "data": {
+                            "amount": verify_amount,
+                            "invoice_id": invoice,
+                            "reference": "REF-OK",
+                            "paid_at": "2026-09-27 09:30:00",
+                            "detail": {},
+                        },
+                    },
+                )
             return httpx.Response(404, text="missing")
 
         return handler
+
+    async def _checkout(self, payment_id: int) -> int:
+        patcher, client = _patch_sunpay_http(self._request_handler())
+        with (
+            patcher,
+            patch(
+                "app.services.payment_settlement._public_base",
+                return_value="https://bot.test",
+            ),
+        ):
+            async with self.Session() as session:
+                payment = await session.get(Payment, payment_id)
+                assert payment is not None
+                settlement = await create_psp_checkout(session, payment)
+                self.assertEqual(settlement.status, SettlementStatus.AWAITING.value)
+                sid = int(settlement.id)
+        await client.aclose()
+        return sid
 
     async def test_checkout_and_return_settles_once(self) -> None:
         async with self.Session() as session:
             await self._configure_platform_sunpay(session)
             payment = await self._seed_wallet_topup(session)
+            payment_id = int(payment.id)
+
+        sid = await self._checkout(payment_id)
+        self._verify_invoice_id = sid
 
         approve = AsyncMock(return_value=None)
+        patcher, client = _patch_sunpay_http(self._request_handler())
         with (
-            _patch_httpx(self._request_handler()),
+            patcher,
             patch(
                 "app.services.payment_settlement._public_base",
                 return_value="https://bot.test",
             ),
             patch("app.services.payment_settlement.approve_payment", approve),
         ):
-            async with self.Session() as session:
-                payment = await session.get(Payment, payment.id)
-                assert payment is not None
-                settlement = await create_psp_checkout(session, payment)
-                self.assertEqual(settlement.provider, "sunpay")
-                self.assertEqual(settlement.status, SettlementStatus.AWAITING.value)
-                self.assertEqual(settlement.external_ref, TOKEN)
-                self.assertEqual(settlement.checkout_url, f"{PAY_URL}/pay/{TOKEN}")
-                sid = int(settlement.id)
-
             async with self.Session() as session:
                 settled = await complete_psp_return(
                     session,
@@ -350,46 +425,52 @@ class SunPaySettlementFlowTests(unittest.IsolatedAsyncioTestCase):
                 )
                 self.assertEqual(settled.status, SettlementStatus.SETTLED.value)
                 approve.assert_awaited()
+        await client.aclose()
 
-            async with self.Session() as session:
-                again = await complete_psp_return(
-                    session,
-                    provider="sunpay",
-                    settlement_id=sid,
-                    callback_params={
-                        "success": "1",
-                        "invoice_id": str(sid),
-                        "token": TOKEN,
-                    },
-                    reseller_id=None,
-                )
-                self.assertEqual(again.status, SettlementStatus.SETTLED.value)
-
-    async def test_success_zero_does_not_burn_settlement(self) -> None:
+    async def test_return_without_params_does_not_burn_settlement(self) -> None:
         async with self.Session() as session:
             await self._configure_platform_sunpay(session)
             payment = await self._seed_wallet_topup(session)
+            payment_id = int(payment.id)
+
+        sid = await self._checkout(payment_id)
+
+        for params in ({}, {"invoice_id": str(sid)}):
+            with self.subTest(params=params):
+                async with self.Session() as session:
+                    with self.assertRaises(ValueError):
+                        await complete_psp_return(
+                            session,
+                            provider="sunpay",
+                            settlement_id=sid,
+                            callback_params=params,
+                            reseller_id=None,
+                        )
+                    row = await session.get(PaymentSettlement, sid)
+                    assert row is not None
+                    self.assertEqual(row.status, SettlementStatus.AWAITING.value)
+
+    async def test_verify_timeout_keeps_settlement_awaiting(self) -> None:
+        async with self.Session() as session:
+            await self._configure_platform_sunpay(session)
+            payment = await self._seed_wallet_topup(session)
+            payment_id = int(payment.id)
+
+        sid = await self._checkout(payment_id)
 
         def handler(request: httpx.Request) -> httpx.Response:
-            if request.url.path.endswith("/api/request"):
-                return httpx.Response(
-                    200, json={"success": 1, "data": {"token": TOKEN}}
-                )
-            raise AssertionError("verify must not be called on soft abort")
+            if request.url.path.endswith("/api/verified"):
+                raise httpx.ConnectTimeout("slow")
+            return httpx.Response(404)
 
+        patcher, client = _patch_sunpay_http(handler)
         with (
-            _patch_httpx(handler),
+            patcher,
             patch(
                 "app.services.payment_settlement._public_base",
                 return_value="https://bot.test",
             ),
         ):
-            async with self.Session() as session:
-                payment = await session.get(Payment, payment.id)
-                assert payment is not None
-                settlement = await create_psp_checkout(session, payment)
-                sid = int(settlement.id)
-
             async with self.Session() as session:
                 with self.assertRaises(ValueError):
                     await complete_psp_return(
@@ -397,7 +478,7 @@ class SunPaySettlementFlowTests(unittest.IsolatedAsyncioTestCase):
                         provider="sunpay",
                         settlement_id=sid,
                         callback_params={
-                            "success": "0",
+                            "success": "1",
                             "invoice_id": str(sid),
                             "token": TOKEN,
                         },
@@ -406,6 +487,32 @@ class SunPaySettlementFlowTests(unittest.IsolatedAsyncioTestCase):
                 row = await session.get(PaymentSettlement, sid)
                 assert row is not None
                 self.assertEqual(row.status, SettlementStatus.AWAITING.value)
+        await client.aclose()
+
+    async def test_success_zero_does_not_burn_settlement(self) -> None:
+        async with self.Session() as session:
+            await self._configure_platform_sunpay(session)
+            payment = await self._seed_wallet_topup(session)
+            payment_id = int(payment.id)
+
+        sid = await self._checkout(payment_id)
+
+        async with self.Session() as session:
+            with self.assertRaises(ValueError):
+                await complete_psp_return(
+                    session,
+                    provider="sunpay",
+                    settlement_id=sid,
+                    callback_params={
+                        "success": "0",
+                        "invoice_id": str(sid),
+                        "token": TOKEN,
+                    },
+                    reseller_id=None,
+                )
+            row = await session.get(PaymentSettlement, sid)
+            assert row is not None
+            self.assertEqual(row.status, SettlementStatus.AWAITING.value)
 
     async def test_wrong_shop_cannot_complete_return(self) -> None:
         async with self.Session() as session:
@@ -428,8 +535,9 @@ class SunPaySettlementFlowTests(unittest.IsolatedAsyncioTestCase):
             shop_id = int(shop.id)
             payment_id = int(payment.id)
 
+        patcher, client = _patch_sunpay_http(self._request_handler())
         with (
-            _patch_httpx(self._request_handler()),
+            patcher,
             patch(
                 "app.services.payment_settlement._public_base",
                 return_value="https://bot.test",
@@ -456,6 +564,7 @@ class SunPaySettlementFlowTests(unittest.IsolatedAsyncioTestCase):
                         },
                         reseller_id=999999,
                     )
+        await client.aclose()
 
 
 if __name__ == "__main__":

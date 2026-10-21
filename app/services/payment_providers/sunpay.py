@@ -6,10 +6,12 @@ Follows the SunPay merchant API:
   GET/POST {PAY_URL}/api/verified  JSON body → amount/reference (read-only)
 
 Verify never cancels or refunds; callers must match amount and invoice_id locally.
+Unknown / transport failures must leave the settlement open for retry.
 """
 
 from __future__ import annotations
 
+import ipaddress
 import logging
 from typing import Any
 from urllib.parse import urlparse
@@ -21,10 +23,34 @@ from app.services.payment_providers.base import CheckoutRequest, CheckoutResult,
 logger = logging.getLogger(__name__)
 
 MIN_AMOUNT_TOMAN = 1000
-_HTTP_TIMEOUT = 20.0
+_HTTP_TIMEOUT = httpx.Timeout(20.0, connect=10.0)
 _PLACEHOLDER_KEYS = frozenset(
     {"", "changeme", "your-api-key", "YOUR_API_KEY", "your_api_key"}
 )
+_BLOCKED_HOSTS = frozenset(
+    {
+        "localhost",
+        "localhost.localdomain",
+        "metadata.google.internal",
+        "metadata",
+    }
+)
+
+_client: httpx.AsyncClient | None = None
+
+
+def _http() -> httpx.AsyncClient:
+    global _client
+    if _client is None or _client.is_closed:
+        _client = httpx.AsyncClient(timeout=_HTTP_TIMEOUT)
+    return _client
+
+
+async def close_client() -> None:
+    global _client
+    if _client is not None and not _client.is_closed:
+        await _client.aclose()
+    _client = None
 
 
 def _is_success_flag(raw: Any) -> bool:
@@ -39,12 +65,46 @@ def _is_success_flag(raw: Any) -> bool:
     return text in {"1", "true", "yes", "ok", "success"}
 
 
-def _is_http_url(value: str) -> bool:
+def _host_is_blocked(host: str) -> bool:
+    name = (host or "").strip().lower().rstrip(".")
+    if not name:
+        return True
+    if name in _BLOCKED_HOSTS or name.endswith(".localhost"):
+        return True
+    # Strip brackets from IPv6 literals.
+    if name.startswith("[") and name.endswith("]"):
+        name = name[1:-1]
     try:
-        parts = urlparse(value)
-    except Exception:
+        ip = ipaddress.ip_address(name)
+    except ValueError:
         return False
-    return parts.scheme in {"http", "https"} and bool(parts.netloc)
+    return bool(
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_reserved
+        or ip.is_multicast
+        or ip.is_unspecified
+    )
+
+
+def validate_sunpay_pay_url(value: str) -> str:
+    """Normalize PAY_URL: https only, no localhost/private targets (SSRF / cleartext key)."""
+    raw = (value or "").strip().rstrip("/")
+    if not raw:
+        raise ValueError("آدرس پایه سان‌پی (PAY_URL) تنظیم نشده")
+    try:
+        parts = urlparse(raw)
+    except ValueError as exc:
+        raise ValueError("آدرس پایه سان‌پی نامعتبر است") from exc
+    if parts.scheme != "https" or not parts.netloc:
+        raise ValueError("آدرس پایه سان‌پی باید با https و میزبان عمومی باشد")
+    if parts.username or parts.password:
+        raise ValueError("آدرس پایه سان‌پی نامعتبر است")
+    host = (parts.hostname or "").strip().lower()
+    if _host_is_blocked(host):
+        raise ValueError("آدرس پایه سان‌پی به میزبان داخلی مجاز نیست")
+    return raw
 
 
 def _safe_int(value: Any, *, field: str) -> int:
@@ -75,13 +135,13 @@ class SunPayAdapter:
 
     def __init__(self, *, api_key: str, pay_url: str):
         self.api_key = (api_key or "").strip()
+        # Store raw; validate on use so create_checkout can mark FAILED inside its try.
         self.pay_url = (pay_url or "").strip().rstrip("/")
 
     def _require_config(self) -> None:
         if self.api_key in _PLACEHOLDER_KEYS:
             raise ValueError("کلید API سان‌پی تنظیم نشده")
-        if not self.pay_url or not _is_http_url(self.pay_url):
-            raise ValueError("آدرس پایه سان‌پی (PAY_URL) تنظیم نشده")
+        self.pay_url = validate_sunpay_pay_url(self.pay_url)
 
     def _request_url(self) -> str:
         return f"{self.pay_url}/api/request"
@@ -101,7 +161,13 @@ class SunPayAdapter:
         if invoice_id <= 0:
             raise ValueError("invoice_id باید بزرگ‌تر از صفر باشد")
         callback = (req.callback_url or "").strip()
-        if not _is_http_url(callback):
+        # Local/dev may use http://127.0.0.1 — allow non-https only for loopback callbacks
+        # that never leave our process; production PUBLIC_BASE_URL is https.
+        try:
+            cb_parts = urlparse(callback)
+        except ValueError as exc:
+            raise ValueError("آدرس بازگشت سان‌پی نامعتبر است") from exc
+        if cb_parts.scheme not in {"http", "https"} or not cb_parts.netloc:
             raise ValueError("آدرس بازگشت سان‌پی نامعتبر است")
 
         payload = {
@@ -111,20 +177,17 @@ class SunPayAdapter:
             "invoice_id": invoice_id,
         }
         try:
-            async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
-                # Documented as GET with JSON body + Content-Type: application/json.
-                resp = await client.request(
-                    "GET",
-                    self._request_url(),
-                    json=payload,
-                    headers={"Content-Type": "application/json"},
-                )
-                data = resp.json() if resp.content else {}
+            resp = await _http().request(
+                "GET",
+                self._request_url(),
+                json=payload,
+                headers={"Content-Type": "application/json"},
+            )
+            data = resp.json() if resp.content else {}
         except httpx.HTTPError as exc:
             logger.warning("sunpay request network error: %s", exc)
             raise ValueError("خطا در ارتباط با درگاه سان‌پی") from exc
         except ValueError as exc:
-            # resp.json() decode failure
             logger.warning("sunpay request non-json response: %s", exc)
             raise ValueError("پاسخ نامعتبر درگاه سان‌پی") from exc
 
@@ -146,6 +209,7 @@ class SunPayAdapter:
         external_ref: str,
         amount: int,
         callback_params: dict[str, Any],
+        expected_invoice_id: int | None = None,
     ) -> VerifyResult:
         token = str(external_ref or "").strip()
         cb_token = str(callback_params.get("token") or "").strip()
@@ -175,24 +239,21 @@ class SunPayAdapter:
         except ValueError as exc:
             return VerifyResult(ok=False, external_ref=token, message=str(exc))
 
-        if self.api_key in _PLACEHOLDER_KEYS or not self.pay_url:
-            return VerifyResult(
-                ok=False,
-                external_ref=token,
-                message="کلید API سان‌پی تنظیم نشده",
-            )
+        try:
+            self._require_config()
+        except ValueError as exc:
+            return VerifyResult(ok=False, external_ref=token, message=str(exc))
 
         payload = {"api_key": self.api_key, "token": token}
         try:
-            async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
-                # Docs allow GET or POST; POST keeps the JSON body reliable.
-                resp = await client.request(
-                    "POST",
-                    self._verify_url(),
-                    json=payload,
-                    headers={"Content-Type": "application/json"},
-                )
-                data = resp.json() if resp.content else {}
+            # Docs allow GET or POST; POST keeps the JSON body reliable.
+            resp = await _http().request(
+                "POST",
+                self._verify_url(),
+                json=payload,
+                headers={"Content-Type": "application/json"},
+            )
+            data = resp.json() if resp.content else {}
         except httpx.HTTPError as exc:
             logger.warning("sunpay verify network error: %s", exc)
             return VerifyResult(
@@ -235,19 +296,24 @@ class SunPayAdapter:
                 raw=data,
             )
 
-        # Optional invoice_id from verify payload — must match callback when both present.
+        # invoice_id from the gateway must match our settlement id (not attacker callback).
         raw_invoice = (result or {}).get("invoice_id")
-        cb_invoice = callback_params.get("invoice_id")
-        if raw_invoice is not None and cb_invoice is not None and str(cb_invoice).strip():
+        if expected_invoice_id is not None:
+            if raw_invoice is None or str(raw_invoice).strip() == "":
+                return VerifyResult(
+                    ok=False,
+                    external_ref=token,
+                    amount=paid_amount,
+                    message="شناسه فاکتور در پاسخ درگاه نیست",
+                    raw=data,
+                )
             try:
-                if _safe_int(raw_invoice, field="invoice_id") != _safe_int(
-                    cb_invoice, field="invoice_id"
-                ):
+                if _safe_int(raw_invoice, field="invoice_id") != int(expected_invoice_id):
                     return VerifyResult(
                         ok=False,
                         external_ref=token,
                         amount=paid_amount,
-                        message="شناسه فاکتور با پاسخ درگاه هم‌خوانی ندارد",
+                        message="شناسه فاکتور با تسویه هم‌خوانی ندارد",
                         raw=data,
                     )
             except ValueError as exc:

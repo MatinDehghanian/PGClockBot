@@ -45,4 +45,5 @@ class PspAdapter(Protocol):
         external_ref: str,
         amount: int,
         callback_params: dict[str, Any],
+        expected_invoice_id: int | None = None,
     ) -> VerifyResult: ...
