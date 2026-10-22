@@ -15,6 +15,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.4.32": [
+        "پرداخت: دکمهٔ صفحهٔ وضعیت به «بازگشت به ربات» عوض شد و چت ربات همان فروشگاه را باز می‌کند (#906)",
+        "وب‌پنل: هدر مودال شفاف‌تر شد و دکمهٔ ذخیرهٔ اصلی در مودال‌های تک‌ذخیره چسبان و مات است (#907)",
+        "ریستور: backup/dev-pre-v0.4.32 (commit d32d99e8)",
+    ],
     "0.4.31": [
         "پرداخت: صفحهٔ موفقیت دیگر کپشن چپ‌چین «پرداخت» ندارد و دکمهٔ تمام‌عرض «بستن» برای برگشت به تلگرام اضافه شد (#904)",
         "ریستور: backup/dev-pre-v0.4.31 (commit 846e2a38)",
