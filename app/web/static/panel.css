@@ -3453,6 +3453,57 @@ a.btn.btn-star:hover {
   flex: 0 0 auto;
 }
 .settings-card { margin-bottom: var(--section-gap); scroll-margin-top: var(--section-gap); }
+.settings-card[data-pay-settings-for][hidden] { display: none !important; }
+/* Long setting helps: one-tap «راهنما» instead of a wall of muted text */
+.setting-help {
+  margin: 0;
+  min-width: 0;
+}
+.setting-help-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  cursor: pointer;
+  list-style: none;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--muted-fg);
+  user-select: none;
+}
+.setting-help-summary::-webkit-details-marker,
+.setting-help-summary::marker {
+  display: none;
+}
+.setting-help-summary::after {
+  content: "";
+  width: 0.45em;
+  height: 0.45em;
+  border-inline-end: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+  opacity: 0.75;
+  transition: transform var(--motion-fast, 120ms) ease;
+}
+.setting-help[open] > .setting-help-summary::after {
+  transform: rotate(-135deg);
+  margin-top: 0.2em;
+}
+.setting-help-summary:hover,
+.setting-help-summary:focus-visible {
+  color: var(--foreground);
+}
+.setting-help-body {
+  margin: var(--space-1) 0 0;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+.ui-switch-copy > .setting-help,
+.toggle-row .setting-help {
+  margin-top: 0;
+}
 .settings-main {
   display: flex;
   flex-direction: column;
@@ -6075,17 +6126,34 @@ form.settings-form > .actions.sticky-actions,
   background: var(--bg-card);
   isolation: isolate;
 }
-/* Title/close stay outside the scrollport (see panel.js ensureModalScrollShell).
-   Same inline inset as .ui-modal-scroll so the title lines up with the body. */
-.ui-modal-panel[data-scroll-shell="1"] > .ui-modal-head {
+/* Sticky frosted chrome inside the scrollport — content scrolls underneath.
+   Head owns the top inset; side/bottom padding stay on .ui-modal-scroll. */
+.ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll:has(> .ui-modal-head:first-child) {
+  padding-top: 0;
+}
+.ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll > .ui-modal-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   flex: 0 0 auto;
-  margin: 0;
+  /* Bleed into inline scroll padding so the matte bar is edge-to-edge */
+  margin-inline: calc(-1 * (var(--space-3) + var(--modal-scrollbar-room, 8px)));
+  margin-block: 0;
   padding: calc(var(--space-3) + var(--modal-scrollbar-room, 8px));
-  /* Extra air under the sticky chrome before scroll content begins */
   padding-bottom: var(--space-2);
   box-sizing: border-box;
-  background: var(--bg-card);
-  z-index: 1;
+  background: color-mix(in srgb, var(--bg-card) 72%, transparent);
+  backdrop-filter: blur(14px) saturate(1.08);
+  -webkit-backdrop-filter: blur(14px) saturate(1.08);
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+}
+html[data-theme="light"] .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll > .ui-modal-head {
+  background: color-mix(in srgb, var(--bg-card) 78%, transparent);
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll > .ui-modal-head {
+    background: color-mix(in srgb, var(--bg-card) 94%, transparent);
+  }
 }
 .ui-modal-scroll {
   flex: 1 1 auto;
@@ -6145,8 +6213,8 @@ form.settings-form > .actions.sticky-actions,
 }
 /* Modal scroll uses shared shell padding (+ --modal-scrollbar-room).
    Extra 14px inset was removed so content width stays consistent while
-   scrollbar-gutter + room keep the thumb off the body. Head stays outside
-   the scrollport (above) with the same inline inset for title alignment. */
+   scrollbar-gutter + room keep the thumb off the body. Sticky head bleeds
+   into that padding so the frosted bar stays edge-aligned. */
 .ui-modal-panel-lg { width: min(720px, 100%); }
 .gift-code-editor { padding-top: var(--space-3); margin-top: var(--space-3); border-top: 1px solid var(--border); }
 .gift-code-editor[hidden] { display: none !important; }

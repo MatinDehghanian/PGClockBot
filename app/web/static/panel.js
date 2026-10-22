@@ -1232,20 +1232,12 @@
       } catch (e) {
         scroll = Array.from(panel.children).find((c) => c.classList && c.classList.contains('ui-modal-scroll')) || null;
       }
-      /* Keep title/close outside the scrollport so chrome stays fixed while
-         the body scrolls and the thumb never paints over the header. */
-      const keepOutsideScroll = (node) => {
-        if (!node || !node.classList) return false;
-        return node.classList.contains('ui-modal-head');
-      };
+      /* Wrap all panel children; sticky frosted .ui-modal-head stays fixed
+         at the top of this scrollport while body content scrolls under it. */
       if (!scroll) {
         scroll = document.createElement('div');
         scroll.className = 'ui-modal-scroll';
-        const toMove = [];
-        Array.from(panel.children).forEach((child) => {
-          if (!keepOutsideScroll(child)) toMove.push(child);
-        });
-        toMove.forEach((child) => scroll.appendChild(child));
+        while (panel.firstChild) scroll.appendChild(panel.firstChild);
         panel.appendChild(scroll);
       }
       /* Marks panel so CSS can put padding/gap on .ui-modal-scroll while the
@@ -1637,6 +1629,33 @@
     });
     /* Pre-wrap every modal so first open already clips the scrollbar to radius. */
     document.querySelectorAll('.ui-modal').forEach((el) => ensureModalScrollShell(el));
+
+    /* Payment method cards: show settings only while the matching toggle is on. */
+    function syncPaySettingsCards(root){
+      const scope = root && root.querySelectorAll ? root : document;
+      scope.querySelectorAll('[data-pay-settings-for]').forEach((card) => {
+        const key = card.getAttribute('data-pay-settings-for');
+        if (!key) return;
+        const form = card.closest('form') || scope;
+        const toggle = form.querySelector
+          ? form.querySelector('input[type="checkbox"][name="s_' + key + '"]')
+          : null;
+        if (!toggle) return;
+        card.hidden = !toggle.checked;
+      });
+    }
+    document.addEventListener('change', (e) => {
+      const t = e.target;
+      if (!t || t.type !== 'checkbox' || !t.name || t.name.slice(0, 2) !== 's_') return;
+      const form = t.closest('form');
+      if (!form || !form.querySelector('[data-pay-settings-for]')) return;
+      const key = t.name.slice(2);
+      form.querySelectorAll('[data-pay-settings-for="' + key + '"]').forEach((card) => {
+        card.hidden = !t.checked;
+      });
+    });
+    syncPaySettingsCards(document);
+
     document.addEventListener('click', (e) => {
       const openBtn = e.target.closest('[data-modal-open]');
       if (openBtn) {

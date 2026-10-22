@@ -189,7 +189,7 @@ class BrowserTests(AppPagesCase):
         self._with_browser({"/modal": _modal_page()}, check)
 
     def test_modal_title_stays_fixed_while_body_scrolls(self):
-        """Sticky header: .ui-modal-head is outside .ui-modal-scroll for every panel."""
+        """Sticky frosted header: head is sticky inside .ui-modal-scroll."""
 
         def check(browser, base):
             page = browser.new_page(viewport=MOBILE)
@@ -200,29 +200,32 @@ class BrowserTests(AppPagesCase):
             layout = page.evaluate(
                 """() => {
                   const panel = document.querySelector('#m1 .ui-modal-panel');
-                  const head = panel.querySelector(':scope > .ui-modal-head');
                   const scroll = panel.querySelector(':scope > .ui-modal-scroll');
+                  const head = scroll && scroll.querySelector(':scope > .ui-modal-head');
                   const form = document.querySelector('#m1 form');
                   if (!head || !scroll || !form) return {ok: false};
-                  const headInsideScroll = scroll.contains(head);
-                  const formInsideScroll = scroll.contains(form);
+                  const style = getComputedStyle(head);
                   const before = head.getBoundingClientRect().top;
-                  scroll.scrollTop = Math.min(120, scroll.scrollHeight);
+                  scroll.scrollTop = Math.min(160, scroll.scrollHeight);
                   const after = head.getBoundingClientRect().top;
-                  const pb = parseFloat(getComputedStyle(head).paddingBottom) || 0;
+                  const pb = parseFloat(style.paddingBottom) || 0;
                   return {
                     ok: true,
-                    headInsideScroll,
-                    formInsideScroll,
-                    headFixed: Math.abs(before - after) < 1,
+                    headInsideScroll: scroll.contains(head),
+                    formInsideScroll: scroll.contains(form),
+                    sticky: style.position === 'sticky',
+                    headFixed: Math.abs(before - after) < 1.5,
                     paddingBottom: pb,
+                    frosted: (style.backdropFilter || style.webkitBackdropFilter || '').includes('blur'),
                   };
                 }"""
             )
             self.assertTrue(layout["ok"], msg=layout)
-            self.assertFalse(layout["headInsideScroll"], msg=layout)
+            self.assertTrue(layout["headInsideScroll"], msg=layout)
             self.assertTrue(layout["formInsideScroll"], msg=layout)
+            self.assertTrue(layout["sticky"], msg=layout)
             self.assertTrue(layout["headFixed"], msg=layout)
+            self.assertTrue(layout["frosted"], msg=layout)
             self.assertGreaterEqual(layout["paddingBottom"], 15, msg=layout)
 
         tall = _modal_page().replace(
