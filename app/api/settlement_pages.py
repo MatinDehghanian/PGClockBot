@@ -116,6 +116,14 @@ def _register_checkout_go(app: Any, get_db: Callable[..., Any]) -> None:
                 http_status=404,
                 watermark="404",
             )
+        if settlement.status == SettlementStatus.SETTLED.value:
+            return _status(
+                request,
+                kind="ok",
+                title="قبلاً تأیید شده",
+                message="این پرداخت پیش‌تر تسویه شده است؛ به تلگرام برگردید.",
+                watermark="OK",
+            )
         target = (settlement.checkout_url or "").strip()
         if not target.startswith("https://"):
             return _status(
