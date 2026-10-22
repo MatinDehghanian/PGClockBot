@@ -21,7 +21,8 @@ class SettlementStatusTemplateTests(unittest.TestCase):
             "title": "پرداخت تأیید شد",
             "message": "می‌توانید به تلگرام برگردید.",
             "watermark": "OK",
-            "kicker": "پرداخت",
+            "kicker": "",
+            "kicker_ltr": False,
             "ref": None,
             "primary_href": "",
             "primary_label": "",
@@ -32,6 +33,8 @@ class SettlementStatusTemplateTests(unittest.TestCase):
             "code_block": "",
             "guide_note": "",
             "body_html": "",
+            "show_close_button": True,
+            "close_button_label": "بستن",
             "footer": "این صفحه را ببندید و به تلگرام برگردید.",
             "app_version": "0.0.0",
             "pwa_name": "MrClockBot",
@@ -44,6 +47,24 @@ class SettlementStatusTemplateTests(unittest.TestCase):
         self.assertIn('data-status="ok"', html)
         self.assertIn("پرداخت تأیید شد", html)
         self.assertIn("می‌توانید به تلگرام برگردید", html)
+
+    def test_payment_page_omits_persian_kicker_and_has_full_width_close(self) -> None:
+        html = self.render()
+        self.assertNotIn("panel-status-kicker", html)
+        self.assertIn("panel-status-close-btn", html)
+        self.assertIn("بستن", html)
+        self.assertIn("panel-status-actions--single", html)
+
+    def test_ascii_kicker_keeps_ltr(self) -> None:
+        html = self.render(
+            kicker="HTTP 404",
+            kicker_ltr=True,
+            show_close_button=False,
+            code="404",
+            title="یافت نشد",
+        )
+        self.assertIn('dir="ltr"', html)
+        self.assertIn("HTTP 404", html)
 
     def test_warn_and_error_tones(self) -> None:
         warn = self.render(code="warn", title="در حال بررسی", watermark="WARN")

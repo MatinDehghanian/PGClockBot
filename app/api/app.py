@@ -175,6 +175,8 @@ def render_panel_status(
     watermark: str | None = None,
     kicker: str | None = None,
     body_html: str = "",
+    show_close_button: bool = False,
+    close_button_label: str = "بستن",
 ):
     """Shared branded status page (404 / 403 / 500 / setup gate / payment returns)."""
     from app.api.status_render import render_status_page
@@ -198,6 +200,8 @@ def render_panel_status(
         guide_note=guide_note,
         body_html=body_html,
         footer=footer,
+        show_close_button=show_close_button,
+        close_button_label=close_button_label,
     )
 
 

@@ -32,6 +32,8 @@ def render_status_page(
     guide_note: str | None = None,
     body_html: str = "",
     footer: str | None = None,
+    show_close_button: bool = False,
+    close_button_label: str = "بستن",
 ):
     """Render ``panel_status.html``.
 
@@ -54,6 +56,9 @@ def render_status_page(
     if kicker is None:
         kicker = f"HTTP {kind_s}" if kind_s.isdigit() else kind_s.upper()
 
+    # Force LTR only for ASCII kickers (HTTP 404, OK, …) — never for Persian labels.
+    kicker_ltr = bool(kicker) and all(ord(ch) < 128 for ch in str(kicker))
+
     return templates.TemplateResponse(
         request,
         "panel_status.html",
@@ -62,7 +67,8 @@ def render_status_page(
             "title": title,
             "message": message,
             "watermark": watermark if watermark is not None else kind_s,
-            "kicker": kicker,
+            "kicker": kicker or "",
+            "kicker_ltr": kicker_ltr,
             "ref": ref,
             "primary_href": primary_href or "",
             "primary_label": primary_label,
@@ -73,6 +79,8 @@ def render_status_page(
             "code_block": code_block or "",
             "guide_note": guide_note or "",
             "body_html": body_html or "",
+            "show_close_button": bool(show_close_button),
+            "close_button_label": close_button_label or "بستن",
             "footer": footer
             or "اگر مشکل ادامه داشت، از حساب خارج شوید و دوباره وارد شوید.",
             "app_version": app_version,
