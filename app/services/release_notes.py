@@ -15,6 +15,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.4.28": [
+        "پرداخت: صفحات وضعیت برگشت درگاه مثل صفحهٔ ۴۰۴ پنل رندر می‌شوند؛ برچسب روش‌ها درست شد (psp = درگاه آنلاین، bbc = بزن به کارت، gateway = درگاه لینک) (#897)",
+        "ربات: دکمهٔ ورود به درگاه از دامنهٔ پنل می‌رود تا میزبان PSP در دیالوگ تلگرام دیده نشود (#897)",
+        "ریستور: backup/dev-pre-v0.4.28 (commit 10c9729a)",
+    ],
     "0.4.27": [
         "پرداخت SunPay: علت شکست درخواست در لاگ سرور (بدون لو رفتن کلید) ثبت می‌شود؛ callback از https زنده پنل ساخته می‌شود و بدون https عمومی درگاه موقتاً رد می‌شود (#895)",
         "پرداخت: روش درخواست SunPay با تنظیم psp_sunpay_request_method بین GET و POST قابل انتخاب است (#895)",
