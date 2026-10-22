@@ -2400,6 +2400,9 @@ async def pay_psp_cb(
             "پس از تأیید درگاه، سرویس خودکار تحویل می‌شود."
         )
     body += f"\n\n(پرداخت #{payment.id})"
+    from app.services.payment_settlement import with_psp_vpn_notice
+
+    body = with_psp_vpn_notice(body)
     rows: list[list[InlineKeyboardButton]] = []
     link = (settlement.checkout_url or "").strip()
     if link.startswith("http://") or link.startswith("https://"):

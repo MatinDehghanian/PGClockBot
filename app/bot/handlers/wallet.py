@@ -572,6 +572,9 @@ async def wtop_choose_method(
         except Exception:
             body = f"مبلغ {amount_txt} را از درگاه آنلاین پرداخت کنید."
         body += f"\n\n(پرداخت #{payment.id})"
+        from app.services.payment_settlement import with_psp_vpn_notice
+
+        body = with_psp_vpn_notice(body)
         rows: list[list[InlineKeyboardButton]] = []
         link = (settlement.checkout_url or "").strip()
         if link.startswith("http://") or link.startswith("https://"):
