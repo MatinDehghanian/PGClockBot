@@ -6164,11 +6164,13 @@ html[data-theme="light"] .ui-modal-panel {
   display: flex;
   flex-direction: column;
   align-items: stretch;
+  justify-content: center;
   gap: var(--space-1);
   width: 100%;
   margin: 0;
-  padding: var(--space-2) var(--modal-frost-pad);
-  padding-bottom: max(var(--space-2), env(safe-area-inset-bottom, 0px));
+  /* Equal air above/below the button (separator line ↔ footer bottom edge) */
+  padding-block: var(--space-2);
+  padding-inline: var(--modal-frost-pad);
   box-sizing: border-box;
   background: var(--modal-frost-bg);
   backdrop-filter: var(--modal-frost-blur);
