@@ -2401,10 +2401,11 @@ async def pay_psp_cb(
         )
     body += f"\n\n(پرداخت #{payment.id})"
     rows: list[list[InlineKeyboardButton]] = []
-    link = (settlement.checkout_url or "").strip()
+    from app.services.payment_settlement import public_checkout_button_url
+
+    link = public_checkout_button_url(settlement)
     if link.startswith("http://") or link.startswith("https://"):
         rows.append([InlineKeyboardButton(text="🏦 ورود به درگاه", url=link)])
-    markup = InlineKeyboardMarkup(inline_keyboard=rows) if rows else None
     if callback.message:
         from app.bot.nav_input import cancel_keyboard
 
@@ -2419,7 +2420,6 @@ async def pay_psp_cb(
             ),
             reply_markup=wait_markup,
         )
-        _ = markup
     if state is not None:
         from app.bot import menu_nav as nav
 

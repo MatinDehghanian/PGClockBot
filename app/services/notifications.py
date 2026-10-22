@@ -662,8 +662,9 @@ async def notify_new_subscription(
     elif plan_name:
         lines.append(kv_line("💎", "پلن", plan_name))
     if order.payment_method and not addon_details:
-        method = "کیف پول" if order.payment_method == "wallet" else "کارت به کارت"
-        lines.append(kv_line("💳", "پرداخت", method))
+        from app.services.payment_method_labels import payment_method_fa
+
+        lines.append(kv_line("💳", "پرداخت", payment_method_fa(order.payment_method)))
     lines.append(kv_line("📌", "وضعیت", "نیاز به تأیید" if needs_approval else "تحویل‌شده"))
     title = f"➕ {addon_details[0]}" if addon_details else "🆕 اشتراک جدید"
     text = format_message(title, info_block(lines))
@@ -780,17 +781,13 @@ async def _addon_order_detail_lines(
     )
     lines.append(kv_line("🔗", "سرویس", html_mod.escape(service_name)))
     if order.payment_method:
-        methods = {
-            "wallet": "کیف پول",
-            "card": "کارت به کارت",
-            "gateway": "درگاه",
-            "crypto": "رمزارز",
-            "stars": "استارز",
-        }
+        from app.services.payment_method_labels import payment_method_fa
+
         lines.append(
             kv_line(
-                "💳", "روش",
-                html_mod.escape(methods.get(order.payment_method, order.payment_method)),
+                "💳",
+                "روش",
+                html_mod.escape(payment_method_fa(order.payment_method)),
             )
         )
     return label, lines
@@ -895,18 +892,13 @@ async def _pending_order_detail_lines(
             kv_line("📅", "مدت پلن", format_plan_duration_days(plan.duration_days))
         )
     if order.payment_method:
-        method_map = {
-            "wallet": "کیف پول",
-            "card": "کارت به کارت",
-            "gateway": "درگاه",
-            "crypto": "رمزارز",
-            "stars": "استارز",
-        }
+        from app.services.payment_method_labels import payment_method_fa
+
         extras.append(
             kv_line(
                 "💳",
                 "روش",
-                method_map.get(str(order.payment_method), str(order.payment_method)),
+                payment_method_fa(order.payment_method),
             )
         )
     return kind, extras

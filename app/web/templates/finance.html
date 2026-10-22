@@ -107,7 +107,7 @@
           <span class="badge warn badge-inline" title="پرداخت شده بدون سرویس">گیرکرده</span>
           {% endif %}
         </td>
-        <td class="col-hide-sm" data-sort-value="{{ o.payment_method or '' }}">{% if o.payment_method=='card' %}کارت{% elif o.payment_method=='wallet' %}کیف پول{% else %}{{ o.payment_method or "—" }}{% endif %}</td>
+        <td class="col-hide-sm" data-sort-value="{{ o.payment_method or '' }}">{% if o.payment_method=='card' %}کارت به کارت{% elif o.payment_method=='wallet' %}کیف پول{% elif o.payment_method=='psp' %}درگاه آنلاین{% elif o.payment_method=='bbc' %}بزن به کارت{% elif o.payment_method=='gateway' %}درگاه لینک{% elif o.payment_method=='crypto' %}رمزارز{% elif o.payment_method=='stars' %}استارز{% else %}{{ o.payment_method or "—" }}{% endif %}</td>
         <td class="muted col-hide-sm" data-sort-value="{{ o.created_at }}">{{ o.created_at }}</td>
         <td class="col-actions">
           {% set has_receipt = pay and pay.receipt_file_id and not (pay.receipt_file_id|string).startswith('stars:') %}

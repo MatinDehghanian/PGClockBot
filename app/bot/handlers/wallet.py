@@ -573,7 +573,9 @@ async def wtop_choose_method(
             body = f"مبلغ {amount_txt} را از درگاه آنلاین پرداخت کنید."
         body += f"\n\n(پرداخت #{payment.id})"
         rows: list[list[InlineKeyboardButton]] = []
-        link = (settlement.checkout_url or "").strip()
+        from app.services.payment_settlement import public_checkout_button_url
+
+        link = public_checkout_button_url(settlement)
         if link.startswith("http://") or link.startswith("https://"):
             rows.append([InlineKeyboardButton(text="🏦 ورود به درگاه", url=link)])
         rows.append(

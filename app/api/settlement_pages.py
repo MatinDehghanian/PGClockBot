@@ -5,43 +5,51 @@ Public surface:
   - Card-auto webhooks — per-tenant path + HMAC secret from that tenant only
   - BezanBeCard callback/return — tenant path + checkout token; always re-fetches API
   - Mock checkout/pay — ONLY when ALLOW_SETTLEMENT_MOCK=1 + one-time token
+  - Checkout go-link — panel-hosted redirect that hides the PSP host in Telegram
 """
 
 from __future__ import annotations
 
 import logging
+import secrets
 from html import escape
+from typing import Any, Callable
 
 from fastapi import Depends, Form, Request
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import Order, Payment, SettlementStatus
+from app.api.status_render import render_status_page
+from app.db.models import SettlementStatus
 
 logger = logging.getLogger(__name__)
 
+_TELEGRAM_FOOTER = "این صفحه را ببندید و به تلگرام برگردید."
 
-def _html_page(title: str, body: str, *, ok: bool = True, status_code: int = 200) -> HTMLResponse:
-    color = "#16a34a" if ok else "#dc2626"
-    doc = f"""<!DOCTYPE html>
-<html lang="fa" dir="rtl">
-<head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>{escape(title)}</title>
-<style>
-body{{font-family:Tahoma,Arial,sans-serif;background:#f4f4f5;margin:0;padding:24px;color:#18181b}}
-.card{{max-width:420px;margin:40px auto;background:#fff;border-radius:12px;padding:24px;
-box-shadow:0 1px 3px rgba(0,0,0,.08);text-align:center}}
-h1{{font-size:1.15rem;margin:0 0 12px;color:{color}}}
-p{{margin:8px 0;line-height:1.7;font-size:.95rem}}
-.btn{{display:inline-block;margin-top:16px;padding:10px 20px;background:#2563eb;color:#fff;
-text-decoration:none;border:0;border-radius:8px;font:inherit;cursor:pointer}}
-.muted{{color:#71717a;font-size:.85rem}}
-</style>
-</head>
-<body><div class="card">{body}</div></body></html>"""
-    return HTMLResponse(doc, status_code=status_code)
+
+def _status(
+    request: Request,
+    *,
+    kind: str,
+    title: str,
+    message: str,
+    http_status: int = 200,
+    watermark: str | None = None,
+    body_html: str = "",
+):
+    return render_status_page(
+        request,
+        kind=kind,
+        title=title,
+        message=message,
+        http_status=http_status,
+        watermark=watermark or kind.upper(),
+        kicker="پرداخت",
+        primary_href="",
+        secondary_href="",
+        body_html=body_html,
+        footer=_TELEGRAM_FOOTER,
+    )
 
 
 def _sig_from_headers(request: Request) -> str:
@@ -56,7 +64,80 @@ def _sig_from_headers(request: Request) -> str:
     return signature.strip()
 
 
-def register_settlement_pages(app, *, get_db):
+def _bbc_return_page(settlement: Any) -> tuple[str, str, str]:
+    """What the payer sees after the payment page; never internal ids or reasons."""
+    status = settlement.status
+    error = str(settlement.error_message or "")
+    if status == SettlementStatus.SETTLED.value:
+        return "ok", "پرداخت تأیید شد", "سرویس در تلگرام برای شما فرستاده شد."
+    if error.startswith("review:") or status == SettlementStatus.FAILED.value:
+        return (
+            "warn",
+            "پرداخت در حال بررسی است",
+            "فروشگاه واریز را بررسی می‌کند و نتیجه در ربات به شما اطلاع داده می‌شود.",
+        )
+    if status == SettlementStatus.EXPIRED.value:
+        return (
+            "error",
+            "مهلت پرداخت تمام شد",
+            "به ربات برگردید و دوباره پرداخت را شروع کنید.",
+        )
+    return (
+        "pending",
+        "هنوز واریزی ثبت نشده",
+        "بعد از واریز دقیقِ مبلغ یکتا، تأیید و تحویل خودکار انجام می‌شود.",
+    )
+
+
+def _register_checkout_go(app: Any, get_db: Callable[..., Any]) -> None:
+    @app.get("/payments/settlement/go/{settlement_id}")
+    async def settlement_checkout_go(
+        settlement_id: int,
+        request: Request,
+        session: AsyncSession = Depends(get_db),
+    ):
+        """302 to the real checkout URL after a token check (hides PSP host in Telegram)."""
+        from app.db.models import PaymentSettlement
+
+        token = (request.query_params.get("t") or "").strip()
+        settlement = await session.get(PaymentSettlement, settlement_id)
+        expected = (settlement.checkout_token if settlement else "") or ""
+        if (
+            not settlement
+            or not token
+            or not expected
+            or not secrets.compare_digest(token, expected)
+        ):
+            return _status(
+                request,
+                kind="error",
+                title="لینک نامعتبر است",
+                message="به ربات برگردید و دوباره پرداخت را شروع کنید.",
+                http_status=404,
+                watermark="404",
+            )
+        if settlement.status == SettlementStatus.SETTLED.value:
+            return _status(
+                request,
+                kind="ok",
+                title="قبلاً تأیید شده",
+                message="این پرداخت پیش‌تر تسویه شده است؛ به تلگرام برگردید.",
+                watermark="OK",
+            )
+        target = (settlement.checkout_url or "").strip()
+        if not target.startswith("https://"):
+            return _status(
+                request,
+                kind="error",
+                title="لینک پرداخت آماده نیست",
+                message="به ربات برگردید و دوباره تلاش کنید.",
+                http_status=400,
+                watermark="ERR",
+            )
+        return RedirectResponse(url=target, status_code=302)
+
+
+def _register_mock_psp(app: Any, get_db: Callable[..., Any]) -> None:
     @app.get("/payments/settlement/mock/checkout", response_class=HTMLResponse)
     async def mock_checkout_page(
         request: Request,
@@ -73,42 +154,73 @@ def register_settlement_pages(app, *, get_db):
         try:
             settlement_id = int(sid)
         except (TypeError, ValueError):
-            return _html_page("خطا", "<h1>درخواست نامعتبر</h1>", ok=False, status_code=400)
+            return _status(
+                request,
+                kind="error",
+                title="درخواست نامعتبر",
+                message="شناسه تسویه درست نیست.",
+                http_status=400,
+            )
         settlement = await session.get(PaymentSettlement, settlement_id)
         if (
             not settlement
             or settlement.channel != CHANNEL_PSP
             or settlement.provider != "mock"
         ):
-            return _html_page("خطا", "<h1>درخواست نامعتبر</h1>", ok=False, status_code=404)
-        # Constant-time-ish token check without leaking existence details on mismatch.
+            return _status(
+                request,
+                kind="error",
+                title="درخواست نامعتبر",
+                message="این صفحه درگاه آزمایشی یافت نشد.",
+                http_status=404,
+                watermark="404",
+            )
         from app.services.payment_settlement import _require_mock_token
 
         try:
             _require_mock_token(settlement, token)
         except ValueError:
-            return _html_page("خطا", "<h1>درخواست نامعتبر</h1>", ok=False, status_code=403)
+            return _status(
+                request,
+                kind="error",
+                title="درخواست نامعتبر",
+                message="توکن این درگاه آزمایشی درست نیست.",
+                http_status=403,
+                watermark="403",
+            )
 
         if settlement.status == SettlementStatus.SETTLED.value:
-            return _html_page("پرداخت شده", "<h1>قبلاً تسویه شده</h1>")
+            return _status(
+                request,
+                kind="ok",
+                title="قبلاً تسویه شده",
+                message="این پرداخت پیش‌تر تأیید شده است.",
+                watermark="OK",
+            )
 
         amount = int(settlement.amount)
-        # Do not echo payment_id / internal ids beyond what the payer already has in the URL.
         body = f"""
-<h1>درگاه آزمایشی (Mock)</h1>
-<p>مبلغ: <b>{amount:,}</b> تومان</p>
+<p>مبلغ: <b dir="ltr">{amount:,}</b> تومان</p>
 <form method="post" action="/payments/settlement/mock/pay">
-  <input type="hidden" name="settlement_id" value="{settlement.id}"/>
+  <input type="hidden" name="settlement_id" value="{int(settlement.id)}"/>
   <input type="hidden" name="amount" value="{amount}"/>
   <input type="hidden" name="token" value="{escape(token)}"/>
   <button class="btn" type="submit">پرداخت آزمایشی موفق</button>
 </form>
 <p class="muted">فقط با ALLOW_SETTLEMENT_MOCK=1</p>
 """
-        return _html_page("Mock PSP", body)
+        return _status(
+            request,
+            kind="pending",
+            title="درگاه آزمایشی (Mock)",
+            message="برای ادامه دکمهٔ زیر را بزنید.",
+            watermark="MOCK",
+            body_html=body,
+        )
 
     @app.post("/payments/settlement/mock/pay", response_class=HTMLResponse)
     async def mock_pay(
+        request: Request,
         settlement_id: int = Form(...),
         amount: int = Form(...),
         token: str = Form(...),
@@ -130,23 +242,28 @@ def register_settlement_pages(app, *, get_db):
                 token=token,
             )
         except ValueError:
-            return _html_page(
-                "ناموفق",
-                "<h1>تسویه ناموفق</h1><p class='muted'>درخواست رد شد.</p>",
-                ok=False,
-                status_code=400,
+            return _status(
+                request,
+                kind="error",
+                title="تسویه ناموفق",
+                message="درخواست رد شد.",
+                http_status=400,
             )
         if settlement.status == SettlementStatus.SETTLED.value:
             try:
                 await deliver_psp_once(session, settlement)
             except Exception:
                 logger.exception("mock pay notify failed settlement=%s", settlement.id)
-        return _html_page(
-            "موفق",
-            "<h1>پرداخت آزمایشی تأیید شد</h1>"
-            "<p>به ربات برگردید.</p>",
+        return _status(
+            request,
+            kind="ok",
+            title="پرداخت آزمایشی تأیید شد",
+            message="به ربات برگردید.",
+            watermark="OK",
         )
 
+
+def _register_psp_return(app: Any, get_db: Callable[..., Any]) -> None:
     @app.get("/payments/settlement/psp/{provider}/return/{settlement_id}")
     async def psp_return(
         provider: str,
@@ -168,11 +285,13 @@ def register_settlement_pages(app, *, get_db):
         params = dict(request.query_params)
         pre = await session.get(PaymentSettlement, settlement_id)
         if not pre:
-            return _html_page(
-                "ناموفق",
-                "<h1>تسویه یافت نشد</h1>",
-                ok=False,
-                status_code=404,
+            return _status(
+                request,
+                kind="error",
+                title="تسویه یافت نشد",
+                message="اگر مبلغ کم شده با پشتیبانی تماس بگیرید.",
+                http_status=404,
+                watermark="404",
             )
         reseller_id = pre.shop_owner_id
 
@@ -185,36 +304,56 @@ def register_settlement_pages(app, *, get_db):
                 reseller_id=reseller_id,
             )
         except ValueError:
-            return _html_page(
-                "ناموفق",
-                "<h1>تأیید پرداخت ناموفق</h1>"
-                "<p class='muted'>اگر مبلغ کم شده با پشتیبانی تماس بگیرید.</p>",
-                ok=False,
-                status_code=400,
+            return _status(
+                request,
+                kind="error",
+                title="تأیید پرداخت ناموفق",
+                message="اگر مبلغ کم شده با پشتیبانی تماس بگیرید.",
+                http_status=400,
             )
         if settlement.status == SettlementStatus.SETTLED.value:
             try:
                 await deliver_psp_once(session, settlement)
             except Exception:
                 logger.exception("psp return notify failed settlement=%s", settlement.id)
-        return _html_page(
-            "موفق",
-            "<h1>پرداخت تأیید شد</h1><p>می‌توانید به تلگرام برگردید.</p>",
+            return _status(
+                request,
+                kind="ok",
+                title="پرداخت تأیید شد",
+                message="می‌توانید به تلگرام برگردید.",
+                watermark="OK",
+            )
+        if settlement.status == SettlementStatus.AWAITING.value:
+            return _status(
+                request,
+                kind="pending",
+                title="پرداخت هنوز تأیید نشده",
+                message="اگر پرداخت را کامل کردید کمی صبر کنید یا به ربات برگردید.",
+                watermark="…",
+            )
+        return _status(
+            request,
+            kind="warn",
+            title="پرداخت تکمیل نشد",
+            message="می‌توانید به ربات برگردید و دوباره تلاش کنید.",
+            watermark="!",
         )
 
+
+def _register_card_auto(app: Any, get_db: Callable[..., Any]) -> None:
     async def _card_auto_webhook_for_shop(
         request: Request,
         session: AsyncSession,
         *,
         shop_owner_id: int | None,
     ):
+        from app.db.models import Order, Payment
         from app.services.payment_settlement import (
             handle_card_auto_webhook,
             notify_after_settlement,
         )
 
         body = await request.body()
-        # Cap body size — fail closed on huge payloads
         if len(body) > 64 * 1024:
             return JSONResponse({"ok": False}, status_code=413)
         try:
@@ -226,7 +365,6 @@ def register_settlement_pages(app, *, get_db):
             )
         except ValueError as exc:
             logger.info("card-auto webhook rejected shop=%s: %s", shop_owner_id, exc)
-            # Generic client error — do not echo internal reason to callers.
             return JSONResponse({"ok": False}, status_code=400)
         payment = await session.get(Payment, int(settlement.payment_id))
         order = None
@@ -252,9 +390,7 @@ def register_settlement_pages(app, *, get_db):
         request: Request,
         session: AsyncSession = Depends(get_db),
     ):
-        return await _card_auto_webhook_for_shop(
-            request, session, shop_owner_id=None
-        )
+        return await _card_auto_webhook_for_shop(request, session, shop_owner_id=None)
 
     @app.post("/payments/settlement/card-auto/shop/{reseller_id}/webhook")
     async def card_auto_webhook_shop(
@@ -273,18 +409,23 @@ def register_settlement_pages(app, *, get_db):
             request, session, shop_owner_id=int(reseller_id)
         )
 
-    # Legacy path removed — do not accept unsigned/tenant-ambiguous webhooks.
     @app.api_route(
         "/payments/settlement/card-auto/webhook",
         methods=["GET", "POST"],
     )
     async def card_auto_webhook_legacy_removed():
         return JSONResponse(
-            {"ok": False, "error": "use /card-auto/platform/webhook or /card-auto/shop/{id}/webhook"},
+            {
+                "ok": False,
+                "error": "use /card-auto/platform/webhook or /card-auto/shop/{id}/webhook",
+            },
             status_code=410,
         )
 
+
+def _register_bbc(app: Any, get_db: Callable[..., Any]) -> None:
     async def _bbc_finish(
+        request: Request,
         session: AsyncSession,
         *,
         tenant_key: int,
@@ -301,44 +442,24 @@ def register_settlement_pages(app, *, get_db):
         except ValueError:
             logger.info("bbc link rejected tenant=%s settlement=%s", tenant_key, settlement_id)
             if as_html:
-                return _html_page(
-                    "نامعتبر",
-                    "<h1>این لینک پرداخت معتبر نیست</h1>"
-                    "<p class='muted'>به ربات برگردید و وضعیت سفارش را آنجا ببینید.</p>",
-                    ok=False,
-                    status_code=404,
+                return _status(
+                    request,
+                    kind="error",
+                    title="این لینک پرداخت معتبر نیست",
+                    message="به ربات برگردید و وضعیت سفارش را آنجا ببینید.",
+                    http_status=404,
+                    watermark="404",
                 )
             return JSONResponse({"ok": False}, status_code=404)
         if not as_html:
             return JSONResponse({"ok": True})
-        title, body, ok = _bbc_return_page(settlement)
-        return _html_page(title, body, ok=ok)
-
-    def _bbc_return_page(settlement) -> tuple[str, str, bool]:
-        """What the payer sees after the payment page; never internal ids or reasons."""
-        status = settlement.status
-        error = str(settlement.error_message or "")
-        if status == SettlementStatus.SETTLED.value:
-            return "موفق", "<h1>پرداخت تأیید شد</h1><p>سرویس در تلگرام برای شما فرستاده شد.</p>", True
-        if error.startswith("review:") or status == SettlementStatus.FAILED.value:
-            return (
-                "در حال بررسی",
-                "<h1>پرداخت در حال بررسی است</h1>"
-                "<p>فروشگاه واریز را بررسی می‌کند و نتیجه در ربات به شما اطلاع داده می‌شود.</p>",
-                True,
-            )
-        if status == SettlementStatus.EXPIRED.value:
-            return (
-                "منقضی",
-                "<h1>مهلت پرداخت تمام شد</h1><p class='muted'>به ربات برگردید و دوباره پرداخت را شروع کنید.</p>",
-                False,
-            )
-        return (
-            "در انتظار",
-            "<h1>هنوز واریزی ثبت نشده</h1>"
-            "<p>بعد از واریز دقیقِ مبلغ یکتا، تأیید و تحویل خودکار انجام می‌شود.</p>"
-            "<p class='muted'>می‌توانید این صفحه را ببندید و به ربات برگردید.</p>",
-            True,
+        kind, title, message = _bbc_return_page(settlement)
+        return _status(
+            request,
+            kind=kind,
+            title=title,
+            message=message,
+            watermark="OK" if kind == "ok" else kind.upper()[:4],
         )
 
     @app.api_route(
@@ -351,10 +472,14 @@ def register_settlement_pages(app, *, get_db):
         request: Request,
         session: AsyncSession = Depends(get_db),
     ):
-        # The body is never read: payment truth comes from the API with the shop's key.
         token = (request.query_params.get("t") or "").strip()
         return await _bbc_finish(
-            session, tenant_key=tenant_key, settlement_id=settlement_id, token=token, as_html=False
+            request,
+            session,
+            tenant_key=tenant_key,
+            settlement_id=settlement_id,
+            token=token,
+            as_html=False,
         )
 
     @app.get("/payments/settlement/bbc/tenant/{tenant_key}/return/{settlement_id}")
@@ -366,5 +491,18 @@ def register_settlement_pages(app, *, get_db):
     ):
         token = (request.query_params.get("t") or "").strip()
         return await _bbc_finish(
-            session, tenant_key=tenant_key, settlement_id=settlement_id, token=token, as_html=True
+            request,
+            session,
+            tenant_key=tenant_key,
+            settlement_id=settlement_id,
+            token=token,
+            as_html=True,
         )
+
+
+def register_settlement_pages(app, *, get_db):
+    _register_checkout_go(app, get_db)
+    _register_mock_psp(app, get_db)
+    _register_psp_return(app, get_db)
+    _register_card_auto(app, get_db)
+    _register_bbc(app, get_db)
