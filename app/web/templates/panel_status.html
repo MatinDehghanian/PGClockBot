@@ -123,7 +123,8 @@
         {% endif %}
 
         {% if primary_href or secondary_href or show_close_button %}
-        <div class="panel-status-actions{% if show_close_button and not primary_href and not secondary_href %} panel-status-actions--single{% endif %}">
+        {% set _single_action = (primary_href and not secondary_href and not show_close_button) or (show_close_button and not primary_href and not secondary_href) %}
+        <div class="panel-status-actions{% if _single_action %} panel-status-actions--single{% endif %}">
           {% if primary_href %}
           <a class="btn" href="{{ primary_href }}">{{ primary_label }}</a>
           {% endif %}

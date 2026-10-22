@@ -920,6 +920,33 @@ def bot_deep_link(bot_username: str | None, payload: str) -> str | None:
     return f"https://t.me/{uname}?start={quote(payload)}"
 
 
+async def shop_bot_chat_url(
+    session: AsyncSession,
+    *,
+    shop_owner_id: int | None,
+) -> str | None:
+    """``https://t.me/<bot>`` for the shop bot, else the platform bot username.
+
+    Uses stored usernames only (no Telegram API call) so payment return pages
+    stay fast when the panel is down. Returns ``None`` when no username is set.
+    """
+    from app.config import get_settings
+    from app.db.models import ResellerProfile
+
+    uname: str | None = None
+    rid = int(shop_owner_id) if shop_owner_id is not None else 0
+    if rid > 0:
+        profile = (
+            await session.execute(
+                select(ResellerProfile).where(ResellerProfile.user_id == rid)
+            )
+        ).scalar_one_or_none()
+        uname = (profile.bot_username if profile else None) or None
+    if not uname:
+        uname = (get_settings().bot_username or "").strip() or None
+    return bot_deep_link(uname, "")
+
+
 async def build_magic_links_context(session: AsyncSession, staff: dict) -> dict[str, Any]:
     """Username + deep links for settings «لینک‌های سریع» tab."""
     from app.config import get_settings

@@ -46,6 +46,7 @@ class Ux20HelpersTests(unittest.TestCase):
             bot_deep_link("MyBot", "renew"),
             "https://t.me/MyBot?start=renew",
         )
+        self.assertEqual(bot_deep_link("MyBot", ""), "https://t.me/MyBot")
         self.assertIsNone(bot_deep_link("", "wallet"))
 
     def test_funnel_steps(self):
