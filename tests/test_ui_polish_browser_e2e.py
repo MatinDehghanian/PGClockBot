@@ -285,6 +285,9 @@ class BrowserTests(AppPagesCase):
                   const warnTopScrolled = warnRow.getBoundingClientRect().top;
                   const panelBottom = document.querySelector('#m1 .ui-modal-panel').getBoundingClientRect().bottom;
                   const saveBottom = saveRow.getBoundingClientRect().bottom;
+                  const saveBtn = document.getElementById('save').getBoundingClientRect();
+                  const savePad = parseFloat(saveStyle.paddingLeft) || 0;
+                  const saveBox = saveRow.getBoundingClientRect();
                   return {
                     ok: true,
                     saveSticky: saveStyle.position === 'sticky',
@@ -293,6 +296,7 @@ class BrowserTests(AppPagesCase):
                     sameFrost: saveStyle.backgroundColor === headStyle.backgroundColor,
                     savePinned: Math.abs(saveBottom - panelBottom) < 2.5,
                     saveMovedLessThanWarn: Math.abs(saveTopScrolled - saveTopAtStart) < Math.abs(warnTopScrolled - saveTopAtStart) - 20,
+                    saveFullWidth: Math.abs(saveBtn.width - (saveBox.width - 2 * savePad)) < 2,
                   };
                 }"""
             )
@@ -302,5 +306,6 @@ class BrowserTests(AppPagesCase):
             self.assertTrue(layout["saveFrosted"], msg=layout)
             self.assertTrue(layout["sameFrost"], msg=layout)
             self.assertTrue(layout["savePinned"], msg=layout)
+            self.assertTrue(layout["saveFullWidth"], msg=layout)
 
         self._with_browser({"/modal": _settings_save_modal_page()}, check)
