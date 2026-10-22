@@ -15,6 +15,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.4.35": [
+        "پرداخت: دکمهٔ «بازگشت به ربات» با tg://resolve چت ربات را داخل مرورگر تلگرام باز می‌کند (#913)",
+        "وب‌پنل: دکمهٔ ذخیره در فوتر مودال وسط‌چین عمودی شد (#914)",
+        "ریستور: backup/dev-pre-v0.4.35 (commit 29d04a82)",
+    ],
     "0.4.34": [
         "وب‌پنل: دکمهٔ ذخیرهٔ مودال به‌صورت فوتر واقعی پایین پنل پین شد؛ فاصلهٔ اضافه زیر ذخیره و چسبیدن محتوا به لبه برطرف شد (#911)",
         "ریستور: backup/dev-pre-v0.4.34 (commit 3b0c31d6)",
