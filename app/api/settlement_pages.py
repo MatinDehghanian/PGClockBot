@@ -26,18 +26,33 @@ _TELEGRAM_FOOTER = "برای ادامه به ربات برگردید."
 _BOT_RETURN_LABEL = "بازگشت به ربات"
 
 
-async def _bot_return_href(
+async def _bot_return_links(
     session: AsyncSession | None,
     shop_owner_id: int | None,
-) -> str:
-    """Shop (or platform) ``t.me`` chat URL for the return CTA."""
-    from app.services.ux20 import bot_deep_link, shop_bot_chat_url
+) -> tuple[str, str]:
+    """Return ``(primary_href, https_fallback)`` for the bot CTA.
+
+    Primary prefers ``tg://resolve?domain=…`` so Telegram's in-app browser
+    actually opens the chat; HTTPS ``t.me`` is kept as a click fallback.
+    """
+    from app.services.ux20 import (
+        bot_deep_link,
+        bot_tg_resolve_link,
+        shop_bot_chat_url,
+        shop_bot_https_url,
+    )
 
     if session is not None:
-        return (await shop_bot_chat_url(session, shop_owner_id=shop_owner_id)) or ""
+        primary = (await shop_bot_chat_url(session, shop_owner_id=shop_owner_id)) or ""
+        https = (await shop_bot_https_url(session, shop_owner_id=shop_owner_id)) or ""
+        return primary, https
+
     from app.config import get_settings
 
-    return bot_deep_link(get_settings().bot_username, "") or ""
+    uname = get_settings().bot_username
+    primary = bot_tg_resolve_link(uname) or bot_deep_link(uname, "") or ""
+    https = bot_deep_link(uname, "") or ""
+    return primary, https
 
 
 async def _status(
@@ -52,7 +67,7 @@ async def _status(
     watermark: str | None = None,
     body_html: str = "",
 ):
-    bot_href = await _bot_return_href(session, shop_owner_id)
+    bot_href, bot_https = await _bot_return_links(session, shop_owner_id)
     return render_status_page(
         request,
         kind=kind,
@@ -64,6 +79,7 @@ async def _status(
         kicker="",
         primary_href=bot_href,
         primary_label=_BOT_RETURN_LABEL if bot_href else "",
+        primary_fallback_href=bot_https if bot_https and bot_https != bot_href else "",
         secondary_href="",
         body_html=body_html,
         footer=_TELEGRAM_FOOTER,

@@ -126,7 +126,7 @@
         {% set _single_action = (primary_href and not secondary_href and not show_close_button) or (show_close_button and not primary_href and not secondary_href) %}
         <div class="panel-status-actions{% if _single_action %} panel-status-actions--single{% endif %}">
           {% if primary_href %}
-          <a class="btn" href="{{ primary_href }}">{{ primary_label }}</a>
+          <a class="btn" id="panel-status-bot-return" href="{{ primary_href }}"{% if primary_fallback_href|default('') %} data-https="{{ primary_fallback_href }}"{% endif %}>{{ primary_label }}</a>
           {% endif %}
           {% if secondary_href %}
           <a class="btn btn-ghost" href="{{ secondary_href }}">{{ secondary_label }}</a>
@@ -145,6 +145,41 @@
       {{ footer|default('اگر مشکل ادامه داشت، از حساب خارج شوید و دوباره وارد شوید.') }}
     </footer>
   </div>
+  {% if primary_href and primary_fallback_href|default('') %}
+  <script>
+  (function () {
+    var a = document.getElementById("panel-status-bot-return");
+    if (!a) return;
+    a.addEventListener("click", function (ev) {
+      var https = a.getAttribute("data-https") || "";
+      var href = a.getAttribute("href") || "";
+      try {
+        if (
+          window.Telegram &&
+          Telegram.WebApp &&
+          typeof Telegram.WebApp.openTelegramLink === "function" &&
+          https.indexOf("https://t.me/") === 0
+        ) {
+          ev.preventDefault();
+          Telegram.WebApp.openTelegramLink(https);
+          return;
+        }
+      } catch (e) {}
+      // tg:// hands off to the Telegram app; if the page is still visible,
+      // fall back to https://t.me (external browser / desktop without handler).
+      if (href.indexOf("tg:") === 0 && https) {
+        setTimeout(function () {
+          try {
+            if (!document.hidden) {
+              window.location.href = https;
+            }
+          } catch (e2) {}
+        }, 900);
+      }
+    });
+  })();
+  </script>
+  {% endif %}
   {% if show_close_button %}
   <script>
   (function () {

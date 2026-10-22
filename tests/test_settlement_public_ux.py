@@ -25,8 +25,9 @@ class SettlementStatusTemplateTests(unittest.TestCase):
             "kicker": "",
             "kicker_ltr": False,
             "ref": None,
-            "primary_href": "https://t.me/shopbot",
+            "primary_href": "tg://resolve?domain=shopbot",
             "primary_label": "بازگشت به ربات",
+            "primary_fallback_href": "https://t.me/shopbot",
             "secondary_href": "",
             "secondary_label": "",
             "guide_heading": "",
@@ -49,13 +50,15 @@ class SettlementStatusTemplateTests(unittest.TestCase):
         self.assertIn("پرداخت تأیید شد", html)
         self.assertIn("می‌توانید به تلگرام برگردید", html)
 
-    def test_payment_page_uses_bot_return_link_not_close(self) -> None:
+    def test_payment_page_uses_tg_resolve_not_plain_tme_alone(self) -> None:
         html = self.render()
         self.assertNotIn("panel-status-kicker", html)
         self.assertNotIn("panel-status-close-btn", html)
         self.assertNotIn("Telegram.WebApp.close", html)
         self.assertIn("بازگشت به ربات", html)
-        self.assertIn('href="https://t.me/shopbot"', html)
+        self.assertIn('href="tg://resolve?domain=shopbot"', html)
+        self.assertIn('data-https="https://t.me/shopbot"', html)
+        self.assertIn("openTelegramLink", html)
         self.assertIn("panel-status-actions--single", html)
 
     def test_ascii_kicker_keeps_ltr(self) -> None:
@@ -64,6 +67,7 @@ class SettlementStatusTemplateTests(unittest.TestCase):
             kicker_ltr=True,
             primary_href="",
             primary_label="",
+            primary_fallback_href="",
             show_close_button=False,
             code="404",
             title="یافت نشد",
@@ -80,7 +84,7 @@ class SettlementStatusTemplateTests(unittest.TestCase):
 
 class ShopBotChatUrlTests(unittest.IsolatedAsyncioTestCase):
     async def test_shop_username_wins_over_platform(self) -> None:
-        from app.services.ux20 import shop_bot_chat_url
+        from app.services.ux20 import shop_bot_chat_url, shop_bot_https_url
 
         profile = MagicMock(bot_username="ShopBot")
         result = MagicMock()
@@ -91,7 +95,9 @@ class ShopBotChatUrlTests(unittest.IsolatedAsyncioTestCase):
         with patch("app.config.get_settings") as gs:
             gs.return_value = MagicMock(bot_username="platformbot")
             url = await shop_bot_chat_url(session, shop_owner_id=42)
-        self.assertEqual(url, "https://t.me/ShopBot")
+            https = await shop_bot_https_url(session, shop_owner_id=42)
+        self.assertEqual(url, "tg://resolve?domain=ShopBot")
+        self.assertEqual(https, "https://t.me/ShopBot")
 
     async def test_platform_fallback_when_shop_has_no_username(self) -> None:
         from app.services.ux20 import shop_bot_chat_url
@@ -104,7 +110,7 @@ class ShopBotChatUrlTests(unittest.IsolatedAsyncioTestCase):
         with patch("app.config.get_settings") as gs:
             gs.return_value = MagicMock(bot_username="@MainBot")
             url = await shop_bot_chat_url(session, shop_owner_id=7)
-        self.assertEqual(url, "https://t.me/MainBot")
+        self.assertEqual(url, "tg://resolve?domain=MainBot")
 
     async def test_platform_shop_uses_settings_username(self) -> None:
         from app.services.ux20 import shop_bot_chat_url
@@ -113,7 +119,7 @@ class ShopBotChatUrlTests(unittest.IsolatedAsyncioTestCase):
         with patch("app.config.get_settings") as gs:
             gs.return_value = MagicMock(bot_username="MainBot")
             url = await shop_bot_chat_url(session, shop_owner_id=None)
-        self.assertEqual(url, "https://t.me/MainBot")
+        self.assertEqual(url, "tg://resolve?domain=MainBot")
         session.execute.assert_not_called()
 
     async def test_missing_username_returns_none(self) -> None:
@@ -124,6 +130,20 @@ class ShopBotChatUrlTests(unittest.IsolatedAsyncioTestCase):
             gs.return_value = MagicMock(bot_username="")
             url = await shop_bot_chat_url(session, shop_owner_id=None)
         self.assertIsNone(url)
+
+
+class BotTgResolveLinkTests(unittest.TestCase):
+    def test_builds_native_deep_link(self) -> None:
+        from app.services.ux20 import bot_tg_resolve_link, normalize_bot_username
+
+        self.assertEqual(normalize_bot_username("@Shop_Bot"), "Shop_Bot")
+        self.assertEqual(
+            bot_tg_resolve_link("ShopBot"),
+            "tg://resolve?domain=ShopBot",
+        )
+        self.assertIsNone(bot_tg_resolve_link(""))
+        self.assertIsNone(bot_tg_resolve_link("ab"))  # too short
+        self.assertIsNone(bot_tg_resolve_link("https://evil.example"))
 
 
 if __name__ == "__main__":
