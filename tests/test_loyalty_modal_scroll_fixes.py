@@ -124,7 +124,9 @@ class ModalScrollLockTests(unittest.TestCase):
             css,
         )
         self.assertNotIn("padding-inline: calc(var(--space-3) + 14px);", css)
-        # Sticky frosted head inside the scrollport (content scrolls underneath)
+        # Shared frost tokens + sticky frosted head/footer
+        self.assertIn("--modal-frost-bg:", css)
+        self.assertIn("color-mix(in srgb, var(--bg-card) 52%, transparent)", css)
         head_sel = (
             '.ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll > .ui-modal-head {'
         )
@@ -132,8 +134,26 @@ class ModalScrollLockTests(unittest.TestCase):
         head_block = css.split(head_sel, 1)[1].split("}", 1)[0]
         self.assertIn("position: sticky;", head_block)
         self.assertIn("padding-bottom: var(--space-2);", head_block)
-        self.assertIn("backdrop-filter: blur(14px)", head_block)
-        self.assertIn("color-mix(in srgb, var(--bg-card) 72%, transparent)", head_block)
+        self.assertIn("background: var(--modal-frost-bg);", head_block)
+        self.assertIn("backdrop-filter: var(--modal-frost-blur);", head_block)
+        # Opt-in single primary save; warn/danger footers stay unmarked
+        save_sel = (
+            ".ui-modal-panel[data-scroll-shell=\"1\"] > .ui-modal-scroll "
+            ".ui-modal-sticky-save {"
+        )
+        self.assertIn(save_sel, css)
+        save_block = css.split(save_sel, 1)[1].split("}", 1)[0]
+        self.assertIn("position: sticky;", save_block)
+        self.assertIn("bottom: 0;", save_block)
+        self.assertIn("background: var(--modal-frost-bg);", save_block)
+        domain = (
+            ROOT / "app/web/templates/_domain_settings_form.html"
+        ).read_text(encoding="utf-8")
+        pending = (
+            ROOT / "app/web/templates/_settings_pending_orders.html"
+        ).read_text(encoding="utf-8")
+        self.assertIn("ui-modal-sticky-save", domain)
+        self.assertNotIn("ui-modal-sticky-save", pending)
         js = JS.read_text(encoding="utf-8")
         self.assertIn('panel.dataset.scrollShell = \'1\'', js)
         self.assertIn("corner clip", js)

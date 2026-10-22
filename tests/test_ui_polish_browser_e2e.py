@@ -97,6 +97,31 @@ def _modal_page() -> str:
     )
 
 
+def _settings_save_modal_page() -> str:
+    """Domain-settings shape: one primary sticky save + a separate warn action."""
+    lines = "".join(f'<p class="muted">خط تنظیمات {i}</p>' for i in range(36))
+    return (
+        '<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width,initial-scale=1">'
+        '<link rel="stylesheet" href="/static/panel.css"></head><body>'
+        '<button id="open" data-modal-open="m1">باز</button>'
+        '<div class="ui-modal" id="m1" hidden><div class="ui-modal-backdrop" data-modal-close></div>'
+        '<div class="ui-modal-panel" role="dialog" aria-modal="true">'
+        '<div class="ui-modal-head"><h2>تنظیمات</h2>'
+        '<button class="icon-btn" data-modal-close>×</button></div>'
+        '<div class="settings-domain-stack">'
+        f'<form class="settings-form" action="#">{lines}'
+        '<div class="actions sticky-actions ui-modal-sticky-save">'
+        '<button class="btn" id="save" type="submit">ذخیره تنظیمات</button></div></form>'
+        '<form class="settings-form" action="#">'
+        '<div class="card settings-card"><h2>عمل جدا</h2></div>'
+        '<div class="actions sticky-actions">'
+        '<button class="btn btn-warn" id="warn" type="submit">لغو الان</button></div></form>'
+        '</div></div></div>'
+        '<script src="/static/panel.js"></script></body></html>'
+    )
+
+
 class AppPagesCase(RoutesHarness):
     async def fetch(self, path: str) -> str:
         cookie = f"session={self.signer.dumps(OWNER_SESSION)}; csrf=token"
@@ -233,3 +258,49 @@ class BrowserTests(AppPagesCase):
             '<form class="form-stack">' + "".join(f'<p class="muted">خط {i}</p>' for i in range(40)),
         )
         self._with_browser({"/modal": tall}, check)
+
+    def test_single_save_stays_fixed_while_warn_action_scrolls(self):
+        """Only the primary settings save gets the frosted sticky footer."""
+
+        def check(browser, base):
+            page = browser.new_page(viewport=MOBILE)
+            page.goto(base + "/modal")
+            page.click("#open")
+            page.wait_for_selector("#m1.open")
+            page.wait_for_timeout(400)
+            layout = page.evaluate(
+                """() => {
+                  const scroll = document.querySelector('#m1 .ui-modal-scroll');
+                  const saveRow = document.querySelector('#save').closest('.sticky-actions');
+                  const warnRow = document.querySelector('#warn').closest('.sticky-actions');
+                  const head = document.querySelector('#m1 .ui-modal-head');
+                  if (!scroll || !saveRow || !warnRow || !head) return {ok: false};
+                  const saveStyle = getComputedStyle(saveRow);
+                  const warnStyle = getComputedStyle(warnRow);
+                  const headStyle = getComputedStyle(head);
+                  scroll.scrollTop = 0;
+                  const saveTopAtStart = saveRow.getBoundingClientRect().top;
+                  scroll.scrollTop = Math.min(220, scroll.scrollHeight);
+                  const saveTopScrolled = saveRow.getBoundingClientRect().top;
+                  const warnTopScrolled = warnRow.getBoundingClientRect().top;
+                  const panelBottom = document.querySelector('#m1 .ui-modal-panel').getBoundingClientRect().bottom;
+                  const saveBottom = saveRow.getBoundingClientRect().bottom;
+                  return {
+                    ok: true,
+                    saveSticky: saveStyle.position === 'sticky',
+                    warnSticky: warnStyle.position === 'sticky',
+                    saveFrosted: (saveStyle.backdropFilter || saveStyle.webkitBackdropFilter || '').includes('blur'),
+                    sameFrost: saveStyle.backgroundColor === headStyle.backgroundColor,
+                    savePinned: Math.abs(saveBottom - panelBottom) < 2.5,
+                    saveMovedLessThanWarn: Math.abs(saveTopScrolled - saveTopAtStart) < Math.abs(warnTopScrolled - saveTopAtStart) - 20,
+                  };
+                }"""
+            )
+            self.assertTrue(layout["ok"], msg=layout)
+            self.assertTrue(layout["saveSticky"], msg=layout)
+            self.assertFalse(layout["warnSticky"], msg=layout)
+            self.assertTrue(layout["saveFrosted"], msg=layout)
+            self.assertTrue(layout["sameFrost"], msg=layout)
+            self.assertTrue(layout["savePinned"], msg=layout)
+
+        self._with_browser({"/modal": _settings_save_modal_page()}, check)
