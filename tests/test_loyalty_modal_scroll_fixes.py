@@ -146,6 +146,24 @@ class ModalScrollLockTests(unittest.TestCase):
         self.assertIn("position: sticky;", save_block)
         self.assertIn("bottom: 0;", save_block)
         self.assertIn("background: var(--modal-frost-bg);", save_block)
+        self.assertIn("display: flex;", save_block)
+        self.assertIn("align-items: stretch;", save_block)
+        self.assertIn(
+            ".ui-modal-panel[data-scroll-shell=\"1\"] > .ui-modal-scroll "
+            ".ui-modal-sticky-save > .btn,",
+            css,
+        )
+        btn_sel = (
+            ".ui-modal-panel[data-scroll-shell=\"1\"] > .ui-modal-scroll "
+            ".ui-modal-sticky-save > .btn,\n"
+            ".ui-modal-panel[data-scroll-shell=\"1\"] > .ui-modal-scroll "
+            ".ui-modal-sticky-save > a.btn,\n"
+            ".ui-modal-panel[data-scroll-shell=\"1\"] > .ui-modal-scroll "
+            ".ui-modal-sticky-save > button {"
+        )
+        self.assertIn(btn_sel, css)
+        btn_block = css.split(btn_sel, 1)[1].split("}", 1)[0]
+        self.assertIn("width: 100%;", btn_block)
         domain = (
             ROOT / "app/web/templates/_domain_settings_form.html"
         ).read_text(encoding="utf-8")
