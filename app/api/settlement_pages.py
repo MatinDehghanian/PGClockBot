@@ -22,12 +22,29 @@ from app.db.models import SettlementStatus
 
 logger = logging.getLogger(__name__)
 
-_TELEGRAM_FOOTER = "این صفحه را ببندید و به تلگرام برگردید."
+_TELEGRAM_FOOTER = "برای ادامه به ربات برگردید."
+_BOT_RETURN_LABEL = "بازگشت به ربات"
 
 
-def _status(
+async def _bot_return_href(
+    session: AsyncSession | None,
+    shop_owner_id: int | None,
+) -> str:
+    """Shop (or platform) ``t.me`` chat URL for the return CTA."""
+    from app.services.ux20 import bot_deep_link, shop_bot_chat_url
+
+    if session is not None:
+        return (await shop_bot_chat_url(session, shop_owner_id=shop_owner_id)) or ""
+    from app.config import get_settings
+
+    return bot_deep_link(get_settings().bot_username, "") or ""
+
+
+async def _status(
     request: Request,
+    session: AsyncSession | None = None,
     *,
+    shop_owner_id: int | None = None,
     kind: str,
     title: str,
     message: str,
@@ -35,6 +52,7 @@ def _status(
     watermark: str | None = None,
     body_html: str = "",
 ):
+    bot_href = await _bot_return_href(session, shop_owner_id)
     return render_status_page(
         request,
         kind=kind,
@@ -44,12 +62,12 @@ def _status(
         watermark=watermark or kind.upper(),
         # No Persian kicker — ``dir=ltr`` + uppercase made «پرداخت» look left-clipped.
         kicker="",
-        primary_href="",
+        primary_href=bot_href,
+        primary_label=_BOT_RETURN_LABEL if bot_href else "",
         secondary_href="",
         body_html=body_html,
         footer=_TELEGRAM_FOOTER,
-        show_close_button=True,
-        close_button_label="بستن",
+        show_close_button=False,
     )
 
 
@@ -107,8 +125,9 @@ def _register_mock_psp(app: Any, get_db: Callable[..., Any]) -> None:
         try:
             settlement_id = int(sid)
         except (TypeError, ValueError):
-            return _status(
+            return await _status(
                 request,
+                session,
                 kind="error",
                 title="درخواست نامعتبر",
                 message="شناسه تسویه درست نیست.",
@@ -120,8 +139,9 @@ def _register_mock_psp(app: Any, get_db: Callable[..., Any]) -> None:
             or settlement.channel != CHANNEL_PSP
             or settlement.provider != "mock"
         ):
-            return _status(
+            return await _status(
                 request,
+                session,
                 kind="error",
                 title="درخواست نامعتبر",
                 message="این صفحه درگاه آزمایشی یافت نشد.",
@@ -130,11 +150,14 @@ def _register_mock_psp(app: Any, get_db: Callable[..., Any]) -> None:
             )
         from app.services.payment_settlement import _require_mock_token
 
+        shop_id = settlement.shop_owner_id
         try:
             _require_mock_token(settlement, token)
         except ValueError:
-            return _status(
+            return await _status(
                 request,
+                session,
+                shop_owner_id=shop_id,
                 kind="error",
                 title="درخواست نامعتبر",
                 message="توکن این درگاه آزمایشی درست نیست.",
@@ -143,8 +166,10 @@ def _register_mock_psp(app: Any, get_db: Callable[..., Any]) -> None:
             )
 
         if settlement.status == SettlementStatus.SETTLED.value:
-            return _status(
+            return await _status(
                 request,
+                session,
+                shop_owner_id=shop_id,
                 kind="ok",
                 title="قبلاً تسویه شده",
                 message="این پرداخت پیش‌تر تأیید شده است.",
@@ -162,8 +187,10 @@ def _register_mock_psp(app: Any, get_db: Callable[..., Any]) -> None:
 </form>
 <p class="muted">فقط با ALLOW_SETTLEMENT_MOCK=1</p>
 """
-        return _status(
+        return await _status(
             request,
+            session,
+            shop_owner_id=shop_id,
             kind="pending",
             title="درگاه آزمایشی (Mock)",
             message="برای ادامه دکمهٔ زیر را بزنید.",
@@ -195,8 +222,9 @@ def _register_mock_psp(app: Any, get_db: Callable[..., Any]) -> None:
                 token=token,
             )
         except ValueError:
-            return _status(
+            return await _status(
                 request,
+                session,
                 kind="error",
                 title="تسویه ناموفق",
                 message="درخواست رد شد.",
@@ -207,8 +235,10 @@ def _register_mock_psp(app: Any, get_db: Callable[..., Any]) -> None:
                 await deliver_psp_once(session, settlement)
             except Exception:
                 logger.exception("mock pay notify failed settlement=%s", settlement.id)
-        return _status(
+        return await _status(
             request,
+            session,
+            shop_owner_id=settlement.shop_owner_id,
             kind="ok",
             title="پرداخت آزمایشی تأیید شد",
             message="به ربات برگردید.",
@@ -238,8 +268,9 @@ def _register_psp_return(app: Any, get_db: Callable[..., Any]) -> None:
         params = dict(request.query_params)
         pre = await session.get(PaymentSettlement, settlement_id)
         if not pre:
-            return _status(
+            return await _status(
                 request,
+                session,
                 kind="error",
                 title="تسویه یافت نشد",
                 message="اگر مبلغ کم شده با پشتیبانی تماس بگیرید.",
@@ -257,8 +288,10 @@ def _register_psp_return(app: Any, get_db: Callable[..., Any]) -> None:
                 reseller_id=reseller_id,
             )
         except ValueError:
-            return _status(
+            return await _status(
                 request,
+                session,
+                shop_owner_id=reseller_id,
                 kind="error",
                 title="تأیید پرداخت ناموفق",
                 message="اگر مبلغ کم شده با پشتیبانی تماس بگیرید.",
@@ -269,23 +302,29 @@ def _register_psp_return(app: Any, get_db: Callable[..., Any]) -> None:
                 await deliver_psp_once(session, settlement)
             except Exception:
                 logger.exception("psp return notify failed settlement=%s", settlement.id)
-            return _status(
+            return await _status(
                 request,
+                session,
+                shop_owner_id=settlement.shop_owner_id,
                 kind="ok",
                 title="پرداخت تأیید شد",
                 message="می‌توانید به تلگرام برگردید.",
                 watermark="OK",
             )
         if settlement.status == SettlementStatus.AWAITING.value:
-            return _status(
+            return await _status(
                 request,
+                session,
+                shop_owner_id=settlement.shop_owner_id,
                 kind="pending",
                 title="پرداخت هنوز تأیید نشده",
                 message="اگر پرداخت را کامل کردید کمی صبر کنید یا به ربات برگردید.",
                 watermark="…",
             )
-        return _status(
+        return await _status(
             request,
+            session,
+            shop_owner_id=settlement.shop_owner_id,
             kind="warn",
             title="پرداخت تکمیل نشد",
             message="می‌توانید به ربات برگردید و دوباره تلاش کنید.",
@@ -395,8 +434,11 @@ def _register_bbc(app: Any, get_db: Callable[..., Any]) -> None:
         except ValueError:
             logger.info("bbc link rejected tenant=%s settlement=%s", tenant_key, settlement_id)
             if as_html:
-                return _status(
+                shop_id = int(tenant_key) if int(tenant_key) > 0 else None
+                return await _status(
                     request,
+                    session,
+                    shop_owner_id=shop_id,
                     kind="error",
                     title="این لینک پرداخت معتبر نیست",
                     message="به ربات برگردید و وضعیت سفارش را آنجا ببینید.",
@@ -407,8 +449,10 @@ def _register_bbc(app: Any, get_db: Callable[..., Any]) -> None:
         if not as_html:
             return JSONResponse({"ok": True})
         kind, title, message = _bbc_return_page(settlement)
-        return _status(
+        return await _status(
             request,
+            session,
+            shop_owner_id=settlement.shop_owner_id,
             kind=kind,
             title=title,
             message=message,
