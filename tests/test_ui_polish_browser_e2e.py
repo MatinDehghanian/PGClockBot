@@ -260,7 +260,7 @@ class BrowserTests(AppPagesCase):
         self._with_browser({"/modal": tall}, check)
 
     def test_single_save_stays_fixed_while_warn_action_scrolls(self):
-        """Only the primary settings save gets the frosted sticky footer."""
+        """Primary save is a panel footer; warn actions stay in the scroll body."""
 
         def check(browser, base):
             page = browser.new_page(viewport=MOBILE)
@@ -270,42 +270,54 @@ class BrowserTests(AppPagesCase):
             page.wait_for_timeout(400)
             layout = page.evaluate(
                 """() => {
-                  const scroll = document.querySelector('#m1 .ui-modal-scroll');
-                  const saveRow = document.querySelector('#save').closest('.sticky-actions');
+                  const panel = document.querySelector('#m1 .ui-modal-panel');
+                  const scroll = panel.querySelector(':scope > .ui-modal-scroll');
+                  const saveRow = document.querySelector('#save').closest('.ui-modal-sticky-save');
                   const warnRow = document.querySelector('#warn').closest('.sticky-actions');
                   const head = document.querySelector('#m1 .ui-modal-head');
-                  if (!scroll || !saveRow || !warnRow || !head) return {ok: false};
+                  if (!panel || !scroll || !saveRow || !warnRow || !head) return {ok: false};
                   const saveStyle = getComputedStyle(saveRow);
-                  const warnStyle = getComputedStyle(warnRow);
                   const headStyle = getComputedStyle(head);
+                  const scrollPadBottom = parseFloat(getComputedStyle(scroll).paddingBottom) || 0;
                   scroll.scrollTop = 0;
                   const saveTopAtStart = saveRow.getBoundingClientRect().top;
+                  const warnTopAtStart = warnRow.getBoundingClientRect().top;
                   scroll.scrollTop = Math.min(220, scroll.scrollHeight);
                   const saveTopScrolled = saveRow.getBoundingClientRect().top;
                   const warnTopScrolled = warnRow.getBoundingClientRect().top;
-                  const panelBottom = document.querySelector('#m1 .ui-modal-panel').getBoundingClientRect().bottom;
-                  const saveBottom = saveRow.getBoundingClientRect().bottom;
+                  const panelBox = panel.getBoundingClientRect();
+                  const saveBox = saveRow.getBoundingClientRect();
                   const saveBtn = document.getElementById('save').getBoundingClientRect();
                   const savePad = parseFloat(saveStyle.paddingLeft) || 0;
-                  const saveBox = saveRow.getBoundingClientRect();
+                  scroll.scrollTop = scroll.scrollHeight;
+                  const warnBottomAtEnd = warnRow.getBoundingClientRect().bottom;
                   return {
                     ok: true,
-                    saveSticky: saveStyle.position === 'sticky',
-                    warnSticky: warnStyle.position === 'sticky',
+                    saveIsPanelChild: saveRow.parentElement === panel,
+                    saveOutsideScroll: !scroll.contains(saveRow),
+                    warnInsideScroll: scroll.contains(warnRow),
                     saveFrosted: (saveStyle.backdropFilter || saveStyle.webkitBackdropFilter || '').includes('blur'),
                     sameFrost: saveStyle.backgroundColor === headStyle.backgroundColor,
-                    savePinned: Math.abs(saveBottom - panelBottom) < 2.5,
-                    saveMovedLessThanWarn: Math.abs(saveTopScrolled - saveTopAtStart) < Math.abs(warnTopScrolled - saveTopAtStart) - 20,
+                    savePinned: Math.abs(saveBox.bottom - panelBox.bottom) < 2.5,
+                    saveFixedWhileScroll: Math.abs(saveTopScrolled - saveTopAtStart) < 1.5,
+                    warnMoved: Math.abs(warnTopScrolled - warnTopAtStart) > 40,
                     saveFullWidth: Math.abs(saveBtn.width - (saveBox.width - 2 * savePad)) < 2,
+                    scrollKeepsBottomPad: scrollPadBottom >= 24,
+                    warnNotFlushAtEnd: (panelBox.bottom - warnBottomAtEnd) >= 20,
                   };
                 }"""
             )
             self.assertTrue(layout["ok"], msg=layout)
-            self.assertTrue(layout["saveSticky"], msg=layout)
-            self.assertFalse(layout["warnSticky"], msg=layout)
+            self.assertTrue(layout["saveIsPanelChild"], msg=layout)
+            self.assertTrue(layout["saveOutsideScroll"], msg=layout)
+            self.assertTrue(layout["warnInsideScroll"], msg=layout)
             self.assertTrue(layout["saveFrosted"], msg=layout)
             self.assertTrue(layout["sameFrost"], msg=layout)
             self.assertTrue(layout["savePinned"], msg=layout)
+            self.assertTrue(layout["saveFixedWhileScroll"], msg=layout)
+            self.assertTrue(layout["warnMoved"], msg=layout)
             self.assertTrue(layout["saveFullWidth"], msg=layout)
+            self.assertTrue(layout["scrollKeepsBottomPad"], msg=layout)
+            self.assertTrue(layout["warnNotFlushAtEnd"], msg=layout)
 
         self._with_browser({"/modal": _settings_save_modal_page()}, check)

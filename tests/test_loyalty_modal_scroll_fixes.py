@@ -136,30 +136,25 @@ class ModalScrollLockTests(unittest.TestCase):
         self.assertIn("padding-bottom: var(--space-2);", head_block)
         self.assertIn("background: var(--modal-frost-bg);", head_block)
         self.assertIn("backdrop-filter: var(--modal-frost-blur);", head_block)
-        # Opt-in single primary save; warn/danger footers stay unmarked
+        # Opt-in primary save is a panel footer (outside scroll), not mid-form sticky
         save_sel = (
-            ".ui-modal-panel[data-scroll-shell=\"1\"] > .ui-modal-scroll "
-            ".ui-modal-sticky-save {"
+            ".ui-modal-panel[data-scroll-shell=\"1\"] > .ui-modal-sticky-save {"
         )
         self.assertIn(save_sel, css)
         save_block = css.split(save_sel, 1)[1].split("}", 1)[0]
-        self.assertIn("position: sticky;", save_block)
-        self.assertIn("bottom: 0;", save_block)
         self.assertIn("background: var(--modal-frost-bg);", save_block)
         self.assertIn("display: flex;", save_block)
         self.assertIn("align-items: stretch;", save_block)
-        self.assertIn(
-            ".ui-modal-panel[data-scroll-shell=\"1\"] > .ui-modal-scroll "
-            ".ui-modal-sticky-save > .btn,",
+        self.assertNotIn("position: sticky;", save_block)
+        self.assertNotIn(
+            ".ui-modal-panel[data-scroll-shell=\"1\"] > .ui-modal-scroll"
+            ":has(.ui-modal-sticky-save)",
             css,
         )
         btn_sel = (
-            ".ui-modal-panel[data-scroll-shell=\"1\"] > .ui-modal-scroll "
-            ".ui-modal-sticky-save > .btn,\n"
-            ".ui-modal-panel[data-scroll-shell=\"1\"] > .ui-modal-scroll "
-            ".ui-modal-sticky-save > a.btn,\n"
-            ".ui-modal-panel[data-scroll-shell=\"1\"] > .ui-modal-scroll "
-            ".ui-modal-sticky-save > button {"
+            ".ui-modal-panel[data-scroll-shell=\"1\"] > .ui-modal-sticky-save > .btn,\n"
+            ".ui-modal-panel[data-scroll-shell=\"1\"] > .ui-modal-sticky-save > a.btn,\n"
+            ".ui-modal-panel[data-scroll-shell=\"1\"] > .ui-modal-sticky-save > button {"
         )
         self.assertIn(btn_sel, css)
         btn_block = css.split(btn_sel, 1)[1].split("}", 1)[0]
@@ -175,8 +170,11 @@ class ModalScrollLockTests(unittest.TestCase):
         js = JS.read_text(encoding="utf-8")
         self.assertIn('panel.dataset.scrollShell = \'1\'', js)
         self.assertIn("corner clip", js)
+        self.assertIn("function pinModalStickySave", js)
+        self.assertIn("data-save-home", js)
         shell_fn = js.split("ensureModalScrollShell")[1].split("function canScrollInside")[0]
         self.assertIn("while (panel.firstChild)", shell_fn)
+        self.assertIn("pinModalStickySave", shell_fn)
         self.assertNotIn("keepOutsideScroll", shell_fn)
         self.assertNotIn("userEditOnly", shell_fn)
         self.assertIn("syncPaySettingsCards", js)
