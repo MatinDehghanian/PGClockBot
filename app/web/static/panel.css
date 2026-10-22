@@ -6126,33 +6126,63 @@ form.settings-form > .actions.sticky-actions,
   background: var(--bg-card);
   isolation: isolate;
 }
-/* Sticky frosted chrome inside the scrollport — content scrolls underneath.
-   Head owns the top inset; side/bottom padding stay on .ui-modal-scroll. */
-.ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll:has(> .ui-modal-head:first-child) {
-  padding-top: 0;
+/* Shared frosted chrome (sticky head + single-save footer). */
+.ui-modal-panel {
+  --modal-frost-bg: color-mix(in srgb, var(--bg-card) 52%, transparent);
+  --modal-frost-bg-fallback: color-mix(in srgb, var(--bg-card) 90%, transparent);
+  --modal-frost-blur: blur(14px) saturate(1.08);
+  --modal-frost-line: color-mix(in srgb, var(--border) 55%, transparent);
+  --modal-frost-pad: calc(var(--space-3) + var(--modal-scrollbar-room, 8px));
 }
+html[data-theme="light"] .ui-modal-panel {
+  --modal-frost-bg: color-mix(in srgb, var(--bg-card) 58%, transparent);
+  --modal-frost-bg-fallback: color-mix(in srgb, var(--bg-card) 94%, transparent);
+}
+/* Sticky frosted chrome inside the scrollport — content scrolls underneath.
+   Head owns the top inset; opt-in .ui-modal-sticky-save owns the bottom inset.
+   (Opt-in avoids warn/danger footers like pending-order cancel.)
+   padding-top/bottom:0 is re-asserted after the shell padding shorthand below. */
 .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll > .ui-modal-head {
   position: sticky;
   top: 0;
-  z-index: 2;
+  z-index: 3;
   flex: 0 0 auto;
   /* Bleed into inline scroll padding so the matte bar is edge-to-edge */
-  margin-inline: calc(-1 * (var(--space-3) + var(--modal-scrollbar-room, 8px)));
+  margin-inline: calc(-1 * var(--modal-frost-pad));
   margin-block: 0;
-  padding: calc(var(--space-3) + var(--modal-scrollbar-room, 8px));
+  padding: var(--modal-frost-pad);
   padding-bottom: var(--space-2);
   box-sizing: border-box;
-  background: color-mix(in srgb, var(--bg-card) 72%, transparent);
-  backdrop-filter: blur(14px) saturate(1.08);
-  -webkit-backdrop-filter: blur(14px) saturate(1.08);
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+  background: var(--modal-frost-bg);
+  backdrop-filter: var(--modal-frost-blur);
+  -webkit-backdrop-filter: var(--modal-frost-blur);
+  border-bottom: 1px solid var(--modal-frost-line);
 }
-html[data-theme="light"] .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll > .ui-modal-head {
-  background: color-mix(in srgb, var(--bg-card) 78%, transparent);
+.ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll .ui-modal-sticky-save {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  flex: 0 0 auto;
+  margin-inline: calc(-1 * var(--modal-frost-pad));
+  margin-block: 0;
+  padding: var(--space-2) var(--modal-frost-pad);
+  padding-bottom: calc(var(--space-2) + var(--modal-scrollbar-room, 8px));
+  box-sizing: border-box;
+  background: var(--modal-frost-bg);
+  backdrop-filter: var(--modal-frost-blur);
+  -webkit-backdrop-filter: var(--modal-frost-blur);
+  border-top: 1px solid var(--modal-frost-line);
+  border-bottom: 0;
+  border-radius: 0;
+}
+html[data-theme="light"] .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll > .ui-modal-head,
+html[data-theme="light"] .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll .ui-modal-sticky-save {
+  background: var(--modal-frost-bg);
 }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll > .ui-modal-head {
-    background: color-mix(in srgb, var(--bg-card) 94%, transparent);
+  .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll > .ui-modal-head,
+  .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll .ui-modal-sticky-save {
+    background: var(--modal-frost-bg-fallback);
   }
 }
 .ui-modal-scroll {
@@ -6210,6 +6240,13 @@ html[data-theme="light"] .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scro
   gap: var(--space-3);
   padding: calc(var(--space-3) + var(--modal-scrollbar-room, 8px));
   box-sizing: border-box;
+}
+/* Re-assert after the shell padding shorthand so sticky chrome can go edge-flush. */
+.ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll:has(> .ui-modal-head:first-child) {
+  padding-top: 0;
+}
+.ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll:has(.ui-modal-sticky-save) {
+  padding-bottom: 0;
 }
 /* Modal scroll uses shared shell padding (+ --modal-scrollbar-room).
    Extra 14px inset was removed so content width stays consistent while
