@@ -15,6 +15,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.4.31": [
+        "پرداخت: صفحهٔ موفقیت دیگر کپشن چپ‌چین «پرداخت» ندارد و دکمهٔ تمام‌عرض «بستن» برای برگشت به تلگرام اضافه شد (#904)",
+        "ریستور: backup/dev-pre-v0.4.31 (commit 846e2a38)",
+    ],
     "0.4.30": [
         "ربات: دکمهٔ ورود به درگاه دوباره URL مستقیم PSP را نشان می‌دهد (مسیر /go/ پنل برداشته شد) (#901)",
         "ربات: قبل از ورود به درگاه آنلاین پیام «VPN را خاموش کنید» نشان داده می‌شود (#902)",
