@@ -50,6 +50,17 @@ CHANNEL_CARD_AUTO = "card_auto"
 CHANNEL_BBC = "bbc"
 BBC_PROVIDER = "bezanbecard"
 
+# Shown on the Telegram PSP checkout message (above the open-gateway button).
+PSP_VPN_NOTICE = "⚠️ برای ورود به درگاه، VPN خود را خاموش کنید."
+
+
+def with_psp_vpn_notice(body: str) -> str:
+    """Append the VPN reminder once so custom ``psp_pay_text`` still shows it."""
+    text = (body or "").rstrip()
+    if PSP_VPN_NOTICE in text:
+        return text
+    return f"{text}\n\n{PSP_VPN_NOTICE}" if text else PSP_VPN_NOTICE
+
 _OPEN_STATUSES = (
     SettlementStatus.CREATED.value,
     SettlementStatus.AWAITING.value,
