@@ -15,6 +15,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.4.30": [
+        "ربات: دکمهٔ ورود به درگاه دوباره URL مستقیم PSP را نشان می‌دهد (مسیر /go/ پنل برداشته شد) (#901)",
+        "ربات: قبل از ورود به درگاه آنلاین پیام «VPN را خاموش کنید» نشان داده می‌شود (#902)",
+        "ریستور: backup/dev-pre-v0.4.30 (commit 9c14fe8c)",
+    ],
     "0.4.29": [
         "وب‌پنل: هدر مودال‌ها مات/نیمه‌شفاف شد؛ در تنظیمات مالی فقط روش‌های روشن دیده می‌شوند؛ راهنماهای بلند پشت «راهنما» جمع می‌شوند (#899)",
         "ریستور: backup/dev-pre-v0.4.29 (commit 5e6b04e1)",
