@@ -910,6 +910,17 @@ async def refresh_user_risk(session: AsyncSession, user: BotUser) -> list[str]:
     return flags
 
 
+_BOT_USERNAME_RE = re.compile(r"^[A-Za-z0-9_]{5,32}$")
+
+
+def normalize_bot_username(bot_username: str | None) -> str | None:
+    """Strip ``@`` and accept only Telegram username shape."""
+    uname = (bot_username or "").strip().lstrip("@")
+    if not uname or not _BOT_USERNAME_RE.fullmatch(uname):
+        return None
+    return uname
+
+
 def bot_deep_link(bot_username: str | None, payload: str) -> str | None:
     uname = (bot_username or "").strip().lstrip("@")
     if not uname:
@@ -920,16 +931,25 @@ def bot_deep_link(bot_username: str | None, payload: str) -> str | None:
     return f"https://t.me/{uname}?start={quote(payload)}"
 
 
-async def shop_bot_chat_url(
+def bot_tg_resolve_link(bot_username: str | None) -> str | None:
+    """Native deep link that opens the bot chat inside the Telegram client.
+
+    Prefer this over ``https://t.me/...`` on payment-return pages: Telegram's
+    in-app browser often swallows ``https://t.me`` navigations (treats them as
+    internal URIs without opening the chat), and ``t.me`` HTTPS may be filtered.
+    """
+    uname = normalize_bot_username(bot_username)
+    if not uname:
+        return None
+    return f"tg://resolve?domain={uname}"
+
+
+async def resolve_shop_bot_username(
     session: AsyncSession,
     *,
     shop_owner_id: int | None,
 ) -> str | None:
-    """``https://t.me/<bot>`` for the shop bot, else the platform bot username.
-
-    Uses stored usernames only (no Telegram API call) so payment return pages
-    stay fast when the panel is down. Returns ``None`` when no username is set.
-    """
+    """Shop ``ResellerProfile.bot_username``, else platform ``BOT_USERNAME``."""
     from app.config import get_settings
     from app.db.models import ResellerProfile
 
@@ -944,7 +964,30 @@ async def shop_bot_chat_url(
         uname = (profile.bot_username if profile else None) or None
     if not uname:
         uname = (get_settings().bot_username or "").strip() or None
-    return bot_deep_link(uname, "")
+    stripped = (uname or "").strip().lstrip("@") or None
+    return normalize_bot_username(stripped) or stripped
+
+
+async def shop_bot_chat_url(
+    session: AsyncSession,
+    *,
+    shop_owner_id: int | None,
+) -> str | None:
+    """``tg://resolve?domain=<bot>`` for returning from a payment WebView."""
+    uname = await resolve_shop_bot_username(session, shop_owner_id=shop_owner_id)
+    return bot_tg_resolve_link(uname) or bot_deep_link(uname, "")
+
+
+async def shop_bot_https_url(
+    session: AsyncSession,
+    *,
+    shop_owner_id: int | None,
+) -> str | None:
+    """HTTPS ``t.me`` fallback when the native ``tg://`` scheme is unavailable."""
+    return bot_deep_link(
+        await resolve_shop_bot_username(session, shop_owner_id=shop_owner_id),
+        "",
+    )
 
 
 async def build_magic_links_context(session: AsyncSession, staff: dict) -> dict[str, Any]:
