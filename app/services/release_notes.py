@@ -15,6 +15,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.4.34": [
+        "وب‌پنل: دکمهٔ ذخیرهٔ مودال به‌صورت فوتر واقعی پایین پنل پین شد؛ فاصلهٔ اضافه زیر ذخیره و چسبیدن محتوا به لبه برطرف شد (#911)",
+        "ریستور: backup/dev-pre-v0.4.34 (commit 3b0c31d6)",
+    ],
     "0.4.33": [
         "وب‌پنل: دکمهٔ ذخیرهٔ چسبان مودال تمام‌عرض شد (#909)",
         "ریستور: backup/dev-pre-v0.4.33 (commit 3cddfae1)",
