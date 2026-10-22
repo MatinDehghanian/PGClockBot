@@ -289,6 +289,8 @@ class BrowserTests(AppPagesCase):
                   const saveBox = saveRow.getBoundingClientRect();
                   const saveBtn = document.getElementById('save').getBoundingClientRect();
                   const savePad = parseFloat(saveStyle.paddingLeft) || 0;
+                  const padTop = parseFloat(saveStyle.paddingTop) || 0;
+                  const padBottom = parseFloat(saveStyle.paddingBottom) || 0;
                   scroll.scrollTop = scroll.scrollHeight;
                   const warnBottomAtEnd = warnRow.getBoundingClientRect().bottom;
                   return {
@@ -302,6 +304,7 @@ class BrowserTests(AppPagesCase):
                     saveFixedWhileScroll: Math.abs(saveTopScrolled - saveTopAtStart) < 1.5,
                     warnMoved: Math.abs(warnTopScrolled - warnTopAtStart) > 40,
                     saveFullWidth: Math.abs(saveBtn.width - (saveBox.width - 2 * savePad)) < 2,
+                    saveVerticallyCentered: Math.abs(padTop - padBottom) < 0.5,
                     scrollKeepsBottomPad: scrollPadBottom >= 24,
                     warnNotFlushAtEnd: (panelBox.bottom - warnBottomAtEnd) >= 20,
                   };
@@ -317,6 +320,7 @@ class BrowserTests(AppPagesCase):
             self.assertTrue(layout["saveFixedWhileScroll"], msg=layout)
             self.assertTrue(layout["warnMoved"], msg=layout)
             self.assertTrue(layout["saveFullWidth"], msg=layout)
+            self.assertTrue(layout["saveVerticallyCentered"], msg=layout)
             self.assertTrue(layout["scrollKeepsBottomPad"], msg=layout)
             self.assertTrue(layout["warnNotFlushAtEnd"], msg=layout)
 

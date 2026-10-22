@@ -145,7 +145,10 @@ class ModalScrollLockTests(unittest.TestCase):
         self.assertIn("background: var(--modal-frost-bg);", save_block)
         self.assertIn("display: flex;", save_block)
         self.assertIn("align-items: stretch;", save_block)
+        self.assertIn("padding-block: var(--space-2);", save_block)
+        self.assertIn("justify-content: center;", save_block)
         self.assertNotIn("position: sticky;", save_block)
+        self.assertNotIn("safe-area-inset-bottom", save_block)
         self.assertNotIn(
             ".ui-modal-panel[data-scroll-shell=\"1\"] > .ui-modal-scroll"
             ":has(.ui-modal-sticky-save)",
