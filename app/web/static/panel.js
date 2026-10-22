@@ -1223,26 +1223,82 @@
       return panel.querySelector(':scope > .ui-modal-scroll') || panel;
     }
 
+    function isVisibleModalSave(save, panel){
+      if (!save || !panel || !panel.contains(save)) return false;
+      if (save.closest('[hidden]')) return false;
+      let node = save.parentElement;
+      while (node && node !== panel) {
+        if (node.hidden) return false;
+        node = node.parentElement;
+      }
+      return true;
+    }
+
+    function restorePinnedModalSaves(panel){
+      if (!panel) return;
+      panel.querySelectorAll(':scope > .ui-modal-sticky-save[data-save-home]').forEach((save) => {
+        const homeId = save.getAttribute('data-save-home');
+        const home = homeId ? document.getElementById(homeId) : null;
+        if (home && home.parentNode) home.replaceWith(save);
+        else {
+          const formId = save.getAttribute('data-save-form');
+          const form = formId ? document.getElementById(formId) : null;
+          if (form) form.appendChild(save);
+        }
+        save.removeAttribute('data-save-home');
+      });
+    }
+
+    /* Lift the visible primary save out of the scrollport into a real panel
+       footer. Avoids mid-form sticky gaps and keeps bottom content padded. */
+    function pinModalStickySave(modal){
+      const panel = modal && modal.querySelector('.ui-modal-panel');
+      if (!panel || panel.dataset.scrollShell !== '1') return;
+      restorePinnedModalSaves(panel);
+      const active = Array.from(panel.querySelectorAll('.ui-modal-sticky-save'))
+        .find((save) => isVisibleModalSave(save, panel));
+      if (!active) return;
+      const form = active.closest('form');
+      if (!form) return;
+      if (!form.id) {
+        form.id = 'ui-modal-form-' + Math.random().toString(36).slice(2, 10);
+      }
+      const slot = document.createElement('div');
+      slot.hidden = true;
+      slot.id = form.id + '-save-slot';
+      slot.setAttribute('data-ui-modal-save-slot', '1');
+      active.replaceWith(slot);
+      active.querySelectorAll('button[type="submit"], button.btn').forEach((btn) => {
+        btn.setAttribute('form', form.id);
+      });
+      active.setAttribute('data-save-home', slot.id);
+      active.setAttribute('data-save-form', form.id);
+      panel.appendChild(active);
+    }
+
     function ensureModalScrollShell(modal){
       const panel = modal && modal.querySelector('.ui-modal-panel');
-      if (!panel || panel.dataset.scrollShell === '1') return;
-      let scroll = null;
-      try {
-        scroll = panel.querySelector(':scope > .ui-modal-scroll');
-      } catch (e) {
-        scroll = Array.from(panel.children).find((c) => c.classList && c.classList.contains('ui-modal-scroll')) || null;
+      if (!panel) return;
+      if (panel.dataset.scrollShell !== '1') {
+        let scroll = null;
+        try {
+          scroll = panel.querySelector(':scope > .ui-modal-scroll');
+        } catch (e) {
+          scroll = Array.from(panel.children).find((c) => c.classList && c.classList.contains('ui-modal-scroll')) || null;
+        }
+        /* Wrap all panel children; sticky frosted .ui-modal-head stays fixed
+           at the top of this scrollport while body content scrolls under it. */
+        if (!scroll) {
+          scroll = document.createElement('div');
+          scroll.className = 'ui-modal-scroll';
+          while (panel.firstChild) scroll.appendChild(panel.firstChild);
+          panel.appendChild(scroll);
+        }
+        /* Marks panel so CSS can put padding/gap on .ui-modal-scroll while the
+           outer panel keeps opaque chrome + overflow:hidden corner clip. */
+        panel.dataset.scrollShell = '1';
       }
-      /* Wrap all panel children; sticky frosted .ui-modal-head stays fixed
-         at the top of this scrollport while body content scrolls under it. */
-      if (!scroll) {
-        scroll = document.createElement('div');
-        scroll.className = 'ui-modal-scroll';
-        while (panel.firstChild) scroll.appendChild(panel.firstChild);
-        panel.appendChild(scroll);
-      }
-      /* Marks panel so CSS can put padding/gap on .ui-modal-scroll while the
-         outer panel keeps opaque chrome + overflow:hidden corner clip. */
-      panel.dataset.scrollShell = '1';
+      pinModalStickySave(modal);
     }
 
     function canScrollInside(el, deltaY){
@@ -1728,6 +1784,8 @@
         const match = panel.getAttribute('data-modal-tab-panel') === id;
         panel.hidden = !match;
       });
+      const modalRoot = tabBtn.closest('.ui-modal');
+      if (modalRoot) pinModalStickySave(modalRoot);
       try {
         const u = new URL(window.location.href);
         const inDomainModal = !!(

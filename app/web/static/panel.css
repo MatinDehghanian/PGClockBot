@@ -6138,10 +6138,9 @@ html[data-theme="light"] .ui-modal-panel {
   --modal-frost-bg: color-mix(in srgb, var(--bg-card) 58%, transparent);
   --modal-frost-bg-fallback: color-mix(in srgb, var(--bg-card) 94%, transparent);
 }
-/* Sticky frosted chrome inside the scrollport — content scrolls underneath.
-   Head owns the top inset; opt-in .ui-modal-sticky-save owns the bottom inset.
-   (Opt-in avoids warn/danger footers like pending-order cancel.)
-   padding-top/bottom:0 is re-asserted after the shell padding shorthand below. */
+/* Frosted head (inside scroll) + frosted save footer (panel child, outside scroll).
+   JS pinModalStickySave lifts .ui-modal-sticky-save to the panel so scroll bottom
+   padding stays intact and content below never hugs the modal edge. */
 .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll > .ui-modal-head {
   position: sticky;
   top: 0;
@@ -6158,31 +6157,28 @@ html[data-theme="light"] .ui-modal-panel {
   -webkit-backdrop-filter: var(--modal-frost-blur);
   border-bottom: 1px solid var(--modal-frost-line);
 }
-.ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll .ui-modal-sticky-save {
-  position: sticky;
-  bottom: 0;
+.ui-modal-panel[data-scroll-shell="1"] > .ui-modal-sticky-save {
+  position: relative;
   z-index: 3;
   flex: 0 0 auto;
   display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: var(--space-1);
-  width: auto;
-  margin-inline: calc(-1 * var(--modal-frost-pad));
-  margin-block: 0;
+  width: 100%;
+  margin: 0;
   padding: var(--space-2) var(--modal-frost-pad);
-  padding-bottom: calc(var(--space-2) + var(--modal-scrollbar-room, 8px));
+  padding-bottom: max(var(--space-2), env(safe-area-inset-bottom, 0px));
   box-sizing: border-box;
   background: var(--modal-frost-bg);
   backdrop-filter: var(--modal-frost-blur);
   -webkit-backdrop-filter: var(--modal-frost-blur);
   border-top: 1px solid var(--modal-frost-line);
-  border-bottom: 0;
   border-radius: 0;
 }
-.ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll .ui-modal-sticky-save > .btn,
-.ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll .ui-modal-sticky-save > a.btn,
-.ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll .ui-modal-sticky-save > button {
+.ui-modal-panel[data-scroll-shell="1"] > .ui-modal-sticky-save > .btn,
+.ui-modal-panel[data-scroll-shell="1"] > .ui-modal-sticky-save > a.btn,
+.ui-modal-panel[data-scroll-shell="1"] > .ui-modal-sticky-save > button {
   width: 100%;
   max-width: 100%;
   flex: 0 0 auto;
@@ -6190,12 +6186,12 @@ html[data-theme="light"] .ui-modal-panel {
   box-sizing: border-box;
 }
 html[data-theme="light"] .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll > .ui-modal-head,
-html[data-theme="light"] .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll .ui-modal-sticky-save {
+html[data-theme="light"] .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-sticky-save {
   background: var(--modal-frost-bg);
 }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll > .ui-modal-head,
-  .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll .ui-modal-sticky-save {
+  .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-sticky-save {
     background: var(--modal-frost-bg-fallback);
   }
 }
@@ -6255,12 +6251,10 @@ html[data-theme="light"] .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scro
   padding: calc(var(--space-3) + var(--modal-scrollbar-room, 8px));
   box-sizing: border-box;
 }
-/* Re-assert after the shell padding shorthand so sticky chrome can go edge-flush. */
+/* Re-assert after the shell padding shorthand so sticky head can go edge-flush.
+   Bottom padding stays — the save footer lives outside the scrollport. */
 .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll:has(> .ui-modal-head:first-child) {
   padding-top: 0;
-}
-.ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll:has(.ui-modal-sticky-save) {
-  padding-bottom: 0;
 }
 /* Modal scroll uses shared shell padding (+ --modal-scrollbar-room).
    Extra 14px inset was removed so content width stays consistent while
