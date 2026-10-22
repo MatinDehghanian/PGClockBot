@@ -124,27 +124,25 @@ class ModalScrollLockTests(unittest.TestCase):
             css,
         )
         self.assertNotIn("padding-inline: calc(var(--space-3) + 14px);", css)
-        # Sticky head chrome: title/close outside scroll for every modal panel
-        head_sel = '.ui-modal-panel[data-scroll-shell="1"] > .ui-modal-head {'
+        # Sticky frosted head inside the scrollport (content scrolls underneath)
+        head_sel = (
+            '.ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll > .ui-modal-head {'
+        )
         self.assertIn(head_sel, css)
         head_block = css.split(head_sel, 1)[1].split("}", 1)[0]
+        self.assertIn("position: sticky;", head_block)
         self.assertIn("padding-bottom: var(--space-2);", head_block)
-        self.assertIn(
-            "padding: calc(var(--space-3) + var(--modal-scrollbar-room, 8px));",
-            head_block,
-        )
+        self.assertIn("backdrop-filter: blur(14px)", head_block)
+        self.assertIn("color-mix(in srgb, var(--bg-card) 72%, transparent)", head_block)
         js = JS.read_text(encoding="utf-8")
         self.assertIn('panel.dataset.scrollShell = \'1\'', js)
         self.assertIn("corner clip", js)
         shell_fn = js.split("ensureModalScrollShell")[1].split("function canScrollInside")[0]
-        self.assertIn("keepOutsideScroll", shell_fn)
-        self.assertIn("ui-modal-head", shell_fn)
-        # Sticky head is universal — no per-modal allow-list
+        self.assertIn("while (panel.firstChild)", shell_fn)
+        self.assertNotIn("keepOutsideScroll", shell_fn)
         self.assertNotIn("userEditOnly", shell_fn)
-        self.assertNotIn("modal-user-edit", shell_fn)
-        # Must not keep settings flash/tabs outside scroll (only the head)
-        self.assertNotIn("settings-modal-flash", shell_fn)
-        self.assertNotIn("modal-section-tabs", shell_fn)
+        self.assertIn("syncPaySettingsCards", js)
+        self.assertIn("data-pay-settings-for", js)
 
 
 class ModalLayoutPolishTests(unittest.TestCase):

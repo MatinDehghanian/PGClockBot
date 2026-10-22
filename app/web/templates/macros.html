@@ -269,6 +269,20 @@
 </div>
 {%- endmacro %}
 
+{# Long field helps collapse behind «راهنما»; short ones stay inline. #}
+{% macro setting_help(help, class_name='') -%}
+{% if help %}
+  {% if help|length > 70 %}
+  <details class="setting-help{% if class_name %} {{ class_name }}{% endif %}">
+    <summary class="setting-help-summary">راهنما</summary>
+    <div class="setting-help-body muted">{{ help }}</div>
+  </details>
+  {% else %}
+  <small class="muted{% if class_name %} {{ class_name }}{% endif %}">{{ help }}</small>
+  {% endif %}
+{% endif %}
+{%- endmacro %}
+
 {# Modal chrome title — same icon-box language as page_title, plus a short caption #}
 {% macro modal_title(name, text, caption=None, tone='brand', heading='h2', heading_id=None) -%}
 <div class="modal-title">
