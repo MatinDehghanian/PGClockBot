@@ -42,11 +42,14 @@ def _status(
         message=message,
         http_status=http_status,
         watermark=watermark or kind.upper(),
-        kicker="پرداخت",
+        # No Persian kicker — ``dir=ltr`` + uppercase made «پرداخت» look left-clipped.
+        kicker="",
         primary_href="",
         secondary_href="",
         body_html=body_html,
         footer=_TELEGRAM_FOOTER,
+        show_close_button=True,
+        close_button_label="بستن",
     )
 
 

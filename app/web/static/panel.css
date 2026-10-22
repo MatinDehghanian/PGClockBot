@@ -11692,6 +11692,12 @@ html[data-theme="light"] .panel-status-card {
   justify-content: center;
   min-width: 7.5rem;
 }
+.panel-status-actions--single .btn,
+.panel-status-actions .panel-status-close-btn {
+  flex: 1 1 100%;
+  width: 100%;
+  min-width: 0;
+}
 .panel-status-foot {
   font-size: 12px;
   line-height: 1.6;

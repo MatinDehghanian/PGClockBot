@@ -82,7 +82,9 @@
           {% endif %}
         </div>
 
-        <p class="panel-status-kicker muted" dir="ltr">{{ kicker|default('HTTP ' ~ code) }}</p>
+        {% if kicker %}
+        <p class="panel-status-kicker muted"{% if kicker_ltr %} dir="ltr"{% endif %}>{{ kicker }}</p>
+        {% endif %}
         <h1 class="panel-status-title" id="panel-status-title">{{ title }}</h1>
         {% if message %}
         <p class="panel-status-msg muted">{{ message }}</p>
@@ -120,13 +122,18 @@
         </section>
         {% endif %}
 
-        {% if primary_href or secondary_href %}
-        <div class="panel-status-actions">
+        {% if primary_href or secondary_href or show_close_button %}
+        <div class="panel-status-actions{% if show_close_button and not primary_href and not secondary_href %} panel-status-actions--single{% endif %}">
           {% if primary_href %}
           <a class="btn" href="{{ primary_href }}">{{ primary_label }}</a>
           {% endif %}
           {% if secondary_href %}
           <a class="btn btn-ghost" href="{{ secondary_href }}">{{ secondary_label }}</a>
+          {% endif %}
+          {% if show_close_button %}
+          <button type="button" class="btn panel-status-close-btn" id="panel-status-close">
+            {{ close_button_label|default('بستن') }}
+          </button>
           {% endif %}
         </div>
         {% endif %}
@@ -137,5 +144,25 @@
       {{ footer|default('اگر مشکل ادامه داشت، از حساب خارج شوید و دوباره وارد شوید.') }}
     </footer>
   </div>
+  {% if show_close_button %}
+  <script>
+  (function () {
+    var btn = document.getElementById("panel-status-close");
+    if (!btn) return;
+    btn.addEventListener("click", function () {
+      try {
+        if (window.Telegram && Telegram.WebApp && typeof Telegram.WebApp.close === "function") {
+          Telegram.WebApp.close();
+          return;
+        }
+      } catch (e) {}
+      try { window.close(); } catch (e) {}
+      try {
+        if (history.length > 1) history.back();
+      } catch (e) {}
+    });
+  })();
+  </script>
+  {% endif %}
 </body>
 </html>
