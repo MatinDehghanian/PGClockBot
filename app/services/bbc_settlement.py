@@ -22,7 +22,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
-from sqlalchemy import or_, select, update
+from sqlalchemy import case, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Order, Payment, PaymentMethod, PaymentSettlement, PaymentStatus, SettlementStatus
@@ -30,12 +30,14 @@ from app.services.payment_providers import bezanbecard as bbc
 from app.services.payment_settlement import (
     BBC_PROVIDER,
     CHANNEL_BBC,
+    _as_utc,
     _get_by_idem,
     _insert_settlement_race_safe,
     _on,
     _shop_ids_equal,
     idem_key_bbc,
     notify_after_settlement,
+    psp_poll_delay,
     resolve_payment_shop_owner_id,
     settle_and_approve,
     tenant_key_for,
@@ -564,8 +566,14 @@ async def handle_bbc_link(
 
 
 async def poll_bbc_settlements(session: AsyncSession, *, limit: int = POLL_BATCH) -> int:
-    """Re-read open orders and recently expired ones; deliver what settled. Returns the count."""
-    since = datetime.now(timezone.utc) - LATE_PAYMENT_WINDOW
+    """Re-read open orders and recently expired ones that are due; deliver what settled.
+
+    Never-checked rows come first, then the oldest due. Each read pushes the row back
+    by its age (``psp_poll_delay``), so expired or abandoned orders cannot fill every
+    batch ahead of a new payment. Returns the count settled.
+    """
+    now = datetime.now(timezone.utc)
+    since = now - LATE_PAYMENT_WINDOW
     rows = (
         await session.execute(
             select(PaymentSettlement)
@@ -577,16 +585,39 @@ async def poll_bbc_settlements(session: AsyncSession, *, limit: int = POLL_BATCH
                     (PaymentSettlement.status == SettlementStatus.EXPIRED.value)
                     & (PaymentSettlement.updated_at >= since),
                 ),
+                or_(PaymentSettlement.next_check_at.is_(None), PaymentSettlement.next_check_at <= now),
             )
-            .order_by(PaymentSettlement.updated_at.asc(), PaymentSettlement.id.asc())
+            .order_by(
+                case((PaymentSettlement.next_check_at.is_(None), 0), else_=1),
+                PaymentSettlement.next_check_at.asc(),
+                PaymentSettlement.id.asc(),
+            )
             .limit(max(1, min(100, int(limit))))
         )
     ).scalars().all()
     settled = 0
     for settlement in rows:
+        await _schedule_next_check(session, settlement, now=now)
         if await _poll_one(session, settlement):
             settled += 1
     return settled
+
+
+async def _schedule_next_check(session: AsyncSession, settlement: PaymentSettlement, *, now: datetime) -> None:
+    """Commit the next read time before the API call.
+
+    An expired order's age counts from its expiry (``updated_at``), which this write
+    keeps unchanged so the late-payment window still ends on time.
+    """
+    expired = settlement.status == SettlementStatus.EXPIRED.value
+    since = _as_utc(settlement.updated_at if expired else settlement.created_at) or now
+    await session.execute(
+        update(PaymentSettlement)
+        .where(PaymentSettlement.id == int(settlement.id))
+        .values(next_check_at=now + psp_poll_delay(now - since), updated_at=PaymentSettlement.updated_at)
+        .execution_options(synchronize_session=False)
+    )
+    await session.commit()
 
 
 async def _poll_one(session: AsyncSession, settlement: PaymentSettlement) -> bool:
