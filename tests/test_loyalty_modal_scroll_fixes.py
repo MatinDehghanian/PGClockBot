@@ -127,6 +127,15 @@ class ModalScrollLockTests(unittest.TestCase):
         # Shared frost tokens + sticky frosted head/footer
         self.assertIn("--modal-frost-bg:", css)
         self.assertIn("color-mix(in srgb, var(--bg-card) 52%, transparent)", css)
+        self.assertIn("--modal-save-pad-y: var(--space-2_5);", css)
+        shared_sel = (
+            ".ui-modal-panel[data-scroll-shell=\"1\"] > .ui-modal-scroll > .ui-modal-head,\n"
+            ".ui-modal-panel[data-scroll-shell=\"1\"] > .ui-modal-sticky-save {"
+        )
+        self.assertIn(shared_sel, css)
+        shared_block = css.split(shared_sel, 1)[1].split("}", 1)[0]
+        self.assertIn("background: var(--modal-frost-bg);", shared_block)
+        self.assertIn("backdrop-filter: var(--modal-frost-blur);", shared_block)
         head_sel = (
             '.ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll > .ui-modal-head {'
         )
@@ -134,24 +143,20 @@ class ModalScrollLockTests(unittest.TestCase):
         head_block = css.split(head_sel, 1)[1].split("}", 1)[0]
         self.assertIn("position: sticky;", head_block)
         self.assertIn("padding-bottom: var(--space-2);", head_block)
-        self.assertIn("background: var(--modal-frost-bg);", head_block)
-        self.assertIn("backdrop-filter: var(--modal-frost-blur);", head_block)
-        # Opt-in primary save is a panel footer (outside scroll), not mid-form sticky
-        save_sel = (
-            ".ui-modal-panel[data-scroll-shell=\"1\"] > .ui-modal-sticky-save {"
+        # Overlay footer (absolute) so content frosts under it like the head
+        save_anchor = (
+            ".ui-modal-panel[data-scroll-shell=\"1\"] > .ui-modal-sticky-save {\n"
+            "  position: absolute;"
         )
-        self.assertIn(save_sel, css)
-        save_block = css.split(save_sel, 1)[1].split("}", 1)[0]
-        self.assertIn("background: var(--modal-frost-bg);", save_block)
+        self.assertIn(save_anchor, css)
+        save_block = css.split(save_anchor, 1)[1].split("}", 1)[0]
         self.assertIn("display: flex;", save_block)
         self.assertIn("align-items: stretch;", save_block)
-        self.assertIn("padding-block: var(--space-2);", save_block)
+        self.assertIn("padding-block: var(--modal-save-pad-y);", save_block)
         self.assertIn("justify-content: center;", save_block)
-        self.assertNotIn("position: sticky;", save_block)
-        self.assertNotIn("safe-area-inset-bottom", save_block)
-        self.assertNotIn(
-            ".ui-modal-panel[data-scroll-shell=\"1\"] > .ui-modal-scroll"
-            ":has(.ui-modal-sticky-save)",
+        self.assertIn(
+            ".ui-modal-panel[data-scroll-shell=\"1\"]:has(> .ui-modal-sticky-save)"
+            " > .ui-modal-scroll {",
             css,
         )
         btn_sel = (

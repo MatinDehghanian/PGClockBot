@@ -6126,55 +6126,55 @@ form.settings-form > .actions.sticky-actions,
   background: var(--bg-card);
   isolation: isolate;
 }
-/* Shared frosted chrome (sticky head + single-save footer). */
+/* Shared frosted chrome (sticky head + save footer). Same tokens for both. */
 .ui-modal-panel {
   --modal-frost-bg: color-mix(in srgb, var(--bg-card) 52%, transparent);
   --modal-frost-bg-fallback: color-mix(in srgb, var(--bg-card) 90%, transparent);
   --modal-frost-blur: blur(14px) saturate(1.08);
   --modal-frost-line: color-mix(in srgb, var(--border) 55%, transparent);
   --modal-frost-pad: calc(var(--space-3) + var(--modal-scrollbar-room, 8px));
+  /* Vertical air around the save button (equal top/bottom) */
+  --modal-save-pad-y: var(--space-2_5);
+  --modal-save-footer-h: calc(var(--modal-save-pad-y) * 2 + var(--btn-h));
 }
 html[data-theme="light"] .ui-modal-panel {
   --modal-frost-bg: color-mix(in srgb, var(--bg-card) 58%, transparent);
   --modal-frost-bg-fallback: color-mix(in srgb, var(--bg-card) 94%, transparent);
 }
-/* Frosted head (inside scroll) + frosted save footer (panel child, outside scroll).
-   JS pinModalStickySave lifts .ui-modal-sticky-save to the panel so scroll bottom
-   padding stays intact and content below never hugs the modal edge. */
+/* Shared matte glass for head + footer (identical look). */
+.ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll > .ui-modal-head,
+.ui-modal-panel[data-scroll-shell="1"] > .ui-modal-sticky-save {
+  z-index: 3;
+  box-sizing: border-box;
+  background: var(--modal-frost-bg);
+  backdrop-filter: var(--modal-frost-blur);
+  -webkit-backdrop-filter: var(--modal-frost-blur);
+}
 .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll > .ui-modal-head {
   position: sticky;
   top: 0;
-  z-index: 3;
   flex: 0 0 auto;
   /* Bleed into inline scroll padding so the matte bar is edge-to-edge */
   margin-inline: calc(-1 * var(--modal-frost-pad));
   margin-block: 0;
   padding: var(--modal-frost-pad);
   padding-bottom: var(--space-2);
-  box-sizing: border-box;
-  background: var(--modal-frost-bg);
-  backdrop-filter: var(--modal-frost-blur);
-  -webkit-backdrop-filter: var(--modal-frost-blur);
   border-bottom: 1px solid var(--modal-frost-line);
 }
 .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-sticky-save {
-  position: relative;
-  z-index: 3;
-  flex: 0 0 auto;
+  position: absolute;
+  bottom: 0;
+  inset-inline: 0;
   display: flex;
   flex-direction: column;
   align-items: stretch;
   justify-content: center;
   gap: var(--space-1);
-  width: 100%;
+  width: auto;
   margin: 0;
-  /* Equal air above/below the button (separator line ↔ footer bottom edge) */
-  padding-block: var(--space-2);
+  /* Equal air above/below the button; a bit taller than before */
+  padding-block: var(--modal-save-pad-y);
   padding-inline: var(--modal-frost-pad);
-  box-sizing: border-box;
-  background: var(--modal-frost-bg);
-  backdrop-filter: var(--modal-frost-blur);
-  -webkit-backdrop-filter: var(--modal-frost-blur);
   border-top: 1px solid var(--modal-frost-line);
   border-radius: 0;
 }
@@ -6253,10 +6253,13 @@ html[data-theme="light"] .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-stic
   padding: calc(var(--space-3) + var(--modal-scrollbar-room, 8px));
   box-sizing: border-box;
 }
-/* Re-assert after the shell padding shorthand so sticky head can go edge-flush.
-   Bottom padding stays — the save footer lives outside the scrollport. */
+/* Re-assert after the shell padding shorthand so sticky chrome clears correctly. */
 .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll:has(> .ui-modal-head:first-child) {
   padding-top: 0;
+}
+/* Reserve room under scroll content for the overlay save footer. */
+.ui-modal-panel[data-scroll-shell="1"]:has(> .ui-modal-sticky-save) > .ui-modal-scroll {
+  padding-bottom: calc(var(--modal-save-footer-h) + var(--space-2));
 }
 /* Modal scroll uses shared shell padding (+ --modal-scrollbar-room).
    Extra 14px inset was removed so content width stays consistent while
