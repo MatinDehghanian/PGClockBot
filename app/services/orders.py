@@ -7,6 +7,7 @@ import secrets
 import string
 import time
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import select, update
@@ -30,6 +31,7 @@ from app.db.models import (
     UserService,
     WalletTransaction,
 )
+from app.services.open_psp_checkouts import open_psp_checkouts, reusable_psp_payment
 from app.services.pasarguard import extract_sub_token, get_pg, user_subscription_url
 from app.services.purchase_contact import CONTACT_REQUIRED_MESSAGE, purchase_contact_needed, require_purchase_contact
 from app.services.shop_membership import ensure_member
@@ -1326,14 +1328,31 @@ async def start_method_payment(
         )
     if claim.rowcount != 1:
         raise ValueError("این سفارش قابل پرداخت نیست")
-    # Drop older pending payments when switching method
-    old = await session.execute(
-        select(Payment).where(
-            Payment.order_id == order_id,
-            Payment.status == PaymentStatus.PENDING.value,
-        )
+    pending = list(
+        (
+            await session.execute(
+                select(Payment).where(
+                    Payment.order_id == order_id,
+                    Payment.status == PaymentStatus.PENDING.value,
+                )
+            )
+        ).scalars().all()
     )
-    for prev in old.scalars().all():
+    checkouts = await open_psp_checkouts(session, [int(p.id) for p in pending])
+    if method == PaymentMethod.PSP.value:
+        reused = reusable_psp_payment(
+            pending, checkouts, amount=int(order.amount), now=datetime.now(timezone.utc)
+        )
+        if reused is not None:
+            await session.commit()
+            await session.refresh(reused)
+            await session.refresh(order)
+            return reused
+    # Drop older pending payments when switching method, except gateway payments
+    # whose link may still be paid; approve_payment supersedes them if another wins.
+    for prev in pending:
+        if int(prev.id) in checkouts:
+            continue
         prev.status = PaymentStatus.REJECTED.value
         prev.review_note = prev.review_note or "replaced by new payment method"
     payment = Payment(
