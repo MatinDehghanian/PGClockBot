@@ -305,6 +305,8 @@ def _parse_verified_payment(
             amount=paid_amount,
             message="مبلغ تأییدشده با سفارش هم‌خوانی ندارد",
             raw=data,
+            reference=str(result.get("reference") or "").strip(),
+            review_reason="amount_mismatch",
         )
     return (result or {}), paid_amount
 
@@ -343,6 +345,8 @@ def _invoice_matches_settlement(
                 amount=paid_amount,
                 message="شناسه فاکتور با تسویه هم‌خوانی ندارد",
                 raw=data,
+                reference=str(result.get("reference") or "").strip(),
+                review_reason="invoice_mismatch",
             )
     except ValueError as exc:
         return VerifyResult(
@@ -594,4 +598,6 @@ class SunPayAdapter:
             amount=paid_amount,
             message=reference or "verified",
             raw=data,
+            reference=reference,
+            paid_at=str(result.get("paid_at") or "").strip(),
         )
