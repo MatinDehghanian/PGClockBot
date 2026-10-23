@@ -20,6 +20,7 @@ import secrets
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -41,6 +42,7 @@ from app.services.payment_settlement import (
 )
 from app.services.public_https import https_public_base
 from app.services.users import get_all_settings
+from app.services.ux20 import shop_bot_https_url
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +60,16 @@ class BbcNotReady(ValueError):
 def https_base() -> str:
     """The https origin for BezanBeCard callbacks, or an empty string when there is none."""
     return https_public_base()
+
+
+def gateway_origin(base: str) -> str:
+    """``https://host`` of ``base`` without a non-default port.
+
+    BezanBeCard refuses links on a panel port such as ``:9000``. Payment truth comes
+    from the poll, so a callback that cannot reach the panel only delays settling.
+    """
+    parts = urlsplit(base)
+    return urlunsplit(("https", parts.hostname or "", "", "", "")) if parts.hostname else ""
 
 
 def https_base_ready() -> bool:
@@ -248,7 +260,8 @@ async def _saved_or_new_request(
         raise ValueError("این پرداخت در حال بررسی است؛ با پشتیبانی در تماس باشید")
     if settlement.status == SettlementStatus.EXPIRED.value:
         _archive_expired_attempt(data)
-    request = _new_request(settlement, payment, description, data)
+    bot_url = await shop_bot_https_url(session, shop_owner_id=settlement.shop_owner_id)
+    request = _new_request(settlement, payment, description, data, bot_url=bot_url)
     data["request"] = request.to_dict()
     data.pop("order", None)
     # Saved before the network call, so a crash after it leaves a request to replay.
@@ -286,20 +299,29 @@ async def _swap_attempt(session: AsyncSession, settlement: PaymentSettlement, ne
 
 
 def _new_request(
-    settlement: PaymentSettlement, payment: Payment, description: str, data: dict[str, Any]
+    settlement: PaymentSettlement,
+    payment: Payment,
+    description: str,
+    data: dict[str, Any],
+    *,
+    bot_url: str | None,
 ) -> bbc.BbcOrderRequest:
-    base = https_base()
-    if not base:
+    origin = gateway_origin(https_base())
+    if not origin:
         raise BbcNotReady(HTTPS_REQUIRED)
     link_token = secrets.token_urlsafe(24)
     data["link_token"] = link_token
     attempt = secrets.token_hex(4)
-    prefix = f"{base}/payments/settlement/bbc/tenant/{int(settlement.tenant_key)}"
+    prefix = f"{origin}/payments/settlement/bbc/tenant/{int(settlement.tenant_key)}"
+    # The payer goes straight back to the shop's bot; the panel page is only a fallback.
+    return_url = bot_url if (bot_url or "").startswith("https://") else (
+        f"{prefix}/return/{int(settlement.id)}?t={link_token}"
+    )
     return bbc.build_order_request(
         amount_toman=int(payment.amount),
         merchant_order_id=str(int(payment.id)),
         callback_url=f"{prefix}/callback/{int(settlement.id)}?t={link_token}",
-        return_url=f"{prefix}/return/{int(settlement.id)}?t={link_token}",
+        return_url=return_url,
         description=description or f"payment-{int(payment.id)}",
         idempotency_key=f"bbc:{int(payment.id)}:{attempt}",
     )
