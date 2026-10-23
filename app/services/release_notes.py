@@ -15,6 +15,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.4.37": [
+        "پرداخت: مسیر پنل /go/ برای ورود به درگاه برگردانده شد تا دامنهٔ ارجاع با callback یکی باشد و برگشت شاپرک/پی‌استار گیر نکند؛ return هم GET و هم POST را می‌پذیرد (#919)",
+        "ریستور: backup/dev-pre-v0.4.37 (commit 8a9d283a)",
+    ],
     "0.4.36": [
         "پرداخت: بعد از پرداخت درگاه آنلاین، ربات مسیر اصلی تأیید و تحویل است؛ مشتری VPN را خاموش می‌کند، پرداخت می‌کند و به چت برمی‌گردد و منتظر سایت نمی‌ماند (#916)",
         "وب‌پنل: فوتر ذخیره مودال مثل هدر مات شد و فاصلهٔ عمودی دکمه بیشتر شد (#917)",
