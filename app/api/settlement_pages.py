@@ -1,7 +1,8 @@
 """Settlement HTTP endpoints — fail-closed, tenant-scoped, mock gated.
 
 Public surface:
-  - Real PSP return (provider != mock) — verifies via provider API
+  - Checkout go-link — panel-hosted redirect so referrer matches PSP callback host
+  - Real PSP return (GET/POST) — verifies via provider API
   - Card-auto webhooks — per-tenant path + HMAC secret from that tenant only
   - BezanBeCard callback/return — tenant path + checkout token; always re-fetches API
   - Mock checkout/pay — ONLY when ALLOW_SETTLEMENT_MOCK=1 + one-time token
@@ -10,11 +11,12 @@ Public surface:
 from __future__ import annotations
 
 import logging
+import secrets
 from html import escape
 from typing import Any, Callable
 
 from fastapi import Depends, Form, Request
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.status_render import render_status_page
@@ -99,6 +101,86 @@ def _sig_from_headers(request: Request) -> str:
     if signature.lower().startswith("sha256="):
         signature = signature.split("=", 1)[1]
     return signature.strip()
+
+
+async def _request_callback_params(request: Request) -> dict[str, str]:
+    """Merge query string and POST form/json body (Paystar often POSTs the return)."""
+    params: dict[str, str] = {
+        str(k): str(v) for k, v in request.query_params.multi_items()
+    }
+    if request.method.upper() != "POST":
+        return params
+    ctype = (request.headers.get("content-type") or "").lower()
+    if "application/json" in ctype:
+        try:
+            body = await request.json()
+        except Exception:
+            body = None
+        if isinstance(body, dict):
+            for key, value in body.items():
+                if value is not None:
+                    params[str(key)] = str(value)
+        return params
+    try:
+        form = await request.form()
+    except Exception:
+        return params
+    for key, value in form.multi_items():
+        params[str(key)] = str(value)
+    return params
+
+
+def _register_checkout_go(app: Any, get_db: Callable[..., Any]) -> None:
+    @app.get("/payments/settlement/go/{settlement_id}")
+    async def settlement_checkout_go(
+        settlement_id: int,
+        request: Request,
+        session: AsyncSession = Depends(get_db),
+    ):
+        """302 to checkout after token check — keeps referrer on the panel host."""
+        from app.db.models import PaymentSettlement
+
+        token = (request.query_params.get("t") or "").strip()
+        settlement = await session.get(PaymentSettlement, settlement_id)
+        expected = (settlement.checkout_token if settlement else "") or ""
+        if (
+            not settlement
+            or not token
+            or not expected
+            or not secrets.compare_digest(token, expected)
+        ):
+            return await _status(
+                request,
+                session,
+                kind="error",
+                title="لینک نامعتبر است",
+                message="به ربات برگردید و دوباره پرداخت را شروع کنید.",
+                http_status=404,
+                watermark="404",
+            )
+        if settlement.status == SettlementStatus.SETTLED.value:
+            return await _status(
+                request,
+                session,
+                shop_owner_id=settlement.shop_owner_id,
+                kind="ok",
+                title="قبلاً تأیید شده",
+                message="این پرداخت پیش‌تر تسویه شده است؛ به چت ربات برگردید.",
+                watermark="OK",
+            )
+        target = (settlement.checkout_url or "").strip()
+        if not target.startswith("https://"):
+            return await _status(
+                request,
+                session,
+                shop_owner_id=settlement.shop_owner_id,
+                kind="error",
+                title="لینک پرداخت آماده نیست",
+                message="به ربات برگردید و دوباره تلاش کنید.",
+                http_status=400,
+                watermark="ERR",
+            )
+        return RedirectResponse(url=target, status_code=302)
 
 
 def _bbc_return_page(settlement: Any) -> tuple[str, str, str]:
@@ -265,7 +347,10 @@ def _register_mock_psp(app: Any, get_db: Callable[..., Any]) -> None:
 
 
 def _register_psp_return(app: Any, get_db: Callable[..., Any]) -> None:
-    @app.get("/payments/settlement/psp/{provider}/return/{settlement_id}")
+    @app.api_route(
+        "/payments/settlement/psp/{provider}/return/{settlement_id}",
+        methods=["GET", "POST"],
+    )
     async def psp_return(
         provider: str,
         settlement_id: int,
@@ -283,7 +368,7 @@ def _register_psp_return(app: Any, get_db: Callable[..., Any]) -> None:
         if provider_l == "mock" and not settlement_mock_allowed():
             return Response(status_code=404, content="Not Found")
 
-        params = dict(request.query_params)
+        params = await _request_callback_params(request)
         pre = await session.get(PaymentSettlement, settlement_id)
         if not pre:
             return await _status(
@@ -521,6 +606,7 @@ def _register_bbc(app: Any, get_db: Callable[..., Any]) -> None:
 
 
 def register_settlement_pages(app, *, get_db):
+    _register_checkout_go(app, get_db)
     _register_mock_psp(app, get_db)
     _register_psp_return(app, get_db)
     _register_card_auto(app, get_db)
