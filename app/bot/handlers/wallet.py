@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot import bbc_checkout_view as bbc_view
 from app.bot import keyboards as kb
 from app.bot.chat_cleanup import keep_message
+from app.bot.handlers.psp_check import psp_check_button
 from app.bot.tg_utils import safe_edit_text
 from app.config import get_settings
 from app.db.models import BotUser, Order, Payment, PaymentMethod, PaymentStatus
@@ -550,15 +551,17 @@ async def wtop_choose_method(
     if key == "psp":
         from app.services.payment_settlement import create_psp_checkout
 
+        # Answer before the gateway call so Telegram does not expire the tap.
+        await callback.answer("در حال آماده‌سازی درگاه…")
         payment = await create_wallet_topup(session, db_user.id, amount, method=method)
         try:
             settlement = await create_psp_checkout(
                 session, payment, description=f"شارژ کیف پول #{payment.id}"
             )
         except ValueError as e:
-            await callback.answer(user_safe_error(e), show_alert=True)
+            if callback.message:
+                await callback.message.answer(user_safe_error(e))
             return
-        await callback.answer()
         amount_txt = format_toman(amount, get_settings().currency)
         try:
             body = render_message_template(
@@ -582,6 +585,7 @@ async def wtop_choose_method(
         link = public_checkout_button_url(settlement, ui=ui)
         if link.startswith("http://") or link.startswith("https://"):
             rows.append([InlineKeyboardButton(text="🏦 ورود به درگاه", url=link)])
+            rows.append([psp_check_button(int(settlement.id))])
         rows.append(
             [kb.back_button(ui, "wallet:home")]
         )
