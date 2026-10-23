@@ -90,14 +90,21 @@ def _public_base() -> str:
     return (cfg.public_base_url or cfg.webhook_url or "").rstrip("/")
 
 
-def public_checkout_button_url(settlement: PaymentSettlement) -> str:
-    """Telegram button URL: panel ``/go/`` so referrer and callback share one host.
+# Telegram button: gateway page (default, like 0.4.27) or panel /go/ hop.
+PSP_CHECKOUT_LINK_DIRECT = "direct"
+PSP_CHECKOUT_LINK_PANEL = "panel"
 
-    Shaparak/Paystar require the domain that sends the user to the gateway to
-    match the callback domain. Opening ``checkout_url`` directly from Telegram
-    breaks that match and leaves payers stuck on «در حال انتقال به سایت پذیرنده».
-    Falls back to the raw checkout URL when no public base or token exists.
-    """
+
+def normalize_psp_checkout_link_mode(raw: str | None) -> str:
+    """``direct`` (default) or ``panel``; unknown values fall back to direct."""
+    mode = str(raw or "").strip().lower()
+    if mode in {PSP_CHECKOUT_LINK_PANEL, "go", "panel_go"}:
+        return PSP_CHECKOUT_LINK_PANEL
+    return PSP_CHECKOUT_LINK_DIRECT
+
+
+def _panel_go_checkout_url(settlement: PaymentSettlement) -> str:
+    """Panel-hosted ``/go/`` so referrer host matches the PSP callback host."""
     raw = (settlement.checkout_url or "").strip()
     token = (settlement.checkout_token or "").strip()
     if not raw or not token or int(getattr(settlement, "id", 0) or 0) <= 0:
@@ -117,6 +124,26 @@ def public_checkout_button_url(settlement: PaymentSettlement) -> str:
         f"{base}/payments/settlement/go/{int(settlement.id)}"
         f"?t={quote(token, safe='')}"
     )
+
+
+def public_checkout_button_url(
+    settlement: PaymentSettlement,
+    *,
+    ui: dict[str, str] | None = None,
+    mode: str | None = None,
+) -> str:
+    """Telegram «ورود به درگاه» URL.
+
+    Default ``psp_checkout_link_mode=direct`` shows the PSP page
+    (e.g. ``payment.….ir/pay/…``). Set mode to ``panel`` to hop via panel
+    ``/go/`` when Shaparak needs matching referrer/callback hosts.
+    """
+    chosen = normalize_psp_checkout_link_mode(
+        mode if mode is not None else (ui or {}).get("psp_checkout_link_mode")
+    )
+    if chosen == PSP_CHECKOUT_LINK_PANEL:
+        return _panel_go_checkout_url(settlement)
+    return (settlement.checkout_url or "").strip()
 
 
 def _on(val: str | None) -> bool:

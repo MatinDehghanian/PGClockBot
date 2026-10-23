@@ -1045,6 +1045,8 @@ DEFAULT_SETTINGS = {
     "psp_merchant_id": "",
     "psp_pay_url": "",
     "psp_sunpay_request_method": "GET",
+    # Telegram «ورود به درگاه»: direct PSP URL (default) or panel /go/ hop.
+    "psp_checkout_link_mode": "direct",
     "psp_sandbox": "1",
     "psp_pay_text": (
         "مبلغ قابل پرداخت: <b>{amount}</b>\n"
@@ -1684,6 +1686,16 @@ SETTING_GROUPS = {
             "حالت سندباکس",
             "toggle",
             "روشن = محیط آزمایشی زرین‌پال (برای سان‌پی اثر ندارد)",
+        ),
+        (
+            "psp_checkout_link_mode",
+            "لینک دکمهٔ درگاه",
+            "select",
+            "اگر برگشت شاپرک گیر کرد، آدرس پنل فروشگاه را انتخاب کنید",
+            [
+                ("direct", "آدرس خود درگاه"),
+                ("panel", "آدرس پنل فروشگاه"),
+            ],
         ),
         (
             "psp_pay_text",
