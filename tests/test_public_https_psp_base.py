@@ -1,4 +1,4 @@
-"""PSP callback base prefers clean https (no :9000) for Paystar returns."""
+"""https_public_base keeps the live panel listen port (e.g. :9000)."""
 
 from __future__ import annotations
 
@@ -8,18 +8,18 @@ from unittest.mock import patch
 from app.services import public_https as pub
 
 
-class HttpsPublicBasePspTests(unittest.TestCase):
-    def test_strips_nondefault_port(self) -> None:
-        self.assertEqual(
-            pub.strip_https_nondefault_port("https://bot.example.com:9000"),
-            "https://bot.example.com",
-        )
-        self.assertEqual(
-            pub.strip_https_nondefault_port("https://bot.example.com"),
-            "https://bot.example.com",
-        )
+class HttpsPublicBasePanelPortTests(unittest.TestCase):
+    def test_live_panel_with_port_wins_over_http_env(self) -> None:
+        with (
+            patch.object(pub, "https_is_active", return_value=True),
+            patch.object(
+                pub, "public_panel_base_url", return_value="https://bot.example.com:9000"
+            ),
+            patch.object(pub, "env_public_base", return_value="http://203.0.113.5:9000"),
+        ):
+            self.assertEqual(pub.https_public_base(), "https://bot.example.com:9000")
 
-    def test_prefers_clean_env_over_live_with_port(self) -> None:
+    def test_does_not_strip_live_panel_port(self) -> None:
         with (
             patch.object(pub, "https_is_active", return_value=True),
             patch.object(
@@ -27,27 +27,15 @@ class HttpsPublicBasePspTests(unittest.TestCase):
             ),
             patch.object(pub, "env_public_base", return_value="https://bot.example.com"),
         ):
-            self.assertEqual(pub.https_public_base(), "https://bot.example.com")
+            # Live panel TLS address is authoritative, even when env is "cleaner".
+            self.assertEqual(pub.https_public_base(), "https://bot.example.com:9000")
 
-    def test_strips_live_port_when_env_is_http_only(self) -> None:
+    def test_env_https_when_panel_tls_off(self) -> None:
         with (
-            patch.object(pub, "https_is_active", return_value=True),
-            patch.object(
-                pub, "public_panel_base_url", return_value="https://bot.example.com:9000"
-            ),
-            patch.object(pub, "env_public_base", return_value="http://203.0.113.5:9000"),
+            patch.object(pub, "https_is_active", return_value=False),
+            patch.object(pub, "env_public_base", return_value="https://bot.example.com:9000"),
         ):
-            self.assertEqual(pub.https_public_base(), "https://bot.example.com")
-
-    def test_clean_live_still_wins_over_http_env(self) -> None:
-        with (
-            patch.object(pub, "https_is_active", return_value=True),
-            patch.object(
-                pub, "public_panel_base_url", return_value="https://panel.live.example"
-            ),
-            patch.object(pub, "env_public_base", return_value="http://203.0.113.5:9000"),
-        ):
-            self.assertEqual(pub.https_public_base(), "https://panel.live.example")
+            self.assertEqual(pub.https_public_base(), "https://bot.example.com:9000")
 
     def test_empty_when_no_https(self) -> None:
         with (
