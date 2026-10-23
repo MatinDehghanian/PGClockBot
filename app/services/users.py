@@ -1045,6 +1045,8 @@ DEFAULT_SETTINGS = {
     "psp_merchant_id": "",
     "psp_pay_url": "",
     "psp_sunpay_request_method": "GET",
+    # Telegram «ورود به درگاه»: direct PSP URL (default) or panel /go/ hop.
+    "psp_checkout_link_mode": "direct",
     "psp_sandbox": "1",
     "psp_pay_text": (
         "مبلغ قابل پرداخت: <b>{amount}</b>\n"
@@ -1678,6 +1680,17 @@ SETTING_GROUPS = {
             "پیش‌فرض GET مطابق مستند؛ اگر درگاه بدنهٔ GET را نخواند POST را امتحان کنید "
             "(تا تأیید با درگاه واقعی نهایی نیست)",
             [("GET", "GET (مستند)"), ("POST", "POST")],
+        ),
+        (
+            "psp_checkout_link_mode",
+            "آدرس دکمهٔ ورود به درگاه",
+            "select",
+            "پیش‌فرض = لینک خود درگاه (مثل payment….ir). اگر برگشت شاپرک گیر کرد، "
+            "«از پنل (/go/)» را بزنید تا دامنهٔ ورود با callback یکی شود.",
+            [
+                ("direct", "لینک مستقیم درگاه (پیش‌فرض)"),
+                ("panel", "از پنل (/go/)"),
+            ],
         ),
         (
             "psp_sandbox",

@@ -90,13 +90,59 @@ def _public_base() -> str:
     return (cfg.public_base_url or cfg.webhook_url or "").rstrip("/")
 
 
-def public_checkout_button_url(settlement: PaymentSettlement) -> str:
-    """Telegram «ورود به درگاه» URL — the gateway checkout page itself.
+# Telegram button: gateway page (default, like 0.4.27) or panel /go/ hop.
+PSP_CHECKOUT_LINK_DIRECT = "direct"
+PSP_CHECKOUT_LINK_PANEL = "panel"
 
-    Matches the 0.4.27 UX: Telegram's open-link dialog shows the PSP host
-    (e.g. ``payment.folfoshop.ir/pay/…``), not the panel. Callback / return
-    URLs still use ``https_public_base()`` separately.
+
+def normalize_psp_checkout_link_mode(raw: str | None) -> str:
+    """``direct`` (default) or ``panel``; unknown values fall back to direct."""
+    mode = str(raw or "").strip().lower()
+    if mode in {PSP_CHECKOUT_LINK_PANEL, "go", "panel_go"}:
+        return PSP_CHECKOUT_LINK_PANEL
+    return PSP_CHECKOUT_LINK_DIRECT
+
+
+def _panel_go_checkout_url(settlement: PaymentSettlement) -> str:
+    """Panel-hosted ``/go/`` so referrer host matches the PSP callback host."""
+    raw = (settlement.checkout_url or "").strip()
+    token = (settlement.checkout_token or "").strip()
+    if not raw or not token or int(getattr(settlement, "id", 0) or 0) <= 0:
+        return raw
+    try:
+        from app.services.public_https import https_public_base
+
+        base = https_public_base() or _public_base()
+    except Exception:
+        base = _public_base()
+    base = (base or "").rstrip("/")
+    if not base.startswith("http://") and not base.startswith("https://"):
+        return raw
+    from urllib.parse import quote
+
+    return (
+        f"{base}/payments/settlement/go/{int(settlement.id)}"
+        f"?t={quote(token, safe='')}"
+    )
+
+
+def public_checkout_button_url(
+    settlement: PaymentSettlement,
+    *,
+    ui: dict[str, str] | None = None,
+    mode: str | None = None,
+) -> str:
+    """Telegram «ورود به درگاه» URL.
+
+    Default ``psp_checkout_link_mode=direct`` shows the PSP page
+    (e.g. ``payment.….ir/pay/…``). Set mode to ``panel`` to hop via panel
+    ``/go/`` when Shaparak needs matching referrer/callback hosts.
     """
+    chosen = normalize_psp_checkout_link_mode(
+        mode if mode is not None else (ui or {}).get("psp_checkout_link_mode")
+    )
+    if chosen == PSP_CHECKOUT_LINK_PANEL:
+        return _panel_go_checkout_url(settlement)
     return (settlement.checkout_url or "").strip()
 
 

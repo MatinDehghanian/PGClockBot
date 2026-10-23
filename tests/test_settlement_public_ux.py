@@ -184,7 +184,7 @@ class PublicCheckoutButtonUrlTests(unittest.IsolatedAsyncioTestCase):
         await self.engine.dispose()
         self._tmp.cleanup()
 
-    async def test_button_uses_direct_psp_checkout_url(self) -> None:
+    async def test_button_defaults_to_direct_psp_checkout_url(self) -> None:
         async with self.Session() as session:
             session.add(
                 BotUser(id=1, telegram_id=101, referral_code="u1", role=Role.USER.value)
@@ -219,9 +219,29 @@ class PublicCheckoutButtonUrlTests(unittest.IsolatedAsyncioTestCase):
             "app.services.public_https.https_public_base",
             return_value="https://bot.example.com:9000",
         ):
-            link = public_checkout_button_url(settlement)
+            link = public_checkout_button_url(settlement, ui={})
         self.assertEqual(link, "https://payment.example.ir/pay/uuid-here")
         self.assertNotIn("/payments/settlement/go/", link)
+
+    async def test_button_panel_mode_uses_go_link(self) -> None:
+        settlement = MagicMock(
+            id=42,
+            checkout_token="tok-abc",
+            checkout_url="https://payment.example.ir/pay/uuid-here",
+        )
+        with patch(
+            "app.services.public_https.https_public_base",
+            return_value="https://bot.example.com:9000",
+        ):
+            link = public_checkout_button_url(
+                settlement, ui={"psp_checkout_link_mode": "panel"}
+            )
+        self.assertTrue(
+            link.startswith(
+                "https://bot.example.com:9000/payments/settlement/go/42?"
+            )
+        )
+        self.assertIn("t=tok-abc", link)
 
     def test_empty_checkout_url_returns_empty(self) -> None:
         settlement = MagicMock(checkout_url=None)
