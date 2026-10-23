@@ -20,12 +20,13 @@ from typing import Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
+from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.catalog_pricing import displayed_quote, quote_product, sale_price
 from app.config import get_settings
-from app.db.models import BotUser, ResellerProfile, UserService
+from app.db.models import BotUser, Order, ResellerProfile, UserService
 from app.services.db_safe import rollback_quiet
 from app.services.service_scope import customer_may_use_service
 from app.services.formatting import (
@@ -420,6 +421,21 @@ async def _reseller_ops_payload(
     }
 
 
+async def _renewal_already_ordered(session: AsyncSession, user: BotUser, preview: object) -> bool:
+    """True when this preview's request key already created the caller's renewal order.
+
+    A retry after a lost response reuses that order (paid or not), so the balance the
+    first try spent must not block it; ``pay_with_wallet`` still checks an unpaid one.
+    """
+    key = preview.get("request_key") if isinstance(preview, dict) else None
+    if not isinstance(key, str) or not key:
+        return False
+    order_id = await session.scalar(
+        select(Order.id).where(Order.renewal_request_key == key, Order.user_id == int(user.id)).limit(1)
+    )
+    return order_id is not None
+
+
 def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
     @app.get("/api/mini/service/{service_id}/cancellation")
     async def mini_cancellation(request: Request, service_id: int, session: AsyncSession = Depends(get_db)):
@@ -780,7 +796,8 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
         ):
             raise HTTPException(400, "پلن تمدید نامعتبر است")
         await session.refresh(user)
-        if sale_price(plan) > int(user.wallet_balance or 0):
+        retrying = await _renewal_already_ordered(session, user, body.get("preview"))
+        if not retrying and sale_price(plan) > int(user.wallet_balance or 0):
             raise HTTPException(400, "موجودی کیف پول کافی نیست")
         try:
             from app.services.service_renewals import renewal_terms

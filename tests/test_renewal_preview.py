@@ -404,6 +404,21 @@ class MiniAppRenewalTests(RenewalFixture):
         self.assertEqual(retry.json()["wallet"], 800)
         self.assertEqual(len(self.pg.writes), 1)
 
+    async def test_api_retry_after_lost_response_succeeds_when_wallet_is_now_empty(self):
+        self.user.wallet_balance = 200
+        await self.session.commit()
+        quote = await self.quote()
+        body = {"service_id": 1, "plan_id": 1, "preview": quote}
+        first = await self.client.post("/api/mini/renew", json=body)
+        self.assertEqual(first.status_code, 200, first.text)
+        self.assertEqual(first.json()["wallet"], 0)
+        retry = await self.client.post("/api/mini/renew", json=body)
+        self.assertEqual(retry.status_code, 200, retry.text)
+        self.assertEqual(retry.json()["order_id"], first.json()["order_id"])
+        self.assertEqual(retry.json()["wallet"], 0)
+        self.assertEqual(await self.session.scalar(select(func.count(Order.id))), 1)
+        self.assertEqual(len(self.pg.writes), 1)
+
     async def test_api_price_change_requires_new_preview_before_debit(self):
         quote = await self.quote()
         self.plan.price = 300
