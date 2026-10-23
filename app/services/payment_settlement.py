@@ -51,15 +51,32 @@ CHANNEL_BBC = "bbc"
 BBC_PROVIDER = "bezanbecard"
 
 # Shown on the Telegram PSP checkout message (above the open-gateway button).
+# Browser return to the panel domain often fails when the payer has VPN off
+# for the Iranian bank gateway — the bot + settlement poller are the real path.
 PSP_VPN_NOTICE = "⚠️ برای ورود به درگاه، VPN خود را خاموش کنید."
+PSP_BOT_RETURN_NOTICE = (
+    "✅ بعد از پرداخت موفق، صفحهٔ درگاه را ببندید و به همین چت ربات برگردید. "
+    "تأیید و تحویل خودکار است؛ لازم نیست منتظر باز شدن صفحهٔ سایت بمانید."
+)
+
+
+def with_psp_checkout_guidance(body: str) -> str:
+    """Append VPN + bot-primary return guidance once (works with custom templates)."""
+    text = (body or "").rstrip()
+    extras: list[str] = []
+    if PSP_VPN_NOTICE not in text:
+        extras.append(PSP_VPN_NOTICE)
+    if PSP_BOT_RETURN_NOTICE not in text:
+        extras.append(PSP_BOT_RETURN_NOTICE)
+    if not extras:
+        return text
+    suffix = "\n\n".join(extras)
+    return f"{text}\n\n{suffix}" if text else suffix
 
 
 def with_psp_vpn_notice(body: str) -> str:
-    """Append the VPN reminder once so custom ``psp_pay_text`` still shows it."""
-    text = (body or "").rstrip()
-    if PSP_VPN_NOTICE in text:
-        return text
-    return f"{text}\n\n{PSP_VPN_NOTICE}" if text else PSP_VPN_NOTICE
+    """Backward-compatible alias for ``with_psp_checkout_guidance``."""
+    return with_psp_checkout_guidance(body)
 
 _OPEN_STATUSES = (
     SettlementStatus.CREATED.value,
@@ -1156,10 +1173,11 @@ async def _poll_one_psp_settlement(
 
 
 async def poll_psp_settlements(session: AsyncSession, *, limit: int = PSP_POLL_BATCH) -> int:
-    """Background backup for browser return: re-verify open sunpay/zarinpal settlements.
+    """Primary verify path when the browser never reaches the panel return URL.
 
-    Only rows created within ``PSP_POLL_WINDOW`` are considered so abandoned
-    checkouts cannot grow an unbounded verify queue (and delay fresh payers).
+    Re-verifies open sunpay/zarinpal settlements. Only rows created within
+    ``PSP_POLL_WINDOW`` are considered so abandoned checkouts cannot grow an
+    unbounded verify queue (and delay fresh payers).
     """
     since = datetime.now(timezone.utc) - PSP_POLL_WINDOW
     rows = (

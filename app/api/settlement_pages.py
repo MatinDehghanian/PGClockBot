@@ -22,7 +22,9 @@ from app.db.models import SettlementStatus
 
 logger = logging.getLogger(__name__)
 
-_TELEGRAM_FOOTER = "برای ادامه به ربات برگردید."
+_TELEGRAM_FOOTER = (
+    "اگر این صفحه باز نشد هم اشکالی ندارد؛ نتیجه در ربات می‌آید."
+)
 _BOT_RETURN_LABEL = "بازگشت به ربات"
 
 
@@ -257,7 +259,7 @@ def _register_mock_psp(app: Any, get_db: Callable[..., Any]) -> None:
             shop_owner_id=settlement.shop_owner_id,
             kind="ok",
             title="پرداخت آزمایشی تأیید شد",
-            message="به ربات برگردید.",
+            message="نتیجه در ربات برایتان ارسال می‌شود؛ به چت ربات برگردید.",
             watermark="OK",
         )
 
@@ -324,7 +326,7 @@ def _register_psp_return(app: Any, get_db: Callable[..., Any]) -> None:
                 shop_owner_id=settlement.shop_owner_id,
                 kind="ok",
                 title="پرداخت تأیید شد",
-                message="می‌توانید به تلگرام برگردید.",
+                message="نتیجه در ربات برایتان ارسال می‌شود؛ به چت ربات برگردید.",
                 watermark="OK",
             )
         if settlement.status == SettlementStatus.AWAITING.value:
@@ -334,7 +336,10 @@ def _register_psp_return(app: Any, get_db: Callable[..., Any]) -> None:
                 shop_owner_id=settlement.shop_owner_id,
                 kind="pending",
                 title="پرداخت هنوز تأیید نشده",
-                message="اگر پرداخت را کامل کردید کمی صبر کنید یا به ربات برگردید.",
+                message=(
+                    "اگر پرداخت را کامل کردید به ربات برگردید؛ "
+                    "تأیید خودکار است و لازم نیست این صفحه باز بماند."
+                ),
                 watermark="…",
             )
         return await _status(
@@ -343,7 +348,9 @@ def _register_psp_return(app: Any, get_db: Callable[..., Any]) -> None:
             shop_owner_id=settlement.shop_owner_id,
             kind="warn",
             title="پرداخت تکمیل نشد",
-            message="می‌توانید به ربات برگردید و دوباره تلاش کنید.",
+            message=(
+                "به ربات برگردید. اگر مبلغ کم شده، نتیجه آنجا اعلام می‌شود."
+            ),
             watermark="!",
         )
 

@@ -20,7 +20,7 @@ class SettlementStatusTemplateTests(unittest.TestCase):
         base = {
             "code": "ok",
             "title": "پرداخت تأیید شد",
-            "message": "می‌توانید به تلگرام برگردید.",
+            "message": "نتیجه در ربات برایتان ارسال می‌شود؛ به چت ربات برگردید.",
             "watermark": "OK",
             "kicker": "",
             "kicker_ltr": False,
@@ -37,7 +37,7 @@ class SettlementStatusTemplateTests(unittest.TestCase):
             "body_html": "",
             "show_close_button": False,
             "close_button_label": "بستن",
-            "footer": "برای ادامه به ربات برگردید.",
+            "footer": "اگر این صفحه باز نشد هم اشکالی ندارد؛ نتیجه در ربات می‌آید.",
             "app_version": "0.0.0",
             "pwa_name": "MrClockBot",
         }
@@ -48,7 +48,8 @@ class SettlementStatusTemplateTests(unittest.TestCase):
         html = self.render()
         self.assertIn('data-status="ok"', html)
         self.assertIn("پرداخت تأیید شد", html)
-        self.assertIn("می‌توانید به تلگرام برگردید", html)
+        self.assertIn("نتیجه در ربات", html)
+        self.assertIn("اگر این صفحه باز نشد", html)
 
     def test_payment_page_uses_tg_resolve_not_plain_tme_alone(self) -> None:
         html = self.render()

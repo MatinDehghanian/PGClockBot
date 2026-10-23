@@ -141,6 +141,7 @@ tests/test_bezanbecard_settlement.py
 # SunPay PSP: request→verify, amount/invoice match, soft cancel, shop-scoped return.
 tests/test_sunpay_psp.py
 tests/test_settlement_public_ux.py
+tests/test_psp_vpn_notice.py
 tests/test_payment_method_labels.py
 tests/test_service_automation.py
 tests/test_customer_features.py
