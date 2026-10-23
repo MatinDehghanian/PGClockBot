@@ -144,6 +144,7 @@ tests/test_settlement_public_ux.py
 tests/test_psp_vpn_notice.py
 tests/test_public_https_psp_base.py
 tests/test_payment_method_labels.py
+tests/test_sunpay_setup_errors.py
 tests/test_service_automation.py
 tests/test_customer_features.py
 tests/test_scheduler_background_jobs.py
