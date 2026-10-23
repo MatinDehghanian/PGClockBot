@@ -24,6 +24,13 @@ from app.db.models import SettlementStatus
 logger = logging.getLogger(__name__)
 
 _BOT_RETURN_LABEL = "بازگشت به ربات"
+_OPEN_SETTLEMENT_STATUSES = frozenset(
+    {
+        SettlementStatus.CREATED.value,
+        SettlementStatus.AWAITING.value,
+        SettlementStatus.SETTLING.value,
+    }
+)
 
 # Browser tab titles matching the original simple payment-return pages.
 _BROWSER_TITLE = {
@@ -377,6 +384,57 @@ def _register_mock_psp(app: Any, get_db: Callable[..., Any]) -> None:
         )
 
 
+async def _psp_return_unverified_page(
+    request: Request,
+    session: AsyncSession,
+    settlement_id: int,
+    params: dict[str, str],
+) -> HTMLResponse:
+    """The payment was not confirmed on this visit: say why without alarming the payer.
+
+    A settlement that is still open is not a failure: the customer cancelled at the
+    bank, or the gateway has not reported the payment yet and the bot keeps checking.
+    """
+    from app.db.models import PaymentSettlement
+    from app.services.db_safe import rollback_quiet
+    from app.services.payment_settlement import callback_indicates_user_abort
+
+    # Reload after the failed verify so the page reflects what was committed.
+    await rollback_quiet(session)
+    settlement = await session.get(PaymentSettlement, settlement_id)
+    shop_owner_id = settlement.shop_owner_id if settlement else None
+    if settlement is None or settlement.status not in _OPEN_SETTLEMENT_STATUSES:
+        return await _status(
+            request,
+            session,
+            shop_owner_id=shop_owner_id,
+            kind="error",
+            title="تأیید پرداخت ناموفق",
+            message="اگر مبلغ کم شده با پشتیبانی تماس بگیرید.",
+            http_status=400,
+        )
+    if callback_indicates_user_abort(params):
+        return await _status(
+            request,
+            session,
+            shop_owner_id=shop_owner_id,
+            kind="warn",
+            title="پرداخت انجام نشد",
+            message=(
+                "پرداخت در درگاه تکمیل نشد. اگر مبلغی کسر شده باشد، بانک طبق روال خود آن را برمی‌گرداند. "
+                "به ربات برگردید و در صورت تمایل دوباره پرداخت کنید."
+            ),
+        )
+    return await _status(
+        request,
+        session,
+        shop_owner_id=shop_owner_id,
+        kind="pending",
+        title="پرداخت هنوز تأیید نشده",
+        message="اگر پرداخت را کامل کرده‌اید به ربات برگردید؛ تأیید و تحویل خودکار انجام می‌شود.",
+    )
+
+
 def _register_psp_return(app: Any, get_db: Callable[..., Any]) -> None:
     @app.api_route(
         "/payments/settlement/psp/{provider}/return/{settlement_id}",
@@ -423,15 +481,7 @@ def _register_psp_return(app: Any, get_db: Callable[..., Any]) -> None:
                 reseller_id=reseller_id,
             )
         except ValueError:
-            return await _status(
-                request,
-                session,
-                shop_owner_id=reseller_id,
-                kind="error",
-                title="تأیید پرداخت ناموفق",
-                message="اگر مبلغ کم شده با پشتیبانی تماس بگیرید.",
-                http_status=400,
-            )
+            return await _psp_return_unverified_page(request, session, settlement_id, params)
         if settlement.status == SettlementStatus.SETTLED.value:
             try:
                 await deliver_psp_once(session, settlement)
