@@ -91,32 +91,13 @@ def _public_base() -> str:
 
 
 def public_checkout_button_url(settlement: PaymentSettlement) -> str:
-    """Telegram button URL: panel ``/go/`` so referrer and callback share one host.
+    """Telegram «ورود به درگاه» URL — the gateway checkout page itself.
 
-    Shaparak/Paystar require the domain that sends the user to the gateway to
-    match the callback domain. Opening ``checkout_url`` directly from Telegram
-    breaks that match and leaves payers stuck on «در حال انتقال به سایت پذیرنده».
-    Falls back to the raw checkout URL when no public base or token exists.
+    Matches the 0.4.27 UX: Telegram's open-link dialog shows the PSP host
+    (e.g. ``payment.folfoshop.ir/pay/…``), not the panel. Callback / return
+    URLs still use ``https_public_base()`` separately.
     """
-    raw = (settlement.checkout_url or "").strip()
-    token = (settlement.checkout_token or "").strip()
-    if not raw or not token or int(getattr(settlement, "id", 0) or 0) <= 0:
-        return raw
-    try:
-        from app.services.public_https import https_public_base
-
-        base = https_public_base() or _public_base()
-    except Exception:
-        base = _public_base()
-    base = (base or "").rstrip("/")
-    if not base.startswith("http://") and not base.startswith("https://"):
-        return raw
-    from urllib.parse import quote
-
-    return (
-        f"{base}/payments/settlement/go/{int(settlement.id)}"
-        f"?t={quote(token, safe='')}"
-    )
+    return (settlement.checkout_url or "").strip()
 
 
 def _on(val: str | None) -> bool:
