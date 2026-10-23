@@ -782,8 +782,12 @@ async def run_bbc_settlement_poll() -> None:
 
 
 async def run_psp_settlement_poll() -> None:
-    """Re-verify open SunPay/Zarinpal settlements when the browser never returns."""
-    from app.services.payment_settlement import poll_psp_settlements
+    """Re-verify open SunPay/Zarinpal settlements when the browser never returns,
+    and finish settlements a crash left half-settled."""
+    from app.services.payment_settlement import (
+        poll_psp_settlements,
+        recover_stuck_psp_settlements,
+    )
 
     async with SessionLocal() as session:
         try:
@@ -792,6 +796,13 @@ async def run_psp_settlement_poll() -> None:
                 logger.info("psp settlement poll settled=%s", n)
         except Exception:
             logger.exception("psp settlement poll failed")
+    async with SessionLocal() as session:
+        try:
+            n = await recover_stuck_psp_settlements(session)
+            if n:
+                logger.info("psp stuck settlements recovered=%s", n)
+        except Exception:
+            logger.exception("psp stuck settlement recovery failed")
 
 
 def start_background_scheduler() -> None:
