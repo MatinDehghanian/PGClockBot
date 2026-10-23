@@ -15,6 +15,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.4.38": [
+        "پرداخت: آدرس callback بدون پورت غیر ۴۴۳ (مثل :9000) ساخته می‌شود و صفحهٔ موفقیت سادهٔ قبلی («پرداخت تأیید شد») برمی‌گردد تا برگشت پی‌استار گیر نکند (#921)",
+        "ریستور: backup/dev-pre-v0.4.38 (commit 50840c44)",
+    ],
     "0.4.37": [
         "پرداخت: مسیر پنل /go/ برای ورود به درگاه برگردانده شد تا دامنهٔ ارجاع با callback یکی باشد و برگشت شاپرک/پی‌استار گیر نکند؛ return هم GET و هم POST را می‌پذیرد (#919)",
         "ریستور: backup/dev-pre-v0.4.37 (commit 8a9d283a)",
