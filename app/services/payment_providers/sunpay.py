@@ -410,7 +410,12 @@ class SunPayAdapter:
         return f"{self.pay_url}/pay/{token}"
 
     async def create_checkout(self, req: CheckoutRequest) -> CheckoutResult:
-        await self._require_outbound_ready()
+        try:
+            await self._require_outbound_ready()
+        except ValueError as exc:
+            # Missing key / bad PAY_URL is the shop's setup, not something the payer can fix.
+            logger.warning("sunpay create refused: %s", exc)
+            raise SunPayGatewayError(CUSTOMER_UNAVAILABLE, admin_detail=str(exc)) from exc
         amount = _safe_int(req.amount, field="مبلغ")
         if amount < MIN_AMOUNT_TOMAN:
             raise ValueError(f"حداقل مبلغ سان‌پی {MIN_AMOUNT_TOMAN} تومان است")
