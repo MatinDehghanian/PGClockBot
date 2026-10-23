@@ -17,6 +17,7 @@ import json
 import logging
 import secrets
 from datetime import datetime, timedelta, timezone
+from enum import Enum
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
@@ -1416,3 +1417,62 @@ async def notify_after_settlement(
                 await bot.session.close()
             except Exception:
                 pass
+
+
+class PspCheckOutcome(str, Enum):
+    """What a customer's «بررسی پرداخت» tap found."""
+
+    SETTLED = "settled"
+    REVIEW = "review"
+    PENDING = "pending"
+    CLOSED = "closed"
+
+
+async def _owned_psp_settlement(
+    session: AsyncSession, *, settlement_id: int, user_id: int, shop_id: int | None
+) -> PaymentSettlement:
+    settlement = await session.get(PaymentSettlement, int(settlement_id))
+    payment = await session.get(Payment, int(settlement.payment_id)) if settlement else None
+    if (
+        settlement is None
+        or payment is None
+        or settlement.channel != CHANNEL_PSP
+        or int(payment.user_id) != int(user_id)
+        or not _shop_ids_equal(settlement.shop_owner_id, shop_id)
+    ):
+        raise ValueError("این پرداخت پیدا نشد")
+    return settlement
+
+
+async def check_psp_payment(
+    session: AsyncSession, *, settlement_id: int, user_id: int, shop_id: int | None
+) -> PspCheckOutcome:
+    """Re-verify the customer's own open gateway payment now, as the poller would.
+
+    Only the payer, inside the settlement's shop, may trigger it. A settled payment
+    is delivered once (``deliver_psp_once``), whichever path settled it.
+    """
+    settlement = await _owned_psp_settlement(
+        session, settlement_id=settlement_id, user_id=user_id, shop_id=shop_id
+    )
+    params = _psp_poll_callback_params(settlement)
+    if settlement.status == SettlementStatus.AWAITING.value and params is not None:
+        try:
+            settlement = await complete_psp_return(
+                session,
+                provider=str(settlement.provider),
+                settlement_id=int(settlement.id),
+                callback_params=params,
+                reseller_id=settlement.shop_owner_id,
+            )
+        except ValueError:
+            logger.info("psp check not verified yet settlement=%s", settlement.id)
+            await session.refresh(settlement)
+    if settlement.status == SettlementStatus.SETTLED.value:
+        await deliver_psp_once(session, settlement)
+        return PspCheckOutcome.SETTLED
+    if is_in_review(settlement):
+        return PspCheckOutcome.REVIEW
+    if settlement.status in _OPEN_STATUSES:
+        return PspCheckOutcome.PENDING
+    return PspCheckOutcome.CLOSED
