@@ -138,6 +138,7 @@ tests/test_nav_admin_counters_0_2_47.py
 tests/test_shop_wallet_isolation.py
 # BezanBeCard: tenant callback token, API re-verify, merchant_order_id bind, no blind trust.
 tests/test_bezanbecard_settlement.py
+tests/test_psp_return_page_states.py
 # SunPay PSP: request→verify, amount/invoice match, soft cancel, shop-scoped return.
 tests/test_sunpay_psp.py
 tests/test_settlement_public_ux.py
