@@ -41,7 +41,7 @@ class SettlementStatusTemplateTests(unittest.TestCase):
         base = {
             "code": "ok",
             "title": "پرداخت تأیید شد",
-            "message": "نتیجه در ربات برایتان ارسال می‌شود؛ به چت ربات برگردید.",
+            "message": "می‌توانید به تلگرام برگردید.",
             "watermark": "OK",
             "kicker": "",
             "kicker_ltr": False,
@@ -58,7 +58,7 @@ class SettlementStatusTemplateTests(unittest.TestCase):
             "body_html": "",
             "show_close_button": False,
             "close_button_label": "بستن",
-            "footer": "اگر این صفحه باز نشد هم اشکالی ندارد؛ نتیجه در ربات می‌آید.",
+            "footer": "می‌توانید به تلگرام برگردید.",
             "app_version": "0.0.0",
             "pwa_name": "MrClockBot",
         }
@@ -69,8 +69,7 @@ class SettlementStatusTemplateTests(unittest.TestCase):
         html = self.render()
         self.assertIn('data-status="ok"', html)
         self.assertIn("پرداخت تأیید شد", html)
-        self.assertIn("نتیجه در ربات", html)
-        self.assertIn("اگر این صفحه باز نشد", html)
+        self.assertIn("می‌توانید به تلگرام برگردید", html)
 
     def test_payment_page_uses_tg_resolve_not_plain_tme_alone(self) -> None:
         html = self.render()
@@ -351,6 +350,9 @@ class SettlementGoEndpointTests(unittest.IsolatedAsyncioTestCase):
         resp = await self.client.get(f"/payments/settlement/go/{sid}?t=tok-done")
         self.assertEqual(resp.status_code, 200)
         self.assertIn("قبلاً تأیید شده", resp.text)
+        self.assertIn("می‌توانید به تلگرام برگردید", resp.text)
+        self.assertIn("<title>موفق</title>", resp.text)
+        self.assertNotIn("panel-status", resp.text)
         self.assertIsNone(resp.headers.get("location"))
 
 
