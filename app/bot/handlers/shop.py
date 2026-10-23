@@ -2400,11 +2400,14 @@ async def pay_psp_cb(
             "پس از پرداخت، به همین چت ربات برگردید؛ تأیید و تحویل خودکار است."
         )
     body += f"\n\n(پرداخت #{payment.id})"
-    from app.services.payment_settlement import with_psp_checkout_guidance
+    from app.services.payment_settlement import (
+        public_checkout_button_url,
+        with_psp_checkout_guidance,
+    )
 
     body = with_psp_checkout_guidance(body)
     rows: list[list[InlineKeyboardButton]] = []
-    link = (settlement.checkout_url or "").strip()
+    link = public_checkout_button_url(settlement)
     if link.startswith("http://") or link.startswith("https://"):
         rows.append([InlineKeyboardButton(text="🏦 ورود به درگاه", url=link)])
     if callback.message:
