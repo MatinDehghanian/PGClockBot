@@ -15,6 +15,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.4.39": [
+        "پرداخت: پورت زندهٔ پنل (مثل :9000) در آدرس callback دوباره نگه داشته می‌شود؛ دکمهٔ تلگرام پیش‌فرض URL مستقیم درگاه است و با تنظیم «لینک دکمهٔ درگاه» می‌توان مسیر پنل /go/ را انتخاب کرد (#923)",
+        "ریستور: backup/dev-pre-v0.4.39 (commit a0e53e28)",
+    ],
     "0.4.38": [
         "پرداخت: آدرس callback بدون پورت غیر ۴۴۳ (مثل :9000) ساخته می‌شود و صفحهٔ موفقیت سادهٔ قبلی («پرداخت تأیید شد») برمی‌گردد تا برگشت پی‌استار گیر نکند (#921)",
         "ریستور: backup/dev-pre-v0.4.38 (commit 50840c44)",
