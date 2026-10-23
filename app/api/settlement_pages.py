@@ -19,44 +19,80 @@ from fastapi import Depends, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.status_render import render_status_page
 from app.db.models import SettlementStatus
 
 logger = logging.getLogger(__name__)
 
-_TELEGRAM_FOOTER = (
-    "اگر این صفحه باز نشد هم اشکالی ندارد؛ نتیجه در ربات می‌آید."
-)
 _BOT_RETURN_LABEL = "بازگشت به ربات"
 
+# Browser tab titles matching the original simple payment-return pages.
+_BROWSER_TITLE = {
+    "ok": "موفق",
+    "pending": "در انتظار",
+    "warn": "توجه",
+    "error": "ناموفق",
+}
 
-async def _bot_return_links(
+
+async def _bot_return_href(
     session: AsyncSession | None,
     shop_owner_id: int | None,
-) -> tuple[str, str]:
-    """Return ``(primary_href, https_fallback)`` for the bot CTA.
-
-    Primary prefers ``tg://resolve?domain=…`` so Telegram's in-app browser
-    actually opens the chat; HTTPS ``t.me`` is kept as a click fallback.
-    """
-    from app.services.ux20 import (
-        bot_deep_link,
-        bot_tg_resolve_link,
-        shop_bot_chat_url,
-        shop_bot_https_url,
-    )
+) -> str:
+    """``tg://resolve?domain=…`` (or https t.me fallback) for the return CTA."""
+    from app.services.ux20 import bot_deep_link, bot_tg_resolve_link, shop_bot_chat_url
 
     if session is not None:
-        primary = (await shop_bot_chat_url(session, shop_owner_id=shop_owner_id)) or ""
-        https = (await shop_bot_https_url(session, shop_owner_id=shop_owner_id)) or ""
-        return primary, https
-
+        return (await shop_bot_chat_url(session, shop_owner_id=shop_owner_id)) or ""
     from app.config import get_settings
 
     uname = get_settings().bot_username
-    primary = bot_tg_resolve_link(uname) or bot_deep_link(uname, "") or ""
-    https = bot_deep_link(uname, "") or ""
-    return primary, https
+    return bot_tg_resolve_link(uname) or bot_deep_link(uname, "") or ""
+
+
+def _simple_payment_page(
+    *,
+    browser_title: str,
+    heading: str,
+    message: str,
+    ok: bool = True,
+    status_code: int = 200,
+    body_html: str = "",
+    bot_href: str = "",
+) -> HTMLResponse:
+    """Compact card UI that used to complete the Paystar return happily."""
+    color = "#16a34a" if ok else "#dc2626"
+    bot_block = ""
+    if bot_href:
+        bot_block = (
+            f'<p><a class="btn" href="{escape(bot_href, quote=True)}">'
+            f"{escape(_BOT_RETURN_LABEL)}</a></p>"
+        )
+    extra = body_html or ""
+    doc = f"""<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>{escape(browser_title)}</title>
+<style>
+body{{font-family:Tahoma,Arial,sans-serif;background:#f4f4f5;margin:0;padding:24px;color:#18181b}}
+.card{{max-width:420px;margin:40px auto;background:#fff;border-radius:12px;padding:24px;
+box-shadow:0 1px 3px rgba(0,0,0,.08);text-align:center}}
+h1{{font-size:1.15rem;margin:0 0 12px;color:{color}}}
+p{{margin:8px 0;line-height:1.7;font-size:.95rem}}
+.btn{{display:inline-block;margin-top:16px;padding:10px 20px;background:#2563eb;color:#fff;
+text-decoration:none;border:0;border-radius:8px;font:inherit;cursor:pointer}}
+.muted{{color:#71717a;font-size:.85rem}}
+</style>
+</head>
+<body><div class="card">
+<h1>{escape(heading)}</h1>
+<p>{escape(message)}</p>
+{extra}
+{bot_block}
+</div></body>
+</html>"""
+    return HTMLResponse(doc, status_code=status_code)
 
 
 async def _status(
@@ -71,23 +107,18 @@ async def _status(
     watermark: str | None = None,
     body_html: str = "",
 ):
-    bot_href, bot_https = await _bot_return_links(session, shop_owner_id)
-    return render_status_page(
-        request,
-        kind=kind,
-        title=title,
+    del request, watermark  # kept for call-site compatibility
+    bot_href = await _bot_return_href(session, shop_owner_id)
+    ok = kind in {"ok", "200"}
+    browser_title = _BROWSER_TITLE.get(kind, title)
+    return _simple_payment_page(
+        browser_title=browser_title,
+        heading=title,
         message=message,
-        http_status=http_status,
-        watermark=watermark or kind.upper(),
-        # No Persian kicker — ``dir=ltr`` + uppercase made «پرداخت» look left-clipped.
-        kicker="",
-        primary_href=bot_href,
-        primary_label=_BOT_RETURN_LABEL if bot_href else "",
-        primary_fallback_href=bot_https if bot_https and bot_https != bot_href else "",
-        secondary_href="",
+        ok=ok,
+        status_code=http_status,
         body_html=body_html,
-        footer=_TELEGRAM_FOOTER,
-        show_close_button=False,
+        bot_href=bot_href,
     )
 
 
@@ -165,7 +196,7 @@ def _register_checkout_go(app: Any, get_db: Callable[..., Any]) -> None:
                 shop_owner_id=settlement.shop_owner_id,
                 kind="ok",
                 title="قبلاً تأیید شده",
-                message="این پرداخت پیش‌تر تسویه شده است؛ به چت ربات برگردید.",
+                message="می‌توانید به تلگرام برگردید.",
                 watermark="OK",
             )
         target = (settlement.checkout_url or "").strip()
@@ -341,7 +372,7 @@ def _register_mock_psp(app: Any, get_db: Callable[..., Any]) -> None:
             shop_owner_id=settlement.shop_owner_id,
             kind="ok",
             title="پرداخت آزمایشی تأیید شد",
-            message="نتیجه در ربات برایتان ارسال می‌شود؛ به چت ربات برگردید.",
+            message="می‌توانید به تلگرام برگردید.",
             watermark="OK",
         )
 
@@ -411,7 +442,7 @@ def _register_psp_return(app: Any, get_db: Callable[..., Any]) -> None:
                 shop_owner_id=settlement.shop_owner_id,
                 kind="ok",
                 title="پرداخت تأیید شد",
-                message="نتیجه در ربات برایتان ارسال می‌شود؛ به چت ربات برگردید.",
+                message="می‌توانید به تلگرام برگردید.",
                 watermark="OK",
             )
         if settlement.status == SettlementStatus.AWAITING.value:
@@ -421,10 +452,7 @@ def _register_psp_return(app: Any, get_db: Callable[..., Any]) -> None:
                 shop_owner_id=settlement.shop_owner_id,
                 kind="pending",
                 title="پرداخت هنوز تأیید نشده",
-                message=(
-                    "اگر پرداخت را کامل کردید به ربات برگردید؛ "
-                    "تأیید خودکار است و لازم نیست این صفحه باز بماند."
-                ),
+                message="اگر پرداخت را کامل کردید کمی صبر کنید یا به ربات برگردید.",
                 watermark="…",
             )
         return await _status(
@@ -433,9 +461,7 @@ def _register_psp_return(app: Any, get_db: Callable[..., Any]) -> None:
             shop_owner_id=settlement.shop_owner_id,
             kind="warn",
             title="پرداخت تکمیل نشد",
-            message=(
-                "به ربات برگردید. اگر مبلغ کم شده، نتیجه آنجا اعلام می‌شود."
-            ),
+            message="می‌توانید به ربات برگردید و دوباره تلاش کنید.",
             watermark="!",
         )
 
