@@ -305,8 +305,10 @@ class BrowserTests(AppPagesCase):
                     warnMoved: Math.abs(warnTopScrolled - warnTopAtStart) > 40,
                     saveFullWidth: Math.abs(saveBtn.width - (saveBox.width - 2 * savePad)) < 2,
                     saveVerticallyCentered: Math.abs(padTop - padBottom) < 0.5,
-                    scrollKeepsBottomPad: scrollPadBottom >= 24,
-                    warnNotFlushAtEnd: (panelBox.bottom - warnBottomAtEnd) >= 20,
+                    savePadY: padTop,
+                    saveOverlays: saveStyle.position === 'absolute',
+                    scrollKeepsBottomPad: scrollPadBottom >= 60,
+                    warnNotFlushAtEnd: (panelBox.bottom - warnBottomAtEnd) >= 60,
                   };
                 }"""
             )
@@ -321,6 +323,8 @@ class BrowserTests(AppPagesCase):
             self.assertTrue(layout["warnMoved"], msg=layout)
             self.assertTrue(layout["saveFullWidth"], msg=layout)
             self.assertTrue(layout["saveVerticallyCentered"], msg=layout)
+            self.assertTrue(layout["saveOverlays"], msg=layout)
+            self.assertGreaterEqual(layout["savePadY"], 18, msg=layout)
             self.assertTrue(layout["scrollKeepsBottomPad"], msg=layout)
             self.assertTrue(layout["warnNotFlushAtEnd"], msg=layout)
 
