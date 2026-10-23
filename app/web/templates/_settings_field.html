@@ -13,7 +13,8 @@
   'pending_order_ttl_hours',
   'btn_pay_card', 'btn_pay_gateway', 'btn_pay_crypto', 'btn_pay_stars',
   'stars_toman_per_star', 'stars_title', 'stars_description',
-  'psp_provider', 'psp_merchant_id',
+  'psp_provider', 'psp_merchant_id', 'psp_pay_url',
+  'psp_sunpay_request_method', 'psp_checkout_link_mode',
   'bbc_api_key', 'btn_pay_bbc',
   'btn_force_join', 'btn_force_join_check',
   'btn_guides', 'btn_guide_open_link',
@@ -33,10 +34,11 @@
     </span>
   </label>
   {% elif kind == 'select' %}
+  {% set select_val = val if val else (options[0][0] if options else '') %}
   <label>{{ label }}
     <select name="s_{{ key }}" {% if key == 'menu_layout' %}id="menu_layout_select"{% endif %}>
       {% for opt_val, opt_label in options %}
-      <option value="{{ opt_val }}" {% if val == opt_val %}selected{% endif %}>{{ opt_label }}</option>
+      <option value="{{ opt_val }}" {% if select_val == opt_val %}selected{% endif %}>{{ opt_label }}</option>
       {% endfor %}
     </select>
     {{ setting_help(help) }}

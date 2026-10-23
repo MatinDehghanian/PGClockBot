@@ -140,7 +140,7 @@ SECTIONS: dict[str, dict] = {
                 ("psp_merchant_id", "مرچنت / کلید API", SECRET),
                 ("psp_pay_url", "آدرس پایه سان‌پی (PAY_URL)", "text"),
                 ("psp_sunpay_request_method", "روش /api/request سان‌پی (GET/POST)", "text"),
-                ("psp_checkout_link_mode", "آدرس دکمه (direct/panel)", "text"),
+                ("psp_checkout_link_mode", "لینک دکمهٔ درگاه (direct/panel)", "text"),
                 ("psp_sandbox", "سندباکس", "toggle"),
                 ("psp_pay_text", "راهنما", "textarea"),
                 *BTN_PAY_PSP,
