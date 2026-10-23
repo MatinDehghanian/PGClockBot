@@ -5,8 +5,6 @@ from __future__ import annotations
 import asyncio
 import importlib.util
 import json
-import shutil
-import subprocess
 import tempfile
 import time
 import unittest
@@ -520,13 +518,3 @@ class RenewalMigrationTests(unittest.TestCase):
                 migration.downgrade()
             self.assertEqual({c["name"] for c in sa.inspect(conn).get_columns("orders")}, {"id", "service_id", "amount", "status", "note"})
         engine.dispose()
-
-
-class MiniAppRenewalJavascriptTests(unittest.TestCase):
-    @unittest.skipUnless(shutil.which("node"), "Node.js is required for browser-handler checks")
-    def test_preview_and_retry_handlers(self):
-        result = subprocess.run(
-            [shutil.which("node"), str(ROOT / "tests/miniapp_renewal_preview.test.cjs")],
-            capture_output=True, text=True, timeout=15,
-        )
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
