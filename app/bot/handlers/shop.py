@@ -2397,12 +2397,12 @@ async def pay_psp_cb(
     except Exception:
         body = (
             f"مبلغ {amount} را از طریق درگاه آنلاین پرداخت کنید.\n"
-            "پس از تأیید درگاه، سرویس خودکار تحویل می‌شود."
+            "پس از پرداخت، به همین چت ربات برگردید؛ تأیید و تحویل خودکار است."
         )
     body += f"\n\n(پرداخت #{payment.id})"
-    from app.services.payment_settlement import with_psp_vpn_notice
+    from app.services.payment_settlement import with_psp_checkout_guidance
 
-    body = with_psp_vpn_notice(body)
+    body = with_psp_checkout_guidance(body)
     rows: list[list[InlineKeyboardButton]] = []
     link = (settlement.checkout_url or "").strip()
     if link.startswith("http://") or link.startswith("https://"):
@@ -2415,10 +2415,7 @@ async def pay_psp_cb(
         wait_markup = InlineKeyboardMarkup(inline_keyboard=wait_rows)
         await safe_edit_text(
             callback.message,
-            format_message(
-                "🏦 درگاه آنلاین",
-                body + "\n\nپس از پرداخت موفق در درگاه، به ربات برگردید.",
-            ),
+            format_message("🏦 درگاه آنلاین", body),
             reply_markup=wait_markup,
         )
     if state is not None:
