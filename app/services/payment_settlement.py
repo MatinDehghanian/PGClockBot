@@ -948,9 +948,9 @@ async def complete_psp_return(
         }:
             _require_mock_token(settlement, str(callback_params.get("token") or ""))
 
+    # No pay_psp_enabled check: the toggle stops new checkouts, but a customer who
+    # already paid an open checkout must still be verified and delivered.
     ui = await get_all_settings(session, reseller_id=settlement.shop_owner_id)
-    if not _on(ui.get("pay_psp_enabled")):
-        raise ValueError("پرداخت درگاه API غیرفعال است")
 
     base = _public_base() or "http://127.0.0.1:8000"
     adapter = get_psp_adapter(provider, ui=ui, public_base_url=base)
