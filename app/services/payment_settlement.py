@@ -20,7 +20,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-from sqlalchemy import select, update
+from sqlalchemy import case, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -1149,6 +1149,14 @@ async def mock_psp_pay(
 PSP_POLL_BATCH = 40
 # Abandoned checkouts (closed tab, never paid) must age out; matches bbc late window.
 PSP_POLL_WINDOW = timedelta(hours=48)
+# Fresh checkouts are re-verified on every run; older ones back off so abandoned
+# checkouts cannot crowd new payers out of the batch or flood the gateway.
+PSP_POLL_BACKOFF: tuple[tuple[timedelta, timedelta], ...] = (
+    (timedelta(minutes=15), timedelta(0)),
+    (timedelta(hours=2), timedelta(minutes=3)),
+    (timedelta(hours=12), timedelta(minutes=15)),
+)
+PSP_POLL_BACKOFF_MAX = timedelta(minutes=45)
 _PSP_POLLABLE = frozenset({"sunpay", "zarinpal"})
 
 
@@ -1198,13 +1206,44 @@ async def deliver_psp_once(session: AsyncSession, settlement: PaymentSettlement)
         logger.exception("psp delivery notice failed payment=%s", payment.id)
 
 
+def psp_poll_delay(age: timedelta) -> timedelta:
+    """Wait before the next re-verify of a checkout that is ``age`` old."""
+    for younger_than, delay in PSP_POLL_BACKOFF:
+        if age < younger_than:
+            return delay
+    return PSP_POLL_BACKOFF_MAX
+
+
+def _as_utc(value: datetime | None) -> datetime | None:
+    # SQLite returns naive datetimes for timezone-aware columns; they are stored as UTC.
+    if value is None or value.tzinfo is not None:
+        return value
+    return value.replace(tzinfo=timezone.utc)
+
+
+async def _schedule_next_psp_check(
+    session: AsyncSession, settlement: PaymentSettlement, *, now: datetime
+) -> None:
+    """Commit the next check time before the gateway call, so a slow or failing
+    verify still moves the row back in the queue."""
+    created = _as_utc(settlement.created_at) or now
+    await session.execute(
+        update(PaymentSettlement)
+        .where(PaymentSettlement.id == int(settlement.id))
+        .values(next_check_at=now + psp_poll_delay(now - created))
+        .execution_options(synchronize_session=False)
+    )
+    await session.commit()
+
+
 async def _poll_one_psp_settlement(
-    session: AsyncSession, settlement: PaymentSettlement
+    session: AsyncSession, settlement: PaymentSettlement, *, now: datetime
 ) -> bool:
     """Re-verify one open PSP row. True when it became SETTLED in this pass."""
     params = _psp_poll_callback_params(settlement)
     if params is None:
         return False
+    await _schedule_next_psp_check(session, settlement, now=now)
     try:
         updated = await complete_psp_return(
             session,
@@ -1231,11 +1270,12 @@ async def _poll_one_psp_settlement(
 async def poll_psp_settlements(session: AsyncSession, *, limit: int = PSP_POLL_BATCH) -> int:
     """Primary verify path when the browser never reaches the panel return URL.
 
-    Re-verifies open sunpay/zarinpal settlements. Only rows created within
-    ``PSP_POLL_WINDOW`` are considered so abandoned checkouts cannot grow an
-    unbounded verify queue (and delay fresh payers).
+    Re-verifies open sunpay/zarinpal settlements whose ``next_check_at`` is due,
+    never-checked rows first. Only rows created within ``PSP_POLL_WINDOW`` are
+    considered, and each check pushes the row back by ``psp_poll_delay``.
     """
-    since = datetime.now(timezone.utc) - PSP_POLL_WINDOW
+    now = datetime.now(timezone.utc)
+    since = now - PSP_POLL_WINDOW
     rows = (
         await session.execute(
             select(PaymentSettlement)
@@ -1245,14 +1285,22 @@ async def poll_psp_settlements(session: AsyncSession, *, limit: int = PSP_POLL_B
                 PaymentSettlement.external_ref.is_not(None),
                 PaymentSettlement.provider.in_(tuple(_PSP_POLLABLE)),
                 PaymentSettlement.created_at >= since,
+                or_(
+                    PaymentSettlement.next_check_at.is_(None),
+                    PaymentSettlement.next_check_at <= now,
+                ),
             )
-            .order_by(PaymentSettlement.updated_at.asc(), PaymentSettlement.id.asc())
+            .order_by(
+                case((PaymentSettlement.next_check_at.is_(None), 0), else_=1),
+                PaymentSettlement.next_check_at.asc(),
+                PaymentSettlement.id.asc(),
+            )
             .limit(max(1, min(100, int(limit))))
         )
     ).scalars().all()
     settled = 0
     for settlement in rows:
-        if await _poll_one_psp_settlement(session, settlement):
+        if await _poll_one_psp_settlement(session, settlement, now=now):
             settled += 1
     return settled
 
