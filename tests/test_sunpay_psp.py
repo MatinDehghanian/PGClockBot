@@ -28,6 +28,7 @@ from app.services.payment_providers import get_psp_adapter
 from app.services.payment_providers.base import CheckoutRequest
 from app.services.payment_providers import sunpay as sunpay_mod
 from app.services.payment_providers.sunpay import (
+    CUSTOMER_NOT_PAID,
     CUSTOMER_REQUEST_FAILED,
     SunPayAdapter,
     SunPayGatewayError,
@@ -418,6 +419,82 @@ class SunPayClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(verified.ok)
         self.assertEqual(verified.amount, 40_000)
 
+    async def _verify_with_response(self, body: dict) -> object:
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json=body)
+
+        http_p, dns_p, client = _patch_sunpay_http(handler)
+        with http_p, dns_p:
+            adapter = SunPayAdapter(api_key=API_KEY, pay_url=PAY_URL)
+            verified = await adapter.verify(
+                external_ref=TOKEN,
+                amount=50_000,
+                callback_params={"success": "1", "token": TOKEN},
+                expected_invoice_id=1,
+            )
+        await client.aclose()
+        return verified
+
+    async def test_lookup_without_reference_is_not_a_payment(self) -> None:
+        for reference in (None, "", "   "):
+            with self.subTest(reference=reference):
+                verified = await self._verify_with_response(
+                    {
+                        "success": 1,
+                        "data": {
+                            "amount": 50_000,
+                            "invoice_id": 1,
+                            "reference": reference,
+                            "paid_at": "2026-09-27 09:30:00",
+                        },
+                    }
+                )
+                self.assertFalse(verified.ok)
+                self.assertEqual(verified.message, CUSTOMER_NOT_PAID)
+
+    async def test_lookup_with_empty_paid_at_is_not_a_payment(self) -> None:
+        for paid_at in (None, ""):
+            with self.subTest(paid_at=paid_at):
+                verified = await self._verify_with_response(
+                    {
+                        "success": 1,
+                        "data": {
+                            "amount": 50_000,
+                            "invoice_id": 1,
+                            "reference": "REF-1",
+                            "paid_at": paid_at,
+                        },
+                    }
+                )
+                self.assertFalse(verified.ok)
+                self.assertEqual(verified.message, CUSTOMER_NOT_PAID)
+
+    async def test_reference_without_paid_at_key_is_accepted(self) -> None:
+        verified = await self._verify_with_response(
+            {
+                "success": 1,
+                "data": {"amount": 50_000, "invoice_id": 1, "reference": "REF-1"},
+            }
+        )
+        self.assertTrue(verified.ok)
+        self.assertEqual(verified.message, "REF-1")
+
+    async def test_only_documented_success_value_counts(self) -> None:
+        for flag in ("ok", "yes", "true", "success", 2):
+            with self.subTest(flag=flag):
+                verified = await self._verify_with_response(
+                    {
+                        "success": flag,
+                        "data": {
+                            "amount": 50_000,
+                            "invoice_id": 1,
+                            "reference": "REF-1",
+                            "paid_at": "2026-09-27 09:30:00",
+                        },
+                    }
+                )
+                self.assertFalse(verified.ok)
+
 
 class SoftCancelHelperTests(unittest.TestCase):
     def test_zarinpal_nok_and_sunpay_success_zero(self) -> None:
@@ -763,6 +840,51 @@ class SunPaySettlementFlowTests(unittest.IsolatedAsyncioTestCase):
                 assert row is not None
                 self.assertEqual(row.status, SettlementStatus.SETTLED.value)
                 approve.assert_awaited()
+        await client.aclose()
+
+    async def test_poller_does_not_settle_unpaid_lookup(self) -> None:
+        """An abandoned checkout's lookup has no reference/paid_at and must not credit."""
+        async with self.Session() as session:
+            await self._configure_platform_sunpay(session)
+            payment = await self._seed_wallet_topup(session)
+            payment_id = int(payment.id)
+
+        sid = await self._checkout(payment_id)
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={
+                    "success": 1,
+                    "data": {
+                        "amount": 50_000,
+                        "invoice_id": sid,
+                        "reference": None,
+                        "paid_at": None,
+                        "detail": {},
+                    },
+                },
+            )
+
+        approve = AsyncMock(return_value=None)
+        http_p, dns_p, client = _patch_sunpay_http(handler)
+        with (
+            http_p,
+            dns_p,
+            _patch_https_public_base("https://bot.test"),
+            patch(
+                "app.services.payment_settlement._public_base",
+                return_value="https://bot.test",
+            ),
+            patch("app.services.payment_settlement.approve_payment", approve),
+        ):
+            async with self.Session() as session:
+                n = await poll_psp_settlements(session)
+                self.assertEqual(n, 0)
+                row = await session.get(PaymentSettlement, sid)
+                assert row is not None
+                self.assertEqual(row.status, SettlementStatus.AWAITING.value)
+                approve.assert_not_awaited()
         await client.aclose()
 
     async def test_poller_skips_settlements_older_than_window(self) -> None:

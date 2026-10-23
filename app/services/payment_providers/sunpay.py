@@ -51,6 +51,7 @@ CUSTOMER_REQUEST_FAILED = "درخواست سان‌پی ناموفق بود"
 CUSTOMER_UNAVAILABLE = "این روش پرداخت موقتاً در دسترس نیست؛ روش دیگری را انتخاب کنید."
 CUSTOMER_NETWORK = "خطا در ارتباط با درگاه سان‌پی"
 CUSTOMER_BAD_RESPONSE = "پاسخ نامعتبر درگاه سان‌پی"
+CUSTOMER_NOT_PAID = "پرداختی برای این تراکنش در درگاه ثبت نشده است"
 
 _HTML_TAG_RE = re.compile(r"<[^>]+>")
 _BODY_LOG_LIMIT = 300
@@ -79,15 +80,25 @@ async def close_client() -> None:
 
 
 def _is_success_flag(raw: Any) -> bool:
-    """SunPay callback/API success: 1 / \"1\" / true."""
+    """SunPay documents success as 1 only; accept the int, its string form, or JSON true."""
     if raw is True:
         return True
-    if raw is False or raw is None:
+    if isinstance(raw, bool) or raw is None:
         return False
-    if isinstance(raw, (int, float)) and not isinstance(raw, bool):
-        return int(raw) == 1
-    text = str(raw).strip().lower()
-    return text in {"1", "true", "yes", "ok", "success"}
+    if isinstance(raw, int):
+        return raw == 1
+    return str(raw).strip() == "1"
+
+
+def _missing_paid_evidence(result: dict[str, Any]) -> bool:
+    """Verify is a lookup, not a confirmation: a paid transaction carries a reference.
+
+    ``paid_at`` is checked only when the gateway sends the key, so a response that
+    omits it does not block a payment that has a reference.
+    """
+    if not str(result.get("reference") or "").strip():
+        return True
+    return "paid_at" in result and not str(result.get("paid_at") or "").strip()
 
 
 def _host_is_blocked(host: str) -> bool:
@@ -283,8 +294,16 @@ def _parse_verified_payment(
             raw=data,
         )
     result = data.get("data") if isinstance(data.get("data"), dict) else {}
+    if _missing_paid_evidence(result):
+        logger.warning("sunpay verify success without paid reference token=%s", token[:16])
+        return VerifyResult(
+            ok=False,
+            external_ref=token,
+            message=CUSTOMER_NOT_PAID,
+            raw=data,
+        )
     try:
-        paid_amount = _safe_int((result or {}).get("amount"), field="مبلغ")
+        paid_amount = _safe_int(result.get("amount"), field="مبلغ")
     except ValueError:
         return VerifyResult(
             ok=False,
@@ -306,7 +325,7 @@ def _parse_verified_payment(
             message="مبلغ تأییدشده با سفارش هم‌خوانی ندارد",
             raw=data,
         )
-    return (result or {}), paid_amount
+    return result, paid_amount
 
 
 def _invoice_matches_settlement(
