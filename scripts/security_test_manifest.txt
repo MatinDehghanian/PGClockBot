@@ -136,6 +136,7 @@ tests/test_setup_wizard_secret_masking.py
 tests/test_shop_isolation_3_5_4.py
 tests/test_nav_admin_counters_0_2_47.py
 tests/test_shop_wallet_isolation.py
+tests/test_psp_verify_after_disable.py
 # BezanBeCard: tenant callback token, API re-verify, merchant_order_id bind, no blind trust.
 tests/test_bezanbecard_settlement.py
 tests/test_psp_return_page_states.py
