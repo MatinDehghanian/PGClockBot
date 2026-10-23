@@ -23,6 +23,7 @@ from app.services.list_query import (
     parse_list_page,
 )
 from app.services.shop_scope import is_platform_admin, payment_shop_id, shop_owner_id
+from app.services.stuck_order_resolution import describe_stuck_orders
 from app.services.users import SETTING_GROUPS, TAB_SETTING_GROUPS, get_all_settings
 from app.services.secret_box import reveal_bot_token
 
@@ -261,6 +262,7 @@ def register_finance_pages(app, *, render, require_staff, get_db):
             "stuck_only_order_ids": [],
             "orders_by_id": {},
             "delivery_diag_by_order": {},
+            "stuck_reasons": {},
             "delivery_payments_by_order": {},
             "pager": None,
             "flash_ok": request.query_params.get("ok")
@@ -607,6 +609,7 @@ def register_finance_pages(app, *, render, require_staff, get_db):
                 )
                 ctx["delivery_diag_by_order"] = diag_by_order
                 ctx["delivery_payments_by_order"] = payments_by_order
+                ctx["stuck_reasons"] = await describe_stuck_orders(session, stuck)
             except Exception:
                 logger.exception("delivery failures tab failed")
                 await rollback_quiet(session)
@@ -617,6 +620,7 @@ def register_finance_pages(app, *, render, require_staff, get_db):
                 ctx["orders_by_id"] = {}
                 ctx["delivery_diag_by_order"] = {}
                 ctx["delivery_payments_by_order"] = {}
+                ctx["stuck_reasons"] = {}
 
         elif tab == "cancellations" and can_orders:
             from app.services.service_cancellations import (

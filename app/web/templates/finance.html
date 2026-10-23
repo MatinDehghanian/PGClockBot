@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "macros.html" import ord_status, pay_status, row_actions, page_title, table_select_head, table_select_cell, table_bulk_bar, modal_title %}
+{% from "_stuck_order_actions.html" import stuck_close_actions %}
 {% block title %}
 {%- if finance_tab == 'reports' -%}گزارشات
 {%- elif finance_tab == 'payments' -%}پرداخت‌ها
@@ -336,12 +337,13 @@
         <td class="mono" data-sort-value="{{ oid }}">#{{ oid }} <span class="badge warn badge-inline">گیرکرده</span></td>
         <td data-sort-value="{{ uname }}">{{ uname }}</td>
         <td data-sort-value="{{ diag.kind if diag else 'stuck' }}">
-          <span class="badge warn badge-inline" title="{{ diag.detail_fa if diag else 'پرداخت‌شده بدون سرویس محلی' }}">{{ diag.label_fa if diag else 'تحویل ناقص' }}</span>
+          {% set why = (stuck_reasons or {}).get(oid) %}
+          <span class="badge warn badge-inline" title="{{ diag.detail_fa if diag else '' }}">{{ why.kind if why else (diag.label_fa if diag else 'تحویل ناقص') }}</span>
           {% if diag and diag.payment_status %}
           <small class="muted" style="display:block">پرداخت: {{ pay_status(diag.payment_status) }}{% if diag.order_status %} · سفارش: {{ ord_status(diag.order_status) }}{% endif %}</small>
           {% endif %}
         </td>
-        <td class="col-hide-sm muted" data-sort-value="stuck">پرداخت‌شده بدون سرویس محلی</td>
+        <td class="col-hide-sm muted" data-sort-value="stuck">{{ why.reason if why else 'پرداخت شده ولی سرویسی ساخته نشد' }}</td>
         <td class="mono" data-sort-value="0">—</td>
         <td class="col-actions">
           {% call row_actions() %}
@@ -351,19 +353,7 @@
                   data-confirm-label="{{ act_label }}">
               <button class="btn btn-ok btn-sm" type="submit">{{ act_label }}</button>
             </form>
-            <form method="post" action="/orders/{{ oid }}/mark-delivered-manually"
-                  data-confirm="تحویل این سفارش را خودتان انجام داده‌اید (مثلاً سرویس را در پنل ساخته‌اید)؟ سفارش بدون جابه‌جایی پول بسته می‌شود."
-                  data-confirm-title="تحویل دستی انجام شد"
-                  data-confirm-label="ثبت تحویل دستی">
-              <button class="btn btn-ghost btn-sm" type="submit">تحویل دستی انجام شد</button>
-            </form>
-            <form method="post" action="/orders/{{ oid }}/refund-stuck-order"
-                  data-confirm="سفارش لغو و مبلغ پرداخت‌شده به کیف پول مشتری برگردانده شود؟ قبلش مطمئن شوید برای این سفارش سرویسی در پاسارگارد ساخته نشده است. این کار یک بار انجام می‌شود."
-                  data-confirm-title="لغو و بازگشت وجه"
-                  data-confirm-danger="1"
-                  data-confirm-label="لغو و بازگشت وجه">
-              <button class="btn btn-danger btn-sm" type="submit">لغو و بازگشت وجه</button>
-            </form>
+            {{ stuck_close_actions(oid, (stuck_reasons or {}).get(oid)) }}
           {% endcall %}
         </td>
       </tr>
@@ -409,19 +399,7 @@
               <button class="btn btn-ghost btn-sm" type="submit">حذف از لیست</button>
             </form>
             {% if f.order_id in (stuck_order_ids or []) %}
-            <form method="post" action="/orders/{{ f.order_id }}/mark-delivered-manually"
-                  data-confirm="تحویل این سفارش را خودتان انجام داده‌اید (مثلاً سرویس را در پنل ساخته‌اید)؟ سفارش بدون جابه‌جایی پول بسته می‌شود."
-                  data-confirm-title="تحویل دستی انجام شد"
-                  data-confirm-label="ثبت تحویل دستی">
-              <button class="btn btn-ghost btn-sm" type="submit">تحویل دستی انجام شد</button>
-            </form>
-            <form method="post" action="/orders/{{ f.order_id }}/refund-stuck-order"
-                  data-confirm="سفارش لغو و مبلغ پرداخت‌شده به کیف پول مشتری برگردانده شود؟ قبلش مطمئن شوید برای این سفارش سرویسی در پاسارگارد ساخته نشده است. این کار یک بار انجام می‌شود."
-                  data-confirm-title="لغو و بازگشت وجه"
-                  data-confirm-danger="1"
-                  data-confirm-label="لغو و بازگشت وجه">
-              <button class="btn btn-danger btn-sm" type="submit">لغو و بازگشت وجه</button>
-            </form>
+            {{ stuck_close_actions(f.order_id, (stuck_reasons or {}).get(f.order_id)) }}
             {% endif %}
           {% endcall %}
         </td>
