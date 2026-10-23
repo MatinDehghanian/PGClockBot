@@ -1114,6 +1114,7 @@ async def notify_settlement_review(
     *,
     shop_id: int | None,
     reason: str,
+    title: str = "⚠️ پرداخت «بزن به کارت» نیاز به بررسی دارد",
 ) -> int:
     """Staff of the payment's shop (platform admins for the platform): an automatic
     payment needs a person. Never approves or rejects anything itself."""
@@ -1129,7 +1130,7 @@ async def notify_settlement_review(
     ]
     if payment.order_id:
         lines.append(kv_line("🛒", "سفارش", f"#{payment.order_id}"))
-    text = format_message("⚠️ پرداخت «بزن به کارت» نیاز به بررسی دارد", info_block(lines) + f"\n\n{reason}")
+    text = format_message(title, info_block(lines) + f"\n\n{reason}")
     bot = create_bot()
     try:
         # The settlement's shop is passed as the explicit scope, so shop events never reach platform admins.

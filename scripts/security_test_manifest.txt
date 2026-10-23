@@ -144,6 +144,7 @@ tests/test_psp_settlement_poll.py
 tests/test_settlement_public_ux.py
 tests/test_psp_open_checkout_payments.py
 tests/test_psp_vpn_notice.py
+tests/test_psp_settlement_review.py
 tests/test_public_https_psp_base.py
 tests/test_payment_method_labels.py
 tests/test_service_automation.py

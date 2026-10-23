@@ -36,10 +36,17 @@ from app.db.models import (
 from app.services.orders import approve_payment
 from app.services.shop_scope import payment_shop_id
 from app.services.payment_providers import get_psp_adapter
-from app.services.payment_providers.base import CheckoutRequest
+from app.services.payment_providers.base import CheckoutRequest, VerifyResult
 from app.services.payment_providers.card_auto import (
     parse_card_auto_event,
     verify_signature,
+)
+from app.services.psp_settlement_review import (
+    REVIEW_IN_PROGRESS_MESSAGE,
+    is_in_review,
+    merge_verify_details,
+    send_to_review,
+    unusable_payment_reason,
 )
 from app.services.users import get_all_settings
 
@@ -394,6 +401,18 @@ async def _insert_settlement_race_safe(
         return raced
 
 
+def _checkout_to_keep(existing: PaymentSettlement) -> bool:
+    """True when the existing attempt is returned as is instead of a new link."""
+    if is_in_review(existing):
+        # A paid attempt waits for staff; a new link must not overwrite its record.
+        raise ValueError(REVIEW_IN_PROGRESS_MESSAGE)
+    if existing.status in {SettlementStatus.SETTLED.value, SettlementStatus.SETTLING.value}:
+        return True
+    return existing.status == SettlementStatus.AWAITING.value and bool(
+        (existing.checkout_url or "").strip()
+    )
+
+
 async def create_psp_checkout(
     session: AsyncSession,
     payment: Payment,
@@ -449,11 +468,7 @@ async def create_psp_checkout(
         )
 
     if existing:
-        if existing.status == SettlementStatus.SETTLED.value:
-            return existing
-        if existing.status == SettlementStatus.SETTLING.value:
-            return existing
-        if existing.status == SettlementStatus.AWAITING.value and (existing.checkout_url or "").strip():
+        if _checkout_to_keep(existing):
             return existing
         # FAILED / CREATED without URL / stale → reuse same row (deterministic key).
         settlement = existing
@@ -939,6 +954,8 @@ async def complete_psp_return(
         )
         await session.refresh(settlement)
         return settlement
+    if is_in_review(settlement):
+        return settlement
 
     if provider == "mock":
         # Token required while still open; settling/settled already consumed it.
@@ -957,6 +974,36 @@ async def complete_psp_return(
     callback_invoice_matches_settlement(
         callback_params, settlement_id=int(settlement.id)
     )
+    external_ref = _psp_return_external_ref(settlement, callback_params)
+
+    # Real PSP: callback alone is never enough — adapter.verify talks to provider.
+    verified = await adapter.verify(
+        external_ref=external_ref,
+        amount=int(settlement.amount),
+        callback_params=callback_params,
+        expected_invoice_id=int(settlement.id),
+    )
+    if not verified.ok:
+        await _handle_unverified_return(session, settlement, verified)
+        return settlement
+
+    if await _sent_paid_settlement_to_review(session, settlement, payment, verified):
+        return settlement
+    paid_amount = verified.amount if verified.amount is not None else settlement.amount
+    await settle_and_approve(
+        session,
+        settlement,
+        expected_amount=int(paid_amount),
+        external_ref=verified.external_ref or external_ref,
+        reviewer_tg=0,
+    )
+    await session.refresh(settlement)
+    return settlement
+
+
+def _psp_return_external_ref(
+    settlement: PaymentSettlement, callback_params: dict[str, Any]
+) -> str:
     external_ref = settlement.external_ref or str(
         callback_params.get("Authority")
         or callback_params.get("authority")
@@ -968,38 +1015,49 @@ async def complete_psp_return(
         raise ValueError("شناسه تراکنش موجود نیست")
     if settlement.external_ref and str(settlement.external_ref).lower() != str(external_ref).lower():
         raise ValueError("شناسه تراکنش با تسویه هم‌خوانی ندارد")
+    return external_ref
 
-    # Real PSP: callback alone is never enough — adapter.verify talks to provider.
-    verified = await adapter.verify(
-        external_ref=external_ref,
-        amount=int(settlement.amount),
-        callback_params=callback_params,
-        expected_invoice_id=int(settlement.id),
-    )
-    if not verified.ok:
-        # Public return URL is unauthenticated and settlement ids are sequential.
-        # Never mark FAILED here: missing params, user abort, network/timeout,
-        # or "not paid yet" must leave AWAITING so the real payer can finish and
-        # verify (read-only) can be retried. Only settle_and_approve amount/tenant
-        # mismatches permanently fail a settlement.
-        # Persist last error for admin visibility while staying AWAITING;
-        # the PSP poller retries verify without needing the browser return.
-        msg = (verified.message or "تأیید درگاه ناموفق بود")[:500]
-        if settlement.status == SettlementStatus.AWAITING.value:
-            settlement.error_message = msg
-            await session.commit()
-        raise ValueError(msg)
 
-    paid_amount = verified.amount if verified.amount is not None else settlement.amount
-    await settle_and_approve(
-        session,
-        settlement,
-        expected_amount=int(paid_amount),
-        external_ref=verified.external_ref or external_ref,
-        reviewer_tg=0,
-    )
-    await session.refresh(settlement)
-    return settlement
+async def _handle_unverified_return(
+    session: AsyncSession, settlement: PaymentSettlement, verified: VerifyResult
+) -> None:
+    """Send a paid-but-unusable result to review; raise for anything retriable."""
+    if verified.review_reason:
+        await send_to_review(session, settlement, verified.review_reason, verified=verified)
+        return
+    # Public return URL is unauthenticated and settlement ids are sequential.
+    # Never mark FAILED here: missing params, user abort, network/timeout,
+    # or "not paid yet" must leave AWAITING so the real payer can finish and
+    # verify (read-only) can be retried. Only settle_and_approve amount/tenant
+    # mismatches permanently fail a settlement.
+    # Persist last error for admin visibility while staying AWAITING;
+    # the PSP poller retries verify without needing the browser return.
+    msg = (verified.message or "تأیید درگاه ناموفق بود")[:500]
+    if settlement.status == SettlementStatus.AWAITING.value:
+        settlement.error_message = msg
+        await session.commit()
+    raise ValueError(msg)
+
+
+async def _sent_paid_settlement_to_review(
+    session: AsyncSession,
+    settlement: PaymentSettlement,
+    payment: Payment,
+    verified: VerifyResult,
+) -> bool:
+    """Record the verified payment; hand it to staff when it can no longer be approved.
+
+    The gateway already holds the money, so a payment that was replaced or an order
+    that was paid, delivered or cancelled meanwhile must not loop through re-verify.
+    """
+    reason = await unusable_payment_reason(session, payment)
+    if reason is not None:
+        await send_to_review(session, settlement, reason, verified=verified)
+        return True
+    if verified.reference or verified.paid_at:
+        settlement.provider_payload = merge_verify_details(settlement.provider_payload, verified)
+        await session.commit()
+    return False
 
 
 async def handle_card_auto_webhook(

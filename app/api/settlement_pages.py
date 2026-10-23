@@ -394,6 +394,7 @@ def _register_psp_return(app: Any, get_db: Callable[..., Any]) -> None:
             deliver_psp_once,
             settlement_mock_allowed,
         )
+        from app.services.psp_settlement_review import is_in_review
 
         provider_l = (provider or "").strip().lower()
         if provider_l == "mock" and not settlement_mock_allowed():
@@ -454,6 +455,16 @@ def _register_psp_return(app: Any, get_db: Callable[..., Any]) -> None:
                 title="پرداخت هنوز تأیید نشده",
                 message="اگر پرداخت را کامل کردید کمی صبر کنید یا به ربات برگردید.",
                 watermark="…",
+            )
+        if is_in_review(settlement):
+            return await _status(
+                request,
+                session,
+                shop_owner_id=settlement.shop_owner_id,
+                kind="warn",
+                title="پرداخت در حال بررسی است",
+                message="پرداخت شما ثبت شد و فروشگاه آن را بررسی می‌کند؛ نتیجه در ربات اطلاع داده می‌شود.",
+                watermark="!",
             )
         return await _status(
             request,
