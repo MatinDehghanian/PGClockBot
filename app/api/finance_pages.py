@@ -14,6 +14,7 @@ from sqlalchemy.orm import selectinload
 
 from app.db.models import BotUser, Order, Payment, Plan, ResellerProfile
 from app.services.authz import authz_from_staff, can_shop
+from app.services.dashboard_trend import sales_trend_or_empty
 from app.services.list_query import (
     DEFAULT_LIST_PAGE_SIZE,
     build_list_pager,
@@ -344,6 +345,7 @@ def register_finance_pages(app, *, render, require_staff, get_db):
                 session, reseller_id=rid, period=report_period
             )
             ctx["report_period"] = report_period
+            ctx["trend"] = await sales_trend_or_empty(session, reseller_id=rid)
 
         elif tab == "orders" and can_orders:
             base_filters = []

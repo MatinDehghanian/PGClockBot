@@ -11972,6 +11972,8 @@ html[data-theme="light"] .sales-delta.down { color: #b91c1c; }
 .sales-error { display: none; margin: var(--space-1) 0 0; color: #f87171; }
 .home-sales-card.is-error .sales-error { display: block; }
 .home-sales-card.is-loading .sales-plot { opacity: 0.5; }
+.finance-report-methods .finance-method-share { width: 34%; min-width: 120px; }
+.finance-report-methods .finance-method-share .ov-meter-top { margin-bottom: 4px; }
 .sc-svg { position: absolute; inset: 0; overflow: visible; }
 .sc-line { fill: none; stroke: var(--foreground); stroke-width: 2.25; stroke-linecap: round; stroke-linejoin: round; }
 .sc-area { fill: color-mix(in srgb, var(--foreground) 10%, transparent); stroke: none; }
