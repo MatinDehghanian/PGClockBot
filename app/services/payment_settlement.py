@@ -25,6 +25,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
+from app.services.db_safe import rollback_quiet
 from app.db.models import (
     BotUser,
     Order,
@@ -1166,6 +1167,60 @@ def _psp_poll_callback_params(settlement: PaymentSettlement) -> dict[str, Any] |
         }
     # zarinpal
     return {"Status": "OK", "Authority": token}
+
+
+# A claim older than this is not a settle in progress: approve and delivery have timeouts.
+PSP_SETTLING_STALE_AFTER = timedelta(minutes=10)
+
+
+async def _recover_one_stuck_settlement(
+    session: AsyncSession, settlement: PaymentSettlement
+) -> bool:
+    """Finish or reopen one stale SETTLING row. True when it became SETTLED."""
+    payment = await session.get(Payment, int(settlement.payment_id))
+    if payment is not None and payment.status == PaymentStatus.APPROVED.value:
+        # approve_payment committed (with the claim) but the process stopped before
+        # SETTLED: the money is accounted for, only the settlement and notice remain.
+        await _finalize_settled(session, settlement)
+        await session.commit()
+        logger.warning("psp settlement recovered as settled settlement=%s", settlement.id)
+        if settlement.status == SettlementStatus.SETTLED.value:
+            await deliver_psp_once(session, settlement)
+            return True
+        return False
+    # Nothing was approved: reopen so the next verify settles or reviews it.
+    await _revert_claim_to_awaiting(session, settlement, error="stale settling claim reopened")
+    await session.commit()
+    logger.warning("psp settlement reopened from stale claim settlement=%s", settlement.id)
+    return False
+
+
+async def recover_stuck_psp_settlements(
+    session: AsyncSession, *, limit: int = PSP_POLL_BATCH
+) -> int:
+    """Finish PSP rows left in SETTLING by a crash between approve and SETTLED."""
+    cutoff = datetime.now(timezone.utc) - PSP_SETTLING_STALE_AFTER
+    rows = (
+        await session.execute(
+            select(PaymentSettlement)
+            .where(
+                PaymentSettlement.channel == CHANNEL_PSP,
+                PaymentSettlement.status == SettlementStatus.SETTLING.value,
+                PaymentSettlement.updated_at < cutoff,
+            )
+            .order_by(PaymentSettlement.id.asc())
+            .limit(max(1, min(100, int(limit))))
+        )
+    ).scalars().all()
+    settled = 0
+    for settlement in rows:
+        try:
+            if await _recover_one_stuck_settlement(session, settlement):
+                settled += 1
+        except Exception:
+            logger.exception("psp stuck settlement recovery failed settlement=%s", settlement.id)
+            await rollback_quiet(session)
+    return settled
 
 
 async def claim_psp_delivery_notice(

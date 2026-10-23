@@ -145,6 +145,7 @@ tests/test_psp_vpn_notice.py
 tests/test_public_https_psp_base.py
 tests/test_payment_method_labels.py
 tests/test_service_automation.py
+tests/test_psp_stuck_settling_recovery.py
 tests/test_customer_features.py
 tests/test_scheduler_background_jobs.py
 tests/test_sqlite_db_file_permissions.py
