@@ -1,4 +1,4 @@
-"""«بزن به کارت» links: no panel port, and the payer returns straight to the shop's bot."""
+"""«بزن به کارت» links: both on the panel host without its port."""
 
 from __future__ import annotations
 
@@ -70,7 +70,7 @@ class GatewayLinkRequestTests(unittest.IsolatedAsyncioTestCase):
         await self.engine.dispose()
         self._tmp.cleanup()
 
-    async def _sent_request(self, *, bot_url: str | None) -> bbc.BbcOrderRequest:
+    async def _sent_request(self) -> bbc.BbcOrderRequest:
         async with self.Session() as session:
             payment = Payment(
                 user_id=1,
@@ -82,27 +82,20 @@ class GatewayLinkRequestTests(unittest.IsolatedAsyncioTestCase):
             session.add(payment)
             await session.commit()
             create = AsyncMock(return_value=_order(int(payment.id)))
-            with (
-                patch.object(bbc, "create_order", create),
-                patch.object(flow, "shop_bot_https_url", AsyncMock(return_value=bot_url)),
-            ):
+            with patch.object(bbc, "create_order", create):
                 await flow.start_bbc_checkout(session, payment)
             return create.await_args.kwargs["request"]
 
     async def test_callback_has_no_panel_port(self) -> None:
-        request = await self._sent_request(bot_url="https://t.me/shop_bot")
+        request = await self._sent_request()
         self.assertTrue(
             request.callback_url.startswith("https://panel.test/payments/settlement/bbc/"),
             request.callback_url,
         )
         self.assertNotIn(":9000", request.callback_url)
 
-    async def test_payer_returns_to_the_shop_bot(self) -> None:
-        request = await self._sent_request(bot_url="https://t.me/shop_bot")
-        self.assertEqual(request.return_url, "https://t.me/shop_bot")
-
-    async def test_without_a_bot_username_the_panel_page_is_used_without_port(self) -> None:
-        request = await self._sent_request(bot_url=None)
+    async def test_payer_returns_to_the_panel_page_without_port(self) -> None:
+        request = await self._sent_request()
         self.assertTrue(
             request.return_url.startswith("https://panel.test/payments/settlement/bbc/"),
             request.return_url,
