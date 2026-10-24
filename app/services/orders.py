@@ -1494,16 +1494,22 @@ async def cancel_stale_pending_for_settings(
         include_awaiting_approval=include_aa,
     )
 
-async def attach_receipt(session: AsyncSession, payment: Payment, file_id: str) -> Payment:
-    """Attach receipt only while payment is still pending (never overwrite approved/rejected)."""
+async def attach_receipt(
+    session: AsyncSession, payment: Payment, file_id: str, *, first_only: bool = False
+) -> Payment:
+    """Attach receipt only while payment is still pending (never overwrite approved/rejected).
+
+    ``first_only`` refuses a payment that already has a receipt, so two concurrent
+    uploads cannot both reach the reviewers.
+    """
     payment_id = int(payment.id)
+    conditions = [Payment.id == payment_id, Payment.status == PaymentStatus.PENDING.value]
+    if first_only:
+        conditions.append(Payment.receipt_file_id.is_(None))
     with session.no_autoflush:
         claim = await session.execute(
             update(Payment)
-            .where(
-                Payment.id == payment_id,
-                Payment.status == PaymentStatus.PENDING.value,
-            )
+            .where(*conditions)
             .values(receipt_file_id=file_id, status=PaymentStatus.PENDING.value)
             .execution_options(synchronize_session=False)
         )

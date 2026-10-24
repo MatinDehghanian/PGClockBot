@@ -74,7 +74,7 @@ function loadMiniApp({ routes, initData = "query_id=x&hash=y", confirm = () => t
     Telegram: tg ? { WebApp: tg } : undefined,
     PGMini: { autostart: false },
     fetch: async (url, options) => {
-      const body = options.body ? JSON.parse(options.body) : undefined;
+      const body = typeof options.body === "string" ? JSON.parse(options.body) : options.body;
       calls.push({ method: options.method, url, body, headers: options.headers });
       const res = await routes(options.method, url, body);
       return { ok: res.status < 400, status: res.status, text: async () => JSON.stringify(res.body) };
