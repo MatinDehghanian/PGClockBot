@@ -202,6 +202,9 @@
     }).join("")}</div>`;
   }
 
+  const LOW_BALANCE = `<p class="inline-error">موجودی کیف پول کافی نیست.</p>
+      <button type="button" class="btn ghost block" data-action="topup">شارژ کیف پول</button>`;
+
   function checkoutHtml(plan, wallet) {
     if (!plan) return `<section class="card"><p class="muted">یک پلن را انتخاب کنید.</p></section>`;
     const price = Number(plan.price) || 0;
@@ -210,9 +213,37 @@
       <div class="sum-row"><span class="muted">پلن</span><span>${esc(plan.name)}</span></div>
       <div class="sum-row"><span class="muted">موجودی کیف پول</span><span>${esc(money(wallet))}</span></div>
       <div class="sum-row is-total"><span>قابل پرداخت</span><span>${priceHtml(plan)}</span></div>
-      ${enough ? "" : '<p class="inline-error">موجودی کیف پول کافی نیست؛ ابتدا کیف پول را از ربات شارژ کنید.</p>'}
+      ${plan.is_trial ? "" : `<form class="code-form" data-form="discount">
+        <label class="form-field"><span class="muted sm">کد تخفیف (اختیاری)</span>
+          <span class="code-line"><input type="text" name="code" maxlength="64" autocomplete="off" dir="ltr" autocapitalize="characters">
+          <button type="submit" class="btn ghost sm">اعمال</button></span></label>
+      </form>`}
+      ${enough ? "" : LOW_BALANCE}
       <button type="button" class="btn block" data-action="buy" data-id="${Number(plan.id) || 0}"${enough ? "" : " disabled"}>${plan.is_trial ? "دریافت سرویس تست" : "پرداخت از کیف پول"}</button>
     </section>`;
+  }
+
+  function discountedCheckoutHtml(checkout, plan, wallet) {
+    const enough = Number(checkout.amount) <= (Number(wallet) || 0);
+    return `<section class="card" aria-label="خلاصهٔ سفارش با تخفیف">
+      <div class="sum-row"><span class="muted">پلن</span><span>${esc(plan ? plan.name : "")}</span></div>
+      <div class="sum-row"><span class="muted">قیمت</span><s>${esc(money(checkout.original_amount))}</s></div>
+      <div class="sum-row"><span class="muted">تخفیف <bdi dir="ltr">${esc(checkout.code)}</bdi></span><span class="is-plus tx-amt"><span aria-hidden="true">−</span><bdi>${esc(money(checkout.discount))}</bdi></span></div>
+      <div class="sum-row is-total"><span>قابل پرداخت</span><span>${esc(money(checkout.amount))}</span></div>
+      ${enough ? "" : LOW_BALANCE}
+      <div class="btn-col">
+        <button type="button" class="btn block" data-action="checkout-pay"${enough ? "" : " disabled"}>پرداخت از کیف پول</button>
+        <button type="button" class="btn ghost block" data-action="checkout-cancel">حذف کد و انصراف</button>
+      </div>
+    </section>`;
+  }
+
+  function giftFormHtml() {
+    return `<form class="code-form" data-form="gift">
+      <label class="form-field"><span>کد هدیه</span>
+        <input type="text" name="code" maxlength="64" autocomplete="off" dir="ltr" autocapitalize="characters"></label>
+      <button type="submit" class="btn block">ثبت کد و شارژ کیف پول</button>
+    </form>`;
   }
 
   function renewPlansHtml(plans, serviceId) {
@@ -306,7 +337,9 @@
       <p class="wallet-value">${esc(money(c.wallet))}</p>
       <div class="btn-row">
         <button type="button" class="btn" data-action="topup">شارژ کیف پول</button>
-        ${actions ? '<button type="button" class="btn ghost" data-action="goto" data-view="shop">خرید سرویس</button>' : ""}
+        ${actions
+          ? '<button type="button" class="btn ghost" data-action="goto" data-view="shop">خرید سرویس</button>'
+          : '<button type="button" class="btn ghost" data-action="gift-code">کد هدیه</button>'}
       </div>
     </section>`;
   }
@@ -488,7 +521,7 @@
 
   root.PGMini.render = Object.freeze({
     icon, isOnHoldStatus, statusTone, expireDaysLabel, meterHtml, serviceRowHtml, glanceRowHtml,
-    attentionCardHtml, serviceDetailHtml, planOptionsHtml, checkoutHtml, renewPlansHtml,
+    attentionCardHtml, serviceDetailHtml, planOptionsHtml, checkoutHtml, discountedCheckoutHtml, giftFormHtml, renewPlansHtml,
     renewPreviewHtml, addonPacksHtml, automationHtml, cancellationHtml, qrHtml, activityHtml,
     walletCardHtml, supportHtml, ticketNewFormHtml, ticketThreadHtml, topupFormHtml, topupPayHtml, receiptFormHtml, recentTopupsHtml, statsHtml, attentionListHtml, linksHtml, navHtml, loadingHtml, emptyHtml,
     errorHtml,

@@ -29,6 +29,7 @@
     activityLimit: ACTIVITY_PAGE,
     renewPreview: null,
     topupCurrent: null,
+    checkout: null,
     addonPacks: [],
     sheet: null,
     sheetSeq: 0,
@@ -179,6 +180,7 @@
     const options = opts || {};
     const next = viewAllowed(view) ? view : homeViewId();
     closeSheet();
+    if (state.view === "shop" && next !== "shop") dropCheckout();
     state.view = next;
     state.serviceId = next === "service" ? Number(options.serviceId) || null : null;
     // The detail screen always shows live usage, so each visit reads it again.
@@ -484,7 +486,20 @@
       state.selectedPlanId = firstPaid ? firstPaid.id : null;
     }
     return head + R.planOptionsHtml(plans, state.selectedPlanId)
-      + `<div id="checkout">${R.checkoutHtml(selectedPlan(), c.wallet)}</div>`;
+      + `<div id="checkout">${checkoutCardHtml()}</div>`;
+  }
+
+  function checkoutCardHtml() {
+    const plan = selectedPlan();
+    const wallet = customer().wallet;
+    return state.checkout && plan && state.checkout.planId === plan.id
+      ? R.discountedCheckoutHtml(state.checkout, plan, wallet)
+      : R.checkoutHtml(plan, wallet);
+  }
+
+  function renderCheckout() {
+    const host = doc.getElementById("checkout");
+    if (host) host.innerHTML = checkoutCardHtml();
   }
 
   function selectedPlan() {
@@ -953,6 +968,89 @@
     });
   }
 
+  /* ---------- discount and gift codes ---------- */
+
+  const PAY_UNKNOWN_OUTCOME = "نتیجهٔ پرداخت مشخص نشد. دوباره «پرداخت» را بزنید؛ مبلغ فقط یک بار کسر می‌شود.";
+
+  async function applyDiscount(form) {
+    const plan = selectedPlan();
+    const code = textField(form, "code");
+    if (!plan || !commerce()) return;
+    if (!code) {
+      core.toast("کد تخفیف را بنویسید", "err");
+      return;
+    }
+    await guarded("discount", form.querySelector("button[type=submit]"), async () => {
+      try {
+        const res = await core.api("/api/mini/checkout", { method: "POST", body: { plan_id: plan.id, price: plan.price, code } });
+        state.checkout = { ...res.checkout, planId: plan.id };
+        core.haptic("ok");
+        renderCheckout();
+      } catch (err) {
+        core.toast(err.message, "err");
+      }
+    });
+  }
+
+  /** Release an unpaid discounted order (best effort; stale ones are also cleaned up on the server). */
+  function dropCheckout() {
+    const checkout = state.checkout;
+    state.checkout = null;
+    if (!checkout) return;
+    core.api(`/api/mini/checkout/${checkout.order_id}/cancel`, { method: "POST", body: {} }).catch(() => {});
+  }
+
+  async function payCheckout(trigger) {
+    const checkout = state.checkout;
+    if (!checkout || !commerce()) return;
+    await guarded("checkout-pay", trigger, async () => {
+      const ok = await core.confirmAction(`پرداخت ${core.money(checkout.amount)} از کیف پول با کد «${checkout.code}»؟`);
+      if (!ok) return;
+      try {
+        const res = await core.api(`/api/mini/checkout/${checkout.order_id}/pay`, { method: "POST", body: {} });
+        state.checkout = null;
+        await afterPurchase(res.message || "خرید انجام شد", { view: "services" });
+      } catch (err) {
+        // Paying the same order again is safe: the server never debits it twice.
+        core.toast(err.status === 0 ? PAY_UNKNOWN_OUTCOME : err.message, "err");
+      }
+    });
+  }
+
+  async function cancelCheckout(trigger) {
+    const checkout = state.checkout;
+    if (!checkout) return;
+    await guarded("checkout-cancel", trigger, async () => {
+      try {
+        await core.api(`/api/mini/checkout/${checkout.order_id}/cancel`, { method: "POST", body: {} });
+      } catch (err) {
+        if (err.status !== 0) core.toast(err.message, "err");
+      }
+      state.checkout = null;
+      renderCheckout();
+    });
+  }
+
+  async function redeemGift(form) {
+    const code = textField(form, "code");
+    if (!code) {
+      core.toast("کد هدیه را بنویسید", "err");
+      return;
+    }
+    await guarded("gift", form.querySelector("button[type=submit]"), async () => {
+      try {
+        const res = await core.api("/api/mini/wallet/redeem", { method: "POST", body: { code } });
+        core.toast(`${res.message || "کیف پول شارژ شد"}: ${core.money(res.amount)}`);
+        closeSheet();
+      } catch (err) {
+        core.toast(err.status === 0 ? "نتیجه مشخص نشد؛ موجودی دوباره خوانده شد." : err.message, "err");
+        if (err.status !== 0) return;
+      }
+      await refreshAfterChange();
+      renderView();
+    });
+  }
+
   async function refreshAfterChange() {
     invalidateCommerce();
     try {
@@ -1027,6 +1125,9 @@
     "open-topup-link": () => openTopupLink(),
     "check-topup": (el) => checkTopup(intAttr(el, "data-id"), el),
     "copy-value": (el) => copyValue(el),
+    "checkout-pay": (el) => payCheckout(el),
+    "checkout-cancel": (el) => cancelCheckout(el),
+    "gift-code": () => openSheet("gift", "کد هدیه", R.giftFormHtml()),
     "ticket-new": () => openSheet("ticket-new", "تیکت جدید", R.ticketNewFormHtml()),
     "open-ticket": (el) => go("ticket", { ticketId: intAttr(el, "data-id") }),
     "refresh-ticket": (el) => loadTicket(intAttr(el, "data-id")),
@@ -1059,12 +1160,12 @@
     doc.querySelectorAll(".plan-option").forEach((label) => {
       label.classList.toggle("is-selected", label.contains(el));
     });
-    const host = doc.getElementById("checkout");
-    if (host) host.innerHTML = R.checkoutHtml(selectedPlan(), customer().wallet);
+    dropCheckout();
+    renderCheckout();
   }
 
   const FORMS = { automation: saveAutomation, cancellation: submitCancellation, topup: startTopup, receipt: uploadReceipt,
-    "ticket-new": submitNewTicket, "ticket-reply": submitTicketReply };
+    "ticket-new": submitNewTicket, "ticket-reply": submitTicketReply, discount: applyDiscount, gift: redeemGift };
 
   function formHandler(form) {
     const kind = form.getAttribute && form.getAttribute("data-form");

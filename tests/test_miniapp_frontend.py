@@ -28,6 +28,9 @@ class MiniAppFrontendTests(unittest.TestCase):
     def test_support_behavior(self) -> None:
         self.run_node("miniapp_support.test.cjs")
 
+    def test_codes_behavior(self) -> None:
+        self.run_node("miniapp_codes.test.cjs")
+
 
 if __name__ == "__main__":
     unittest.main()
