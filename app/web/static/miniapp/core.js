@@ -51,6 +51,23 @@
     settings.currency = String(value || "تومان");
   }
 
+  /** Persian digits in labels the server builds with ASCII digits ("27.9 از 30 گیگ"). */
+  function faDigits(value) {
+    return String(value == null ? "" : value).replace(/[0-9]/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[d]).replace(/\./g, "٫");
+  }
+
+  /** A date in the reader's Persian calendar, without the time. */
+  function formatDate(iso) {
+    if (!iso) return "";
+    const d = new Date(iso);
+    if (!Number.isFinite(d.getTime())) return "";
+    try {
+      return new Intl.DateTimeFormat("fa-IR", { dateStyle: "medium" }).format(d);
+    } catch (_) {
+      return d.toLocaleDateString("fa-IR");
+    }
+  }
+
   function formatDateTime(iso) {
     if (!iso) return "";
     const d = new Date(iso);
@@ -243,7 +260,7 @@
   }
 
   const core = Object.freeze({
-    tg, getInitData, esc, safeUrl, safePanelPath, num, money, parseAmount, setCurrency, formatDateTime,
+    tg, getInitData, esc, safeUrl, safePanelPath, num, money, parseAmount, setCurrency, formatDateTime, formatDate, faDigits,
     haptic, toast, confirmAction, openExternal, openTelegramLink, api, ApiError, copyText, markCopied,
     applyTheme, initTelegram,
   });
