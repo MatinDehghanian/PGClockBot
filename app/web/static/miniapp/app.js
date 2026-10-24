@@ -32,6 +32,7 @@
     checkout: null,
     addonPacks: [],
     clubHistory: null,
+    reviewImage: null,
     sheet: null,
     sheetSeq: 0,
     viewSeq: 0,
@@ -72,12 +73,25 @@
     ["ticket", { parent: "support", tab: "account", label: "پشتیبانی" }],
   ]);
 
+  /** Receipt review sits under the admin dashboard or the reseller's shop tab. */
+  function reviewSubView() {
+    return persona() === "admin"
+      ? { parent: "home", tab: "home", label: "داشبورد" }
+      : { parent: "ops", tab: "ops", label: "فروشگاه" };
+  }
+
+  function subView(view) {
+    return view === "review" ? reviewSubView() : SUB_VIEWS.get(view);
+  }
+
   function navTab(view) {
-    const sub = SUB_VIEWS.get(view);
+    const sub = subView(view);
     return sub ? sub.tab : view;
   }
 
   function viewAllowed(view) {
+    // The server decides who reviews; the screen shows its answer (including a refusal).
+    if (view === "review") return persona() === "admin" || persona() === "reseller";
     if (SUB_VIEWS.has(view)) return commerce();
     return ((state.me && state.me.nav) || []).some((n) => n.id === view);
   }
@@ -110,6 +124,7 @@
     support: () => core.api("/api/mini/support"),
     guides: () => core.api("/api/mini/guides"),
     club: () => core.api("/api/mini/club"),
+    review: () => core.api("/api/mini/review"),
   };
 
   const inflight = new Map();
@@ -233,7 +248,7 @@
 
   function onTelegramBack() {
     if (closeOpenOverlays()) return;
-    const sub = SUB_VIEWS.get(state.view);
+    const sub = subView(state.view);
     if (sub) {
       go(sub.parent);
       return;
@@ -280,6 +295,7 @@
     state.sheetSeq += 1;
     state.renewPreview = null;
     state.topupCurrent = null;
+    dropReviewImage();
     els.sheet.hidden = true;
     els.sheetBody.innerHTML = "";
     doc.body.classList.remove("has-sheet");
@@ -352,9 +368,13 @@
     ["services", "سرویس‌ها"], ["plans", "پلن‌ها"], ["tickets", "تیکت باز"],
   ];
   const ATTENTION = [
-    ["pending", "رسیدهای در انتظار تأیید", "finance"],
+    ["pending", "رسیدهای در انتظار تأیید", "finance", "review"],
     ["tickets", "تیکت‌های باز", "tickets"],
   ];
+
+  function inAppAttention(ops) {
+    return new Set(ops && ops.can_review ? ["review"] : []);
+  }
 
   function adminHomeHtml() {
     const r = resource("ops");
@@ -362,7 +382,7 @@
     if (body) return greetingHtml() + body;
     const ops = r.data;
     return greetingHtml()
-      + `<section class="card" aria-label="نیاز به اقدام"><h2 class="card-title">نیاز به اقدام</h2>${R.attentionListHtml(ops.stats, ops.panel_links, ATTENTION)}</section>`
+      + `<section class="card" aria-label="نیاز به اقدام"><h2 class="card-title">نیاز به اقدام</h2>${R.attentionListHtml(ops.stats, ops.panel_links, ATTENTION, inAppAttention(ops))}</section>`
       + `<section class="card" aria-label="نمای کلی"><h2 class="card-title">نمای کلی پلتفرم</h2>${R.statsHtml(ops.stats, ADMIN_STATS)}</section>`;
   }
 
@@ -374,7 +394,7 @@
           <div class="card-head"><span class="muted">اعتبار فروشگاه (پرداخت به‌ازای مصرف)</span>${billing.suspended ? '<span class="badge is-danger">مسدود</span>' : ""}</div>
           <p class="wallet-value">${core.esc(core.money(billing.balance))}</p>
         </section>` : "")
-      + `<section class="card" aria-label="نیاز به اقدام"><div class="card-head"><h2 class="card-title">نیاز به اقدام</h2>${shop.active ? '<span class="badge is-ok">ربات فعال</span>' : '<span class="badge is-warn">ربات غیرفعال</span>'}</div>${R.attentionListHtml(ops.stats, ops.panel_links, ATTENTION)}</section>`
+      + `<section class="card" aria-label="نیاز به اقدام"><div class="card-head"><h2 class="card-title">نیاز به اقدام</h2>${shop.active ? '<span class="badge is-ok">ربات فعال</span>' : '<span class="badge is-warn">ربات غیرفعال</span>'}</div>${R.attentionListHtml(ops.stats, ops.panel_links, ATTENTION, inAppAttention(ops))}</section>`
       + `<section class="card" aria-label="آمار فروشگاه"><h2 class="card-title">آمار فروشگاه</h2>${R.statsHtml(ops.stats, RESELLER_STATS)}</section>`
       + `<section class="card list-card" aria-label="میانبر پنل"><h2 class="card-title">میانبر پنل وب</h2>${R.linksHtml(ops.panel_links)}</section>`;
   }
@@ -543,6 +563,11 @@
     return viewHead("باشگاه مشتریان") + R.clubHtml(r.data.club, state.clubHistory);
   }
 
+  function reviewViewHtml() {
+    const r = resource("review");
+    return viewHead("رسیدهای در انتظار تأیید") + (settled(r, 3, "retry") || R.reviewQueueHtml(r.data));
+  }
+
   function ticketViewHtml() {
     const id = state.ticketId;
     const row = state.tickets.get(id);
@@ -575,13 +600,14 @@
     ops: opsViewHtml,
     support: supportViewHtml,
     club: clubViewHtml,
+    review: reviewViewHtml,
     ticket: ticketViewHtml,
   };
 
   function renderView() {
     if (!state.me) return;
     const renderer = VIEW_RENDERERS[state.view] || VIEW_RENDERERS.home;
-    const sub = SUB_VIEWS.get(state.view);
+    const sub = subView(state.view);
     els.root.innerHTML = `<div class="view" data-view="${core.esc(state.view)}">${sub ? R.backBarHtml(sub.label) : ""}${renderer()}</div>`;
     if (state.view === "services" && !state.services) loadServices(true);
   }
@@ -1106,6 +1132,63 @@
     });
   }
 
+  /* ---------- receipt review ---------- */
+
+  function dropReviewImage() {
+    if (state.reviewImage && root.URL && root.URL.revokeObjectURL) root.URL.revokeObjectURL(state.reviewImage);
+    state.reviewImage = null;
+  }
+
+  function findReviewItem(id) {
+    const r = state.resources.review;
+    return r && r.status === "ready" ? (r.data.items || []).find((item) => item.id === id) || null : null;
+  }
+
+  async function openReview(id) {
+    const item = findReviewItem(id);
+    if (!item) return;
+    const seq = openSheet("review", `رسید #${core.num(id)}`, R.reviewSheetHtml(item, "", ""), { paymentId: id });
+    let url = "";
+    let error = "";
+    try {
+      const blob = await core.api(`/api/mini/review/${id}/receipt`, { blob: true });
+      url = root.URL.createObjectURL(blob);
+    } catch (err) {
+      error = err.message;
+    }
+    if (seq !== state.sheetSeq) {
+      if (url) root.URL.revokeObjectURL(url);
+      return;
+    }
+    state.reviewImage = url || null;
+    setSheetBody(seq, R.reviewSheetHtml(item, url, error));
+  }
+
+  const REVIEW_ACTIONS = {
+    approve: { confirm: "این پرداخت تأیید شود؟ مبلغ به حساب مشتری منظور یا سفارش تحویل داده می‌شود.", done: "پرداخت تأیید شد" },
+    reject: { confirm: "این پرداخت رد شود؟ به مشتری اطلاع داده می‌شود و سفارش لغو می‌شود.", done: "پرداخت رد شد" },
+  };
+
+  /** One request per tap and no automatic retry: the queue is read again either way. */
+  async function reviewAction(kind, id, trigger) {
+    const spec = REVIEW_ACTIONS[kind];
+    if (!spec || !findReviewItem(id)) return;
+    if (!(await core.confirmAction(spec.confirm))) return;
+    await guarded("review:" + id, trigger, async () => {
+      try {
+        const res = await core.api(`/api/mini/review/${id}/${kind}`, { method: "POST", body: {} });
+        core.haptic("ok");
+        core.toast(res.message || spec.done);
+      } catch (err) {
+        core.toast(err.status === 0 ? "نتیجه مشخص نشد؛ فهرست رسیدها دوباره خوانده شد." : err.message, "err");
+      }
+      closeSheet();
+      invalidate("review");
+      invalidate("ops");
+      if (state.view === "review") renderView();
+    });
+  }
+
   /* ---------- discount and gift codes ---------- */
 
   const PAY_UNKNOWN_OUTCOME = "نتیجهٔ پرداخت مشخص نشد. دوباره «پرداخت» را بزنید؛ مبلغ فقط یک بار کسر می‌شود.";
@@ -1269,6 +1352,9 @@
     "open-guide-link": (el) => openGuideLink(el.getAttribute("data-guide"), Number(el.getAttribute("data-index"))),
     "send-guide": (el) => sendGuide(el.getAttribute("data-guide"), el),
     "share-invite": () => shareInvite(),
+    "open-review": (el) => openReview(intAttr(el, "data-id")),
+    "review-approve": (el) => reviewAction("approve", intAttr(el, "data-id"), el),
+    "review-reject": (el) => reviewAction("reject", intAttr(el, "data-id"), el),
     "redeem-reward": (el) => chooseReward(intAttr(el, "data-id"), el),
     "redeem-reward-service": (el) => {
       const reward = findReward(intAttr(el, "data-id"));

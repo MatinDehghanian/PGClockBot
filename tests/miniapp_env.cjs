@@ -77,7 +77,7 @@ function loadMiniApp({ routes, initData = "query_id=x&hash=y", confirm = () => t
       const body = typeof options.body === "string" ? JSON.parse(options.body) : options.body;
       calls.push({ method: options.method, url, body, headers: options.headers });
       const res = await routes(options.method, url, body);
-      return { ok: res.status < 400, status: res.status, text: async () => JSON.stringify(res.body) };
+      return { ok: res.status < 400, status: res.status, text: async () => JSON.stringify(res.body), blob: async () => res.blob };
     },
   };
   context.window = context;

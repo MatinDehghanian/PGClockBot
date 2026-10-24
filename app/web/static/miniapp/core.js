@@ -158,6 +158,8 @@
     } catch (_) {
       throw new ApiError(FALLBACK_ERROR, 0);
     }
+    // Binary responses (receipt photos) come back as a Blob; errors are still JSON.
+    if (options.blob && res.ok) return res.blob();
     const text = await res.text();
     let data = null;
     try {
