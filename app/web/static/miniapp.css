@@ -274,6 +274,7 @@ div.list-row { cursor: default; }
 .search-field:focus-within { border-color: var(--accent); }
 
 /* ---------- plans and checkout ---------- */
+/* Selected options keep a 1px border plus an inset ring, so selecting never shifts the layout. */
 .plan-list { display: flex; flex-direction: column; gap: var(--space-1); }
 .plan-option {
   width: 100%; display: flex; align-items: center; gap: var(--space-1_5);
@@ -282,7 +283,7 @@ div.list-row { cursor: default; }
   color: var(--fg); text-align: start; cursor: pointer;
 }
 .sheet .plan-option { background: var(--card-2); }
-.plan-option.is-selected { border: 2px solid var(--accent); }
+.plan-option.is-selected { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .plan-option input { width: 20px; height: 20px; margin: 0; accent-color: var(--accent); flex-shrink: 0; }
 .plan-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .plan-meta .badge { align-self: flex-start; }
@@ -335,13 +336,13 @@ div.list-row { cursor: default; }
   border-radius: var(--control-radius); border: 1px solid var(--border); background: var(--card-2);
   font-size: 13px; text-align: center;
 }
-.chip input:checked + span { border: 2px solid var(--accent); font-weight: 700; }
+.chip input:checked + span { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); font-weight: 700; }
 .chip input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
 .method-option {
   display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-1_5);
   padding: var(--space-1_5); border-radius: var(--radius); border: 1px solid var(--border); background: var(--card-2);
 }
-.method-option:has(input:checked) { border: 2px solid var(--accent); }
+.method-option:has(input:checked) { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .method-option input { width: 20px; height: 20px; margin: 0; accent-color: var(--accent); }
 .method-option select {
   flex-basis: 100%; min-height: 44px; padding: 0 var(--space-1_5);
