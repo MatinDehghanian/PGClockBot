@@ -286,6 +286,7 @@ class CatalogDiscountTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(addon.amount, 80)
         with patch("app.services.users.get_all_settings", AsyncMock(return_value={
             "custom_plan_enabled": "1", "custom_plan_price_per_gb": "100", "custom_plan_price_per_day": "100",
+            "custom_plan_group_ids": "1",
             'wholesale_tiers': '[{"min": 1, "percent": 0}]',
             "wholesale_enabled": "1", "wholesale_min_qty": "1", "wholesale_max_qty": "100",
         })):

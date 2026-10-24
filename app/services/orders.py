@@ -32,7 +32,7 @@ from app.db.models import (
     WalletTransaction,
 )
 from app.services.open_psp_checkouts import open_psp_checkouts, reusable_psp_payment
-from app.services.pasarguard import extract_sub_token, get_pg, user_subscription_url
+from app.services.pasarguard import extract_sub_token, get_pg, parse_group_ids, user_subscription_url
 from app.services.purchase_contact import CONTACT_REQUIRED_MESSAGE, purchase_contact_needed, require_purchase_contact
 from app.services.shop_membership import ensure_member
 from app.services.provision_gate import (
@@ -629,6 +629,9 @@ def calc_custom_plan_price(
     return max(0, gb_units * int(price_per_gb) + int(days) * int(price_per_day))
 
 
+CUSTOM_PLAN_UNCONFIGURED = "پلن دلخواه فعلاً در دسترس نیست؛ لطفاً یکی از پلن‌های آماده را انتخاب کنید"
+
+
 async def create_custom_order(
     session: AsyncSession,
     *,
@@ -707,6 +710,9 @@ async def create_custom_order(
             raise ValueError(
                 "برای پلن دلخواه، تمپلیت یا گروه پاسارگارد اختصاصی فروشگاه را در تنظیمات مشخص کنید"
             )
+    elif not tpl_id and not parse_group_ids(group_ids):
+        # Delivery needs a template or groups; refuse before payment, not after it.
+        raise ValueError(CUSTOM_PLAN_UNCONFIGURED)
 
     plan = Plan(
         name="پلن دلخواه",
