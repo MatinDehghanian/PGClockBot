@@ -279,49 +279,6 @@ async def buy_extra_users(
     return {"users": n, "amount": total, "max_users": new_max}
 
 
-async def renew_reseller_capacity(
-    session: AsyncSession,
-    *,
-    user: BotUser,
-    profile: ResellerProfile,
-    plan: ResellerPlan,
-) -> dict[str, Any]:
-    """Renew subscription: invoice from capacity, restore access, reset traffic."""
-    from app.services.pg_admin_subscription import (
-        get_or_create_subscription,
-        is_subscription_plan,
-        renew_subscription,
-    )
-
-    if is_payg(profile):
-        raise ValueError("پلن PAYG تمدید زمانی ندارد — از شارژ کیف پول استفاده کنید")
-    if not is_subscription_plan(plan):
-        raise ValueError("تمدید فقط برای پلن اشتراک است")
-
-    uname = (profile.pg_admin_username or "").strip()
-    if not uname:
-        raise ValueError("ادمین پاسارگارد برای این نماینده تنظیم نشده است")
-
-    sub = await get_or_create_subscription(session, uname)
-    if sub.plan_id is None:
-        sub.plan_id = int(plan.id)
-    result = await renew_subscription(
-        session,
-        sub=sub,
-        plan=plan,
-        payer=user,
-        charge_wallet=True,
-        reset_user_traffic=True,
-    )
-    return {
-        "amount": result.get("amount", 0),
-        "reset_ok": result.get("reset_ok", 0),
-        "reset_err": result.get("reset_err", 0),
-        "invoice": result.get("invoice"),
-        "expires_at": result.get("expires_at"),
-    }
-
-
 async def admin_adjust_reseller_subscription(
     session: AsyncSession,
     profile: ResellerProfile,
