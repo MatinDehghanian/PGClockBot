@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from datetime import timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -74,6 +75,15 @@ class PackageOverview:
     current: ResellerPlan | None
     generation: int
     choices: list[PackageChoice]
+    usage: AdminUsage | None
+
+    @property
+    def expires_at_iso(self) -> str | None:
+        expires = self.sub.expires_at if self.sub is not None else None
+        if expires is None:
+            return None
+        # SQLite returns naive datetimes for timezone-aware columns; they are stored as UTC.
+        return (expires if expires.tzinfo else expires.replace(tzinfo=timezone.utc)).isoformat()
 
 
 def _limits(plan: ResellerPlan, sub: PgAdminSubscription | None) -> tuple[int, int]:
@@ -198,6 +208,7 @@ async def package_overview(session: AsyncSession, profile: ResellerProfile) -> P
     choices.sort(key=lambda c: (c.relation != RELATION_CURRENT, c.blocked is not None))
     return PackageOverview(
         sub=sub, current=current, generation=int(sub.renew_generation or 0) if sub else 0, choices=choices,
+        usage=usage,
     )
 
 
