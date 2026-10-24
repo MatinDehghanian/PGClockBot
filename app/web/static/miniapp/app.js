@@ -63,11 +63,11 @@
     return nav.length ? nav[0].id : "home";
   }
 
-  // Screens below a tab: where Back goes and which tab stays highlighted.
+  // Screens below a tab: where Back goes, its label, and which tab stays highlighted.
   const SUB_VIEWS = new Map([
-    ["service", { parent: "services", tab: "services" }],
-    ["support", { parent: "account", tab: "account" }],
-    ["ticket", { parent: "support", tab: "account" }],
+    ["service", { parent: "services", tab: "services", label: "سرویس‌ها" }],
+    ["support", { parent: "account", tab: "account", label: "حساب" }],
+    ["ticket", { parent: "support", tab: "account", label: "پشتیبانی" }],
   ]);
 
   function navTab(view) {
@@ -566,7 +566,8 @@
   function renderView() {
     if (!state.me) return;
     const renderer = VIEW_RENDERERS[state.view] || VIEW_RENDERERS.home;
-    els.root.innerHTML = `<div class="view" data-view="${core.esc(state.view)}">${renderer()}</div>`;
+    const sub = SUB_VIEWS.get(state.view);
+    els.root.innerHTML = `<div class="view" data-view="${core.esc(state.view)}">${sub ? R.backBarHtml(sub.label) : ""}${renderer()}</div>`;
     if (state.view === "services" && !state.services) loadServices(true);
   }
 
@@ -1120,6 +1121,7 @@
       renderView();
     },
     "close-sheet": () => closeSheet(),
+    back: () => onTelegramBack(),
     topup: () => openTopup(),
     "topup-receipt": (el) => openReceiptSheet(intAttr(el, "data-id")),
     "open-topup-link": () => openTopupLink(),
