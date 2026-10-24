@@ -157,6 +157,12 @@ def _subscription_success_outbound(ui: dict[str, str], order) -> tuple[str, dict
     return text, send_kw
 
 
+UNDELIVERED_ORDER_NOTE = (
+    "پرداخت شما دریافت و تأیید شد، ولی ساخت سرویس هنوز کامل نشده است. "
+    "پشتیبانی در جریان است و سرویس به‌محض آماده شدن برایتان فرستاده می‌شود؛ نیازی به پرداخت دوباره نیست."
+)
+
+
 async def build_delivery_content(
     session: AsyncSession,
     payment: Payment | None,
@@ -328,6 +334,30 @@ async def build_delivery_content(
             "title": title,
             "text": text,
             "send_kw": send_kw,
+            "detail_text": None,
+            "markup": markup,
+            "sub_url": None,
+            "sub_info": None,
+            "ui": ui,
+            "is_subscription": False,
+            "skip_qr": True,
+        }
+
+    if order is not None:
+        # Paid but nothing created yet (the panel failed; staff were alerted to resume it).
+        # Saying only "approved" here left buyers waiting for a service that never came.
+        title = rich_plain_text(ui.get("payment_ok_title")) or "✅ پرداخت تأیید شد"
+        body = info_block(
+            [
+                kv_line("🧾", "پرداخت", f"#{payment.id if payment else '—'}"),
+                kv_line("🛒", "سفارش", f"#{order.id}"),
+                kv_line("⏳", "وضعیت سرویس", "در حال آماده‌سازی"),
+            ]
+        ) + f"\n\n{UNDELIVERED_ORDER_NOTE}"
+        return {
+            "title": title,
+            "text": format_message(title, body),
+            "send_kw": {},
             "detail_text": None,
             "markup": markup,
             "sub_url": None,
