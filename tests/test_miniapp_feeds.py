@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.api.miniapp_feeds import register_miniapp_feeds
-from app.api.miniapp_pages import register_miniapp_pages
+from app.api.miniapp_pages import _serialize_service, register_miniapp_pages
 from app.db.models import Base, BotUser, Plan, ResellerProfile, UserService, WalletTransaction
 from app.services.miniapp_home import customer_home_summary
 from app.services.users import reset_shop_reseller_id, set_shop_reseller_id
@@ -250,6 +250,25 @@ class HomeSummaryTests(MiniAppFeedTestCase):
     async def test_customer_without_services(self) -> None:
         summary = await customer_home_summary(self.session, 1, now=NOW)
         self.assertEqual(summary.payload(), {"service_count": 0, "attention": [], "recent": []})
+
+
+
+class ServiceTimesTests(unittest.TestCase):
+    def test_last_connection_is_a_raw_time_never_labelled_expired(self) -> None:
+        now = datetime.now(timezone.utc)
+        info = {"status": "active", "used_traffic": 1, "data_limit": 10,
+                "expire": int((now + timedelta(days=3)).timestamp()),
+                "online_at": (now - timedelta(minutes=5)).isoformat()}
+        row = _serialize_service(UserService(id=1, bot_user_id=1, pg_username="a"), info)
+        online = datetime.fromisoformat(row["online_at"])
+        self.assertLess(abs((online - (now - timedelta(minutes=5))).total_seconds()), 2)
+        self.assertNotIn("منقضی", row["online_at"])
+        self.assertLess(abs((datetime.fromisoformat(row["expire_at"]) - (now + timedelta(days=3))).total_seconds()), 2)
+
+    def test_unknown_times_stay_empty(self) -> None:
+        row = _serialize_service(UserService(id=1, bot_user_id=1, pg_username="a"), {"status": "on_hold"})
+        self.assertIsNone(row["expire_at"])
+        self.assertIsNone(row["online_at"])
 
 
 if __name__ == "__main__":

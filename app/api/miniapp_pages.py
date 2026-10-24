@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import logging
+from datetime import timezone
 from typing import Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -35,6 +36,7 @@ from app.services.formatting import (
     format_expire_short,
     hold_duration_from_info,
     is_on_hold_status,
+    parse_expire,
     status_label_plain,
     time_remaining_label,
 )
@@ -184,6 +186,12 @@ def _safe_client_message(exc: BaseException, *, fallback: str) -> str:
     return msg
 
 
+def _iso_time(value: object) -> str | None:
+    """A panel time as ISO 8601 UTC; the Mini App formats it in the reader's calendar."""
+    moment = parse_expire(value)
+    return moment.astimezone(timezone.utc).isoformat() if moment else None
+
+
 def _serialize_service(svc: UserService, info: dict | None = None) -> dict:
     info = validate_service_info(info)
     # Only our sentinel may appear as ``error`` — never raw upstream strings.
@@ -226,14 +234,14 @@ def _serialize_service(svc: UserService, info: dict | None = None) -> dict:
         "expire": format_expire_short(expire, status=status_raw, expire_duration=hold_dur)
         if time_known
         else "—",
+        "expire_at": _iso_time(expire) if time_known else None,
         "expire_days": days,
         "expire_days_label": time_remaining_label(days_left=days, status=status_raw)
         if time_known
         else "—",
         "pending_start": pending,
-        "online_at": format_expire_short(info.get("online_at"))
-        if info.get("online_at") and not upstream_err
-        else None,
+        # A past moment, not an expiry: sent raw so it is never labelled "expired".
+        "online_at": _iso_time(info.get("online_at")) if not upstream_err else None,
         "error": info.get("error"),
         "error_code": info.get("error_code"),
         "error_message": info.get("error_message"),
@@ -248,7 +256,7 @@ def _unavailable_service_row(svc: UserService) -> dict:
         "is_cancelled": bool(getattr(svc, "is_cancelled", False)),
         "cancellation_pending": bool(getattr(svc, "cancellation_pending", False)),
         "subscription_url": "", "status": "—", "status_fa": "—",
-        "traffic": "—", "traffic_pct": None, "expire": "—",
+        "traffic": "—", "traffic_pct": None, "expire": "—", "expire_at": None,
         "expire_days": None, "expire_days_label": "—", "pending_start": False,
         "online_at": None, "info_fetched_at": None,
         **service_info_error("invalid_response"),
