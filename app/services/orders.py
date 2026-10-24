@@ -1494,16 +1494,22 @@ async def cancel_stale_pending_for_settings(
         include_awaiting_approval=include_aa,
     )
 
-async def attach_receipt(session: AsyncSession, payment: Payment, file_id: str) -> Payment:
-    """Attach receipt only while payment is still pending (never overwrite approved/rejected)."""
+async def attach_receipt(
+    session: AsyncSession, payment: Payment, file_id: str, *, first_only: bool = False
+) -> Payment:
+    """Attach receipt only while payment is still pending (never overwrite approved/rejected).
+
+    ``first_only`` refuses a payment that already has a receipt, so two concurrent
+    uploads cannot both reach the reviewers.
+    """
     payment_id = int(payment.id)
+    conditions = [Payment.id == payment_id, Payment.status == PaymentStatus.PENDING.value]
+    if first_only:
+        conditions.append(Payment.receipt_file_id.is_(None))
     with session.no_autoflush:
         claim = await session.execute(
             update(Payment)
-            .where(
-                Payment.id == payment_id,
-                Payment.status == PaymentStatus.PENDING.value,
-            )
+            .where(*conditions)
             .values(receipt_file_id=file_id, status=PaymentStatus.PENDING.value)
             .execution_options(synchronize_session=False)
         )
@@ -2279,6 +2285,11 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
         raise
 
 
+MIN_TOPUP_AMOUNT = 1000
+# Soft ceiling to prevent absurd pending top-ups / receipt spam.
+MAX_TOPUP_AMOUNT = 500_000_000
+
+
 async def create_wallet_topup(
     session: AsyncSession,
     user_id: int,
@@ -2287,10 +2298,9 @@ async def create_wallet_topup(
     method: str = PaymentMethod.CARD.value,
     wallet_shop_id: int | None = None,
 ) -> Payment:
-    if amount < 1000:
+    if amount < MIN_TOPUP_AMOUNT:
         raise ValueError("حداقل مبلغ شارژ ۱۰۰۰ است")
-    # Soft ceiling to prevent absurd pending top-ups / receipt spam
-    if amount > 500_000_000:
+    if amount > MAX_TOPUP_AMOUNT:
         raise ValueError("مبلغ شارژ بیش از حد مجاز است")
     from app.services.users import current_shop_reseller_id
 

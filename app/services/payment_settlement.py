@@ -16,6 +16,7 @@ import hmac
 import json
 import logging
 import secrets
+import time
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any
@@ -1497,6 +1498,24 @@ async def _owned_psp_settlement(
     ):
         raise ValueError("این پرداخت پیدا نشد")
     return settlement
+
+
+# Each «بررسی پرداخت» tap may call the gateway; one check per settlement per window is enough.
+PSP_CHECK_THROTTLE_SECONDS = 10.0
+_PSP_CHECK_RECENT_LIMIT = 1000
+_recent_psp_checks: dict[int, float] = {}
+
+
+def claim_psp_check_slot(settlement_id: int) -> bool:
+    """False when this settlement was checked within the throttle window (bot and Mini App share it)."""
+    now = time.monotonic()
+    last = _recent_psp_checks.get(int(settlement_id))
+    if last is not None and now - last < PSP_CHECK_THROTTLE_SECONDS:
+        return False
+    if len(_recent_psp_checks) >= _PSP_CHECK_RECENT_LIMIT:
+        _recent_psp_checks.pop(next(iter(_recent_psp_checks)))
+    _recent_psp_checks[int(settlement_id)] = now
+    return True
 
 
 async def check_psp_payment(

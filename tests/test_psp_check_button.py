@@ -25,6 +25,7 @@ from app.db.models import (
     Role,
     SettlementStatus,
 )
+from app.services import payment_settlement
 from app.services.payment_providers import sunpay as sunpay_mod
 from app.services.payment_providers.sunpay import close_client
 from app.services.payment_settlement import (
@@ -185,7 +186,7 @@ class CheckPspPaymentTests(unittest.IsolatedAsyncioTestCase):
 
 class PspCheckHandlerTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
-        psp_check._recent_checks.clear()
+        payment_settlement._recent_psp_checks.clear()
 
     def _callback(self, settlement_id: int) -> MagicMock:
         callback = MagicMock()

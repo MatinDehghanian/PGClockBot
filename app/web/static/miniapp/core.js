@@ -38,6 +38,15 @@
     return num(value).replace(/٬/g, ",") + " " + settings.currency;
   }
 
+  /** Persian/Arabic digits to ASCII, separators and spaces removed; "" when not a whole number. */
+  function parseAmount(value) {
+    const ascii = String(value || "")
+      .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
+      .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+      .replace(/[,٬،\s]/g, "");
+    return /^\d{1,12}$/.test(ascii) ? Number(ascii) : null;
+  }
+
   function setCurrency(value) {
     settings.currency = String(value || "تومان");
   }
@@ -118,18 +127,21 @@
     return STATUS_ERRORS[status] || FALLBACK_ERROR;
   }
 
+  /** ``opts.body`` is sent as JSON; ``opts.raw`` (a Blob) is sent as is, e.g. an image. */
   async function api(path, opts) {
     const options = opts || {};
     const hasBody = options.body !== undefined;
+    const raw = options.raw;
+    const contentType = raw ? raw.type || "application/octet-stream" : hasBody ? "application/json" : null;
     let res;
     try {
       res = await root.fetch(path, {
         method: options.method || "GET",
         headers: {
           "X-Telegram-Init-Data": getInitData(),
-          ...(hasBody ? { "Content-Type": "application/json" } : {}),
+          ...(contentType ? { "Content-Type": contentType } : {}),
         },
-        body: hasBody ? JSON.stringify(options.body) : undefined,
+        body: raw || (hasBody ? JSON.stringify(options.body) : undefined),
         cache: "no-store",
         credentials: "same-origin",
       });
@@ -211,7 +223,7 @@
   }
 
   const core = Object.freeze({
-    tg, getInitData, esc, safeUrl, safePanelPath, num, money, setCurrency, formatDateTime,
+    tg, getInitData, esc, safeUrl, safePanelPath, num, money, parseAmount, setCurrency, formatDateTime,
     haptic, toast, confirmAction, openExternal, api, ApiError, copyText, markCopied,
     applyTheme, initTelegram,
   });

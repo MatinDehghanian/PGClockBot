@@ -303,11 +303,93 @@
     return `<section class="card wallet-card" aria-label="کیف پول">
       <div class="card-head"><span class="muted">موجودی کیف پول</span>${badge(c.wallet_pay_enabled ? "پرداخت فعال" : "فقط مشاهده", c.wallet_pay_enabled ? "ok" : "")}</div>
       <p class="wallet-value">${esc(money(c.wallet))}</p>
-      ${actions ? `<div class="btn-row">
-        <button type="button" class="btn" data-action="goto" data-view="shop">خرید سرویس</button>
-        <button type="button" class="btn ghost" data-action="goto" data-view="account">تراکنش‌ها</button>
-      </div>` : ""}
-      <p class="muted sm">شارژ کیف پول از داخل ربات انجام می‌شود.</p>
+      <div class="btn-row">
+        <button type="button" class="btn" data-action="topup">شارژ کیف پول</button>
+        ${actions ? '<button type="button" class="btn ghost" data-action="goto" data-view="shop">خرید سرویس</button>' : ""}
+      </div>
+    </section>`;
+  }
+
+  const TOPUP_STATUS_TONES = { approved: "ok", rejected: "danger" };
+
+  function topupFormHtml(options) {
+    const methods = (options && options.methods) || [];
+    if (!methods.length) {
+      return emptyHtml(options && options.bot_only
+        ? "شارژ کیف پول فعلاً فقط از داخل ربات ممکن است."
+        : "روش شارژی فعال نیست.");
+    }
+    const presets = options.presets || [];
+    return `<form class="topup-form" data-form="topup">
+      <fieldset class="field-group"><legend>مبلغ شارژ</legend>
+        <div class="chip-grid">${presets.map((n, i) => `<label class="chip"><input type="radio" name="preset" value="${Number(n) || 0}"${i === 0 ? " checked" : ""}><span>${esc(money(n))}</span></label>`).join("")}
+          <label class="chip"><input type="radio" name="preset" value="custom"${presets.length ? "" : " checked"}><span>مبلغ دلخواه</span></label>
+        </div>
+        <label class="form-field"><span class="muted sm">مبلغ دلخواه (${esc(money(options.min_amount))} تا ${esc(money(options.max_amount))})</span>
+          <input type="text" name="custom_amount" inputmode="numeric" autocomplete="off" dir="ltr" maxlength="16"></label>
+      </fieldset>
+      <fieldset class="field-group"><legend>روش پرداخت</legend>
+        ${methods.map((m, i) => `<label class="method-option">
+          <input type="radio" name="method" value="${esc(m.key)}"${i === 0 ? " checked" : ""}>
+          <span class="plan-meta"><strong>${esc(m.label)}</strong>${m.needs_receipt ? '<span class="muted sm">پس از واریز، تصویر رسید را بفرستید</span>' : '<span class="muted sm">پرداخت آنلاین و تأیید خودکار</span>'}</span>
+          ${(m.choices || []).length ? `<select name="dest_${esc(m.key)}" aria-label="مقصد ${esc(m.label)}">${m.choices.map((c) => `<option value="${esc(c.id)}">${esc(c.label)}</option>`).join("")}</select>` : ""}
+        </label>`).join("")}
+      </fieldset>
+      ${options.bot_only ? '<p class="muted sm">روش «بزن به کارت» فقط از داخل ربات در دسترس است.</p>' : ""}
+      <button type="submit" class="btn block">ادامه</button>
+    </form>`;
+  }
+
+  function copyRow(label, value) {
+    return `<div class="copy-row"><span class="muted sm">${esc(label)}</span>
+      <div class="copy-line"><strong dir="ltr">${esc(value)}</strong>
+      <button type="button" class="btn ghost sm" data-action="copy-value" data-value="${esc(value)}">کپی</button></div></div>`;
+  }
+
+  function receiptFormHtml(paymentId) {
+    const id = Number(paymentId) || 0;
+    return `<form class="receipt-form" data-form="receipt" data-id="${id}">
+      <label class="file-field"><span class="file-field-label">انتخاب تصویر رسید</span>
+        <span class="muted sm">عکس JPG یا PNG، حداکثر ۸ مگابایت</span>
+        <input type="file" name="receipt" class="visually-hidden" accept="image/jpeg,image/png,image/*" data-input="receipt-file"></label>
+      <button type="submit" class="btn block">ارسال رسید</button>
+      <p class="muted sm">تصویر رسید برای شما در ربات هم فرستاده می‌شود. می‌توانید رسید را مستقیم در ربات هم بفرستید.</p>
+    </form>`;
+  }
+
+  function topupPayHtml(t) {
+    const rows = [`<div class="sum-row is-total"><span>مبلغ</span><span>${esc(money(t.amount))}</span></div>`];
+    if (t.method === "card") {
+      rows.push(copyRow("شمارهٔ کارت", t.card_number || ""));
+      if (t.card_holder) rows.push(`<p class="sm">به نام ${esc(t.card_holder)}</p>`);
+    } else if (t.method === "gateway") {
+      rows.push(`<p class="sm">پرداخت از طریق ${esc(t.gateway_name || "درگاه")}</p>`);
+      if (t.gateway_link) rows.push(`<button type="button" class="btn block ghost" data-action="open-topup-link">ورود به ${esc(t.gateway_name || "درگاه")}</button>`);
+    } else if (t.method === "crypto") {
+      rows.push(`<p class="sm">${esc(t.crypto_asset || "")}${t.crypto_network ? " · شبکهٔ " + esc(t.crypto_network) : ""}</p>`);
+      rows.push(copyRow("آدرس کیف پول", t.crypto_address || ""));
+    } else if (t.method === "psp") {
+      rows.push(t.checkout_url
+        ? '<button type="button" class="btn block" data-action="open-topup-link">ورود به درگاه پرداخت</button>'
+        : errorHtml("لینک درگاه آماده نشد؛ دوباره تلاش کنید."));
+      if (t.settlement_id) rows.push(`<button type="button" class="btn block ghost" data-action="check-topup" data-id="${Number(t.settlement_id) || 0}">بررسی پرداخت</button>`);
+      rows.push('<p class="muted sm">پس از پرداخت، کیف پول خودکار شارژ می‌شود؛ اگر برنگشتید «بررسی پرداخت» را بزنید.</p>');
+    }
+    if (t.note) rows.push(`<p class="muted sm pre-line">${esc(t.note)}</p>`);
+    rows.push(`<p class="muted sm">شمارهٔ پرداخت: ${esc(num(t.payment_id))}</p>`);
+    if (t.needs_receipt) rows.push(receiptFormHtml(t.payment_id));
+    return rows.join("");
+  }
+
+  function recentTopupsHtml(rows) {
+    if (!rows || !rows.length) return "";
+    return `<section class="card list-card" aria-label="شارژهای اخیر"><h2 class="card-title">شارژهای اخیر</h2>
+      ${rows.map((r) => `<div class="list-row">
+        <span class="list-row-label">${esc(money(r.amount))}<span class="muted sm"> · ${esc(core.formatDateTime(r.created_at))}</span></span>
+        ${r.waiting_receipt
+          ? `<button type="button" class="btn sm" data-action="topup-receipt" data-id="${Number(r.id) || 0}">ارسال رسید</button>`
+          : badge(r.status_fa, TOPUP_STATUS_TONES[r.status] || "warn")}
+      </div>`).join("")}
     </section>`;
   }
 
@@ -363,7 +445,7 @@
     icon, isOnHoldStatus, statusTone, expireDaysLabel, meterHtml, serviceRowHtml, glanceRowHtml,
     attentionCardHtml, serviceDetailHtml, planOptionsHtml, checkoutHtml, renewPlansHtml,
     renewPreviewHtml, addonPacksHtml, automationHtml, cancellationHtml, qrHtml, activityHtml,
-    walletCardHtml, statsHtml, attentionListHtml, linksHtml, navHtml, loadingHtml, emptyHtml,
+    walletCardHtml, topupFormHtml, topupPayHtml, receiptFormHtml, recentTopupsHtml, statsHtml, attentionListHtml, linksHtml, navHtml, loadingHtml, emptyHtml,
     errorHtml,
   });
 })(typeof window === "object" ? window : globalThis);

@@ -83,6 +83,7 @@ tests/test_miniapp_security_audit.py
 tests/test_miniapp_service_addons.py
 tests/test_miniapp_feeds.py
 tests/test_miniapp_frontend.py
+tests/test_miniapp_topup.py
 tests/test_renewal_preview.py
 tests/test_on_hold_addon_quotas.py
 tests/test_on_hold_service_display.py

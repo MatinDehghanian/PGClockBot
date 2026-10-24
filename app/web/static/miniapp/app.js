@@ -26,6 +26,7 @@
     selectedPlanId: null,
     activityLimit: ACTIVITY_PAGE,
     renewPreview: null,
+    topupCurrent: null,
     addonPacks: [],
     sheet: null,
     sheetSeq: 0,
@@ -88,6 +89,7 @@
     plans: () => core.api("/api/mini/plans"),
     activity: () => core.api("/api/mini/activity?limit=" + state.activityLimit),
     ops: () => core.api("/api/mini/ops"),
+    topup: () => core.api("/api/mini/topup"),
   };
 
   const inflight = new Map();
@@ -250,6 +252,7 @@
     state.sheet = null;
     state.sheetSeq += 1;
     state.renewPreview = null;
+    state.topupCurrent = null;
     els.sheet.hidden = true;
     els.sheetBody.innerHTML = "";
     doc.body.classList.remove("has-sheet");
@@ -475,8 +478,10 @@
     const body = settled(r, 3, "retry");
     const rows = body || R.activityHtml(r.data.items);
     const canMore = !body && state.activityLimit < ACTIVITY_MORE && (r.data.items || []).length >= state.activityLimit;
+    const topups = resource("topup");
     return viewHead(user.name || "حساب من", "حساب")
       + R.walletCardHtml(customer())
+      + (topups.status === "ready" ? R.recentTopupsHtml(topups.data.recent) : "")
       + `<section class="card" aria-label="تراکنش‌ها"><h2 class="card-title">تراکنش‌ها</h2>${rows}
           ${canMore ? '<button type="button" class="btn ghost block" data-action="activity-more">تراکنش‌های بیشتر</button>' : ""}</section>`;
   }
@@ -687,6 +692,140 @@
     });
   }
 
+  /* ---------- wallet top-up ---------- */
+
+  const RECEIPT_MAX_SIDE = 1600;
+  const RECEIPT_UNKNOWN_OUTCOME = "نتیجهٔ ارسال رسید مشخص نشد؛ «شارژهای اخیر» را بررسی کنید. هر پرداخت فقط یک رسید می‌پذیرد.";
+
+  async function openTopup() {
+    if (!commerce()) return;
+    const seq = openSheet("topup", "شارژ کیف پول", R.loadingHtml(2));
+    invalidate("topup");
+    const r = await ensure("topup");
+    if (r.status !== "ready") {
+      setSheetBody(seq, R.errorHtml(r.error || "دریافت روش‌های شارژ ناموفق بود"));
+      return;
+    }
+    setSheetBody(seq, R.topupFormHtml(r.data));
+  }
+
+  function topupAmount(form, options) {
+    const preset = form.elements.preset ? String(form.elements.preset.value || "custom") : "custom";
+    const amount = preset === "custom" ? core.parseAmount(form.elements.custom_amount.value) : Number(preset);
+    if (!amount || amount < options.min_amount || amount > options.max_amount) return null;
+    return amount;
+  }
+
+  async function startTopup(form) {
+    const r = state.resources.topup;
+    if (!r || r.status !== "ready") return;
+    const button = form.querySelector("button[type=submit]");
+    await guarded("topup-start", button, async () => {
+      const amount = topupAmount(form, r.data);
+      if (!amount) {
+        core.toast(`مبلغ را بین ${core.money(r.data.min_amount)} و ${core.money(r.data.max_amount)} وارد کنید`, "err");
+        return;
+      }
+      const method = String(form.elements.method.value || "");
+      const dest = form.elements["dest_" + method];
+      const seq = state.sheetSeq;
+      try {
+        const data = await core.api("/api/mini/topup", {
+          method: "POST", body: { amount, method, ...(dest ? { dest_id: String(dest.value) } : {}) },
+        });
+        invalidate("topup");
+        state.topupCurrent = data.topup;
+        setSheetBody(seq, R.topupPayHtml(data.topup));
+      } catch (err) {
+        core.toast(err.message, "err");
+      }
+    });
+  }
+
+  function openReceiptSheet(paymentId) {
+    state.topupCurrent = null;
+    openSheet("receipt", "ارسال رسید", R.receiptFormHtml(paymentId));
+  }
+
+  /** Re-encode as a bounded JPEG: smaller upload, and the photo's location data is dropped. */
+  async function prepareReceipt(file) {
+    if (!file || !/^image\//.test(String(file.type || ""))) throw new Error("تصویر رسید را انتخاب کنید");
+    try {
+      const bitmap = await root.createImageBitmap(file);
+      const scale = Math.min(1, RECEIPT_MAX_SIDE / Math.max(bitmap.width, bitmap.height));
+      const canvas = doc.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+      canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+      canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      if (bitmap.close) bitmap.close();
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.85));
+      if (blob) return blob;
+    } catch (_) {
+      // Fall back to the original file; the server checks type and size again.
+    }
+    if (file.type === "image/jpeg" || file.type === "image/png") return file;
+    throw new Error("این نوع تصویر پشتیبانی نمی‌شود؛ عکس JPG یا PNG انتخاب کنید");
+  }
+
+  async function uploadReceipt(form) {
+    const paymentId = intAttr(form, "data-id");
+    const button = form.querySelector("button[type=submit]");
+    const files = form.elements.receipt && form.elements.receipt.files;
+    if (!paymentId || !files || !files.length) {
+      core.toast("تصویر رسید را انتخاب کنید", "err");
+      return;
+    }
+    await guarded("receipt:" + paymentId, button, async () => {
+      let image;
+      try {
+        image = await prepareReceipt(files[0]);
+      } catch (err) {
+        core.toast(err.message, "err");
+        return;
+      }
+      try {
+        const res = await core.api(`/api/mini/topup/${paymentId}/receipt`, { method: "POST", raw: image });
+        core.toast(res.message || "رسید ثبت شد");
+        closeSheet();
+      } catch (err) {
+        core.toast(err.status === 0 ? RECEIPT_UNKNOWN_OUTCOME : err.message, "err");
+        if (err.status !== 0) return;
+      }
+      invalidate("topup");
+      await refreshAfterChange();
+      renderView();
+    });
+  }
+
+  function openTopupLink() {
+    const t = state.topupCurrent;
+    const url = t && (t.method === "psp" ? t.checkout_url : t.gateway_link);
+    if (!core.openExternal(url)) core.toast("لینک پرداخت معتبر نیست", "err");
+  }
+
+  async function checkTopup(settlementId, trigger) {
+    await guarded("topup-check", trigger, async () => {
+      try {
+        const res = await core.api("/api/mini/topup/check", { method: "POST", body: { settlement_id: settlementId } });
+        core.toast(res.message);
+        if (res.outcome === "settled" || res.outcome === "closed") {
+          closeSheet();
+          invalidate("topup");
+          await refreshAfterChange();
+          renderView();
+        }
+      } catch (err) {
+        core.toast(err.message, "err");
+      }
+    });
+  }
+
+  async function copyValue(trigger) {
+    const ok = await core.copyText(trigger.getAttribute("data-value"));
+    if (ok) core.markCopied(trigger);
+    else core.toast("کپی نشد", "err");
+  }
+
   /* ---------- purchases ---------- */
 
   async function buyPlan(planId, trigger) {
@@ -772,6 +911,11 @@
       renderView();
     },
     "close-sheet": () => closeSheet(),
+    topup: () => openTopup(),
+    "topup-receipt": (el) => openReceiptSheet(intAttr(el, "data-id")),
+    "open-topup-link": () => openTopupLink(),
+    "check-topup": (el) => checkTopup(intAttr(el, "data-id"), el),
+    "copy-value": (el) => copyValue(el),
     retry: () => retryCurrentView(),
   };
 
@@ -787,6 +931,13 @@
 
   function onChange(event) {
     const el = event.target;
+    if (el.matches && el.matches("[data-input=receipt-file]")) {
+      const label = el.closest(".file-field").querySelector(".file-field-label");
+      const file = el.files && el.files[0];
+      // textContent: the file name is user data.
+      if (label) label.textContent = file ? "تصویر انتخاب‌شده: " + file.name : "انتخاب تصویر رسید";
+      return;
+    }
     if (!el.matches || !el.matches("input[data-action=select-plan]")) return;
     state.selectedPlanId = intAttr(el, "data-id");
     core.haptic("select");
@@ -797,7 +948,7 @@
     if (host) host.innerHTML = R.checkoutHtml(selectedPlan(), customer().wallet);
   }
 
-  const FORMS = { automation: saveAutomation, cancellation: submitCancellation };
+  const FORMS = { automation: saveAutomation, cancellation: submitCancellation, topup: startTopup, receipt: uploadReceipt };
 
   function formHandler(form) {
     const kind = form.getAttribute && form.getAttribute("data-form");

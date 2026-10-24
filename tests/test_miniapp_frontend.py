@@ -10,14 +10,20 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
+@unittest.skipUnless(shutil.which("node"), "Node.js is required for browser-behavior checks")
 class MiniAppFrontendTests(unittest.TestCase):
-    @unittest.skipUnless(shutil.which("node"), "Node.js is required for browser-behavior checks")
-    def test_miniapp_behavior(self) -> None:
+    def run_node(self, name: str) -> None:
         result = subprocess.run(
-            [shutil.which("node"), str(ROOT / "tests/miniapp_app.test.cjs")],
+            [shutil.which("node"), str(ROOT / "tests" / name)],
             capture_output=True, text=True, timeout=60,
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_miniapp_behavior(self) -> None:
+        self.run_node("miniapp_app.test.cjs")
+
+    def test_wallet_top_up_behavior(self) -> None:
+        self.run_node("miniapp_topup.test.cjs")
 
 
 if __name__ == "__main__":
