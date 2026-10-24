@@ -34,6 +34,7 @@ from app.services.resellers import (
     reseller_billing_mode_label,
     reseller_plan_mode_of,
 )
+from app.bot.handlers.reseller_package import change_button, renew_button
 from app.bot.reseller_hub_groups import back_callback_for
 from app.bot.tg_utils import safe_edit_text
 from app.services.users import get_all_settings
@@ -1488,13 +1489,10 @@ async def res_renew(
     sub = await get_subscription(session, uname) if uname else None
     invoice = compute_renew_invoice(plan, sub)
     price = int(invoice.get("total") or plan_renew_price(plan))
+    generation = int(sub.renew_generation or 0) if sub else 0
     rows = [
-        [
-            InlineKeyboardButton(
-                text=f"✅ تمدید — {format_toman(price, get_settings().currency)}",
-                callback_data="res:renew:go",
-            )
-        ],
+        [renew_button(price, int(plan.id), generation)],
+        [change_button()],
         [kb.back_button(None, back_callback_for("res_renew"))],
     ]
     detail = format_renew_invoice_html(invoice, currency=get_settings().currency)
@@ -1528,44 +1526,10 @@ async def res_renew_go(
     is_reseller_bot: bool = False,
     reseller_owner_id: int | None = None,
 ):
-    from app.services.reseller_capacity import renew_reseller_capacity
-
-    owner_id, profile, plan, owner = await _capacity_context(
-        session,
-        db_user,
-        is_reseller_bot=is_reseller_bot,
-        reseller_owner_id=reseller_owner_id,
+    """A renew button from before pay buttons carried a generation: show the current invoice again."""
+    await res_renew(
+        callback, session, db_user, is_reseller_bot=is_reseller_bot, reseller_owner_id=reseller_owner_id,
     )
-    if not owner_id or not profile or not plan or not owner:
-        await callback.answer(feedback.RESELLERS_ONLY, show_alert=True)
-        return
-    try:
-        result = await renew_reseller_capacity(
-            session, user=owner, profile=profile, plan=plan
-        )
-    except ValueError as e:
-        await callback.answer(user_safe_error(e, limit=180), show_alert=True)
-        return
-    await callback.answer(feedback.RENEWED)
-    if callback.message:
-        exp = result.get("expires_at")
-        exp_line = ""
-        if exp is not None:
-            try:
-                exp_line = f"\nانقضای جدید: <b>{exp.strftime('%Y-%m-%d %H:%M')}</b> UTC"
-            except Exception:
-                exp_line = ""
-        await safe_edit_text(
-            callback.message,
-            format_message(
-                "✅ تمدید انجام شد",
-                f"مبلغ: {format_toman(result['amount'], get_settings().currency)}\n"
-                f"صفر شدن مصرف کاربران: {result['reset_ok']}"
-                + (f" (خطا: {result['reset_err']})" if result.get("reset_err") else "")
-                + exp_line,
-            ),
-            reply_markup=_group_back("res_renew"),
-        )
 
 
 @router.callback_query(F.data == "res:buy_gb")
