@@ -138,6 +138,19 @@ test("Back goes ticket → support → account → home", async () => {
   assert.equal(env.mini.app.state.view, "home");
 });
 
+test("sub-pages show a visible back button to their parent", async () => {
+  const env = await boot();
+  env.mini.app.go("ticket", { ticketId: 5 });
+  await settle();
+  assert.ok(env.element("root").innerHTML.includes('data-action="back"'));
+  assert.ok(env.element("root").innerHTML.includes("بازگشت به پشتیبانی"));
+  env.mini.app.ACTIONS.back(trigger({}));
+  assert.equal(env.mini.app.state.view, "support");
+  env.mini.app.go("account");
+  await settle();
+  assert.ok(!env.element("root").innerHTML.includes('data-action="back"'), "tabs need no back button");
+});
+
 test("admin persona cannot reach support screens", async () => {
   const env = await boot([[/GET \/api\/mini\/me/, () => ({ status: 200, body: { ...ME, persona: "admin", commerce_allowed: false } })]]);
   env.mini.app.go("support");

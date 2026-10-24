@@ -60,6 +60,36 @@ async function boot(options) {
 const tests = [];
 const test = (name, fn) => tests.push([name, fn]);
 
+test("service times and usage read in Persian digits and calendar", async () => {
+  const detail = service(7, { traffic: "27.9 از 30 گیگ", expire_days_label: "3 روز", expire: "2026/10/26 · 3 روز",
+    expire_at: "2026-10-26T12:00:00+00:00", online_at: "2026-10-24T08:00:00+00:00" });
+  const env = await boot({ routes: router([[/GET \/api\/mini\/service\/7$/, () => ({ status: 200, body: { service: detail } })]]) });
+  env.mini.app.go("service", { serviceId: 7 });
+  await settle();
+  const html = env.element("root").innerHTML;
+  assert.ok(html.includes("۲۷٫۹ از ۳۰ گیگ") && html.includes("۳ روز"));
+  assert.ok(!/2026|منقضی/.test(html), "no Gregorian date and no 'expired' on the last connection");
+  assert.ok(html.includes("۱۴۰۵"), "dates use the Persian calendar");
+});
+
+test("Telegram's header and overscroll use the page colour", async () => {
+  const env = await boot({ routes: router() });
+  assert.deepEqual(env.context.Telegram.WebApp.colors, { header: "secondary_bg_color", background: "secondary_bg_color" });
+});
+
+test("Telegram's top insets apply only while the app is fullscreen", async () => {
+  const env = await boot({ routes: router() });
+  const tg = env.context.Telegram.WebApp;
+  const attrs = env.context.document.documentElement.attrs;
+  assert.equal(attrs["data-fullscreen"], "0");
+  tg.isFullscreen = true;
+  tg.events.fullscreenChanged();
+  assert.equal(attrs["data-fullscreen"], "1");
+  tg.isFullscreen = false;
+  tg.events.fullscreenChanged();
+  assert.equal(attrs["data-fullscreen"], "0");
+});
+
 test("launch reads only /me and escapes customer text", async () => {
   const env = await boot({ routes: router() });
   assert.deepEqual(env.calls.map((c) => c.url), ["/api/mini/me"]);

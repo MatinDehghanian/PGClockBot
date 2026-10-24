@@ -3,7 +3,7 @@
   "use strict";
 
   const core = root.PGMini.core;
-  const { esc, num, money } = core;
+  const { esc, num, money, faDigits } = core;
 
   const STROKE = 'fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"';
   const ICON_PATHS = {
@@ -20,6 +20,8 @@
     auto: '<path d="M20 11a8 8 0 0 0-14.5-4.5L4 8"/><path d="M4 4v4h4"/><path d="M12 8v4l2 2"/>',
     cancel: '<circle cx="12" cy="12" r="9"/><path d="m9 9 6 6M15 9l-6 6"/>',
     chevron: '<path d="m15 6-6 6 6 6"/>',
+    // RTL: "back" points right.
+    back: '<path d="m9 6 6 6-6 6"/>',
     search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
     close: '<path d="M6 6l12 12M18 6 6 18"/>',
     chat: '<path d="M4 5h16v11H9l-5 4z"/><path d="M8 9h8M8 12h5"/>',
@@ -61,7 +63,7 @@
 
   /** Remaining-time label — never map on_hold + null days to «نامحدود». */
   function expireDaysLabel(s) {
-    if (s && s.expire_days_label) return String(s.expire_days_label);
+    if (s && s.expire_days_label) return faDigits(s.expire_days_label);
     if (s && s.expire_days != null) return num(s.expire_days) + " روز";
     if (s && (s.pending_start || isOnHoldStatus(s.status))) return "پس از اتصال";
     if (!s || s.error || !s.status || s.status === "—") return "—";
@@ -84,7 +86,7 @@
     return `<button type="button" class="svc-row" data-action="open-service" data-id="${id}">
       <span class="svc-row-head"><strong dir="ltr">${esc(s.username || "—")}</strong>${serviceStatusBadge(s)}</span>
       ${meterHtml(s.traffic_pct)}
-      <span class="svc-row-meta"><span>${esc(s.traffic || "—")}</span><span>${esc(expireDaysLabel(s))}</span></span>
+      <span class="svc-row-meta"><span>${esc(faDigits(s.traffic || "—"))}</span><span>${esc(expireDaysLabel(s))}</span></span>
       ${serviceErrorHtml(s)}
     </button>`;
   }
@@ -93,7 +95,7 @@
     const id = Number(g.id) || 0;
     return `<button type="button" class="svc-row" data-action="open-service" data-id="${id}">
       <span class="svc-row-head"><strong dir="ltr">${esc(g.username || "—")}</strong>${serviceStatusBadge(g)}</span>
-      <span class="svc-row-meta"><span>${esc(g.remaining_label || "—")}</span>${icon("chevron", 16)}</span>
+      <span class="svc-row-meta"><span>${esc(faDigits(g.remaining_label || "—"))}</span>${icon("chevron", 16)}</span>
     </button>`;
   }
 
@@ -104,21 +106,26 @@
     return `<div class="notice is-warn">
       ${icon("clock", 22)}
       <div class="notice-body"><strong>${esc(title)}: <span dir="ltr">${esc(g.username || "—")}</span></strong>
-        <span>${esc(g.remaining_label || "")}</span></div>
+        <span>${esc(faDigits(g.remaining_label || ""))}</span></div>
       <button type="button" class="btn sm is-warn" data-action="open-service" data-id="${id}" data-then="renew">تمدید</button>
     </div>`;
+  }
+
+  /** Expiry in the Persian calendar; the server's label only for cases without a date (on hold). */
+  function expireDateText(s) {
+    return core.formatDate(s.expire_at) || faDigits(s.expire || "—");
   }
 
   function serviceUsageHtml(s) {
     const fetched = s.info_fetched_at ? core.formatDateTime(s.info_fetched_at) : "";
     return `<section class="card" aria-label="مصرف سرویس">
       <div class="card-head">${serviceStatusBadge(s)}${fetched ? `<span class="muted sm">به‌روز: ${esc(fetched)}</span>` : ""}</div>
-      <p class="usage-line"><strong>${esc(s.traffic || "—")}</strong></p>
+      <p class="usage-line"><strong>${esc(faDigits(s.traffic || "—"))}</strong></p>
       ${meterHtml(s.traffic_pct)}
       <div class="tile-grid">
         <div class="tile"><span>زمان باقی‌مانده</span><strong>${esc(expireDaysLabel(s))}</strong></div>
-        <div class="tile"><span>انقضا</span><strong>${esc(s.expire || "—")}</strong></div>
-        <div class="tile"><span>آخرین اتصال</span><strong>${esc(s.online_at || "—")}</strong></div>
+        <div class="tile"><span>انقضا</span><strong>${esc(expireDateText(s))}</strong></div>
+        <div class="tile"><span>آخرین اتصال</span><strong>${esc(core.formatDateTime(s.online_at) || "—")}</strong></div>
       </div>
       ${serviceErrorHtml(s)}
     </section>`;
@@ -216,7 +223,7 @@
       ${plan.is_trial ? "" : `<form class="code-form" data-form="discount">
         <label class="form-field"><span class="muted sm">کد تخفیف (اختیاری)</span>
           <span class="code-line"><input type="text" name="code" maxlength="64" autocomplete="off" dir="ltr" autocapitalize="characters">
-          <button type="submit" class="btn ghost sm">اعمال</button></span></label>
+          <button type="submit" class="btn ghost">اعمال</button></span></label>
       </form>`}
       ${enough ? "" : LOW_BALANCE}
       <button type="button" class="btn block" data-action="buy" data-id="${Number(plan.id) || 0}"${enough ? "" : " disabled"}>${plan.is_trial ? "دریافت سرویس تست" : "پرداخت از کیف پول"}</button>
@@ -507,6 +514,11 @@
     }).join("");
   }
 
+  /** Visible way back for screens below a tab (Telegram's own Back button is easy to miss). */
+  function backBarHtml(label) {
+    return `<button type="button" class="back-link" data-action="back">${icon("back", 18)}<span>بازگشت به ${esc(label)}</span></button>`;
+  }
+
   function loadingHtml(rows) {
     return `<div class="loading" aria-busy="true" aria-label="در حال بارگذاری">${'<div class="skeleton"></div>'.repeat(Number(rows) || 3)}</div>`;
   }
@@ -523,7 +535,7 @@
     icon, isOnHoldStatus, statusTone, expireDaysLabel, meterHtml, serviceRowHtml, glanceRowHtml,
     attentionCardHtml, serviceDetailHtml, planOptionsHtml, checkoutHtml, discountedCheckoutHtml, giftFormHtml, renewPlansHtml,
     renewPreviewHtml, addonPacksHtml, automationHtml, cancellationHtml, qrHtml, activityHtml,
-    walletCardHtml, supportHtml, ticketNewFormHtml, ticketThreadHtml, topupFormHtml, topupPayHtml, receiptFormHtml, recentTopupsHtml, statsHtml, attentionListHtml, linksHtml, navHtml, loadingHtml, emptyHtml,
+    backBarHtml, walletCardHtml, supportHtml, ticketNewFormHtml, ticketThreadHtml, topupFormHtml, topupPayHtml, receiptFormHtml, recentTopupsHtml, statsHtml, attentionListHtml, linksHtml, navHtml, loadingHtml, emptyHtml,
     errorHtml,
   });
 })(typeof window === "object" ? window : globalThis);

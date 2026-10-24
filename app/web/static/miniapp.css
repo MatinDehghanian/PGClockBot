@@ -1,4 +1,5 @@
-/* Mini App — mobile-first, follows the Telegram theme with panel brand fallbacks. */
+/* Mini App — mobile-first. Surfaces and text follow the Telegram theme so the app blends
+   with Telegram's header; accents and status colours are the web panel's (panel.css). */
 :root {
   --background: #09090b;
   --foreground: #fafafa;
@@ -8,34 +9,49 @@
   --brand: #f97316;
   --brand-fg: #fb923c;
   --ok: #22c55e;
-  --warn: #f59e0b;
+  --warn: #eab308;
   --danger-base: #ef4444;
+  --on-solid: #ffffff;
+  --on-warn: #1c1305;
 
-  --bg: var(--tg-theme-bg-color, var(--background));
+  /* Telegram's grouped layout: the page uses secondary_bg, sections (cards) section_bg. */
+  --bg: var(--tg-theme-secondary-bg-color, var(--tg-theme-bg-color, var(--background)));
   --fg: var(--tg-theme-text-color, var(--foreground));
-  --card: var(--tg-theme-section-bg-color, var(--tg-theme-secondary-bg-color, var(--surface)));
+  --card: var(--tg-theme-section-bg-color, var(--tg-theme-bg-color, var(--surface)));
   --card-2: var(--surface-2);
   --muted-fg: var(--tg-theme-hint-color, var(--hint));
-  --accent: var(--tg-theme-button-color, var(--brand));
-  --accent-fg: var(--tg-theme-button-text-color, #ffffff);
-  --link: var(--tg-theme-link-color, var(--brand-fg));
+  --accent: var(--brand);
+  --accent-fg: var(--on-solid);
+  --link: var(--brand-fg);
   --danger: var(--tg-theme-destructive-text-color, var(--danger-base));
   --border: rgba(255, 255, 255, 0.09);
   --ok-soft: rgba(34, 197, 94, 0.16);
-  --warn-soft: rgba(245, 158, 11, 0.16);
+  --warn-soft: rgba(234, 179, 8, 0.16);
   --danger-soft: rgba(239, 68, 68, 0.16);
 
-  --radius: 16px;
-  --radius-sm: 12px;
+  /* Same radius policy as the web panel (panel.css):
+     --radius         → cards, tiles, sheets, textareas, multi-line boxes
+     --control-radius → buttons, single-line fields, chips, badges (pill) */
+  --radius: 20px;
+  --control-radius: 999px;
+  --bubble-tail-radius: 6px;
   --space-0: 4px;
   --space-1: 8px;
   --space-1_5: 12px;
   --space-2: 16px;
   --space-3: 24px;
   --font: "Vazirmatn", system-ui, sans-serif;
+  /* Safe areas: the larger of the browser's inset and Telegram's. At the top Telegram's
+     insets count only in fullscreen; otherwise its header already sits above the page. */
   --safe-top: env(safe-area-inset-top, 0px);
-  --safe-bottom: env(safe-area-inset-bottom, 0px);
-  --nav-h: 64px;
+  --safe-bottom: max(env(safe-area-inset-bottom, 0px),
+    calc(var(--tg-safe-area-inset-bottom, 0px) + var(--tg-content-safe-area-inset-bottom, 0px)));
+  --safe-left: max(env(safe-area-inset-left, 0px), var(--tg-safe-area-inset-left, 0px));
+  --safe-right: max(env(safe-area-inset-right, 0px), var(--tg-safe-area-inset-right, 0px));
+  --viewport-h: var(--tg-viewport-stable-height, 100dvh);
+  /* Tab bar height above its bottom padding: border + top padding + 52px buttons. */
+  --nav-h: 57px;
+  --nav-bottom: max(var(--safe-bottom), var(--space-1));
   --motion: 200ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -45,7 +61,16 @@
   --surface: #ffffff;
   --surface-2: #f4f4f5;
   --hint: #52525b;
+  /* The panel's light values: darker so text and links keep their contrast on white. */
+  --brand: #ea580c;
+  --brand-fg: #c2410c;
+  --ok: #16a34a;
+  --warn: #ca8a04;
+  --danger-base: #dc2626;
   --border: rgba(0, 0, 0, 0.09);
+  --ok-soft: rgba(22, 163, 74, 0.12);
+  --warn-soft: rgba(202, 138, 4, 0.14);
+  --danger-soft: rgba(220, 38, 38, 0.12);
 }
 
 @supports (color: color-mix(in srgb, red 50%, blue)) {
@@ -67,9 +92,16 @@ html, body {
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
 }
+:root[data-fullscreen="1"] {
+  --safe-top: max(env(safe-area-inset-top, 0px),
+    calc(var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px)));
+}
+/* An inset is itself breathing room: add a small gap past it, never a full margin on top of it. */
 body {
-  padding: calc(var(--safe-top) + var(--space-2)) var(--space-2)
-    calc(var(--nav-h) + var(--safe-bottom) + var(--space-3));
+  padding-top: max(var(--space-2), calc(var(--safe-top) + var(--space-1)));
+  padding-bottom: calc(var(--nav-h) + var(--nav-bottom) + var(--space-2));
+  padding-left: calc(var(--safe-left) + var(--space-2));
+  padding-right: calc(var(--safe-right) + var(--space-2));
 }
 body.has-sheet { overflow: hidden; }
 h1, h2, p { margin: 0; }
@@ -100,8 +132,14 @@ button, input, select, textarea { font: inherit; color: inherit; }
   font-size: 20px; font-weight: 800; line-height: 1.3;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+.back-link {
+  align-self: flex-start; min-height: 36px; padding: 0 var(--space-1_5) 0 var(--space-1);
+  display: inline-flex; align-items: center; gap: var(--space-0);
+  border: 1px solid var(--border); border-radius: var(--control-radius);
+  background: var(--card); color: var(--link); font-size: 13px; cursor: pointer;
+}
 .role-chip {
-  flex-shrink: 0; padding: 3px 10px; border-radius: 999px;
+  flex-shrink: 0; padding: 2px var(--space-1); border-radius: var(--control-radius);
   background: var(--card-2); color: var(--muted-fg); font-size: 11px; font-weight: 700;
 }
 
@@ -113,7 +151,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
   padding: var(--space-2);
   display: flex; flex-direction: column; gap: var(--space-1_5);
 }
-.card.inset { background: var(--card-2); padding: var(--space-1_5); border-radius: var(--radius-sm); gap: var(--space-1); }
+.card.inset { background: var(--card-2); padding: var(--space-1_5); gap: var(--space-1); }
 .card-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-1); }
 .card-title { font-size: 15px; font-weight: 700; }
 .list-card { padding-block: var(--space-0); gap: 0; }
@@ -124,7 +162,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 
 .badge {
   display: inline-flex; align-items: center; flex-shrink: 0;
-  padding: 2px 9px; border-radius: 999px;
+  padding: 2px var(--space-1); border-radius: var(--control-radius);
   background: var(--card-2); color: var(--muted-fg);
   font-size: 11px; font-weight: 700; line-height: 1.5;
 }
@@ -136,14 +174,14 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .tile-grid.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .tile.is-wide { grid-column: 1 / -1; }
 .tile {
-  background: var(--card-2); border-radius: var(--radius-sm);
+  background: var(--card-2); border-radius: var(--radius);
   padding: var(--space-1) var(--space-1_5);
   display: flex; flex-direction: column; gap: 2px; min-width: 0;
 }
 .tile span { font-size: 11px; color: var(--muted-fg); }
 .tile strong { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.meter { height: 7px; border-radius: 999px; background: var(--card-2); overflow: hidden; }
+.meter { height: 7px; border-radius: var(--control-radius); background: var(--card-2); overflow: hidden; }
 .meter i { display: block; height: 100%; border-radius: inherit; background: var(--accent); transition: width var(--motion); }
 .meter.is-warn i { background: var(--warn); }
 .meter.is-danger i { background: var(--danger); }
@@ -162,7 +200,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .btn {
   min-height: 44px; padding: 0 var(--space-2);
   display: inline-flex; align-items: center; justify-content: center; gap: var(--space-1);
-  border: 0; border-radius: var(--radius-sm);
+  border: 0; border-radius: var(--control-radius);
   background: var(--accent); color: var(--accent-fg);
   font-size: 14px; font-weight: 700; cursor: pointer;
   transition: opacity var(--motion), transform var(--motion);
@@ -172,15 +210,15 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .btn.ghost { background: transparent; color: var(--fg); border: 1px solid var(--border); font-weight: 500; }
 .btn.sm { min-height: 36px; padding: 0 var(--space-1_5); font-size: 13px; }
 .btn.block { width: 100%; }
-.btn.is-warn { background: var(--warn); color: #1c1305; }
-.btn.is-danger { background: var(--danger); color: #ffffff; }
-.btn.is-copied { background: var(--ok); color: #ffffff; }
+.btn.is-warn { background: var(--warn); color: var(--on-warn); }
+.btn.is-danger { background: var(--danger); color: var(--on-solid); }
+.btn.is-copied { background: var(--ok); color: var(--on-solid); }
 .btn-row { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: var(--space-1); }
 .btn-col { display: flex; flex-direction: column; gap: var(--space-1); }
 .icon-btn {
   width: 44px; height: 44px; flex-shrink: 0;
   display: inline-flex; align-items: center; justify-content: center;
-  border-radius: var(--radius-sm); border: 1px solid var(--border);
+  border-radius: var(--control-radius); border: 1px solid var(--border);
   background: var(--card); color: var(--fg); cursor: pointer;
 }
 .link-btn {
@@ -201,15 +239,15 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .list-row-label { flex: 1; min-width: 0; }
 div.list-row { cursor: default; }
 .count {
-  min-width: 26px; padding: 1px 8px; border-radius: 999px; text-align: center;
-  background: var(--warn); color: #1c1305; font-size: 12px; font-weight: 700;
+  min-width: 24px; padding: 2px var(--space-1); border-radius: var(--control-radius); text-align: center;
+  background: var(--warn); color: var(--on-warn); font-size: 12px; font-weight: 700;
 }
 
 /* ---------- services ---------- */
 .svc-list { display: flex; flex-direction: column; gap: var(--space-1); }
 .svc-row {
   width: 100%; display: flex; flex-direction: column; gap: var(--space-1);
-  padding: var(--space-1_5); border-radius: var(--radius-sm);
+  padding: var(--space-1_5); border-radius: var(--radius);
   border: 1px solid var(--border); background: var(--card);
   color: var(--fg); text-align: start; cursor: pointer;
 }
@@ -220,7 +258,7 @@ div.list-row { cursor: default; }
 .inline-error { color: var(--danger); font-size: 12px; }
 
 .link-box {
-  padding: var(--space-1) var(--space-1_5); border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-1_5); border-radius: var(--control-radius);
   background: var(--card-2); color: var(--muted-fg); font-size: 12px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
@@ -228,13 +266,14 @@ div.list-row { cursor: default; }
 .search-field {
   display: flex; align-items: center; gap: var(--space-1);
   min-height: 44px; padding: 0 var(--space-1_5);
-  border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--card);
+  border-radius: var(--control-radius); border: 1px solid var(--border); background: var(--card);
   color: var(--muted-fg);
 }
 .search-field input { flex: 1; min-width: 0; border: 0; background: none; outline: none; color: var(--fg); }
 .search-field:focus-within { border-color: var(--accent); }
 
 /* ---------- plans and checkout ---------- */
+/* Selected options keep a 1px border plus an inset ring, so selecting never shifts the layout. */
 .plan-list { display: flex; flex-direction: column; gap: var(--space-1); }
 .plan-option {
   width: 100%; display: flex; align-items: center; gap: var(--space-1_5);
@@ -243,7 +282,7 @@ div.list-row { cursor: default; }
   color: var(--fg); text-align: start; cursor: pointer;
 }
 .sheet .plan-option { background: var(--card-2); }
-.plan-option.is-selected { border: 2px solid var(--accent); }
+.plan-option.is-selected { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .plan-option input { width: 20px; height: 20px; margin: 0; accent-color: var(--accent); flex-shrink: 0; }
 .plan-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .plan-meta .badge { align-self: flex-start; }
@@ -266,11 +305,11 @@ div.list-row { cursor: default; }
 .form-field { display: flex; flex-direction: column; gap: var(--space-0); font-size: 13px; }
 .form-field textarea, .form-field select {
   width: 100%; min-height: 44px; padding: var(--space-1) var(--space-1_5);
-  border-radius: var(--radius-sm); border: 1px solid var(--border);
+  border-radius: var(--control-radius); border: 1px solid var(--border);
   background: var(--card-2); color: var(--fg);
 }
-.form-field textarea { resize: vertical; }
-.check-row { display: flex; align-items: center; gap: var(--space-1); min-height: 40px; }
+.form-field textarea { resize: vertical; border-radius: var(--radius); }
+.check-row { display: flex; align-items: center; gap: var(--space-1); min-height: 44px; }
 .check-row input { width: 20px; height: 20px; accent-color: var(--accent); }
 .auto-form {
   display: flex; flex-direction: column; gap: var(--space-1);
@@ -285,7 +324,7 @@ div.list-row { cursor: default; }
 .field-group legend { padding: 0; margin-bottom: var(--space-1); font-size: 13px; font-weight: 700; }
 .form-field input {
   width: 100%; min-height: 44px; padding: 0 var(--space-1_5);
-  border-radius: var(--radius-sm); border: 1px solid var(--border);
+  border-radius: var(--control-radius); border: 1px solid var(--border);
   background: var(--card-2); color: var(--fg);
 }
 .chip-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-1); }
@@ -293,30 +332,30 @@ div.list-row { cursor: default; }
 .chip input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
 .chip span {
   min-height: 44px; display: flex; align-items: center; justify-content: center;
-  border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--card-2);
+  border-radius: var(--control-radius); border: 1px solid var(--border); background: var(--card-2);
   font-size: 13px; text-align: center;
 }
-.chip input:checked + span { border: 2px solid var(--accent); font-weight: 700; }
+.chip input:checked + span { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); font-weight: 700; }
 .chip input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
 .method-option {
   display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-1_5);
   padding: var(--space-1_5); border-radius: var(--radius); border: 1px solid var(--border); background: var(--card-2);
 }
-.method-option:has(input:checked) { border: 2px solid var(--accent); }
+.method-option:has(input:checked) { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .method-option input { width: 20px; height: 20px; margin: 0; accent-color: var(--accent); }
 .method-option select {
-  flex-basis: 100%; min-height: 40px; padding: 0 var(--space-1);
-  border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--card); color: var(--fg);
+  flex-basis: 100%; min-height: 44px; padding: 0 var(--space-1_5);
+  border-radius: var(--control-radius); border: 1px solid var(--border); background: var(--card); color: var(--fg);
 }
 .copy-row { display: flex; flex-direction: column; gap: var(--space-0); }
 .copy-line {
   display: flex; align-items: center; justify-content: space-between; gap: var(--space-1);
-  padding: var(--space-1) var(--space-1_5); border-radius: var(--radius-sm); background: var(--card-2);
+  padding: var(--space-1) var(--space-1_5); border-radius: var(--radius); background: var(--card-2);
 }
 .copy-line strong { font-size: 16px; letter-spacing: 0.04em; overflow-wrap: anywhere; }
 .file-field {
   min-height: 56px; display: flex; flex-direction: column; justify-content: center; gap: var(--space-0);
-  padding: var(--space-1_5); border-radius: var(--radius-sm); border: 1px dashed var(--border);
+  padding: var(--space-1_5); border-radius: var(--radius); border: 1px dashed var(--border);
   font-size: 13px; cursor: pointer;
 }
 .file-field-label { font-weight: 700; color: var(--link); overflow-wrap: anywhere; }
@@ -329,16 +368,17 @@ div.list-row { cursor: default; }
   max-width: 88%; padding: var(--space-1) var(--space-1_5); border-radius: var(--radius);
   background: var(--card); border: 1px solid var(--border); overflow-wrap: anywhere;
 }
-.bubble.is-mine { align-self: flex-start; }
-.bubble.is-staff { align-self: flex-end; background: var(--card-2); }
+/* Chat-bubble tail like the panel's Telegram preview: one small corner on the sender's side. */
+.bubble.is-mine { align-self: flex-start; border-end-start-radius: var(--bubble-tail-radius); }
+.bubble.is-staff { align-self: flex-end; background: var(--card-2); border-end-end-radius: var(--bubble-tail-radius); }
 .bubble-who { display: block; margin-bottom: 2px; }
 
 /* ---------- codes ---------- */
 .code-form { display: flex; flex-direction: column; gap: var(--space-1); }
 .code-line { display: flex; gap: var(--space-1); }
 .code-line input {
-  flex: 1; min-width: 0; min-height: 40px; padding: 0 var(--space-1_5);
-  border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--card-2); color: var(--fg);
+  flex: 1; min-width: 0; min-height: 44px; padding: 0 var(--space-1_5);
+  border-radius: var(--control-radius); border: 1px solid var(--border); background: var(--card-2); color: var(--fg);
 }
 .is-plus { color: var(--ok); }
 
@@ -371,7 +411,9 @@ div.list-row { cursor: default; }
 /* ---------- tab bar ---------- */
 .tabbar {
   position: fixed; inset-inline: 0; bottom: 0; z-index: 20;
-  display: flex; padding: var(--space-0) var(--space-1) calc(var(--safe-bottom) + var(--space-1));
+  display: flex;
+  padding: var(--space-0) calc(var(--safe-right) + var(--space-1)) var(--nav-bottom)
+    calc(var(--safe-left) + var(--space-1));
   background: var(--bg); border-top: 1px solid var(--border);
 }
 .nav-btn {
@@ -387,9 +429,12 @@ div.list-row { cursor: default; }
 .sheet[hidden] { display: none; }
 .sheet-backdrop { position: absolute; inset: 0; border: 0; background: rgba(0, 0, 0, 0.55); cursor: pointer; }
 .sheet-panel {
-  position: relative; width: 100%; max-height: 86vh; overflow-y: auto;
-  padding: var(--space-2) var(--space-2) calc(var(--safe-bottom) + var(--space-2));
-  border-radius: 20px 20px 0 0; background: var(--card);
+  position: relative; width: 100%; overflow-y: auto; overscroll-behavior: contain;
+  /* Never under the status bar / Telegram header, never under the home indicator. */
+  max-height: calc(var(--viewport-h) - var(--safe-top) - var(--space-3));
+  padding: var(--space-2) calc(var(--safe-right) + var(--space-2)) max(var(--safe-bottom), var(--space-2))
+    calc(var(--safe-left) + var(--space-2));
+  border-radius: var(--radius) var(--radius) 0 0; background: var(--card);
   display: flex; flex-direction: column; gap: var(--space-1_5);
   animation: sheet-up var(--motion);
 }
@@ -400,13 +445,14 @@ div.list-row { cursor: default; }
 
 /* ---------- toast ---------- */
 .toast {
-  position: fixed; inset-inline: var(--space-2); bottom: calc(var(--nav-h) + var(--safe-bottom) + var(--space-2));
-  z-index: 60; padding: var(--space-1_5) var(--space-2); border-radius: var(--radius-sm);
+  position: fixed; left: calc(var(--safe-left) + var(--space-2)); right: calc(var(--safe-right) + var(--space-2));
+  bottom: calc(var(--nav-h) + var(--nav-bottom) + var(--space-2));
+  z-index: 60; padding: var(--space-1_5) var(--space-2); border-radius: var(--radius);
   background: var(--fg); color: var(--bg); font-size: 13px; text-align: center;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
   animation: fade-in var(--motion);
 }
-.toast.is-error { background: var(--danger); color: #ffffff; }
+.toast.is-error { background: var(--danger); color: var(--on-solid); }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
