@@ -15,6 +15,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.5.1": [
+        "مینی‌اپ: فیلدها دیگر با فوکوس زوم نمی‌شوند؛ فاصله‌ها بازتر و ردیف کپی یک‌خطی (#952)",
+        "مالی: نمودار روزانهٔ سفارش و کاربر جدید در تب گزارشات (#953)",
+        "ریستور: backup/dev-pre-v0.5.1 (commit eb290fba)",
+    ],
     "0.5.0": [
         "مینی‌اپ: بازطراحی و بارگذاری هر صفحه به‌صورت جداگانه (#940)",
         "مینی‌اپ: افزایش موجودی کیف پول (#941)",
