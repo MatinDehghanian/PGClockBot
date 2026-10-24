@@ -32,7 +32,7 @@ from app.db.models import (
     WalletTransaction,
 )
 from app.services.open_psp_checkouts import open_psp_checkouts, reusable_psp_payment
-from app.services.pasarguard import extract_sub_token, get_pg, user_subscription_url
+from app.services.pasarguard import extract_sub_token, get_pg, parse_group_ids, user_subscription_url
 from app.services.purchase_contact import CONTACT_REQUIRED_MESSAGE, purchase_contact_needed, require_purchase_contact
 from app.services.shop_membership import ensure_member
 from app.services.provision_gate import (
@@ -629,6 +629,10 @@ def calc_custom_plan_price(
     return max(0, gb_units * int(price_per_gb) + int(days) * int(price_per_day))
 
 
+CUSTOM_ORDER_NOTE = "custom"
+CUSTOM_PLAN_UNCONFIGURED = "پلن دلخواه فعلاً در دسترس نیست؛ لطفاً یکی از پلن‌های آماده را انتخاب کنید"
+
+
 async def create_custom_order(
     session: AsyncSession,
     *,
@@ -707,6 +711,9 @@ async def create_custom_order(
             raise ValueError(
                 "برای پلن دلخواه، تمپلیت یا گروه پاسارگارد اختصاصی فروشگاه را در تنظیمات مشخص کنید"
             )
+    elif not tpl_id and not parse_group_ids(group_ids):
+        # Delivery needs a template or groups; refuse before payment, not after it.
+        raise ValueError(CUSTOM_PLAN_UNCONFIGURED)
 
     plan = Plan(
         name="پلن دلخواه",
@@ -735,7 +742,7 @@ async def create_custom_order(
         amount=amount,
         discount_amount=0,
         status=OrderStatus.PENDING.value,
-        note="custom",
+        note=CUSTOM_ORDER_NOTE,
     )
     session.add(order)
     await session.flush()
@@ -1494,16 +1501,22 @@ async def cancel_stale_pending_for_settings(
         include_awaiting_approval=include_aa,
     )
 
-async def attach_receipt(session: AsyncSession, payment: Payment, file_id: str) -> Payment:
-    """Attach receipt only while payment is still pending (never overwrite approved/rejected)."""
+async def attach_receipt(
+    session: AsyncSession, payment: Payment, file_id: str, *, first_only: bool = False
+) -> Payment:
+    """Attach receipt only while payment is still pending (never overwrite approved/rejected).
+
+    ``first_only`` refuses a payment that already has a receipt, so two concurrent
+    uploads cannot both reach the reviewers.
+    """
     payment_id = int(payment.id)
+    conditions = [Payment.id == payment_id, Payment.status == PaymentStatus.PENDING.value]
+    if first_only:
+        conditions.append(Payment.receipt_file_id.is_(None))
     with session.no_autoflush:
         claim = await session.execute(
             update(Payment)
-            .where(
-                Payment.id == payment_id,
-                Payment.status == PaymentStatus.PENDING.value,
-            )
+            .where(*conditions)
             .values(receipt_file_id=file_id, status=PaymentStatus.PENDING.value)
             .execution_options(synchronize_session=False)
         )
@@ -2138,7 +2151,7 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
             except ProvisionError as e:
                 raise ValueError(e.message) from e
 
-        from app.services.pasarguard import build_user_create_payload, parse_group_ids
+        from app.services.pasarguard import build_user_create_payload, build_user_modify_payload, parse_group_ids
 
         group_ids = None
         if not plan.pg_template_id:
@@ -2187,6 +2200,13 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
             pg_uid = pg_user.get("id")
             if pg_uid:
                 created_pg_ids.append(int(pg_uid))
+            if plan.pg_template_id and _order_note(order) == CUSTOM_ORDER_NOTE and pg_uid:
+                # A template brings its own volume and expiry; the buyer paid for the chosen ones.
+                applied = await pg.modify_user_by_id(
+                    int(pg_uid), build_user_modify_payload(data_limit=data_limit, expire_ts=expire)
+                )
+                if isinstance(applied, dict):
+                    pg_user = {**pg_user, **applied}
             # When creating via the shop's own PG admin, ownership is already that admin.
             # set_owner is only needed for the legacy owner-token path (no stored password).
             # With get_pg_for_reseller we skip transfer.
@@ -2279,6 +2299,11 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
         raise
 
 
+MIN_TOPUP_AMOUNT = 1000
+# Soft ceiling to prevent absurd pending top-ups / receipt spam.
+MAX_TOPUP_AMOUNT = 500_000_000
+
+
 async def create_wallet_topup(
     session: AsyncSession,
     user_id: int,
@@ -2287,10 +2312,9 @@ async def create_wallet_topup(
     method: str = PaymentMethod.CARD.value,
     wallet_shop_id: int | None = None,
 ) -> Payment:
-    if amount < 1000:
+    if amount < MIN_TOPUP_AMOUNT:
         raise ValueError("حداقل مبلغ شارژ ۱۰۰۰ است")
-    # Soft ceiling to prevent absurd pending top-ups / receipt spam
-    if amount > 500_000_000:
+    if amount > MAX_TOPUP_AMOUNT:
         raise ValueError("مبلغ شارژ بیش از حد مجاز است")
     from app.services.users import current_shop_reseller_id
 

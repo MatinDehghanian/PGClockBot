@@ -5,14 +5,13 @@ from __future__ import annotations
 import logging
 from urllib.parse import quote, urlencode
 
-import httpx
 from fastapi import Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy import String, and_, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.db.models import BotUser, Order, Payment, Plan, ResellerProfile
+from app.db.models import BotUser, Order, Payment, Plan
 from app.services.authz import authz_from_staff, can_shop
 from app.services.dashboard_trend import sales_trend_or_empty
 from app.services.list_query import (
@@ -23,10 +22,10 @@ from app.services.list_query import (
     normalize_search_q,
     parse_list_page,
 )
+from app.services.receipt_files import fetch_telegram_file, payment_bot_token
 from app.services.shop_scope import is_platform_admin, payment_shop_id, shop_owner_id
 from app.services.stuck_order_resolution import describe_stuck_orders
 from app.services.users import SETTING_GROUPS, TAB_SETTING_GROUPS, get_all_settings
-from app.services.secret_box import reveal_bot_token
 
 logger = logging.getLogger(__name__)
 
@@ -70,98 +69,6 @@ def _payment_search_clause(pat: str, needle: str):
     if "خرید" in needle:
         parts.append(Payment.is_wallet_topup.is_(False))
     return or_(*parts)
-
-
-async def _payment_bot_token(
-    session: AsyncSession,
-    payment: Payment,
-    *,
-    order: Order | None,
-    payer_reseller_id: int | None,
-) -> str:
-    """Resolve Telegram bot token that owns this receipt file_id.
-
-    Never cross tenants: reseller receipts use only that shop's bot token;
-    platform receipts use only the platform bot token (no fallback either way).
-    """
-    from app.config import get_settings
-
-    if order is not None and order.reseller_id:
-        profile = (
-            await session.execute(
-                select(ResellerProfile).where(
-                    ResellerProfile.user_id == int(order.reseller_id)
-                )
-            )
-        ).scalar_one_or_none()
-        return ((reveal_bot_token(profile.bot_token) if profile else None) or "").strip()
-
-    if payer_reseller_id:
-        profile = (
-            await session.execute(
-                select(ResellerProfile).where(
-                    ResellerProfile.user_id == int(payer_reseller_id)
-                )
-            )
-        ).scalar_one_or_none()
-        return ((reveal_bot_token(profile.bot_token) if profile else None) or "").strip()
-
-    return (get_settings().bot_token or "").strip()
-
-
-def _safe_telegram_file_path(raw: str | None) -> str | None:
-    """Normalize Telegram getFile path; reject traversal / absolute / non-file paths."""
-    import re
-
-    path = (raw or "").strip().lstrip("/")
-    if not path:
-        return None
-    if ".." in path or "\\" in path:
-        return None
-    if path.startswith(("http:", "https:", "file:")):
-        return None
-    if any(ord(ch) < 32 for ch in path):
-        return None
-    if not re.match(r"^[A-Za-z0-9_./-]+$", path):
-        return None
-    return path
-
-
-async def _fetch_telegram_file(token: str, file_id: str) -> tuple[bytes, str] | None:
-    """Download a Telegram file. Returns image bytes only (receipt photos)."""
-    async with httpx.AsyncClient(timeout=20.0) as client:
-        meta = await client.get(
-            f"https://api.telegram.org/bot{token}/getFile",
-            params={"file_id": file_id},
-        )
-        data = meta.json() if meta.status_code == 200 else {}
-        if not data.get("ok"):
-            return None
-        path = _safe_telegram_file_path(((data.get("result") or {}).get("file_path") or ""))
-        if not path:
-            return None
-        file_resp = await client.get(
-            f"https://api.telegram.org/file/bot{token}/{path}"
-        )
-        if file_resp.status_code != 200 or not file_resp.content:
-            return None
-        # Cap size — receipts are photos, not arbitrary dumps.
-        if len(file_resp.content) > 15 * 1024 * 1024:
-            return None
-        ctype = (file_resp.headers.get("content-type") or "").split(";")[0].strip().lower()
-        if not ctype or ctype == "application/octet-stream":
-            lower = path.lower()
-            if lower.endswith(".png"):
-                ctype = "image/png"
-            elif lower.endswith(".webp"):
-                ctype = "image/webp"
-            elif lower.endswith(".gif"):
-                ctype = "image/gif"
-            else:
-                ctype = "image/jpeg"
-        if not ctype.startswith("image/"):
-            return None
-        return file_resp.content, ctype
 
 
 async def _authorize_receipt_access(
@@ -683,7 +590,7 @@ def register_finance_pages(app, *, render, require_staff, get_db):
             return Response(status_code=403, content="دسترسی ندارید")
         order, payer_reseller_id = scoped
 
-        token = await _payment_bot_token(
+        token = await payment_bot_token(
             session,
             payment,
             order=order,
@@ -692,7 +599,7 @@ def register_finance_pages(app, *, render, require_staff, get_db):
         if not token:
             return Response(status_code=503, content="توکن ربات تنظیم نشده")
         try:
-            fetched = await _fetch_telegram_file(token, file_id)
+            fetched = await fetch_telegram_file(token, file_id)
         except Exception:
             logger.exception("receipt getFile failed payment_id=%s", payment_id)
             fetched = None

@@ -81,6 +81,15 @@ tests/test_inbox_platform_scope_leak.py
 tests/test_live_pg_menus.py
 tests/test_miniapp_security_audit.py
 tests/test_miniapp_service_addons.py
+tests/test_miniapp_feeds.py
+tests/test_miniapp_frontend.py
+tests/test_miniapp_topup.py
+tests/test_miniapp_support.py
+tests/test_miniapp_codes.py
+tests/test_miniapp_guides.py
+tests/test_miniapp_loyalty.py
+tests/test_loyalty_redeem_race.py
+tests/test_miniapp_review.py
 tests/test_renewal_preview.py
 tests/test_on_hold_addon_quotas.py
 tests/test_on_hold_service_display.py
@@ -240,6 +249,7 @@ tests/test_bbc_https_requirement.py
 tests/test_volume_allocation.py
 tests/test_volume_allocation_external.py
 tests/test_volume_allocation_cascade.py
+tests/test_paid_order_undelivered.py
 tests/test_reseller_package.py
 tests/test_reseller_subscription_pages.py
 tests/test_reseller_package_bot.py

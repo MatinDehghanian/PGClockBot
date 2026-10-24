@@ -13,6 +13,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from sqlalchemy import Select, func, select, update
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -1089,6 +1090,32 @@ async def _user_redemption_count(session: AsyncSession, user_id: int, reward_id:
     )
 
 
+async def _replayed_redemption(session: AsyncSession, key: str) -> RewardRedemption:
+    existing = await session.scalar(select(RewardRedemption).where(RewardRedemption.idempotency_key == key))
+    if existing is None:
+        raise ValueError("این درخواست در حال انجام است؛ چند لحظه بعد دوباره بررسی کنید")
+    return existing
+
+
+async def next_redemption_key(
+    session: AsyncSession, user_id: int, reward_id: int, service_id: int | None
+) -> str:
+    """Idempotency key for the customer's next redemption of one reward.
+
+    Derived from the redemptions already recorded (not from the request), so a double
+    tap or a retried request shares the key and the unique index keeps it to one spend.
+    """
+    used = int(
+        await session.scalar(
+            select(func.count()).select_from(RewardRedemption).where(
+                RewardRedemption.user_id == int(user_id), RewardRedemption.reward_id == int(reward_id),
+            )
+        )
+        or 0
+    )
+    return f"tg:redeem:{int(user_id)}:{int(reward_id)}:{int(service_id or 0)}:{used}"
+
+
 async def redeem_reward(
     session: AsyncSession,
     user: BotUser,
@@ -1177,6 +1204,10 @@ async def redeem_reward(
         commit=False,
         shop_id=user_rid,
     )
+    if sa_inspect(reward).expired:
+        # debit_points lost the unique-key race and rolled back: a concurrent request with this
+        # key has already debited and recorded the redemption, so the benefit is not applied again.
+        return await _replayed_redemption(session, key)
 
     try:
         if rtype in ("traffic_gb", "time_days"):
