@@ -322,6 +322,17 @@ div.list-row { cursor: default; }
 .file-field-label { font-weight: 700; color: var(--link); overflow-wrap: anywhere; }
 .file-field:focus-within { border-color: var(--accent); border-style: solid; }
 
+/* ---------- support ---------- */
+.ticket-form { display: flex; flex-direction: column; gap: var(--space-1_5); }
+.thread { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-1); }
+.bubble {
+  max-width: 88%; padding: var(--space-1) var(--space-1_5); border-radius: var(--radius);
+  background: var(--card); border: 1px solid var(--border); overflow-wrap: anywhere;
+}
+.bubble.is-mine { align-self: flex-start; }
+.bubble.is-staff { align-self: flex-end; background: var(--card-2); }
+.bubble-who { display: block; margin-bottom: 2px; }
+
 /* ---------- states ---------- */
 .loading { display: flex; flex-direction: column; gap: var(--space-1_5); }
 .skeleton {

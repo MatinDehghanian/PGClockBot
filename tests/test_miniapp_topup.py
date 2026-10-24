@@ -149,6 +149,11 @@ class TopupOptionsTests(MiniAppTopupTestCase):
         self.assertEqual(body["presets"], [100000, 250000])
         self.assertTrue(body["bot_only"])
 
+    async def test_admin_labels_show_as_plain_text(self) -> None:
+        self.settings["btn_pay_card"] = "💳 <b>کارت</b> &amp; بانک"
+        body = (await self.client.get("/api/mini/topup")).json()
+        self.assertEqual(body["methods"][0]["label"], "💳 کارت & بانک")
+
     async def test_random_card_mode_hides_the_card_choice(self) -> None:
         self.settings["payment_cards_random"] = "1"
         body = (await self.client.get("/api/mini/topup")).json()

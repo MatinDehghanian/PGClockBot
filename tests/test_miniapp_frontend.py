@@ -25,6 +25,9 @@ class MiniAppFrontendTests(unittest.TestCase):
     def test_wallet_top_up_behavior(self) -> None:
         self.run_node("miniapp_topup.test.cjs")
 
+    def test_support_behavior(self) -> None:
+        self.run_node("miniapp_support.test.cjs")
+
 
 if __name__ == "__main__":
     unittest.main()

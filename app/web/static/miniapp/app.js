@@ -19,6 +19,8 @@
     me: null,
     view: "home",
     serviceId: null,
+    ticketId: null,
+    tickets: new Map(),
     then: null,
     resources: {},
     services: null,
@@ -60,8 +62,20 @@
     return nav.length ? nav[0].id : "home";
   }
 
+  // Screens below a tab: where Back goes and which tab stays highlighted.
+  const SUB_VIEWS = new Map([
+    ["service", { parent: "services", tab: "services" }],
+    ["support", { parent: "account", tab: "account" }],
+    ["ticket", { parent: "support", tab: "account" }],
+  ]);
+
+  function navTab(view) {
+    const sub = SUB_VIEWS.get(view);
+    return sub ? sub.tab : view;
+  }
+
   function viewAllowed(view) {
-    if (view === "service") return commerce();
+    if (SUB_VIEWS.has(view)) return commerce();
     return ((state.me && state.me.nav) || []).some((n) => n.id === view);
   }
 
@@ -90,6 +104,7 @@
     activity: () => core.api("/api/mini/activity?limit=" + state.activityLimit),
     ops: () => core.api("/api/mini/ops"),
     topup: () => core.api("/api/mini/topup"),
+    support: () => core.api("/api/mini/support"),
   };
 
   const inflight = new Map();
@@ -147,16 +162,17 @@
   function applyMe(me) {
     state.me = me;
     core.setCurrency(me.currency);
-    els.nav.innerHTML = R.navHtml(me.nav, state.view === "service" ? "services" : state.view);
+    els.nav.innerHTML = R.navHtml(me.nav, navTab(state.view));
   }
 
   /* ---------- routing and back button ---------- */
 
   function hashRoute() {
     const raw = String(root.location.hash || "").replace(/^#/, "");
-    const match = /^service\/(\d{1,10})$/.exec(raw);
-    if (match) return { view: "service", serviceId: Number(match[1]) };
-    return { view: LEGACY_VIEWS.get(raw) || raw || "home", serviceId: null };
+    const match = /^(service|ticket)\/(\d{1,10})$/.exec(raw);
+    if (match && match[1] === "service") return { view: "service", serviceId: Number(match[2]) };
+    if (match) return { view: "ticket", ticketId: Number(match[2]) };
+    return { view: LEGACY_VIEWS.get(raw) || raw || "home" };
   }
 
   function go(view, opts) {
@@ -167,14 +183,18 @@
     state.serviceId = next === "service" ? Number(options.serviceId) || null : null;
     // The detail screen always shows live usage, so each visit reads it again.
     if (state.serviceId) state.details.delete(state.serviceId);
+    state.ticketId = next === "ticket" ? Number(options.ticketId) || null : null;
+    if (state.ticketId) state.tickets.delete(state.ticketId);
     state.then = options.then || null;
     if (next === "service" && !state.serviceId) state.view = "services";
-    const hash = state.view === "service" ? "service/" + state.serviceId : state.view;
+    if (next === "ticket" && !state.ticketId) state.view = "support";
+    const hash = state.view === "service" ? "service/" + state.serviceId
+      : state.view === "ticket" ? "ticket/" + state.ticketId : state.view;
     if (String(root.location.hash || "").replace(/^#/, "") !== hash) {
       root.history.replaceState(null, "", "#" + hash);
     }
     state.viewSeq += 1;
-    els.nav.innerHTML = R.navHtml(state.me.nav, state.view === "service" ? "services" : state.view);
+    els.nav.innerHTML = R.navHtml(state.me.nav, navTab(state.view));
     renderView();
     root.scrollTo(0, 0);
     syncTelegramBackButton();
@@ -207,8 +227,9 @@
 
   function onTelegramBack() {
     if (closeOpenOverlays()) return;
-    if (state.view === "service") {
-      go("services");
+    const sub = SUB_VIEWS.get(state.view);
+    if (sub) {
+      go(sub.parent);
       return;
     }
     if (state.view !== homeViewId()) go(homeViewId());
@@ -482,8 +503,38 @@
     return viewHead(user.name || "حساب من", "حساب")
       + R.walletCardHtml(customer())
       + (topups.status === "ready" ? R.recentTopupsHtml(topups.data.recent) : "")
+      + `<section class="card list-card" aria-label="پشتیبانی"><button type="button" class="list-row" data-action="goto" data-view="support">
+          ${R.icon("chat")}<span class="list-row-label">پشتیبانی و تیکت‌ها</span>${R.icon("chevron", 16)}</button></section>`
       + `<section class="card" aria-label="تراکنش‌ها"><h2 class="card-title">تراکنش‌ها</h2>${rows}
           ${canMore ? '<button type="button" class="btn ghost block" data-action="activity-more">تراکنش‌های بیشتر</button>' : ""}</section>`;
+  }
+
+  function supportViewHtml() {
+    const r = resource("support");
+    return viewHead("پشتیبانی") + (settled(r, 3, "retry") || R.supportHtml(r.data));
+  }
+
+  function ticketViewHtml() {
+    const id = state.ticketId;
+    const row = state.tickets.get(id);
+    if (!row) {
+      loadTicket(id);
+      return R.loadingHtml(3);
+    }
+    if (row.status === "loading") return R.loadingHtml(3);
+    if (row.status === "error") return viewHead("تیکت") + R.errorHtml(row.error, "retry");
+    return R.ticketThreadHtml(row.data);
+  }
+
+  async function loadTicket(id) {
+    state.tickets.set(id, { status: "loading" });
+    try {
+      const data = await core.api("/api/mini/support/tickets/" + id);
+      state.tickets.set(id, { status: "ready", data: data.ticket });
+    } catch (err) {
+      state.tickets.set(id, { status: "error", error: err.message });
+    }
+    if (state.view === "ticket" && state.ticketId === id) renderView();
   }
 
   const VIEW_RENDERERS = {
@@ -493,6 +544,8 @@
     shop: shopViewHtml,
     account: accountViewHtml,
     ops: opsViewHtml,
+    support: supportViewHtml,
+    ticket: ticketViewHtml,
   };
 
   function renderView() {
@@ -826,6 +879,62 @@
     else core.toast("کپی نشد", "err");
   }
 
+  /* ---------- support ---------- */
+
+  function textField(form, name) {
+    const field = form.elements[name];
+    return String((field && field.value) || "").trim();
+  }
+
+  async function submitNewTicket(form) {
+    const subject = textField(form, "subject");
+    const body = textField(form, "body");
+    if (!subject || !body) {
+      core.toast("موضوع و متن پیام را بنویسید", "err");
+      return;
+    }
+    await guarded("ticket-new", form.querySelector("button[type=submit]"), async () => {
+      try {
+        const res = await core.api("/api/mini/support/tickets", { method: "POST", body: { subject, body } });
+        core.toast(res.message || "تیکت ثبت شد");
+        invalidate("support");
+        go("ticket", { ticketId: res.ticket_id });
+      } catch (err) {
+        core.toast(err.status === 0 ? "نتیجه مشخص نشد؛ پیش از ارسال دوباره، فهرست تیکت‌ها را ببینید." : err.message, "err");
+        if (err.status === 0) {
+          closeSheet();
+          invalidate("support");
+          renderView();
+        }
+      }
+    });
+  }
+
+  async function submitTicketReply(form) {
+    const id = intAttr(form, "data-id");
+    const body = textField(form, "body");
+    if (!id || !body) {
+      core.toast("متن پیام را بنویسید", "err");
+      return;
+    }
+    await guarded("ticket-reply:" + id, form.querySelector("button[type=submit]"), async () => {
+      try {
+        await core.api(`/api/mini/support/tickets/${id}/messages`, { method: "POST", body: { body } });
+        invalidate("support");
+        await loadTicket(id);
+      } catch (err) {
+        core.toast(err.status === 0 ? "نتیجه مشخص نشد؛ گفتگو دوباره خوانده شد." : err.message, "err");
+        if (err.status === 0) await loadTicket(id);
+      }
+    });
+  }
+
+  function openContact(index) {
+    const r = state.resources.support;
+    const contact = r && r.status === "ready" ? (r.data.contacts || [])[index] : null;
+    if (!contact || !core.openTelegramLink(contact.url)) core.toast("لینک پشتیبان معتبر نیست", "err");
+  }
+
   /* ---------- purchases ---------- */
 
   async function buyPlan(planId, trigger) {
@@ -880,6 +989,8 @@
       state.services = null;
     } else if (state.view === "service") {
       state.details.delete(state.serviceId);
+    } else if (state.view === "ticket") {
+      state.tickets.delete(state.ticketId);
     } else {
       for (const name of Object.keys(state.resources)) {
         if (state.resources[name].status === "error") invalidate(name);
@@ -916,6 +1027,10 @@
     "open-topup-link": () => openTopupLink(),
     "check-topup": (el) => checkTopup(intAttr(el, "data-id"), el),
     "copy-value": (el) => copyValue(el),
+    "ticket-new": () => openSheet("ticket-new", "تیکت جدید", R.ticketNewFormHtml()),
+    "open-ticket": (el) => go("ticket", { ticketId: intAttr(el, "data-id") }),
+    "refresh-ticket": (el) => loadTicket(intAttr(el, "data-id")),
+    "open-contact": (el) => openContact(Number(el.getAttribute("data-index"))),
     retry: () => retryCurrentView(),
   };
 
@@ -948,7 +1063,8 @@
     if (host) host.innerHTML = R.checkoutHtml(selectedPlan(), customer().wallet);
   }
 
-  const FORMS = { automation: saveAutomation, cancellation: submitCancellation, topup: startTopup, receipt: uploadReceipt };
+  const FORMS = { automation: saveAutomation, cancellation: submitCancellation, topup: startTopup, receipt: uploadReceipt,
+    "ticket-new": submitNewTicket, "ticket-reply": submitTicketReply };
 
   function formHandler(form) {
     const kind = form.getAttribute && form.getAttribute("data-form");
@@ -990,7 +1106,8 @@
     root.addEventListener("hashchange", () => {
       if (!state.me) return;
       const route = hashRoute();
-      if (route.view !== state.view || route.serviceId !== state.serviceId) go(route.view, route);
+      if (route.view !== state.view || (route.serviceId || null) !== state.serviceId
+        || (route.ticketId || null) !== state.ticketId) go(route.view, route);
     });
   }
 

@@ -42,7 +42,7 @@ from app.services.payment_settlement import (
     public_checkout_button_url,
 )
 from app.services.receipts import submit_receipt
-from app.services.rich_text import rich_plain_text
+from app.services.rich_text import visible_text
 from app.services.users import on
 
 logger = logging.getLogger(__name__)
@@ -154,7 +154,7 @@ def topup_options(ui: dict) -> dict[str, Any]:
         label_key, fallback = METHOD_LABELS[key]
         methods.append({
             "key": key,
-            "label": rich_plain_text(ui.get(label_key)).strip() or fallback,
+            "label": visible_text(ui.get(label_key)) or fallback,
             "needs_receipt": key in RECEIPT_METHODS,
             "choices": _method_choices(key, ui),
         })
@@ -311,7 +311,7 @@ async def _prepare_payment(
         start.card_holder = str(destination.get("holder") or "") or None
         if on(ui.get("pay_card_auto_enabled")):
             await create_card_auto_awaiting(session, payment)
-            start.note = rich_plain_text(ui.get("card_auto_hint_text")).strip() or None
+            start.note = visible_text(ui.get("card_auto_hint_text")) or None
     elif method == "gateway":
         start.gateway_name = str(destination.get("name") or "درگاه")
         start.gateway_link = _gateway_link(destination, payment)
