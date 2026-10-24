@@ -218,7 +218,7 @@
       ${plan.is_trial ? "" : `<form class="code-form" data-form="discount">
         <label class="form-field"><span class="muted sm">کد تخفیف (اختیاری)</span>
           <span class="code-line"><input type="text" name="code" maxlength="64" autocomplete="off" dir="ltr" autocapitalize="characters">
-          <button type="submit" class="btn ghost sm">اعمال</button></span></label>
+          <button type="submit" class="btn ghost">اعمال</button></span></label>
       </form>`}
       ${enough ? "" : LOW_BALANCE}
       <button type="button" class="btn block" data-action="buy" data-id="${Number(plan.id) || 0}"${enough ? "" : " disabled"}>${plan.is_trial ? "دریافت سرویس تست" : "پرداخت از کیف پول"}</button>
