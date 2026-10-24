@@ -16,25 +16,27 @@ from __future__ import annotations
 import asyncio
 import base64
 import logging
-from datetime import datetime, timezone
+from datetime import timezone
 from typing import Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.catalog_pricing import annotate_prices, displayed_quote, quote_product, sale_price
+from app.services.catalog_pricing import displayed_quote, quote_product, sale_price
 from app.config import get_settings
-from app.db.models import BotUser, Plan, ResellerProfile, UserService
+from app.db.models import BotUser, Order, ResellerProfile, UserService
 from app.services.db_safe import rollback_quiet
-from app.services.service_scope import customer_may_use_service, list_customer_services
+from app.services.service_scope import customer_may_use_service
 from app.services.formatting import (
     expire_remaining_days,
     format_bytes_ratio,
     format_expire_short,
     hold_duration_from_info,
     is_on_hold_status,
+    parse_expire,
     status_label_plain,
     time_remaining_label,
 )
@@ -42,9 +44,9 @@ from app.services.miniapp_auth import (
     assert_mini_force_join,
     assert_miniapp_feature_enabled,
     load_mini_user,
-    load_reseller_profile,
     resolve_mini_persona,
 )
+from app.services.miniapp_home import customer_home_summary
 from app.services.pasarguard import get_pg
 from app.services.service_live_info import fetch_subscription_info, service_info_error, validate_service_info
 from app.services.users import get_all_settings, on
@@ -69,18 +71,18 @@ def _nav_for(persona: str) -> list[dict[str, str]]:
     """Nav is persona-scoped — admin never sees shop/wallet/services commerce tabs."""
     if persona == "admin":
         return [
-            {"id": "home", "label": "خانه", "icon": "home"},
-            {"id": "ops", "label": "عملیات", "icon": "ops"},
+            {"id": "home", "label": "داشبورد", "icon": "home"},
+            {"id": "ops", "label": "میانبرها", "icon": "ops"},
         ]
     base = [
         {"id": "home", "label": "خانه", "icon": "home"},
-        {"id": "services", "label": "سرویس", "icon": "svc"},
+        {"id": "services", "label": "سرویس‌ها", "icon": "svc"},
         {"id": "shop", "label": "خرید", "icon": "shop"},
-        {"id": "wallet", "label": "کیف پول", "icon": "wallet"},
     ]
+    account = {"id": "account", "label": "حساب", "icon": "account"}
     if persona == "reseller":
-        return base + [{"id": "ops", "label": "پنل", "icon": "ops"}]
-    return base
+        return base + [{"id": "ops", "label": "فروشگاه", "icon": "store"}, account]
+    return base + [account]
 
 
 def _require_commerce(user: BotUser) -> str:
@@ -184,6 +186,12 @@ def _safe_client_message(exc: BaseException, *, fallback: str) -> str:
     return msg
 
 
+def _iso_time(value: object) -> str | None:
+    """A panel time as ISO 8601 UTC; the Mini App formats it in the reader's calendar."""
+    moment = parse_expire(value)
+    return moment.astimezone(timezone.utc).isoformat() if moment else None
+
+
 def _serialize_service(svc: UserService, info: dict | None = None) -> dict:
     info = validate_service_info(info)
     # Only our sentinel may appear as ``error`` — never raw upstream strings.
@@ -226,14 +234,14 @@ def _serialize_service(svc: UserService, info: dict | None = None) -> dict:
         "expire": format_expire_short(expire, status=status_raw, expire_duration=hold_dur)
         if time_known
         else "—",
+        "expire_at": _iso_time(expire) if time_known else None,
         "expire_days": days,
         "expire_days_label": time_remaining_label(days_left=days, status=status_raw)
         if time_known
         else "—",
         "pending_start": pending,
-        "online_at": format_expire_short(info.get("online_at"))
-        if info.get("online_at") and not upstream_err
-        else None,
+        # A past moment, not an expiry: sent raw so it is never labelled "expired".
+        "online_at": _iso_time(info.get("online_at")) if not upstream_err else None,
         "error": info.get("error"),
         "error_code": info.get("error_code"),
         "error_message": info.get("error_message"),
@@ -248,7 +256,7 @@ def _unavailable_service_row(svc: UserService) -> dict:
         "is_cancelled": bool(getattr(svc, "is_cancelled", False)),
         "cancellation_pending": bool(getattr(svc, "cancellation_pending", False)),
         "subscription_url": "", "status": "—", "status_fa": "—",
-        "traffic": "—", "traffic_pct": None, "expire": "—",
+        "traffic": "—", "traffic_pct": None, "expire": "—", "expire_at": None,
         "expire_days": None, "expire_days_label": "—", "pending_start": False,
         "online_at": None, "info_fetched_at": None,
         **service_info_error("invalid_response"),
@@ -281,81 +289,29 @@ async def _enrich_services(services: list[UserService], *, session=None) -> list
     return out
 
 
-async def _user_shop_payload(session: AsyncSession, user: BotUser) -> dict:
-    """Customer commerce payload — caller's services/wallet/activity only.
+async def _customer_summary(session: AsyncSession, user: BotUser) -> dict:
+    """Light launch payload: wallet, enabled features and the cached home summary.
 
-    Plans are **platform catalog only** (owner_reseller_id IS NULL). Mini App never
-    mounts shop-bot context, so foreign reseller catalogs must not appear here.
+    Plans, activity and live service usage load on their own screens.
     """
-    from app.services.wallet import list_activity
-
-    services = await list_customer_services(session, user.id, None)
-    plans_q = (
-        select(Plan)
-        .where(
-            Plan.is_active.is_(True),
-            Plan.is_trial.is_(False),
-            Plan.owner_reseller_id.is_(None),
-        )
-        .order_by(Plan.sort_order, Plan.id)
-    )
-    plans = list((await session.execute(plans_q)).scalars().all())
-    await annotate_prices(session, plans, shop_id=None)
-    trial = (
-        await session.execute(
-            select(Plan)
-            .where(
-                Plan.is_active.is_(True),
-                Plan.is_trial.is_(True),
-                Plan.owner_reseller_id.is_(None),
-            )
-            .limit(1)
-        )
-    ).scalar_one_or_none()
-
     ui = await get_all_settings(session)
-    wallet_pay = on(ui.get("pay_wallet_enabled"))
     try:
-        enriched = await _enrich_services(services, session=session)
-    except Exception:
-        log.warning("miniapp enrich failed user=%s", user.id)
-        # Still list local rows — never hide owned services because PG enrich failed.
-        enriched = [_unavailable_service_row(s) for s in services]
-    for row, svc in zip(enriched, services):
-        row["addons_allowed"] = _addons_allowed(user, svc)
-    try:
-        activity = await list_activity(session, user.id, limit=25)
-    except Exception:
+        home = (await customer_home_summary(session, int(user.id))).payload()
+    except SQLAlchemyError:
         await rollback_quiet(session)
-        log.exception("miniapp activity failed user=%s", user.id)
-        activity = []
+        log.warning("miniapp home summary failed user=%s", user.id, exc_info=True)
+        home = _empty_home()
     return {
         "wallet": int(user.wallet_balance or 0),
-        "wallet_pay_enabled": wallet_pay,
+        "wallet_pay_enabled": on(ui.get("pay_wallet_enabled")),
+        "qr_enabled": on(ui.get("qr_enabled", "1")),
         "commerce_allowed": True,
-        "services": enriched,
-        "plans": [
-            {
-                "id": p.id,
-                "name": p.name,
-                **displayed_quote(p).payload(),
-                "days": p.duration_days,
-                "gb": p.data_limit_gb,
-                "is_trial": bool(p.is_trial),
-            }
-            for p in (([trial] if trial else []) + plans)
-        ],
-        "activity": [
-            {
-                "amount": int(a.amount),
-                "reason": a.reason or "",
-                "created_at": a.created_at.astimezone(timezone.utc).isoformat()
-                if isinstance(a.created_at, datetime)
-                else None,
-            }
-            for a in activity
-        ],
+        "home": home,
     }
+
+
+def _empty_home() -> dict:
+    return {"service_count": 0, "attention": [], "recent": []}
 
 
 def _mini_panel_base() -> str:
@@ -376,10 +332,9 @@ def _empty_customer() -> dict:
     return {
         "wallet": 0,
         "wallet_pay_enabled": False,
+        "qr_enabled": False,
         "commerce_allowed": False,
-        "services": [],
-        "plans": [],
-        "activity": [],
+        "home": _empty_home(),
     }
 
 
@@ -474,6 +429,21 @@ async def _reseller_ops_payload(
     }
 
 
+async def _renewal_already_ordered(session: AsyncSession, user: BotUser, preview: object) -> bool:
+    """True when this preview's request key already created the caller's renewal order.
+
+    A retry after a lost response reuses that order (paid or not), so the balance the
+    first try spent must not block it; ``pay_with_wallet`` still checks an unpaid one.
+    """
+    key = preview.get("request_key") if isinstance(preview, dict) else None
+    if not isinstance(key, str) or not key:
+        return False
+    order_id = await session.scalar(
+        select(Order.id).where(Order.renewal_request_key == key, Order.user_id == int(user.id)).limit(1)
+    )
+    return order_id is not None
+
+
 def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
     @app.get("/api/mini/service/{service_id}/cancellation")
     async def mini_cancellation(request: Request, service_id: int, session: AsyncSession = Depends(get_db)):
@@ -532,18 +502,10 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
             "commerce_allowed": commerce_allowed(persona),
         }
         if commerce_allowed(persona):
-            payload["customer"] = await _user_shop_payload(session, user)
+            payload["customer"] = await _customer_summary(session, user)
         else:
             # Owner/admin: ops only — no commerce surfaces / no foreign service lists
             payload["customer"] = _empty_customer()
-        if persona == "admin":
-            payload["ops"] = await _admin_ops_payload(session)
-        elif persona == "reseller":
-            profile = await load_reseller_profile(session, user)
-            payload["ops"] = await _reseller_ops_payload(session, profile, user=user)
-        ops_base = ((payload.get("ops") or {}).get("panel_base") or "").rstrip("/")
-        if ops_base:
-            payload["panel_base"] = ops_base
         return _no_store(payload)
 
     @app.get("/api/mini/service/{service_id}")
@@ -559,7 +521,9 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
             sync_service_quota_cache(svc, info=info)
             await session.commit()
         # Never return raw PG payload — allowlisted summary only
-        return _no_store({"service": _serialize_service(svc, info)})
+        row = _serialize_service(svc, info)
+        row["addons_allowed"] = _addons_allowed(user, svc)
+        return _no_store({"service": row})
 
     @app.get("/api/mini/service/{service_id}/qr")
     async def mini_service_qr(
@@ -840,7 +804,8 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
         ):
             raise HTTPException(400, "پلن تمدید نامعتبر است")
         await session.refresh(user)
-        if sale_price(plan) > int(user.wallet_balance or 0):
+        retrying = await _renewal_already_ordered(session, user, body.get("preview"))
+        if not retrying and sale_price(plan) > int(user.wallet_balance or 0):
             raise HTTPException(400, "موجودی کیف پول کافی نیست")
         try:
             from app.services.service_renewals import renewal_terms

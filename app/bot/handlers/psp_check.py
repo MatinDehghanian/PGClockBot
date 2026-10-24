@@ -8,7 +8,6 @@ instead of waiting for the background poller.
 from __future__ import annotations
 
 import logging
-import time
 
 from aiogram import F, Router
 from aiogram.exceptions import TelegramBadRequest
@@ -16,7 +15,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser
-from app.services.payment_settlement import PspCheckOutcome, check_psp_payment
+from app.services.payment_settlement import PspCheckOutcome, check_psp_payment, claim_psp_check_slot
 from app.services.redact import user_safe_error
 from app.services.users import current_shop_reseller_id
 
@@ -26,10 +25,6 @@ router = Router(name="psp_check")
 
 CHECK_PREFIX = "pspchk:"
 CHECK_BUTTON_TEXT = "🔄 بررسی پرداخت"
-# Each tap may call the gateway; one check per settlement per window is enough.
-CHECK_THROTTLE_SECONDS = 10.0
-_RECENT_LIMIT = 1000
-_recent_checks: dict[int, float] = {}
 
 OUTCOME_TEXT = {
     PspCheckOutcome.SETTLED: "✅ پرداخت شما تأیید شد. اگر سرویس یا شارژ را هنوز در چت نمی‌بینید، چند لحظه صبر کنید.",
@@ -49,21 +44,10 @@ def psp_check_button(settlement_id: int) -> InlineKeyboardButton:
     )
 
 
-def _throttled(settlement_id: int) -> bool:
-    now = time.monotonic()
-    last = _recent_checks.get(settlement_id)
-    if last is not None and now - last < CHECK_THROTTLE_SECONDS:
-        return True
-    if len(_recent_checks) >= _RECENT_LIMIT:
-        _recent_checks.pop(next(iter(_recent_checks)))
-    _recent_checks[settlement_id] = now
-    return False
-
-
 @router.callback_query(F.data.regexp(rf"^{CHECK_PREFIX}\d+$"))
 async def psp_check_cb(callback: CallbackQuery, session: AsyncSession, db_user: BotUser) -> None:
     settlement_id = int((callback.data or "").removeprefix(CHECK_PREFIX))
-    if _throttled(settlement_id):
+    if not claim_psp_check_slot(settlement_id):
         await callback.answer("چند ثانیه بعد دوباره بزنید")
         return
     # Answer before the gateway call so Telegram does not expire the tap.

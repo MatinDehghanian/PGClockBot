@@ -16,6 +16,7 @@ import hmac
 import json
 import logging
 import secrets
+import time
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any
@@ -823,6 +824,38 @@ async def _revert_claim_to_awaiting(
     await session.refresh(settlement)
 
 
+async def _approved_but_undelivered(session: AsyncSession, payment: Payment) -> bool:
+    """True when approve_payment committed the money but its delivery then failed."""
+    await session.refresh(payment)
+    return payment.status == PaymentStatus.APPROVED.value
+
+
+async def _report_undelivered(session: AsyncSession, payment: Payment, error: str) -> None:
+    """Queue the order under failed deliveries and alert its shop's staff, who resume it.
+
+    Delivery is not retried automatically: a panel that failed mid-create may already
+    hold the user, and only a person can tell before a second user is created.
+    """
+    # Local imports: notifications and the bot pull in handler modules that import this one.
+    from app.bot import create_bot
+    from app.services.notifications import notify_approved_delivery_stuck
+    from app.services.ux20 import note_delivery_send_failure
+
+    order = await session.get(Order, int(payment.order_id)) if payment.order_id else None
+    await note_delivery_send_failure(session, order=order, payment=payment, error=error)
+    payer = await session.get(BotUser, int(payment.user_id)) if payment.user_id else None
+    bot = create_bot()
+    try:
+        await notify_approved_delivery_stuck(
+            bot, session, payment, getattr(payer, "telegram_id", None), error=error
+        )
+    except Exception:
+        # The failed-delivery queue still lists the order for staff.
+        logger.warning("undelivered payment notice failed payment=%s", payment.id, exc_info=True)
+    finally:
+        await bot.session.close()
+
+
 async def settle_and_approve(
     session: AsyncSession,
     settlement: PaymentSettlement,
@@ -889,16 +922,21 @@ async def settle_and_approve(
 
     try:
         await approve_payment(session, payment, reviewer_tg=reviewer_tg)
-    except ValueError as exc:
-        if "قبلاً تأیید شده" in str(exc):
+    except Exception as exc:
+        if isinstance(exc, ValueError) and "قبلاً تأیید شده" in str(exc):
             await _finalize_settled(session, settlement)
             await session.commit()
             await session.refresh(payment)
             return payment
-        await _revert_claim_to_awaiting(session, settlement, error=str(exc))
-        await session.commit()
-        raise
-    except Exception as exc:
+        await rollback_quiet(session)
+        await session.refresh(settlement)
+        if await _approved_but_undelivered(session, payment):
+            # The money is confirmed: settle it so the gateway is not asked again, and
+            # hand the unfinished delivery to staff instead of reporting a payment failure.
+            await _finalize_settled(session, settlement)
+            await session.commit()
+            await _report_undelivered(session, payment, str(exc))
+            return payment
         await _revert_claim_to_awaiting(session, settlement, error=str(exc))
         await session.commit()
         raise
@@ -1497,6 +1535,24 @@ async def _owned_psp_settlement(
     ):
         raise ValueError("این پرداخت پیدا نشد")
     return settlement
+
+
+# Each «بررسی پرداخت» tap may call the gateway; one check per settlement per window is enough.
+PSP_CHECK_THROTTLE_SECONDS = 10.0
+_PSP_CHECK_RECENT_LIMIT = 1000
+_recent_psp_checks: dict[int, float] = {}
+
+
+def claim_psp_check_slot(settlement_id: int) -> bool:
+    """False when this settlement was checked within the throttle window (bot and Mini App share it)."""
+    now = time.monotonic()
+    last = _recent_psp_checks.get(int(settlement_id))
+    if last is not None and now - last < PSP_CHECK_THROTTLE_SECONDS:
+        return False
+    if len(_recent_psp_checks) >= _PSP_CHECK_RECENT_LIMIT:
+        _recent_psp_checks.pop(next(iter(_recent_psp_checks)))
+    _recent_psp_checks[int(settlement_id)] = now
+    return True
 
 
 async def check_psp_payment(

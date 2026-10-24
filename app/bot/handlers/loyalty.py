@@ -30,6 +30,7 @@ from app.services.loyalty import (
     list_available_discounts,
     list_points_history,
     loyalty_enabled,
+    next_redemption_key,
     points_balance,
     month_earned_points,
     overview_metrics,
@@ -1180,26 +1181,7 @@ async def _do_redeem(
     reward_id: int,
     service_id: int | None,
 ) -> None:
-    # Stable slot key (not callback.id): double-tap shares the same next slot
-    # so uniqueness + IntegrityError replay prevent double spend.
-    from sqlalchemy import func, select
-
-    from app.db.models import RewardRedemption
-
-    used = int(
-        (
-            await session.execute(
-                select(func.count())
-                .select_from(RewardRedemption)
-                .where(
-                    RewardRedemption.user_id == int(db_user.id),
-                    RewardRedemption.reward_id == int(reward_id),
-                )
-            )
-        ).scalar_one()
-        or 0
-    )
-    key = f"tg:redeem:{db_user.id}:{reward_id}:{service_id or 0}:{used}"
+    key = await next_redemption_key(session, int(db_user.id), reward_id, service_id)
     try:
         red = await redeem_reward(
             session,
