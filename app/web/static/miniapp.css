@@ -37,16 +37,17 @@
   --space-2: 16px;
   --space-3: 24px;
   --font: "Vazirmatn", system-ui, sans-serif;
-  /* Safe areas: the larger of the browser's inset and Telegram's (device inset plus,
-     in fullscreen, Telegram's own header and close controls). */
-  --safe-top: max(env(safe-area-inset-top, 0px),
-    calc(var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px)));
+  /* Safe areas: the larger of the browser's inset and Telegram's. At the top Telegram's
+     insets count only in fullscreen; otherwise its header already sits above the page. */
+  --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: max(env(safe-area-inset-bottom, 0px),
     calc(var(--tg-safe-area-inset-bottom, 0px) + var(--tg-content-safe-area-inset-bottom, 0px)));
   --safe-left: max(env(safe-area-inset-left, 0px), var(--tg-safe-area-inset-left, 0px));
   --safe-right: max(env(safe-area-inset-right, 0px), var(--tg-safe-area-inset-right, 0px));
   --viewport-h: var(--tg-viewport-stable-height, 100dvh);
-  --nav-h: 64px;
+  /* Tab bar height above its bottom padding: border + top padding + 52px buttons. */
+  --nav-h: 57px;
+  --nav-bottom: max(var(--safe-bottom), var(--space-1));
   --motion: 200ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -78,9 +79,14 @@ html, body {
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
 }
+:root[data-fullscreen="1"] {
+  --safe-top: max(env(safe-area-inset-top, 0px),
+    calc(var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px)));
+}
+/* An inset is itself breathing room: add a small gap past it, never a full margin on top of it. */
 body {
-  padding-top: calc(var(--safe-top) + var(--space-2));
-  padding-bottom: calc(var(--nav-h) + var(--safe-bottom) + var(--space-3));
+  padding-top: max(var(--space-2), calc(var(--safe-top) + var(--space-1)));
+  padding-bottom: calc(var(--nav-h) + var(--nav-bottom) + var(--space-2));
   padding-left: calc(var(--safe-left) + var(--space-2));
   padding-right: calc(var(--safe-right) + var(--space-2));
 }
@@ -393,7 +399,7 @@ div.list-row { cursor: default; }
 .tabbar {
   position: fixed; inset-inline: 0; bottom: 0; z-index: 20;
   display: flex;
-  padding: var(--space-0) calc(var(--safe-right) + var(--space-1)) calc(var(--safe-bottom) + var(--space-1))
+  padding: var(--space-0) calc(var(--safe-right) + var(--space-1)) var(--nav-bottom)
     calc(var(--safe-left) + var(--space-1));
   background: var(--bg); border-top: 1px solid var(--border);
 }
@@ -413,7 +419,7 @@ div.list-row { cursor: default; }
   position: relative; width: 100%; overflow-y: auto; overscroll-behavior: contain;
   /* Never under the status bar / Telegram header, never under the home indicator. */
   max-height: calc(var(--viewport-h) - var(--safe-top) - var(--space-3));
-  padding: var(--space-2) calc(var(--safe-right) + var(--space-2)) calc(var(--safe-bottom) + var(--space-2))
+  padding: var(--space-2) calc(var(--safe-right) + var(--space-2)) max(var(--safe-bottom), var(--space-2))
     calc(var(--safe-left) + var(--space-2));
   border-radius: var(--radius) var(--radius) 0 0; background: var(--card);
   display: flex; flex-direction: column; gap: var(--space-1_5);
@@ -427,7 +433,7 @@ div.list-row { cursor: default; }
 /* ---------- toast ---------- */
 .toast {
   position: fixed; left: calc(var(--safe-left) + var(--space-2)); right: calc(var(--safe-right) + var(--space-2));
-  bottom: calc(var(--nav-h) + var(--safe-bottom) + var(--space-2));
+  bottom: calc(var(--nav-h) + var(--nav-bottom) + var(--space-2));
   z-index: 60; padding: var(--space-1_5) var(--space-2); border-radius: var(--radius);
   background: var(--fg); color: var(--bg); font-size: 13px; text-align: center;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);

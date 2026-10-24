@@ -46,7 +46,7 @@ function loadMiniApp({ routes, initData = "query_id=x&hash=y", confirm = () => t
   const toasts = [];
   const location = { hash: "" };
   const doc = {
-    documentElement: { setAttribute() {} },
+    documentElement: { attrs: {}, setAttribute(name, value) { this.attrs[name] = String(value); } },
     body: { classList: element("body").classList, appendChild(el) { toasts.push(el); } },
     getElementById: (id) => element(id),
     querySelectorAll: () => [],
@@ -54,7 +54,8 @@ function loadMiniApp({ routes, initData = "query_id=x&hash=y", confirm = () => t
     addEventListener() {},
   };
   const tg = telegram ? {
-    initData, colorScheme: "dark", ready() {}, expand() {}, setHeaderColor() {}, setBackgroundColor() {}, onEvent() {},
+    initData, colorScheme: "dark", ready() {}, expand() {}, setHeaderColor() {}, setBackgroundColor() {},
+    events: {}, onEvent(name, fn) { this.events[name] = fn; },
     BackButton: { show() { back.visible = true; }, hide() { back.visible = false; }, onClick(fn) { back.handler = fn; } },
     HapticFeedback: { notificationOccurred() {}, selectionChanged() {} },
     openLink(url) { calls.push({ method: "OPEN", url }); },
