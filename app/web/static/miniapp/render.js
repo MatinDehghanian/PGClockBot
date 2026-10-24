@@ -667,7 +667,7 @@
       ${items.map((r) => `<button type="button" class="list-row" data-action="open-review" data-id="${Number(r.id) || 0}">
         <span class="list-row-label"><span>${esc(money(r.amount))}</span>
           <span class="muted sm"> · ${esc(reviewKindText(r))}</span>
-          <span class="muted sm reward-desc">${esc(r.payer || "—")} · ${esc(core.formatDateTime(r.created_at))}</span></span>
+          <span class="muted sm reward-desc"><bdi>${esc(r.payer || "—")}</bdi> · ${esc(core.formatDateTime(r.created_at))}</span></span>
         ${icon("chevron", 16)}
       </button>`).join("")}
     </section>`;
@@ -683,7 +683,7 @@
       <div class="kv-list">
         <p><span class="muted">مبلغ</span> <strong>${esc(money(item.amount))}</strong></p>
         <p><span class="muted">نوع</span> ${esc(reviewKindText(item))}</p>
-        <p><span class="muted">پرداخت‌کننده</span> ${esc(item.payer || "—")}</p>
+        <p><span class="muted">پرداخت‌کننده</span> <bdi>${esc(item.payer || "—")}</bdi></p>
         <p><span class="muted">زمان</span> ${esc(core.formatDateTime(item.created_at))}</p>
       </div>
       <div class="btn-row">

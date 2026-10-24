@@ -68,6 +68,7 @@ test("the queue escapes payer and plan names and has a way back per persona", as
   await openQueue(env);
   let html = env.element("root").innerHTML;
   assert.ok(html.includes("&lt;img") && !html.includes("<img src=x"));
+  assert.ok(html.includes("<bdi>&lt;img"), "payer names keep their own direction (e.g. @username)");
   assert.ok(html.includes("بازگشت به داشبورد"));
   env.mini.app.ACTIONS.back();
   assert.equal(env.mini.app.state.view, "home");
