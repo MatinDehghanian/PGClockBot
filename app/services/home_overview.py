@@ -8,14 +8,13 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 import httpx
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import (
     BotUser,
     Order,
     Payment,
-    PaymentStatus,
     Plan,
     ResellerProfile,
     Ticket,
@@ -27,6 +26,7 @@ from app.services.service_scope import shop_services_clause
 from app.services.shop_membership import shop_member_clause
 from app.services.ticket_scope import ticket_shop_clause
 from app.services.setup_wizard import current_setup_values
+from app.services.shop_scope import pending_receipt_clause
 
 _TEHRAN = ZoneInfo("Asia/Tehran")
 
@@ -146,13 +146,8 @@ async def bot_panel_summary(session: AsyncSession) -> dict[str, Any]:
         .select_from(Payment)
         .outerjoin(Order, Order.id == Payment.order_id)
         .where(
-            Payment.status == PaymentStatus.PENDING.value,
-            Payment.receipt_file_id.is_not(None),
+            pending_receipt_clause(None),
             non_demo_customer(Payment.user_id),
-            or_(
-                and_(Payment.is_wallet_topup.is_(True), Payment.wallet_shop_id.is_(None)),
-                and_(Payment.is_wallet_topup.is_(False), Order.reseller_id.is_(None)),
-            ),
         )
         .scalar_subquery()
     )
@@ -536,13 +531,8 @@ async def reseller_shop_summary(
         .select_from(Payment)
         .outerjoin(Order, Order.id == Payment.order_id)
         .where(
-            Payment.status == PaymentStatus.PENDING.value,
-            Payment.receipt_file_id.is_not(None),
+            pending_receipt_clause(rid),
             non_demo_customer(Payment.user_id),
-            or_(
-                and_(Payment.is_wallet_topup.is_(True), Payment.wallet_shop_id == rid),
-                and_(Payment.is_wallet_topup.is_(False), Order.reseller_id == rid),
-            ),
         )
         .scalar_subquery()
     )
