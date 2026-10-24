@@ -103,7 +103,7 @@ class LiveHttpsAddressTests(_Db):
     def test_callbacks_use_the_live_https_address(self) -> None:
         self.panel_with_tls(env_base="http://203.0.113.5:9000")
         settlement = MagicMock(id=7, tenant_key=0)
-        request = flow._new_request(settlement, MagicMock(id=3, amount=1000), "test", {}, bot_url=None)
+        request = flow._new_request(settlement, MagicMock(id=3, amount=1000), "test", {})
         # The live panel host is used, but BezanBeCard refuses the panel listen port.
         self.assertTrue(
             request.callback_url.startswith("https://panel.example.com/payments/settlement/bbc/")
