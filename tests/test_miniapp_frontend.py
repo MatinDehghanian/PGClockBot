@@ -34,6 +34,9 @@ class MiniAppFrontendTests(unittest.TestCase):
     def test_guides_behavior(self) -> None:
         self.run_node("miniapp_guides.test.cjs")
 
+    def test_club_behavior(self) -> None:
+        self.run_node("miniapp_club.test.cjs")
+
 
 if __name__ == "__main__":
     unittest.main()

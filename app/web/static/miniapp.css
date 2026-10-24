@@ -237,6 +237,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .list-row > svg:last-child { color: var(--muted-fg); flex-shrink: 0; }
 .list-row.is-danger, .list-row.is-danger > svg:first-child { color: var(--danger); }
 .list-row-label { flex: 1; min-width: 0; }
+.reward-desc { display: block; }
 div.list-row { cursor: default; }
 .count {
   min-width: 24px; padding: 2px var(--space-1); border-radius: var(--control-radius); text-align: center;

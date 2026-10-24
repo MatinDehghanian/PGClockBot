@@ -25,6 +25,7 @@
     search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
     close: '<path d="M6 6l12 12M18 6 6 18"/>',
     chat: '<path d="M4 5h16v11H9l-5 4z"/><path d="M8 9h8M8 12h5"/>',
+    gift: '<path d="M4 11h16v9H4zM3 7h18v4H3zM12 7v13"/><path d="M12 7c-1.5-3-5-3-5-1s3 1 5 1c2 0 5 1 5-1s-3.5-2-5 1"/>',
   };
 
   function icon(name, size) {
@@ -540,6 +541,112 @@
       </div>`;
   }
 
+  /* ---------- club: points, invites, rewards ---------- */
+
+  function pointsText(value) {
+    return `${num(value)} امتیاز`;
+  }
+
+  function rewardValueText(r) {
+    const value = Number(r.value) || 0;
+    if (r.type === "traffic_gb") return `${num(value)} گیگ ترافیک`;
+    if (r.type === "time_days") return `${num(value)} روز اعتبار`;
+    if (r.type === "wallet_credit") return `${money(value)} اعتبار کیف پول`;
+    if (r.type === "discount_percent") return `${num(value)}٪ تخفیف`;
+    return r.type_label || "";
+  }
+
+  function clubPointsHtml(club) {
+    const tier = club.tier || {};
+    const next = tier.points_to_next == null ? "" : `<p class="muted sm">${esc(pointsText(tier.points_to_next))} تا سطح بعد</p>`;
+    return `<section class="card wallet-card" aria-label="امتیاز شما">
+      <div class="card-head"><span class="muted">امتیاز شما</span>${tier.name ? badge(tier.name, "ok") : ""}</div>
+      <p class="wallet-value"><bdi>${esc(num(club.points))}</bdi></p>
+      ${next}<p class="muted sm">امتیاز این ماه: <bdi>${esc(num(club.month_points))}</bdi></p>
+    </section>`;
+  }
+
+  function clubReferralHtml(ref) {
+    const r = ref || {};
+    const link = core.safeUrl(r.link);
+    return `<section class="card" aria-label="دعوت دوستان"><h2 class="card-title">دعوت دوستان</h2>
+      <p class="muted sm">با لینک یا کد خودتان دوستانتان را دعوت کنید و امتیاز بگیرید.</p>
+      ${link ? copyRow("لینک دعوت", link) : ""}
+      ${r.code ? copyRow("کد دعوت", r.code) : ""}
+      <div class="tile-grid cols-2">
+        <div class="tile"><span>دعوت‌های موفق</span><strong>${esc(num(r.invited))}</strong></div>
+        <div class="tile"><span>امتیاز از دعوت</span><strong>${esc(num(r.earned_points))}</strong></div>
+      </div>
+      ${link ? '<button type="button" class="btn block" data-action="share-invite">ارسال لینک برای دوستان</button>' : ""}
+    </section>`;
+  }
+
+  function clubRewardsHtml(rewards) {
+    const rows = rewards || [];
+    return `<section class="card list-card" aria-label="جوایز"><h2 class="card-title">جوایز</h2>
+      ${rows.length ? rows.map((r) => `<div class="list-row">
+        <span class="list-row-label"><span>${esc(r.name)}</span>
+          <span class="muted sm"> · ${esc(rewardValueText(r))} · ${esc(pointsText(r.cost))}</span>
+          ${r.description ? `<span class="muted sm pre-line reward-desc">${esc(r.description)}</span>` : ""}</span>
+        <button type="button" class="btn sm${r.affordable ? "" : " ghost"}" data-action="redeem-reward" data-id="${Number(r.id) || 0}"${r.affordable ? "" : ' disabled aria-disabled="true"'}>${r.affordable ? "دریافت" : "امتیاز کافی نیست"}</button>
+      </div>`).join("") : '<p class="muted sm">هنوز جایزه‌ای تعریف نشده است.</p>'}
+    </section>`;
+  }
+
+  function discountLimitText(d) {
+    const parts = [`${num(d.percent)}٪ تخفیف`];
+    if (Number(d.min_purchase) > 0) parts.push(`خرید از ${money(d.min_purchase)}`);
+    if (d.max_discount != null) parts.push(`حداکثر ${money(d.max_discount)}`);
+    if (d.expires_at) parts.push(`تا ${core.formatDateTime(d.expires_at)}`);
+    return parts.join(" · ");
+  }
+
+  function clubDiscountsHtml(discounts) {
+    const rows = discounts || [];
+    if (!rows.length) return "";
+    return `<section class="card" aria-label="کدهای تخفیف من"><h2 class="card-title">کدهای تخفیف من</h2>
+      ${rows.map((d) => copyRow(discountLimitText(d), d.code)).join("")}
+      <p class="muted sm">هنگام خرید سرویس، کد را در بخش «کد تخفیف» وارد کنید.</p>
+    </section>`;
+  }
+
+  function pointsHistoryRowsHtml(items) {
+    return (items || []).map((t) => {
+      const amount = Number(t.amount) || 0;
+      return `<div class="tx-row">
+        <span class="tx-meta"><span>${esc(t.label || "—")}</span><span class="muted sm">${esc(core.formatDateTime(t.created_at))}</span></span>
+        <span class="tx-amt${amount >= 0 ? " is-plus" : " is-minus"}"><span class="visually-hidden">${amount < 0 ? "مصرف" : "دریافت"}</span><span aria-hidden="true">${amount > 0 ? "+" : amount < 0 ? "−" : ""}</span><bdi>${esc(num(Math.abs(amount)))}</bdi></span>
+      </div>`;
+    }).join("");
+  }
+
+  function clubHistoryHtml(items, hasMore) {
+    return `<section class="card" aria-label="تاریخچهٔ امتیاز"><h2 class="card-title">تاریخچهٔ امتیاز</h2>
+      ${items && items.length ? pointsHistoryRowsHtml(items) : '<p class="muted sm">هنوز امتیازی نگرفته‌اید.</p>'}
+      ${hasMore ? '<button type="button" class="btn ghost block" data-action="club-history-more">موارد بیشتر</button>' : ""}
+    </section>`;
+  }
+
+  function clubHtml(club, history) {
+    if (!club.enabled) {
+      return clubReferralHtml(club.referral) + '<section class="card"><p class="muted">امتیاز و جوایز فعلاً غیرفعال است.</p></section>';
+    }
+    return clubPointsHtml(club) + clubReferralHtml(club.referral) + clubRewardsHtml(club.rewards)
+      + clubDiscountsHtml(club.discounts) + clubHistoryHtml(history.items, history.hasMore);
+  }
+
+  function rewardCodeHtml(code) {
+    return `${copyRow("کد تخفیف", code)}<p class="muted sm">هنگام خرید سرویس، کد را در بخش «کد تخفیف» وارد کنید.</p>`;
+  }
+
+  function rewardServicePickerHtml(reward, services) {
+    if (!services || !services.length) return emptyHtml("برای این جایزه سرویس فعالی ندارید.");
+    return `<p class="muted sm">${esc(rewardValueText(reward))} به کدام سرویس اضافه شود؟ هزینه: ${esc(pointsText(reward.cost))}</p>
+      <div class="plan-list">${services.map((s) => `<button type="button" class="plan-option" data-action="redeem-reward-service" data-id="${Number(reward.id) || 0}" data-service="${Number(s.id) || 0}">
+        <span class="plan-meta"><strong dir="ltr">${esc(s.name)}</strong></span>${icon("chevron", 16)}
+      </button>`).join("")}</div>`;
+  }
+
   function loadingHtml(rows) {
     return `<div class="loading" aria-busy="true" aria-label="در حال بارگذاری">${'<div class="skeleton"></div>'.repeat(Number(rows) || 3)}</div>`;
   }
@@ -556,7 +663,7 @@
     icon, isOnHoldStatus, statusTone, expireDaysLabel, meterHtml, serviceRowHtml, glanceRowHtml,
     attentionCardHtml, serviceDetailHtml, planOptionsHtml, checkoutHtml, discountedCheckoutHtml, giftFormHtml, renewPlansHtml,
     renewPreviewHtml, addonPacksHtml, automationHtml, cancellationHtml, qrHtml, activityHtml,
-    backBarHtml, guideListHtml, guideHtml, walletCardHtml, supportHtml, ticketNewFormHtml, ticketThreadHtml, topupFormHtml, topupPayHtml, receiptFormHtml, recentTopupsHtml, statsHtml, attentionListHtml, linksHtml, navHtml, loadingHtml, emptyHtml,
+    backBarHtml, guideListHtml, guideHtml, rewardValueText, clubHtml, rewardCodeHtml, rewardServicePickerHtml, walletCardHtml, supportHtml, ticketNewFormHtml, ticketThreadHtml, topupFormHtml, topupPayHtml, receiptFormHtml, recentTopupsHtml, statsHtml, attentionListHtml, linksHtml, navHtml, loadingHtml, emptyHtml,
     errorHtml,
   });
 })(typeof window === "object" ? window : globalThis);

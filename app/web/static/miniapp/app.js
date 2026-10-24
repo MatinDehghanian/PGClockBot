@@ -31,6 +31,7 @@
     topupCurrent: null,
     checkout: null,
     addonPacks: [],
+    clubHistory: null,
     sheet: null,
     sheetSeq: 0,
     viewSeq: 0,
@@ -67,6 +68,7 @@
   const SUB_VIEWS = new Map([
     ["service", { parent: "services", tab: "services", label: "سرویس‌ها" }],
     ["support", { parent: "account", tab: "account", label: "حساب" }],
+    ["club", { parent: "account", tab: "account", label: "حساب" }],
     ["ticket", { parent: "support", tab: "account", label: "پشتیبانی" }],
   ]);
 
@@ -107,6 +109,7 @@
     topup: () => core.api("/api/mini/topup"),
     support: () => core.api("/api/mini/support"),
     guides: () => core.api("/api/mini/guides"),
+    club: () => core.api("/api/mini/club"),
   };
 
   const inflight = new Map();
@@ -520,7 +523,9 @@
       + R.walletCardHtml(customer())
       + (topups.status === "ready" ? R.recentTopupsHtml(topups.data.recent) : "")
       + `<section class="card list-card" aria-label="پشتیبانی"><button type="button" class="list-row" data-action="goto" data-view="support">
-          ${R.icon("chat")}<span class="list-row-label">پشتیبانی و تیکت‌ها</span>${R.icon("chevron", 16)}</button></section>`
+          ${R.icon("chat")}<span class="list-row-label">پشتیبانی و تیکت‌ها</span>${R.icon("chevron", 16)}</button>
+          <button type="button" class="list-row" data-action="goto" data-view="club">
+          ${R.icon("gift")}<span class="list-row-label">امتیاز، جوایز و دعوت دوستان</span>${R.icon("chevron", 16)}</button></section>`
       + `<section class="card" aria-label="تراکنش‌ها"><h2 class="card-title">تراکنش‌ها</h2>${rows}
           ${canMore ? '<button type="button" class="btn ghost block" data-action="activity-more">تراکنش‌های بیشتر</button>' : ""}</section>`;
   }
@@ -528,6 +533,14 @@
   function supportViewHtml() {
     const r = resource("support");
     return viewHead("پشتیبانی") + (settled(r, 3, "retry") || R.supportHtml(r.data));
+  }
+
+  function clubViewHtml() {
+    const r = resource("club");
+    const body = settled(r, 4, "retry");
+    if (body) return viewHead("باشگاه مشتریان") + body;
+    if (!state.clubHistory) state.clubHistory = { items: r.data.club.history || [], hasMore: !!r.data.club.history_more };
+    return viewHead("باشگاه مشتریان") + R.clubHtml(r.data.club, state.clubHistory);
   }
 
   function ticketViewHtml() {
@@ -561,6 +574,7 @@
     account: accountViewHtml,
     ops: opsViewHtml,
     support: supportViewHtml,
+    club: clubViewHtml,
     ticket: ticketViewHtml,
   };
 
@@ -1016,6 +1030,82 @@
     });
   }
 
+  /* ---------- club: invites and rewards ---------- */
+
+  function clubData() {
+    const r = state.resources.club;
+    return r && r.status === "ready" ? r.data.club : null;
+  }
+
+  function findReward(id) {
+    const club = clubData();
+    return club ? (club.rewards || []).find((r) => r.id === id) || null : null;
+  }
+
+  function shareInvite() {
+    const club = clubData();
+    const link = club && core.safeUrl(club.referral && club.referral.link);
+    if (!link || !core.openTelegramLink("https://t.me/share/url?url=" + encodeURIComponent(link))) {
+      core.toast("لینک دعوت در دسترس نیست", "err");
+    }
+  }
+
+  function resetClub() {
+    invalidate("club");
+    state.clubHistory = null;
+  }
+
+  async function loadMoreClubHistory(trigger) {
+    const history = state.clubHistory;
+    const last = history && history.items[history.items.length - 1];
+    if (!last) return;
+    await guarded("club-history", trigger, async () => {
+      try {
+        const res = await core.api("/api/mini/club/history?before=" + Number(last.id));
+        if (state.clubHistory !== history) return;
+        history.items = history.items.concat(res.items || []);
+        history.hasMore = !!res.has_more;
+        if (state.view === "club") renderView();
+      } catch (err) {
+        core.toast(err.message, "err");
+      }
+    });
+  }
+
+  async function chooseReward(id, trigger) {
+    const reward = findReward(id);
+    if (!reward || !reward.affordable) return;
+    if (reward.needs_service) {
+      openSheet("reward", reward.name, R.rewardServicePickerHtml(reward, clubData().services));
+      return;
+    }
+    const ok = await core.confirmAction(`«${reward.name}» (${R.rewardValueText(reward)}) با ${core.num(reward.cost)} امتیاز دریافت شود؟`);
+    if (ok) await redeemReward(reward, null, trigger);
+  }
+
+  /** One request per tap and no automatic retry: a lost answer is settled by reading the club again. */
+  async function redeemReward(reward, serviceId, trigger) {
+    await guarded("redeem-reward", trigger, async () => {
+      let res = null;
+      try {
+        res = await core.api(`/api/mini/club/rewards/${Number(reward.id)}/redeem`, {
+          method: "POST", body: serviceId ? { service_id: serviceId } : {},
+        });
+      } catch (err) {
+        core.toast(err.status === 0 ? "نتیجه مشخص نشد؛ امتیاز و جوایز دوباره خوانده شد." : err.message, "err");
+      }
+      closeSheet();
+      resetClub();
+      if (res) {
+        core.haptic("success");
+        core.toast(res.message || "جایزه دریافت شد");
+        if (res.discount_code) openSheet("reward-code", "کد تخفیف شما", R.rewardCodeHtml(res.discount_code));
+      }
+      if (!res || reward.type === "wallet_credit" || reward.needs_service) await refreshAfterChange();
+      if (state.view === "club") renderView();
+    });
+  }
+
   /* ---------- discount and gift codes ---------- */
 
   const PAY_UNKNOWN_OUTCOME = "نتیجهٔ پرداخت مشخص نشد. دوباره «پرداخت» را بزنید؛ مبلغ فقط یک بار کسر می‌شود.";
@@ -1178,6 +1268,14 @@
     "open-guide": (el) => openGuide(el.getAttribute("data-guide"), intAttr(el, "data-id")),
     "open-guide-link": (el) => openGuideLink(el.getAttribute("data-guide"), Number(el.getAttribute("data-index"))),
     "send-guide": (el) => sendGuide(el.getAttribute("data-guide"), el),
+    "share-invite": () => shareInvite(),
+    "redeem-reward": (el) => chooseReward(intAttr(el, "data-id"), el),
+    "redeem-reward-service": (el) => {
+      const reward = findReward(intAttr(el, "data-id"));
+      const serviceId = intAttr(el, "data-service");
+      if (reward && serviceId) redeemReward(reward, serviceId, el);
+    },
+    "club-history-more": (el) => loadMoreClubHistory(el),
     "checkout-pay": (el) => payCheckout(el),
     "checkout-cancel": (el) => cancelCheckout(el),
     "gift-code": () => openSheet("gift", "کد هدیه", R.giftFormHtml()),
