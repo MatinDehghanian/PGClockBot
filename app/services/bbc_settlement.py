@@ -14,9 +14,11 @@ instead of being approved or retried blindly.
 from __future__ import annotations
 
 import hmac
+import html
 import json
 import logging
 import secrets
+import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -44,7 +46,6 @@ from app.services.payment_settlement import (
 )
 from app.services.public_https import https_public_base
 from app.services.users import get_all_settings
-from app.services.ux20 import shop_bot_https_url
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +98,9 @@ LATE_PAYMENT_WINDOW = timedelta(hours=48)
 MAX_EXPIRED_ATTEMPTS = 5
 REVIEW_PREFIX = "review:"
 REJECTED_PREFIX = "rejected:"
+REFUSAL_TITLE = "❌ «بزن به کارت» ساخت سفارش را نپذیرفت"
+REFUSAL_NOTICE_INTERVAL = 30 * 60
+_last_refusal_notice: dict[int, float] = {}
 
 REVIEW_REASONS = {
     "needs_review": "بزن به کارت این واریز را «نیاز به بررسی» زده است. در داشبورد بزن به کارت بررسی و تأییدش کنید؛ ربات بعد از تأیید خودش تحویل می‌دهد.",
@@ -262,8 +266,7 @@ async def _saved_or_new_request(
         raise ValueError("این پرداخت در حال بررسی است؛ با پشتیبانی در تماس باشید")
     if settlement.status == SettlementStatus.EXPIRED.value:
         _archive_expired_attempt(data)
-    bot_url = await shop_bot_https_url(session, shop_owner_id=settlement.shop_owner_id)
-    request = _new_request(settlement, payment, description, data, bot_url=bot_url)
+    request = _new_request(settlement, payment, description, data)
     data["request"] = request.to_dict()
     data.pop("order", None)
     # Saved before the network call, so a crash after it leaves a request to replay.
@@ -305,8 +308,6 @@ def _new_request(
     payment: Payment,
     description: str,
     data: dict[str, Any],
-    *,
-    bot_url: str | None,
 ) -> bbc.BbcOrderRequest:
     origin = gateway_origin(https_base())
     if not origin:
@@ -315,15 +316,12 @@ def _new_request(
     data["link_token"] = link_token
     attempt = secrets.token_hex(4)
     prefix = f"{origin}/payments/settlement/bbc/tenant/{int(settlement.tenant_key)}"
-    # The payer goes straight back to the shop's bot; the panel page is only a fallback.
-    return_url = bot_url if (bot_url or "").startswith("https://") else (
-        f"{prefix}/return/{int(settlement.id)}?t={link_token}"
-    )
+    # Both links stay on the panel host: the return page verifies at once and links to the shop's bot.
     return bbc.build_order_request(
         amount_toman=int(payment.amount),
         merchant_order_id=str(int(payment.id)),
         callback_url=f"{prefix}/callback/{int(settlement.id)}?t={link_token}",
-        return_url=return_url,
+        return_url=f"{prefix}/return/{int(settlement.id)}?t={link_token}",
         description=description or f"payment-{int(payment.id)}",
         idempotency_key=f"bbc:{int(payment.id)}:{attempt}",
     )
@@ -349,6 +347,7 @@ async def _create_remote(
         settlement.status = SettlementStatus.FAILED.value
         settlement.error_message = f"{REJECTED_PREFIX}{exc.code or exc.status_code}"
         await session.commit()
+        await _notify_refusal(session, settlement, exc)
         raise
     # BbcUnreachable propagates: the row stays CREATED with its request for a replay.
     data = _payload(settlement)
@@ -501,6 +500,41 @@ async def _notify_staff(session: AsyncSession, settlement: PaymentSettlement, re
     except Exception:
         # The review marker is saved; the staff queue still shows the payment.
         logger.warning("bbc review notice failed settlement=%s", settlement.id, exc_info=True)
+
+
+def _refusal_notice_due(tenant_key: int) -> bool:
+    """At most one refusal notice per shop per window, so a broken setup does not flood staff."""
+    now = time.monotonic()
+    last = _last_refusal_notice.get(tenant_key)
+    if last is not None and now - last < REFUSAL_NOTICE_INTERVAL:
+        return False
+    _last_refusal_notice[tenant_key] = now
+    return True
+
+
+async def _notify_refusal(session: AsyncSession, settlement: PaymentSettlement, exc: bbc.BbcRejected) -> None:
+    """Tell the shop's staff why BezanBeCard refused to create the order; customers keep the fixed text."""
+    if not _refusal_notice_due(int(settlement.tenant_key)):
+        return
+    # Local import: notifications pulls in bot keyboards, which import payment modules.
+    from app.services.notifications import notify_settlement_review
+
+    payment = await session.get(Payment, int(settlement.payment_id))
+    if payment is None:
+        return
+    reason = html.escape(exc.reason or "بدون توضیح")
+    code = html.escape(exc.code or str(exc.status_code))
+    text = (
+        f"پاسخ بزن به کارت ({code}): <code>{reason}</code>\n\n"
+        "هیچ سفارشی ساخته نشد و مبلغی کسر نشده است. تنظیمات حساب و دامنهٔ پنل را در بزن به کارت بررسی کنید."
+    )
+    try:
+        await notify_settlement_review(
+            session, payment, shop_id=settlement.shop_owner_id, reason=text, title=REFUSAL_TITLE,
+        )
+    except Exception:
+        # Best effort: the refusal is saved on the settlement and in the log.
+        logger.warning("bbc refusal notice failed settlement=%s", settlement.id, exc_info=True)
 
 
 async def claim_delivery_notice(session: AsyncSession, settlement: PaymentSettlement) -> bool:
