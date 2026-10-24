@@ -629,6 +629,7 @@ def calc_custom_plan_price(
     return max(0, gb_units * int(price_per_gb) + int(days) * int(price_per_day))
 
 
+CUSTOM_ORDER_NOTE = "custom"
 CUSTOM_PLAN_UNCONFIGURED = "پلن دلخواه فعلاً در دسترس نیست؛ لطفاً یکی از پلن‌های آماده را انتخاب کنید"
 
 
@@ -741,7 +742,7 @@ async def create_custom_order(
         amount=amount,
         discount_amount=0,
         status=OrderStatus.PENDING.value,
-        note="custom",
+        note=CUSTOM_ORDER_NOTE,
     )
     session.add(order)
     await session.flush()
@@ -2144,7 +2145,7 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
             except ProvisionError as e:
                 raise ValueError(e.message) from e
 
-        from app.services.pasarguard import build_user_create_payload, parse_group_ids
+        from app.services.pasarguard import build_user_create_payload, build_user_modify_payload, parse_group_ids
 
         group_ids = None
         if not plan.pg_template_id:
@@ -2193,6 +2194,13 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
             pg_uid = pg_user.get("id")
             if pg_uid:
                 created_pg_ids.append(int(pg_uid))
+            if plan.pg_template_id and _order_note(order) == CUSTOM_ORDER_NOTE and pg_uid:
+                # A template brings its own volume and expiry; the buyer paid for the chosen ones.
+                applied = await pg.modify_user_by_id(
+                    int(pg_uid), build_user_modify_payload(data_limit=data_limit, expire_ts=expire)
+                )
+                if isinstance(applied, dict):
+                    pg_user = {**pg_user, **applied}
             # When creating via the shop's own PG admin, ownership is already that admin.
             # set_owner is only needed for the legacy owner-token path (no stored password).
             # With get_pg_for_reseller we skip transfer.

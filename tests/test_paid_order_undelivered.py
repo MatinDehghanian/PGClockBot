@@ -185,5 +185,45 @@ class CustomPlanConfigTests(UndeliveredPaidOrderTestCase):
         self.assertEqual(order.status, "pending")
 
 
+class TemplateCustomPlanTests(UndeliveredPaidOrderTestCase):
+    async def asyncSetUp(self) -> None:
+        await super().asyncSetUp()
+        self.settings = {**CUSTOM, "custom_plan_template_id": "7"}
+        self.pg.create_user_from_template = AsyncMock(return_value={"id": 9, "username": "u9", "subscription_url": "https://x/sub/t"})
+        self.pg.modify_user_by_id = AsyncMock(return_value={"id": 9, "data_limit": 10 * 1024**3})
+
+    async def approve(self) -> Order:
+        order = await create_custom_order(self.session, user_id=1, data_limit_gb=10, duration_days=30)
+        payment = Payment(user_id=1, order_id=order.id, amount=order.amount, status="pending", receipt_file_id="f")
+        self.session.add(payment)
+        await self.session.commit()
+        return await approve_payment(self.session, payment, reviewer_tg=0)
+
+    async def test_template_service_gets_the_volume_and_days_the_buyer_chose(self) -> None:
+        delivered = await self.approve()
+        self.assertEqual(delivered.status, "delivered")
+        user_id, payload = self.pg.modify_user_by_id.await_args.args
+        self.assertEqual(user_id, 9)
+        self.assertEqual(payload["data_limit"], 10 * 1024**3)
+        self.assertIn("expire", payload)
+
+    async def test_catalog_template_plans_keep_the_template_limits(self) -> None:
+        self.session.add(Order(id=50, user_id=1, plan_id=1, amount=10, status="paid"))
+        await self.session.commit()
+        from app.services.orders import deliver_order
+
+        await deliver_order(self.session, await self.session.get(Order, 50))
+        self.pg.modify_user_by_id.assert_not_awaited()
+
+    async def test_failed_limits_remove_the_new_user_and_keep_the_order_paid(self) -> None:
+        self.pg.modify_user_by_id = AsyncMock(side_effect=PanelDown("modify failed"))
+        with self.assertRaises(PanelDown):
+            await self.approve()
+        self.pg.delete_user_by_id.assert_awaited_once_with(9)
+        self.session.expire_all()
+        order = await self.session.scalar(select(Order).where(Order.note == "custom"))
+        self.assertEqual((order.status, order.service_id), ("paid", None))
+
+
 if __name__ == "__main__":
     unittest.main()
