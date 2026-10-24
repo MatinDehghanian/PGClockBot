@@ -106,6 +106,7 @@
     ops: () => core.api("/api/mini/ops"),
     topup: () => core.api("/api/mini/topup"),
     support: () => core.api("/api/mini/support"),
+    guides: () => core.api("/api/mini/guides"),
   };
 
   const inflight = new Map();
@@ -969,6 +970,52 @@
     });
   }
 
+  /* ---------- connection guides ---------- */
+
+  function findGuide(id) {
+    const r = state.resources.guides;
+    return r && r.status === "ready" ? (r.data.guides || []).find((g) => g.id === id) || null : null;
+  }
+
+  async function showGuides(serviceId) {
+    const seq = state.sheet && state.sheet.kind === "guides"
+      ? state.sheetSeq
+      : openSheet("guides", "راهنمای اتصال", R.loadingHtml(2), { serviceId });
+    els.sheetTitle.textContent = "راهنمای اتصال";
+    const r = await ensure("guides");
+    if (r.status !== "ready") {
+      setSheetBody(seq, R.errorHtml(r.error || "دریافت آموزش‌ها ناموفق بود"));
+      return;
+    }
+    setSheetBody(seq, R.guideListHtml(r.data.guides, serviceId));
+  }
+
+  function openGuide(guideId, serviceId) {
+    const guide = findGuide(guideId);
+    if (!guide || !state.sheet) return;
+    els.sheetTitle.textContent = guide.title;
+    const row = detailRow(serviceId);
+    setSheetBody(state.sheetSeq, R.guideHtml(guide, serviceId, !!(row && core.safeUrl(row.subscription_url))));
+  }
+
+  function openGuideLink(guideId, index) {
+    const guide = findGuide(guideId);
+    const link = guide && (guide.links || [])[index];
+    if (!link || !core.openTelegramLink(link.url)) core.toast("لینک معتبر نیست", "err");
+  }
+
+  async function sendGuide(guideId, trigger) {
+    if (!findGuide(guideId)) return;
+    await guarded("send-guide", trigger, async () => {
+      try {
+        const res = await core.api(`/api/mini/guides/${encodeURIComponent(guideId)}/send`, { method: "POST", body: {} });
+        core.toast(res.message || "آموزش در ربات فرستاده شد");
+      } catch (err) {
+        core.toast(err.message, "err");
+      }
+    });
+  }
+
   /* ---------- discount and gift codes ---------- */
 
   const PAY_UNKNOWN_OUTCOME = "نتیجهٔ پرداخت مشخص نشد. دوباره «پرداخت» را بزنید؛ مبلغ فقط یک بار کسر می‌شود.";
@@ -1127,6 +1174,10 @@
     "open-topup-link": () => openTopupLink(),
     "check-topup": (el) => checkTopup(intAttr(el, "data-id"), el),
     "copy-value": (el) => copyValue(el),
+    guides: (el) => showGuides(intAttr(el, "data-id")),
+    "open-guide": (el) => openGuide(el.getAttribute("data-guide"), intAttr(el, "data-id")),
+    "open-guide-link": (el) => openGuideLink(el.getAttribute("data-guide"), Number(el.getAttribute("data-index"))),
+    "send-guide": (el) => sendGuide(el.getAttribute("data-guide"), el),
     "checkout-pay": (el) => payCheckout(el),
     "checkout-cancel": (el) => cancelCheckout(el),
     "gift-code": () => openSheet("gift", "کد هدیه", R.giftFormHtml()),

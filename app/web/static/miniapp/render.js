@@ -152,6 +152,7 @@
         ${features.qr ? `<button type="button" class="btn ghost" data-action="show-qr" data-id="${id}">QR کد</button>` : ""}
         <button type="button" class="btn ghost" data-action="open-link" data-id="${id}">باز کردن</button>
       </div>
+      <button type="button" class="btn ghost block" data-action="guides" data-id="${id}">راهنمای اتصال</button>
     </section>`;
   }
 
@@ -519,6 +520,26 @@
     return `<button type="button" class="back-link" data-action="back">${icon("back", 18)}<span>بازگشت به ${esc(label)}</span></button>`;
   }
 
+  function guideListHtml(guides, serviceId) {
+    if (!guides || !guides.length) return emptyHtml("هنوز آموزشی تعریف نشده است.");
+    const sid = Number(serviceId) || 0;
+    return `<p class="muted sm">برنامهٔ دستگاه خود را انتخاب کنید.</p>
+      <div class="plan-list">${guides.map((g) => `<button type="button" class="plan-option" data-action="open-guide" data-guide="${esc(g.id)}" data-id="${sid}">
+        <span class="plan-meta"><strong>${esc(g.title)}</strong>${g.media_count ? `<span class="muted sm">${esc(num(g.media_count))} عکس یا ویدیو</span>` : ""}</span>${icon("chevron", 16)}
+      </button>`).join("")}</div>`;
+  }
+
+  function guideHtml(guide, serviceId, canOpenSubscription) {
+    const sid = Number(serviceId) || 0;
+    return `<p class="pre-line">${esc(guide.body)}</p>
+      <div class="btn-col">
+        ${guide.opens_subscription && canOpenSubscription ? `<button type="button" class="btn block" data-action="open-link" data-id="${sid}">افزودن اشتراک به برنامه</button>` : ""}
+        ${(guide.links || []).map((link, i) => `<button type="button" class="btn ghost block" data-action="open-guide-link" data-guide="${esc(guide.id)}" data-index="${i}">${esc(link.label)}</button>`).join("")}
+        ${guide.media_count ? `<button type="button" class="btn ghost block" data-action="send-guide" data-guide="${esc(guide.id)}">ارسال آموزش کامل با عکس و ویدیو در ربات</button>` : ""}
+        <button type="button" class="btn ghost block" data-action="guides" data-id="${sid}">${icon("back", 16)} همهٔ آموزش‌ها</button>
+      </div>`;
+  }
+
   function loadingHtml(rows) {
     return `<div class="loading" aria-busy="true" aria-label="در حال بارگذاری">${'<div class="skeleton"></div>'.repeat(Number(rows) || 3)}</div>`;
   }
@@ -535,7 +556,7 @@
     icon, isOnHoldStatus, statusTone, expireDaysLabel, meterHtml, serviceRowHtml, glanceRowHtml,
     attentionCardHtml, serviceDetailHtml, planOptionsHtml, checkoutHtml, discountedCheckoutHtml, giftFormHtml, renewPlansHtml,
     renewPreviewHtml, addonPacksHtml, automationHtml, cancellationHtml, qrHtml, activityHtml,
-    backBarHtml, walletCardHtml, supportHtml, ticketNewFormHtml, ticketThreadHtml, topupFormHtml, topupPayHtml, receiptFormHtml, recentTopupsHtml, statsHtml, attentionListHtml, linksHtml, navHtml, loadingHtml, emptyHtml,
+    backBarHtml, guideListHtml, guideHtml, walletCardHtml, supportHtml, ticketNewFormHtml, ticketThreadHtml, topupFormHtml, topupPayHtml, receiptFormHtml, recentTopupsHtml, statsHtml, attentionListHtml, linksHtml, navHtml, loadingHtml, emptyHtml,
     errorHtml,
   });
 })(typeof window === "object" ? window : globalThis);
