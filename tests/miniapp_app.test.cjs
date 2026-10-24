@@ -60,6 +60,11 @@ async function boot(options) {
 const tests = [];
 const test = (name, fn) => tests.push([name, fn]);
 
+test("Telegram's header and overscroll use the page colour", async () => {
+  const env = await boot({ routes: router() });
+  assert.deepEqual(env.context.Telegram.WebApp.colors, { header: "secondary_bg_color", background: "secondary_bg_color" });
+});
+
 test("Telegram's top insets apply only while the app is fullscreen", async () => {
   const env = await boot({ routes: router() });
   const tg = env.context.Telegram.WebApp;

@@ -215,8 +215,9 @@
     doc.documentElement.setAttribute("data-theme", scheme);
     if (!tg) return;
     try {
-      tg.setHeaderColor("bg_color");
-      tg.setBackgroundColor("bg_color");
+      // The page uses secondary_bg (see miniapp.css), so Telegram's header and overscroll match it.
+      tg.setHeaderColor("secondary_bg_color");
+      tg.setBackgroundColor("secondary_bg_color");
     } catch (_) {}
   }
 
