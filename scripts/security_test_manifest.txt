@@ -240,3 +240,4 @@ tests/test_bbc_https_requirement.py
 tests/test_volume_allocation.py
 tests/test_volume_allocation_external.py
 tests/test_volume_allocation_cascade.py
+tests/test_reseller_package.py
