@@ -54,7 +54,8 @@ function loadMiniApp({ routes, initData = "query_id=x&hash=y", confirm = () => t
     addEventListener() {},
   };
   const tg = telegram ? {
-    initData, colorScheme: "dark", ready() {}, expand() {}, setHeaderColor() {}, setBackgroundColor() {},
+    initData, colorScheme: "dark", ready() {}, expand() {},
+    colors: {}, setHeaderColor(c) { this.colors.header = c; }, setBackgroundColor(c) { this.colors.background = c; },
     events: {}, onEvent(name, fn) { this.events[name] = fn; },
     BackButton: { show() { back.visible = true; }, hide() { back.visible = false; }, onClick(fn) { back.handler = fn; } },
     HapticFeedback: { notificationOccurred() {}, selectionChanged() {} },

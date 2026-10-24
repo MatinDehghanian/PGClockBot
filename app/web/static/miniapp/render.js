@@ -3,7 +3,7 @@
   "use strict";
 
   const core = root.PGMini.core;
-  const { esc, num, money } = core;
+  const { esc, num, money, faDigits } = core;
 
   const STROKE = 'fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"';
   const ICON_PATHS = {
@@ -64,7 +64,7 @@
 
   /** Remaining-time label — never map on_hold + null days to «نامحدود». */
   function expireDaysLabel(s) {
-    if (s && s.expire_days_label) return String(s.expire_days_label);
+    if (s && s.expire_days_label) return faDigits(s.expire_days_label);
     if (s && s.expire_days != null) return num(s.expire_days) + " روز";
     if (s && (s.pending_start || isOnHoldStatus(s.status))) return "پس از اتصال";
     if (!s || s.error || !s.status || s.status === "—") return "—";
@@ -87,7 +87,7 @@
     return `<button type="button" class="svc-row" data-action="open-service" data-id="${id}">
       <span class="svc-row-head"><strong dir="ltr">${esc(s.username || "—")}</strong>${serviceStatusBadge(s)}</span>
       ${meterHtml(s.traffic_pct)}
-      <span class="svc-row-meta"><span>${esc(s.traffic || "—")}</span><span>${esc(expireDaysLabel(s))}</span></span>
+      <span class="svc-row-meta"><span>${esc(faDigits(s.traffic || "—"))}</span><span>${esc(expireDaysLabel(s))}</span></span>
       ${serviceErrorHtml(s)}
     </button>`;
   }
@@ -96,7 +96,7 @@
     const id = Number(g.id) || 0;
     return `<button type="button" class="svc-row" data-action="open-service" data-id="${id}">
       <span class="svc-row-head"><strong dir="ltr">${esc(g.username || "—")}</strong>${serviceStatusBadge(g)}</span>
-      <span class="svc-row-meta"><span>${esc(g.remaining_label || "—")}</span>${icon("chevron", 16)}</span>
+      <span class="svc-row-meta"><span>${esc(faDigits(g.remaining_label || "—"))}</span>${icon("chevron", 16)}</span>
     </button>`;
   }
 
@@ -107,21 +107,26 @@
     return `<div class="notice is-warn">
       ${icon("clock", 22)}
       <div class="notice-body"><strong>${esc(title)}: <span dir="ltr">${esc(g.username || "—")}</span></strong>
-        <span>${esc(g.remaining_label || "")}</span></div>
+        <span>${esc(faDigits(g.remaining_label || ""))}</span></div>
       <button type="button" class="btn sm is-warn" data-action="open-service" data-id="${id}" data-then="renew">تمدید</button>
     </div>`;
+  }
+
+  /** Expiry in the Persian calendar; the server's label only for cases without a date (on hold). */
+  function expireDateText(s) {
+    return core.formatDate(s.expire_at) || faDigits(s.expire || "—");
   }
 
   function serviceUsageHtml(s) {
     const fetched = s.info_fetched_at ? core.formatDateTime(s.info_fetched_at) : "";
     return `<section class="card" aria-label="مصرف سرویس">
       <div class="card-head">${serviceStatusBadge(s)}${fetched ? `<span class="muted sm">به‌روز: ${esc(fetched)}</span>` : ""}</div>
-      <p class="usage-line"><strong>${esc(s.traffic || "—")}</strong></p>
+      <p class="usage-line"><strong>${esc(faDigits(s.traffic || "—"))}</strong></p>
       ${meterHtml(s.traffic_pct)}
       <div class="tile-grid">
         <div class="tile"><span>زمان باقی‌مانده</span><strong>${esc(expireDaysLabel(s))}</strong></div>
-        <div class="tile"><span>انقضا</span><strong>${esc(s.expire || "—")}</strong></div>
-        <div class="tile"><span>آخرین اتصال</span><strong>${esc(s.online_at || "—")}</strong></div>
+        <div class="tile"><span>انقضا</span><strong>${esc(expireDateText(s))}</strong></div>
+        <div class="tile"><span>آخرین اتصال</span><strong>${esc(core.formatDateTime(s.online_at) || "—")}</strong></div>
       </div>
       ${serviceErrorHtml(s)}
     </section>`;
@@ -220,7 +225,7 @@
       ${plan.is_trial ? "" : `<form class="code-form" data-form="discount">
         <label class="form-field"><span class="muted sm">کد تخفیف (اختیاری)</span>
           <span class="code-line"><input type="text" name="code" maxlength="64" autocomplete="off" dir="ltr" autocapitalize="characters">
-          <button type="submit" class="btn ghost sm">اعمال</button></span></label>
+          <button type="submit" class="btn ghost">اعمال</button></span></label>
       </form>`}
       ${enough ? "" : LOW_BALANCE}
       <button type="button" class="btn block" data-action="buy" data-id="${Number(plan.id) || 0}"${enough ? "" : " disabled"}>${plan.is_trial ? "دریافت سرویس تست" : "پرداخت از کیف پول"}</button>

@@ -1,4 +1,5 @@
-/* Mini App — mobile-first, follows the Telegram theme with panel brand fallbacks. */
+/* Mini App — mobile-first. Surfaces and text follow the Telegram theme so the app blends
+   with Telegram's header; accents and status colours are the web panel's (panel.css). */
 :root {
   --background: #09090b;
   --foreground: #fafafa;
@@ -8,21 +9,24 @@
   --brand: #f97316;
   --brand-fg: #fb923c;
   --ok: #22c55e;
-  --warn: #f59e0b;
+  --warn: #eab308;
   --danger-base: #ef4444;
+  --on-solid: #ffffff;
+  --on-warn: #1c1305;
 
-  --bg: var(--tg-theme-bg-color, var(--background));
+  /* Telegram's grouped layout: the page uses secondary_bg, sections (cards) section_bg. */
+  --bg: var(--tg-theme-secondary-bg-color, var(--tg-theme-bg-color, var(--background)));
   --fg: var(--tg-theme-text-color, var(--foreground));
-  --card: var(--tg-theme-section-bg-color, var(--tg-theme-secondary-bg-color, var(--surface)));
+  --card: var(--tg-theme-section-bg-color, var(--tg-theme-bg-color, var(--surface)));
   --card-2: var(--surface-2);
   --muted-fg: var(--tg-theme-hint-color, var(--hint));
-  --accent: var(--tg-theme-button-color, var(--brand));
-  --accent-fg: var(--tg-theme-button-text-color, #ffffff);
-  --link: var(--tg-theme-link-color, var(--brand-fg));
+  --accent: var(--brand);
+  --accent-fg: var(--on-solid);
+  --link: var(--brand-fg);
   --danger: var(--tg-theme-destructive-text-color, var(--danger-base));
   --border: rgba(255, 255, 255, 0.09);
   --ok-soft: rgba(34, 197, 94, 0.16);
-  --warn-soft: rgba(245, 158, 11, 0.16);
+  --warn-soft: rgba(234, 179, 8, 0.16);
   --danger-soft: rgba(239, 68, 68, 0.16);
 
   /* Same radius policy as the web panel (panel.css):
@@ -57,7 +61,16 @@
   --surface: #ffffff;
   --surface-2: #f4f4f5;
   --hint: #52525b;
+  /* The panel's light values: darker so text and links keep their contrast on white. */
+  --brand: #ea580c;
+  --brand-fg: #c2410c;
+  --ok: #16a34a;
+  --warn: #ca8a04;
+  --danger-base: #dc2626;
   --border: rgba(0, 0, 0, 0.09);
+  --ok-soft: rgba(22, 163, 74, 0.12);
+  --warn-soft: rgba(202, 138, 4, 0.14);
+  --danger-soft: rgba(220, 38, 38, 0.12);
 }
 
 @supports (color: color-mix(in srgb, red 50%, blue)) {
@@ -120,13 +133,13 @@ button, input, select, textarea { font: inherit; color: inherit; }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .back-link {
-  align-self: flex-start; min-height: 40px; padding: 0 var(--space-1_5) 0 var(--space-1);
+  align-self: flex-start; min-height: 36px; padding: 0 var(--space-1_5) 0 var(--space-1);
   display: inline-flex; align-items: center; gap: var(--space-0);
   border: 1px solid var(--border); border-radius: var(--control-radius);
   background: var(--card); color: var(--link); font-size: 13px; cursor: pointer;
 }
 .role-chip {
-  flex-shrink: 0; padding: 3px 10px; border-radius: var(--control-radius);
+  flex-shrink: 0; padding: 2px var(--space-1); border-radius: var(--control-radius);
   background: var(--card-2); color: var(--muted-fg); font-size: 11px; font-weight: 700;
 }
 
@@ -138,7 +151,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
   padding: var(--space-2);
   display: flex; flex-direction: column; gap: var(--space-1_5);
 }
-.card.inset { background: var(--card-2); padding: var(--space-1_5); border-radius: var(--radius); gap: var(--space-1); }
+.card.inset { background: var(--card-2); padding: var(--space-1_5); gap: var(--space-1); }
 .card-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-1); }
 .card-title { font-size: 15px; font-weight: 700; }
 .list-card { padding-block: var(--space-0); gap: 0; }
@@ -149,7 +162,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 
 .badge {
   display: inline-flex; align-items: center; flex-shrink: 0;
-  padding: 2px 9px; border-radius: var(--control-radius);
+  padding: 2px var(--space-1); border-radius: var(--control-radius);
   background: var(--card-2); color: var(--muted-fg);
   font-size: 11px; font-weight: 700; line-height: 1.5;
 }
@@ -198,9 +211,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .btn.ghost.danger { color: var(--danger); border-color: var(--danger-soft); }
 .btn.sm { min-height: 36px; padding: 0 var(--space-1_5); font-size: 13px; }
 .btn.block { width: 100%; }
-.btn.is-warn { background: var(--warn); color: #1c1305; }
-.btn.is-danger { background: var(--danger); color: #ffffff; }
-.btn.is-copied { background: var(--ok); color: #ffffff; }
+.btn.is-warn { background: var(--warn); color: var(--on-warn); }
+.btn.is-danger { background: var(--danger); color: var(--on-solid); }
+.btn.is-copied { background: var(--ok); color: var(--on-solid); }
 .btn-row { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: var(--space-1); }
 .btn-col { display: flex; flex-direction: column; gap: var(--space-1); }
 .icon-btn {
@@ -231,8 +244,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .kv-list p { margin: 0; display: flex; justify-content: space-between; gap: var(--space-1); }
 div.list-row { cursor: default; }
 .count {
-  min-width: 26px; padding: 1px 8px; border-radius: var(--control-radius); text-align: center;
-  background: var(--warn); color: #1c1305; font-size: 12px; font-weight: 700;
+  min-width: 24px; padding: 2px var(--space-1); border-radius: var(--control-radius); text-align: center;
+  background: var(--warn); color: var(--on-warn); font-size: 12px; font-weight: 700;
 }
 
 /* ---------- services ---------- */
@@ -265,6 +278,7 @@ div.list-row { cursor: default; }
 .search-field:focus-within { border-color: var(--accent); }
 
 /* ---------- plans and checkout ---------- */
+/* Selected options keep a 1px border plus an inset ring, so selecting never shifts the layout. */
 .plan-list { display: flex; flex-direction: column; gap: var(--space-1); }
 .plan-option {
   width: 100%; display: flex; align-items: center; gap: var(--space-1_5);
@@ -273,7 +287,7 @@ div.list-row { cursor: default; }
   color: var(--fg); text-align: start; cursor: pointer;
 }
 .sheet .plan-option { background: var(--card-2); }
-.plan-option.is-selected { border: 2px solid var(--accent); }
+.plan-option.is-selected { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .plan-option input { width: 20px; height: 20px; margin: 0; accent-color: var(--accent); flex-shrink: 0; }
 .plan-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .plan-meta .badge { align-self: flex-start; }
@@ -300,7 +314,7 @@ div.list-row { cursor: default; }
   background: var(--card-2); color: var(--fg);
 }
 .form-field textarea { resize: vertical; border-radius: var(--radius); }
-.check-row { display: flex; align-items: center; gap: var(--space-1); min-height: 40px; }
+.check-row { display: flex; align-items: center; gap: var(--space-1); min-height: 44px; }
 .check-row input { width: 20px; height: 20px; accent-color: var(--accent); }
 .auto-form {
   display: flex; flex-direction: column; gap: var(--space-1);
@@ -326,22 +340,22 @@ div.list-row { cursor: default; }
   border-radius: var(--control-radius); border: 1px solid var(--border); background: var(--card-2);
   font-size: 13px; text-align: center;
 }
-.chip input:checked + span { border: 2px solid var(--accent); font-weight: 700; }
+.chip input:checked + span { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); font-weight: 700; }
 .chip input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
 .method-option {
   display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-1_5);
   padding: var(--space-1_5); border-radius: var(--radius); border: 1px solid var(--border); background: var(--card-2);
 }
-.method-option:has(input:checked) { border: 2px solid var(--accent); }
+.method-option:has(input:checked) { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .method-option input { width: 20px; height: 20px; margin: 0; accent-color: var(--accent); }
 .method-option select {
-  flex-basis: 100%; min-height: 40px; padding: 0 var(--space-1);
+  flex-basis: 100%; min-height: 44px; padding: 0 var(--space-1_5);
   border-radius: var(--control-radius); border: 1px solid var(--border); background: var(--card); color: var(--fg);
 }
 .copy-row { display: flex; flex-direction: column; gap: var(--space-0); }
 .copy-line {
   display: flex; align-items: center; justify-content: space-between; gap: var(--space-1);
-  padding: var(--space-1) var(--space-1_5); border-radius: var(--control-radius); background: var(--card-2);
+  padding: var(--space-1) var(--space-1_5); border-radius: var(--radius); background: var(--card-2);
 }
 .copy-line strong { font-size: 16px; letter-spacing: 0.04em; overflow-wrap: anywhere; }
 .file-field {
@@ -368,7 +382,7 @@ div.list-row { cursor: default; }
 .code-form { display: flex; flex-direction: column; gap: var(--space-1); }
 .code-line { display: flex; gap: var(--space-1); }
 .code-line input {
-  flex: 1; min-width: 0; min-height: 40px; padding: 0 var(--space-1_5);
+  flex: 1; min-width: 0; min-height: 44px; padding: 0 var(--space-1_5);
   border-radius: var(--control-radius); border: 1px solid var(--border); background: var(--card-2); color: var(--fg);
 }
 .is-plus { color: var(--ok); }
@@ -443,7 +457,7 @@ div.list-row { cursor: default; }
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
   animation: fade-in var(--motion);
 }
-.toast.is-error { background: var(--danger); color: #ffffff; }
+.toast.is-error { background: var(--danger); color: var(--on-solid); }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
