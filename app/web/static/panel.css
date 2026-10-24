@@ -11974,6 +11974,50 @@ html[data-theme="light"] .sales-delta.down { color: #b91c1c; }
 .home-sales-card.is-loading .sales-plot { opacity: 0.5; }
 .finance-report-methods .finance-method-share { width: 34%; min-width: 120px; }
 .finance-report-methods .finance-method-share .ov-meter-top { margin-bottom: 4px; }
+
+/* Finance reports: daily bar charts and the payment-method share bar. */
+.fin-charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: var(--stack-gap); }
+.fin-chart-card { display: flex; flex-direction: column; gap: var(--space-2); }
+.fin-chart-head { display: flex; flex-direction: column; gap: 4px; }
+.fin-chart-head h2 { font-size: var(--title-size); margin: 0; }
+.fin-chart-head p { margin: 0; font-size: 12px; }
+.fin-chart-empty { padding-block: var(--space-3); text-align: center; }
+.fin-bars {
+  list-style: none; margin: 0; padding: 0;
+  display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 6px;
+  height: 180px;
+}
+.fin-bars.is-dense { gap: 2px; }
+.fin-bar-col { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+/* The track fills the plot; the bar is --h% of it, the value sits just above the bar. */
+.fin-bar-track { position: relative; flex: 1; min-height: 0; }
+.fin-bar {
+  position: absolute; inset-inline: 0; bottom: 0; height: calc(var(--h, 0) * 1%);
+  border-radius: 6px 6px 2px 2px; background: color-mix(in srgb, var(--muted-fg) 35%, transparent); overflow: hidden;
+  transition: height var(--motion-med) var(--ease-out);
+}
+.fin-bar-ok { position: absolute; inset-inline: 0; bottom: 0; height: calc(var(--s, 0) * 1%); background: var(--ok); }
+.fin-bars.is-users .fin-bar { background: var(--info); }
+.fin-bar-value { position: absolute; inset-inline: 0; bottom: calc(var(--h, 0) * 1% + 2px); }
+.fin-bar-value, .fin-bar-label {
+  font-size: 11px; color: var(--muted-fg); text-align: center;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.fin-bars.is-dense .fin-bar-value { display: none; }
+/* Thirty columns are too narrow for a word: the sparse day numbers may spill over their neighbours. */
+.fin-bars.is-dense .fin-bar-label { overflow: visible; }
+.fin-bar-label { flex-shrink: 0; height: 16px; line-height: 16px; }
+.fin-legend { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2); font-size: 12px; color: var(--muted-fg); }
+.fin-legend li { display: inline-flex; align-items: center; gap: 6px; }
+.fin-dot { width: 10px; height: 10px; border-radius: 3px; background: color-mix(in srgb, var(--muted-fg) 35%, transparent); }
+.fin-dot.is-ok { background: var(--ok); }
+.fin-share { display: flex; height: 14px; margin-bottom: var(--space-1); border-radius: var(--control-radius); overflow: hidden; background: var(--muted); }
+.fin-share-seg { flex: 0 0 calc(var(--p, 0) * 1%); }
+:is(.fin-share-seg, .fin-dot)[data-tone="1"] { background: var(--brand); }
+:is(.fin-share-seg, .fin-dot)[data-tone="2"] { background: var(--info); }
+:is(.fin-share-seg, .fin-dot)[data-tone="3"] { background: var(--ok); }
+:is(.fin-share-seg, .fin-dot)[data-tone="4"] { background: var(--warn); }
+:is(.fin-share-seg, .fin-dot)[data-tone="5"] { background: var(--muted-fg); }
 .sc-svg { position: absolute; inset: 0; overflow: visible; }
 .sc-line { fill: none; stroke: var(--foreground); stroke-width: 2.25; stroke-linecap: round; stroke-linejoin: round; }
 .sc-area { fill: color-mix(in srgb, var(--foreground) 10%, transparent); stroke: none; }

@@ -255,3 +255,4 @@ tests/test_reseller_subscription_pages.py
 tests/test_reseller_package_bot.py
 tests/test_reseller_extra_purchase.py
 tests/test_bbc_refusal_reason.py
+tests/test_finance_daily_charts.py
