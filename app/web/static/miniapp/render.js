@@ -487,14 +487,18 @@
     ).join("")}</div>`;
   }
 
-  /** Counts that need someone to act, each opening its panel page when one exists. */
-  function attentionListHtml(stats, links, items) {
+  /** Counts that need someone to act: an in-app screen when allowed, else the panel page when one exists. */
+  function attentionListHtml(stats, links, items, inAppViews) {
     const byId = new Map((links || []).map((l) => [l.id, l]));
+    const inApp = inAppViews || new Set();
     const rows = items
       .filter(([key]) => Number((stats || {})[key]) > 0)
-      .map(([key, label, linkId]) => {
+      .map(([key, label, linkId, view]) => {
         const link = byId.get(linkId);
         const count = `<span class="count">${esc(num(stats[key]))}</span>`;
+        if (view && inApp.has(view)) {
+          return `<button type="button" class="list-row" data-action="goto" data-view="${esc(view)}"><span class="list-row-label">${esc(label)}</span>${count}</button>`;
+        }
         return link
           ? `<button type="button" class="list-row" data-action="open-panel" data-path="${esc(link.path)}"><span class="list-row-label">${esc(label)}</span>${count}</button>`
           : `<div class="list-row"><span class="list-row-label">${esc(label)}</span>${count}</div>`;
@@ -647,6 +651,47 @@
       </button>`).join("")}</div>`;
   }
 
+  /* ---------- receipt review ---------- */
+
+  function reviewKindText(item) {
+    if (item.kind === "topup") return "شارژ کیف پول";
+    return item.plan_name ? `خرید «${item.plan_name}»` : "خرید سرویس";
+  }
+
+  function reviewQueueHtml(data) {
+    const items = (data && data.items) || [];
+    if (!items.length) return emptyHtml("رسیدی در انتظار بررسی نیست.");
+    const total = Number(data.total) || items.length;
+    return `<section class="card list-card" aria-label="رسیدهای در انتظار">
+      ${total > items.length ? `<p class="muted sm">${esc(num(items.length))} رسید قدیمی‌تر از ${esc(num(total))} رسید نمایش داده شده است.</p>` : ""}
+      ${items.map((r) => `<button type="button" class="list-row" data-action="open-review" data-id="${Number(r.id) || 0}">
+        <span class="list-row-label"><span>${esc(money(r.amount))}</span>
+          <span class="muted sm"> · ${esc(reviewKindText(r))}</span>
+          <span class="muted sm reward-desc"><bdi>${esc(r.payer || "—")}</bdi> · ${esc(core.formatDateTime(r.created_at))}</span></span>
+        ${icon("chevron", 16)}
+      </button>`).join("")}
+    </section>`;
+  }
+
+  /** Sheet body for one receipt; ``imageUrl`` is a blob: URL made by the app, or "" while loading. */
+  function reviewSheetHtml(item, imageUrl, imageError) {
+    const id = Number(item.id) || 0;
+    const photo = imageUrl && /^blob:/.test(imageUrl)
+      ? `<img class="receipt-photo" src="${esc(imageUrl)}" alt="تصویر رسید پرداخت #${esc(num(id))}">`
+      : imageError ? `<p class="muted sm">${esc(imageError)}</p>` : loadingHtml(1);
+    return `${photo}
+      <div class="kv-list">
+        <p><span class="muted">مبلغ</span> <strong>${esc(money(item.amount))}</strong></p>
+        <p><span class="muted">نوع</span> ${esc(reviewKindText(item))}</p>
+        <p><span class="muted">پرداخت‌کننده</span> <bdi>${esc(item.payer || "—")}</bdi></p>
+        <p><span class="muted">زمان</span> ${esc(core.formatDateTime(item.created_at))}</p>
+      </div>
+      <div class="btn-row">
+        <button type="button" class="btn" data-action="review-approve" data-id="${id}">تأیید پرداخت</button>
+        <button type="button" class="btn ghost danger" data-action="review-reject" data-id="${id}">رد پرداخت</button>
+      </div>`;
+  }
+
   function loadingHtml(rows) {
     return `<div class="loading" aria-busy="true" aria-label="در حال بارگذاری">${'<div class="skeleton"></div>'.repeat(Number(rows) || 3)}</div>`;
   }
@@ -663,7 +708,7 @@
     icon, isOnHoldStatus, statusTone, expireDaysLabel, meterHtml, serviceRowHtml, glanceRowHtml,
     attentionCardHtml, serviceDetailHtml, planOptionsHtml, checkoutHtml, discountedCheckoutHtml, giftFormHtml, renewPlansHtml,
     renewPreviewHtml, addonPacksHtml, automationHtml, cancellationHtml, qrHtml, activityHtml,
-    backBarHtml, guideListHtml, guideHtml, rewardValueText, clubHtml, rewardCodeHtml, rewardServicePickerHtml, walletCardHtml, supportHtml, ticketNewFormHtml, ticketThreadHtml, topupFormHtml, topupPayHtml, receiptFormHtml, recentTopupsHtml, statsHtml, attentionListHtml, linksHtml, navHtml, loadingHtml, emptyHtml,
+    backBarHtml, guideListHtml, guideHtml, rewardValueText, clubHtml, rewardCodeHtml, rewardServicePickerHtml, reviewQueueHtml, reviewSheetHtml, walletCardHtml, supportHtml, ticketNewFormHtml, ticketThreadHtml, topupFormHtml, topupPayHtml, receiptFormHtml, recentTopupsHtml, statsHtml, attentionListHtml, linksHtml, navHtml, loadingHtml, emptyHtml,
     errorHtml,
   });
 })(typeof window === "object" ? window : globalThis);

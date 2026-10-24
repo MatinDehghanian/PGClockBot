@@ -28,6 +28,7 @@ from app.db.models import Plan
 from app.services.catalog_pricing import annotate_prices, displayed_quote
 from app.services.db_safe import rollback_quiet
 from app.services.miniapp_auth import load_mini_user, load_reseller_profile, resolve_mini_persona
+from app.services.receipt_review import may_review_receipts
 from app.services.service_scope import SERVICE_SEARCH_MAX_LENGTH, page_customer_services
 from app.services.users import get_all_settings, on
 from app.services.wallet import list_activity
@@ -134,8 +135,10 @@ def register_miniapp_feeds(app: FastAPI, *, get_db) -> None:
         user = await load_mini_user(session, request)
         persona = resolve_mini_persona(user)
         if persona == "admin":
-            return _no_store(await _admin_ops_payload(session))
-        if persona == "reseller":
+            payload = await _admin_ops_payload(session)
+        elif persona == "reseller":
             profile = await load_reseller_profile(session, user)
-            return _no_store(await _reseller_ops_payload(session, profile, user=user))
-        raise HTTPException(403, "این بخش برای حساب شما فعال نیست")
+            payload = await _reseller_ops_payload(session, profile, user=user)
+        else:
+            raise HTTPException(403, "این بخش برای حساب شما فعال نیست")
+        return _no_store({**payload, "can_review": await may_review_receipts(session, user)})
