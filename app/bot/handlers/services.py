@@ -16,7 +16,7 @@ from app.bot.chat_cleanup import keep_message
 from app.bot.list_pages import page_line, page_number
 from app.bot.tg_utils import safe_edit_text
 from app.config import get_settings
-from app.db.models import BotUser, UserService
+from app.db.models import BotUser, Plan, UserService
 from app.services.formatting import format_message, format_toman, service_card
 from app.services.orders import get_catalog_plan, list_active_plans
 from app.services.pasarguard import absolutize_subscription_url, get_pg
@@ -25,6 +25,7 @@ from app.services.service_scope import customer_may_use_service, list_customer_s
 from app.services.users import current_shop_reseller_id, get_all_settings
 from app.services.redact import user_safe_error
 from app.services.service_live_info import fetch_live_service_info
+from app.services.service_renewals import RENEWAL_CURRENT, RENEWAL_LABELS, renewal_relation
 from app.services.wireguard_delivery import REASON_DISABLED, REASON_UNAVAILABLE, fetch_wireguard, has_wireguard
 from app.services.wireguard_send import send_wireguard_files
 from app.services import bot_feedback_texts as feedback
@@ -540,6 +541,11 @@ async def svc_wireguard(callback: CallbackQuery, session: AsyncSession, db_user:
     else:
         await callback.answer(WIREGUARD_SEND_FAILED, show_alert=True)
 
+def _renewal_button_text(plan: Plan, relation: str | None) -> str:
+    label = f"{RENEWAL_LABELS[relation]} · " if relation else ""
+    return f"{label}{plan.name} — {format_toman(sale_price(plan), get_settings().currency)}"
+
+
 @router.callback_query(F.data.startswith("svc:renew:"))
 async def svc_renew(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
     ui = await get_all_settings(session)
@@ -562,10 +568,13 @@ async def svc_renew(callback: CallbackQuery, session: AsyncSession, db_user: Bot
     from app.services.plan_categories import shop_category_map
 
     categories = await shop_category_map(session)
+    current_plan = next((p for p in plans if svc.plan_id is not None and int(p.id) == int(svc.plan_id)), None)
+    relations = {int(p.id): renewal_relation(current_plan, p) for p in plans}
+    plans = sorted(plans, key=lambda p: relations[int(p.id)] != RENEWAL_CURRENT)
     rows = [
         [
             InlineKeyboardButton(
-                text=f"{p.name} — {format_toman(sale_price(p), get_settings().currency)}",
+                text=_renewal_button_text(p, relations[int(p.id)]),
                 callback_data=f"svc:renewpay:{svc_id}:{p.id}",
                 icon_custom_emoji_id=kb.category_icon_for(p, categories),
             )
