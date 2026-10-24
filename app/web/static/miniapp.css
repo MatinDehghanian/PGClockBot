@@ -106,6 +106,8 @@ body {
 body.has-sheet { overflow: hidden; }
 h1, h2, p { margin: 0; }
 button, input, select, textarea { font: inherit; color: inherit; }
+/* iOS zooms into any field under 16px when it gets focus; text fields stay at 16px. */
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea { font-size: 16px; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .visually-hidden {
@@ -119,7 +121,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .center { text-align: center; }
 .pre-line { white-space: pre-line; }
 
-.view { display: flex; flex-direction: column; gap: var(--space-1_5); animation: fade-in var(--motion); }
+.view { display: flex; flex-direction: column; gap: var(--space-2); animation: fade-in var(--motion); }
 @keyframes fade-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 
 .view-head {
@@ -149,7 +151,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: var(--space-2);
-  display: flex; flex-direction: column; gap: var(--space-1_5);
+  display: flex; flex-direction: column; gap: var(--space-2);
 }
 .card.inset { background: var(--card-2); padding: var(--space-1_5); gap: var(--space-1); }
 .card-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-1); }
@@ -214,6 +216,10 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .btn.is-warn { background: var(--warn); color: var(--on-warn); }
 .btn.is-danger { background: var(--danger); color: var(--on-solid); }
 .btn.is-copied { background: var(--ok); color: var(--on-solid); }
+/* A primary action sits a little apart from the content it acts on. */
+:is(.card, .sheet-body, .topup-form, .receipt-form, .ticket-form, .code-form) > :is(.btn, .btn-row, .btn-col):not(:first-child) {
+  margin-top: var(--space-1);
+}
 .btn-row { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: var(--space-1); }
 .btn-col { display: flex; flex-direction: column; gap: var(--space-1); }
 .icon-btn {
@@ -324,7 +330,7 @@ div.list-row { cursor: default; }
 .auto-form .btn { align-self: flex-start; }
 
 /* ---------- wallet top-up ---------- */
-.topup-form, .receipt-form { display: flex; flex-direction: column; gap: var(--space-1_5); }
+.topup-form, .receipt-form { display: flex; flex-direction: column; gap: var(--space-2); }
 .field-group { margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: var(--space-1); }
 .field-group legend { padding: 0; margin-bottom: var(--space-1); font-size: 13px; font-weight: 700; }
 .form-field input {
@@ -352,12 +358,17 @@ div.list-row { cursor: default; }
   flex-basis: 100%; min-height: 44px; padding: 0 var(--space-1_5);
   border-radius: var(--control-radius); border: 1px solid var(--border); background: var(--card); color: var(--fg);
 }
-.copy-row { display: flex; flex-direction: column; gap: var(--space-0); }
+.copy-row { display: flex; flex-direction: column; gap: var(--space-1); }
 .copy-line {
   display: flex; align-items: center; justify-content: space-between; gap: var(--space-1);
   padding: var(--space-1) var(--space-1_5); border-radius: var(--radius); background: var(--card-2);
 }
-.copy-line strong { font-size: 16px; letter-spacing: 0.04em; overflow-wrap: anywhere; }
+/* One line: a long value (an invite link) ends in «…»; the button keeps its width when it says «کپی شد». */
+.copy-line strong {
+  flex: 1; min-width: 0; font-size: 16px; letter-spacing: 0.04em; text-align: right;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.copy-line .btn { flex-shrink: 0; min-width: 76px; white-space: nowrap; }
 .file-field {
   min-height: 56px; display: flex; flex-direction: column; justify-content: center; gap: var(--space-0);
   padding: var(--space-1_5); border-radius: var(--radius); border: 1px dashed var(--border);
@@ -367,7 +378,7 @@ div.list-row { cursor: default; }
 .file-field:focus-within { border-color: var(--accent); border-style: solid; }
 
 /* ---------- support ---------- */
-.ticket-form { display: flex; flex-direction: column; gap: var(--space-1_5); }
+.ticket-form { display: flex; flex-direction: column; gap: var(--space-2); }
 .thread { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-1); }
 .bubble {
   max-width: 88%; padding: var(--space-1) var(--space-1_5); border-radius: var(--radius);
@@ -379,7 +390,7 @@ div.list-row { cursor: default; }
 .bubble-who { display: block; margin-bottom: 2px; }
 
 /* ---------- codes ---------- */
-.code-form { display: flex; flex-direction: column; gap: var(--space-1); }
+.code-form { display: flex; flex-direction: column; gap: var(--space-1_5); }
 .code-line { display: flex; gap: var(--space-1); }
 .code-line input {
   flex: 1; min-width: 0; min-height: 44px; padding: 0 var(--space-1_5);
@@ -440,13 +451,13 @@ div.list-row { cursor: default; }
   padding: var(--space-2) calc(var(--safe-right) + var(--space-2)) max(var(--safe-bottom), var(--space-2))
     calc(var(--safe-left) + var(--space-2));
   border-radius: var(--radius) var(--radius) 0 0; background: var(--card);
-  display: flex; flex-direction: column; gap: var(--space-1_5);
+  display: flex; flex-direction: column; gap: var(--space-2);
   animation: sheet-up var(--motion);
 }
 @keyframes sheet-up { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
 .sheet-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-1); }
 .sheet-head h2 { font-size: 16px; font-weight: 700; }
-.sheet-body { display: flex; flex-direction: column; gap: var(--space-1_5); }
+.sheet-body { display: flex; flex-direction: column; gap: var(--space-2); }
 
 /* ---------- toast ---------- */
 .toast {
