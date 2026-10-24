@@ -87,6 +87,7 @@ tests/test_miniapp_topup.py
 tests/test_miniapp_support.py
 tests/test_miniapp_codes.py
 tests/test_miniapp_guides.py
+tests/test_miniapp_loyalty.py
 tests/test_loyalty_redeem_race.py
 tests/test_renewal_preview.py
 tests/test_on_hold_addon_quotas.py
