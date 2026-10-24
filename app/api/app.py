@@ -1435,6 +1435,8 @@ def create_api_app(lifespan=None) -> FastAPI:
         require_staff=require_staff,
         get_db=get_db,
     )
+    from app.api.reseller_subscription_pages import register_reseller_subscription_pages
+    register_reseller_subscription_pages(app, render=render, require_staff=require_staff, get_db=get_db)
     from app.api.settlement_pages import register_settlement_pages
 
     register_settlement_pages(app, get_db=get_db)
