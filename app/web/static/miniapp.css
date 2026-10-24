@@ -333,6 +333,15 @@ div.list-row { cursor: default; }
 .bubble.is-staff { align-self: flex-end; background: var(--card-2); }
 .bubble-who { display: block; margin-bottom: 2px; }
 
+/* ---------- codes ---------- */
+.code-form { display: flex; flex-direction: column; gap: var(--space-1); }
+.code-line { display: flex; gap: var(--space-1); }
+.code-line input {
+  flex: 1; min-width: 0; min-height: 40px; padding: 0 var(--space-1_5);
+  border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--card-2); color: var(--fg);
+}
+.is-plus { color: var(--ok); }
+
 /* ---------- states ---------- */
 .loading { display: flex; flex-direction: column; gap: var(--space-1_5); }
 .skeleton {
