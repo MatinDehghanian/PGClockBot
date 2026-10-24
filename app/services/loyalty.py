@@ -1097,6 +1097,25 @@ async def _replayed_redemption(session: AsyncSession, key: str) -> RewardRedempt
     return existing
 
 
+async def next_redemption_key(
+    session: AsyncSession, user_id: int, reward_id: int, service_id: int | None
+) -> str:
+    """Idempotency key for the customer's next redemption of one reward.
+
+    Derived from the redemptions already recorded (not from the request), so a double
+    tap or a retried request shares the key and the unique index keeps it to one spend.
+    """
+    used = int(
+        await session.scalar(
+            select(func.count()).select_from(RewardRedemption).where(
+                RewardRedemption.user_id == int(user_id), RewardRedemption.reward_id == int(reward_id),
+            )
+        )
+        or 0
+    )
+    return f"tg:redeem:{int(user_id)}:{int(reward_id)}:{int(service_id or 0)}:{used}"
+
+
 async def redeem_reward(
     session: AsyncSession,
     user: BotUser,
