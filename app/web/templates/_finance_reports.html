@@ -46,6 +46,7 @@
 </section>
 
 {% include "_home_sales_chart.html" %}
+{% include "_finance_charts.html" %}
 
 <div class="home-panels finance-report-panels">
   <section class="home-panel home-panel-neutral">
@@ -143,6 +144,14 @@
     <h2>روش پرداخت — {{ report.period_label or '' }}</h2>
     <p class="muted">فقط فروش موفق در بازه</p>
   </header>
+  {% if method_segments %}
+  <div class="fin-share" role="img" aria-label="سهم روش‌های پرداخت از فروش: {% for seg in method_segments %}{{ seg.label }} {{ seg.share_pct }}٪{% if not loop.last %}، {% endif %}{% endfor %}">
+    {% for seg in method_segments %}<span class="fin-share-seg" data-tone="{{ seg.tone }}" style="--p: {{ seg.share_pct }}" title="{{ seg.label }}: {{ seg.share_pct }}٪"></span>{% endfor %}
+  </div>
+  <ul class="fin-legend">
+    {% for seg in method_segments %}<li><i class="fin-dot" data-tone="{{ seg.tone }}"></i>{{ seg.label }} <span dir="ltr">{{ seg.share_pct }}%</span></li>{% endfor %}
+  </ul>
+  {% endif %}
   <div class="table-wrap">
     <table class="table-compact">
       <thead>

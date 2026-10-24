@@ -1,0 +1,55 @@
+{# Daily bar charts for the finance reports tab — expects: charts (finance_charts), report #}
+{% set ch = charts or {} %}
+{% set chart_days = ch.days or [] %}
+{% set dense = chart_days | length > 7 %}
+<div class="fin-charts">
+  <section class="card fin-chart-card" aria-label="سفارش‌ها در روز">
+    <header class="fin-chart-head">
+      <h2>سفارش‌ها در روز</h2>
+      <p class="muted">{{ chart_days | length }} روز اخیر · {{ ch.total_orders | num }} سفارش، {{ ch.total_delivered | num }} تحویل‌شده</p>
+    </header>
+    {% if ch.has_orders %}
+    <ol class="fin-bars{% if dense %} is-dense{% endif %}" role="img"
+        aria-label="سفارش‌ها در {{ chart_days | length }} روز اخیر: {{ ch.total_orders | num }} سفارش، {{ ch.total_delivered | num }} تحویل‌شده">
+      {% for d in chart_days %}
+      <li class="fin-bar-col" title="{{ d.weekday }} {{ d.jalali }} — {{ d.orders | num }} سفارش، {{ d.delivered | num }} تحویل‌شده">
+        <span class="fin-bar-track" style="--h: {{ d.orders_pct }}">
+          <span class="fin-bar-value">{{ d.orders | num if d.orders else '' }}</span>
+          <span class="fin-bar"><i class="fin-bar-ok" style="--s: {{ d.delivered_share }}"></i></span>
+        </span>
+        <span class="fin-bar-label">{% if loop.last %}امروز{% elif not dense %}{{ d.weekday }}{% elif loop.revindex0 % 5 == 0 %}{{ d.jalali[-2:] | int }}{% endif %}</span>
+      </li>
+      {% endfor %}
+    </ol>
+    <ul class="fin-legend">
+      <li><i class="fin-dot is-ok"></i>تحویل‌شده</li>
+      <li><i class="fin-dot"></i>تحویل‌نشده</li>
+    </ul>
+    {% else %}
+    <p class="muted fin-chart-empty">در این بازه سفارشی ثبت نشده است.</p>
+    {% endif %}
+  </section>
+
+  <section class="card fin-chart-card" aria-label="کاربران جدید در روز">
+    <header class="fin-chart-head">
+      <h2>کاربران جدید در روز</h2>
+      <p class="muted">{{ chart_days | length }} روز اخیر · {{ ch.total_new_users | num }} کاربر جدید</p>
+    </header>
+    {% if ch.has_users %}
+    <ol class="fin-bars is-users{% if dense %} is-dense{% endif %}" role="img"
+        aria-label="کاربران جدید در {{ chart_days | length }} روز اخیر: {{ ch.total_new_users | num }}">
+      {% for d in chart_days %}
+      <li class="fin-bar-col" title="{{ d.weekday }} {{ d.jalali }} — {{ d.new_users | num }} کاربر جدید">
+        <span class="fin-bar-track" style="--h: {{ d.users_pct }}">
+          <span class="fin-bar-value">{{ d.new_users | num if d.new_users else '' }}</span>
+          <span class="fin-bar"></span>
+        </span>
+        <span class="fin-bar-label">{% if loop.last %}امروز{% elif not dense %}{{ d.weekday }}{% elif loop.revindex0 % 5 == 0 %}{{ d.jalali[-2:] | int }}{% endif %}</span>
+      </li>
+      {% endfor %}
+    </ol>
+    {% else %}
+    <p class="muted fin-chart-empty">در این بازه کاربر جدیدی اضافه نشده است.</p>
+    {% endif %}
+  </section>
+</div>
