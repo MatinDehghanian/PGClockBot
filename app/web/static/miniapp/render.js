@@ -22,6 +22,7 @@
     chevron: '<path d="m15 6-6 6 6 6"/>',
     search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
     close: '<path d="M6 6l12 12M18 6 6 18"/>',
+    chat: '<path d="M4 5h16v11H9l-5 4z"/><path d="M8 9h8M8 12h5"/>',
   };
 
   function icon(name, size) {
@@ -393,6 +394,50 @@
     </section>`;
   }
 
+  const TICKET_TONES = { open: "warn", answered: "ok", closed: "" };
+
+  function supportHtml(data) {
+    const contacts = (data && data.contacts) || [];
+    const tickets = (data && data.tickets) || [];
+    return `<section class="card" aria-label="پشتیبانی">
+        <p class="pre-line">${esc(data.text || "")}</p>
+        <button type="button" class="btn block" data-action="ticket-new">تیکت جدید</button>
+        ${contacts.length ? `<div class="btn-col">${contacts.map((c, i) => `<button type="button" class="btn ghost block" data-action="open-contact" data-index="${i}">گفتگو با ${esc(c.title)}</button>`).join("")}</div>` : ""}
+      </section>
+      <section class="card list-card" aria-label="تیکت‌های من"><h2 class="card-title">تیکت‌های من</h2>
+        ${tickets.length ? tickets.map((t) => `<button type="button" class="list-row" data-action="open-ticket" data-id="${Number(t.id) || 0}">
+          <span class="list-row-label"><span>${esc(t.subject)}</span><span class="muted sm"> · #${esc(num(t.id))}</span></span>
+          ${badge(t.status_fa, TICKET_TONES[t.status] || "")}
+        </button>`).join("") : '<p class="muted sm">هنوز تیکتی ندارید.</p>'}
+      </section>`;
+  }
+
+  function ticketNewFormHtml() {
+    return `<form class="ticket-form" data-form="ticket-new">
+      <label class="form-field"><span>موضوع</span><input type="text" name="subject" maxlength="120" autocomplete="off"></label>
+      <label class="form-field"><span>متن پیام</span><textarea name="body" rows="5" maxlength="2000"></textarea></label>
+      <button type="submit" class="btn block">ثبت تیکت</button>
+    </form>`;
+  }
+
+  function ticketThreadHtml(t) {
+    const id = Number(t.id) || 0;
+    return `<header class="view-head">
+        <div><span class="muted sm">تیکت #${esc(num(id))}</span><h1>${esc(t.subject)}</h1></div>
+        <button type="button" class="icon-btn" data-action="refresh-ticket" data-id="${id}" aria-label="به‌روزرسانی گفتگو">${icon("refresh")}</button>
+      </header>
+      <div class="card-head">${badge(t.status_fa, TICKET_TONES[t.status] || "")}</div>
+      <ol class="thread" aria-label="پیام‌ها">${(t.messages || []).map((m) => `<li class="bubble${m.from_staff ? " is-staff" : " is-mine"}">
+        <span class="bubble-who muted sm">${m.from_staff ? "پشتیبانی" : "شما"} · ${esc(core.formatDateTime(m.created_at))}</span>
+        <p class="pre-line">${esc(m.body)}</p></li>`).join("")}</ol>
+      ${t.is_closed
+        ? '<p class="muted sm center">این تیکت بسته شده است؛ برای ادامه، تیکت تازه بسازید.</p>'
+        : `<form class="ticket-form" data-form="ticket-reply" data-id="${id}">
+          <label class="form-field"><span class="visually-hidden">پاسخ شما</span><textarea name="body" rows="3" maxlength="2000" placeholder="پاسخ خود را بنویسید"></textarea></label>
+          <button type="submit" class="btn block">ارسال</button>
+        </form>`}`;
+  }
+
   function statsHtml(stats, keys, { columns } = {}) {
     const s = stats || {};
     return `<div class="tile-grid${columns === 2 ? " cols-2" : ""}">${keys.map(([key, label, isMoney]) =>
@@ -445,7 +490,7 @@
     icon, isOnHoldStatus, statusTone, expireDaysLabel, meterHtml, serviceRowHtml, glanceRowHtml,
     attentionCardHtml, serviceDetailHtml, planOptionsHtml, checkoutHtml, renewPlansHtml,
     renewPreviewHtml, addonPacksHtml, automationHtml, cancellationHtml, qrHtml, activityHtml,
-    walletCardHtml, topupFormHtml, topupPayHtml, receiptFormHtml, recentTopupsHtml, statsHtml, attentionListHtml, linksHtml, navHtml, loadingHtml, emptyHtml,
+    walletCardHtml, supportHtml, ticketNewFormHtml, ticketThreadHtml, topupFormHtml, topupPayHtml, receiptFormHtml, recentTopupsHtml, statsHtml, attentionListHtml, linksHtml, navHtml, loadingHtml, emptyHtml,
     errorHtml,
   });
 })(typeof window === "object" ? window : globalThis);

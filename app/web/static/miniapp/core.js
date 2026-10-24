@@ -103,6 +103,16 @@
     return true;
   }
 
+  /** t.me links open inside Telegram; anything else goes through openExternal. */
+  function openTelegramLink(url) {
+    const safe = safeUrl(url);
+    if (tg && typeof tg.openTelegramLink === "function" && /^https:\/\/t\.me\//i.test(safe)) {
+      tg.openTelegramLink(safe);
+      return true;
+    }
+    return openExternal(safe);
+  }
+
   class ApiError extends Error {
     constructor(message, status) {
       super(message);
@@ -224,7 +234,7 @@
 
   const core = Object.freeze({
     tg, getInitData, esc, safeUrl, safePanelPath, num, money, parseAmount, setCurrency, formatDateTime,
-    haptic, toast, confirmAction, openExternal, api, ApiError, copyText, markCopied,
+    haptic, toast, confirmAction, openExternal, openTelegramLink, api, ApiError, copyText, markCopied,
     applyTheme, initTelegram,
   });
   root.PGMini = Object.assign(root.PGMini || {}, { core });
