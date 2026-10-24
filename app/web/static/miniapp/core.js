@@ -220,6 +220,13 @@
     } catch (_) {}
   }
 
+  /** Telegram's top insets apply only in fullscreen; CSS reads data-fullscreen. */
+  function applyFullscreen() {
+    const doc = root.document;
+    if (!doc || !doc.documentElement) return;
+    doc.documentElement.setAttribute("data-fullscreen", tg && tg.isFullscreen ? "1" : "0");
+  }
+
   function initTelegram() {
     if (!tg) return;
     try {
@@ -227,8 +234,10 @@
       tg.expand();
     } catch (_) {}
     applyTheme();
+    applyFullscreen();
     try {
       tg.onEvent("themeChanged", applyTheme);
+      tg.onEvent("fullscreenChanged", applyFullscreen);
     } catch (_) {}
   }
 

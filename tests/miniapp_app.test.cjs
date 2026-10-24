@@ -60,6 +60,19 @@ async function boot(options) {
 const tests = [];
 const test = (name, fn) => tests.push([name, fn]);
 
+test("Telegram's top insets apply only while the app is fullscreen", async () => {
+  const env = await boot({ routes: router() });
+  const tg = env.context.Telegram.WebApp;
+  const attrs = env.context.document.documentElement.attrs;
+  assert.equal(attrs["data-fullscreen"], "0");
+  tg.isFullscreen = true;
+  tg.events.fullscreenChanged();
+  assert.equal(attrs["data-fullscreen"], "1");
+  tg.isFullscreen = false;
+  tg.events.fullscreenChanged();
+  assert.equal(attrs["data-fullscreen"], "0");
+});
+
 test("launch reads only /me and escapes customer text", async () => {
   const env = await boot({ routes: router() });
   assert.deepEqual(env.calls.map((c) => c.url), ["/api/mini/me"]);
