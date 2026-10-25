@@ -138,24 +138,26 @@ quiescence/evidence is required; a force-clear/reapply control is intentionally 
 
 ## Migration and rollback
 
-New revisions follow preserved prerequisites: 0070 identity expansion; 0071 channel
-ownership; 0072 consent history; 0073 catalog/read snapshots/request replay; 0074
-operation/target/audit/lease/guard/capacity; 0075 encrypted delivery/pack grants;
-0076 event/destination/key/attempt/control evidence. Each new migration is repeat-safe
-and retains populated records on downgrade. Do not renumber merged prerequisites.
+Feature revisions 0071 foundation, 0072 administration and 0073 security follow
+upstream `0070_shop_miniapp_key`; subsequent revisions are: 0074 identity expansion; 0075 channel
+ownership; 0076 consent history; 0077 catalog/read snapshots/request replay; 0078
+operation/target/audit/lease/guard/capacity; 0079 encrypted delivery/pack grants;
+0080 event/destination/key/attempt/control evidence. Each new migration is repeat-safe
+and retains populated records on downgrade. Merged upstream revisions 0067–0070 are unchanged. Only this feature’s unmerged
+revisions were renumbered during target integration.
 
 On an existing installation, under normal backup/change procedures:
 
 1. Keep route, execution and webhook flags false; keep the DB API switch disabled.
 2. Deploy the compatibility-aware code, then upgrade explicitly to
-   `0070_customer_identity` before attempting head.
+   `0074_customer_identity` before attempting head.
 3. Run `python -m app.cli.customer_identity_backfill` from zero. It commits bounded
    500-row batches and supports explicit saved user/service cursors. Run from zero
    again to verify coverage. Resolve reported inconsistencies without guessing shops
    or clearing review flags. Backfill does not reactivate blocked customers. After head is installed, reruns
    process only legacy rows, skip website services and retain their identities and
    technical state.
-4. Upgrade to head. 0071 refuses incomplete coverage before owner nullability changes.
+4. Upgrade to head. 0075 refuses incomplete coverage before owner nullability changes.
    SQLite requires a dedicated migration connection with FK enforcement off for its
    parent-table rebuild and verifies integrity afterward; normal Alembic supplies it.
    Request connections must retain FK enforcement. PostgreSQL uses native alteration.
@@ -178,8 +180,9 @@ exist. Do not physically drop populated integration tables/columns as rollback.
 For this local handoff, all checks requiring an actual PasarGuard panel, staging
 setup/deployment, live infrastructure probes, real credentials or real Telegram/
 webhook deliveries are **deferred / not performed**. No staging access or
-credentials are required for this task. The completed automated evidence is reused;
-no runtime changes, replacement mock tests or broad-suite reruns were needed.
+credentials are required for this task. Earlier automated evidence was verified against its saved fingerprint. Target
+integration required fresh affected database/concurrency, security and full-suite
+checks; the final submission checkpoint in the roadmap records their results.
 Deferral does not satisfy the future activation gates below or relax any runtime
 authorization, current-principal or live-PG-evidence requirement. Public API,
 execution, webhook and database activation switches remain disabled.

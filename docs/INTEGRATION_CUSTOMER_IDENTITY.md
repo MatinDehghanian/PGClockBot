@@ -1,7 +1,7 @@
 # Integration customer identity decision
 
 Status: independent customers, compatibility/canonical ownership enforcement and
-optional dual-proof Telegram linking are implemented locally. Migrations 0070–0072
+optional dual-proof Telegram linking are implemented locally. Migrations 0074–0076
 retain original shops, owners and unresolved review evidence. API execution and
 private delivery are separate from linking. The [release operating guide](INTEGRATION_API_OPERATIONS.md)
 records the current supported boundary and activation/rollback requirements.
@@ -240,7 +240,7 @@ old schema or making an old application safe. The chosen policy is:
   procedure. A backup restore alone would lose subsequent website/customer data.
 
 Phase 2A deliberately retains the additive schema even when empty. Its tested
-0070-to-0069 downgrade disables API access and permits re-upgrade without deleting
+0074-to-0073 downgrade disables API access and permits re-upgrade without deleting
 identity data. Physical removal of unused extensions is a separate future
 decommission procedure, rather than a supported 2A rollback mode. An unconditional
 populated table drop or inventing bot owners is never a supported rollback.
@@ -283,7 +283,7 @@ customer wallet commerce and new contact-verification channels remain out of v1.
 
 ## 9. Phase 2A implementation and operating procedure
 
-Migration `0070_customer_identity` follows the preserved `0069_integration_security`.
+Migration `0074_customer_identity` follows the preserved `0073_integration_security`.
 It adds independent identities, mappings, nullable service `customer_id`/`public_id`,
 lookup indexes and a deny-by-default `Integration.customer_entry_policy`.
 `BotUser.telegram_id` and `UserService.bot_user_id` remain non-null. No integration,
@@ -348,7 +348,7 @@ This creates no PurchaseContact evidence. Future HTTP callers must also pass the
 established transport/authentication/write-budget boundary; internal services do
 not mount routes or enable the global switch.
 
-**Supported rollback:** downgrade from 0070 to 0069 disables the global API switch
+**Supported rollback:** downgrade from 0074 to 0073 disables the global API switch
 and retains all added schema, public IDs, mappings, service associations and policy
 values, even when empty. Re-upgrade is repeat-safe and repairs missing indexes.
 Prerequisite credentials/security/admin-audit evidence is preserved. SQLite adds
@@ -356,7 +356,7 @@ the nullable service reference inline to avoid rebuilding a parent referenced by
 orders; the other additive changes use Alembic batch operations. PostgreSQL uses
 its native foreign-key operation. Neither backend invents IDs or drops populated
 extensions. This is a retained-schema rollback, not restoration of the old schema.
-Only this 0070↔0069 path is covered here; downgrade through earlier prerequisite
+Only this 0074↔0073 path is covered here; downgrade through earlier prerequisite
 migrations and arbitrary older application binaries are not certified by 2A.
 
 **Next task, Phase 2B:** inventory and adapt remaining legacy service readers,

@@ -17,6 +17,7 @@ from app.bot import bbc_checkout_view as bbc_view
 from app.bot import keyboards as kb
 from app.bot.chat_cleanup import keep_message
 from app.bot.handlers.purchase_contact import prompt_purchase_contact_if_needed
+from app.bot.handlers.psp_check import psp_check_button
 from app.bot.tg_utils import safe_edit_text
 from app.config import get_settings
 from app.db.models import BotUser, Order, PaymentMethod
@@ -2371,6 +2372,8 @@ async def pay_psp_cb(
     if not is_customer_order_in_current_shop(order, db_user.id):
         await callback.answer("این سفارش دیگر در دسترس نیست", show_alert=True)
         return
+    # Answer before the gateway call so Telegram does not expire the tap.
+    await callback.answer("در حال آماده‌سازی درگاه…")
     try:
         payment = await start_method_payment(
             session, order, db_user.id, PaymentMethod.PSP.value
@@ -2381,9 +2384,9 @@ async def pay_psp_cb(
             description=f"سفارش #{order.id}",
         )
     except ValueError as e:
-        await callback.answer(user_safe_error(e), show_alert=True)
+        if callback.message:
+            await callback.message.answer(user_safe_error(e))
         return
-    await callback.answer()
     amount = format_toman(order.amount, get_settings().currency)
     try:
         body = render_message_template(
@@ -2397,14 +2400,20 @@ async def pay_psp_cb(
     except Exception:
         body = (
             f"مبلغ {amount} را از طریق درگاه آنلاین پرداخت کنید.\n"
-            "پس از تأیید درگاه، سرویس خودکار تحویل می‌شود."
+            "پس از پرداخت، به همین چت ربات برگردید؛ تأیید و تحویل خودکار است."
         )
     body += f"\n\n(پرداخت #{payment.id})"
+    from app.services.payment_settlement import (
+        public_checkout_button_url,
+        with_psp_checkout_guidance,
+    )
+
+    body = with_psp_checkout_guidance(body)
     rows: list[list[InlineKeyboardButton]] = []
-    link = (settlement.checkout_url or "").strip()
+    link = public_checkout_button_url(settlement, ui=ui)
     if link.startswith("http://") or link.startswith("https://"):
         rows.append([InlineKeyboardButton(text="🏦 ورود به درگاه", url=link)])
-    markup = InlineKeyboardMarkup(inline_keyboard=rows) if rows else None
+        rows.append([psp_check_button(int(settlement.id))])
     if callback.message:
         from app.bot.nav_input import cancel_keyboard
 
@@ -2413,13 +2422,9 @@ async def pay_psp_cb(
         wait_markup = InlineKeyboardMarkup(inline_keyboard=wait_rows)
         await safe_edit_text(
             callback.message,
-            format_message(
-                "🏦 درگاه آنلاین",
-                body + "\n\nپس از پرداخت موفق در درگاه، به ربات برگردید.",
-            ),
+            format_message("🏦 درگاه آنلاین", body),
             reply_markup=wait_markup,
         )
-        _ = markup
     if state is not None:
         from app.bot import menu_nav as nav
 

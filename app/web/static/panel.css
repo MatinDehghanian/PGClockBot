@@ -3453,6 +3453,57 @@ a.btn.btn-star:hover {
   flex: 0 0 auto;
 }
 .settings-card { margin-bottom: var(--section-gap); scroll-margin-top: var(--section-gap); }
+.settings-card[data-pay-settings-for][hidden] { display: none !important; }
+/* Long setting helps: one-tap «راهنما» instead of a wall of muted text */
+.setting-help {
+  margin: 0;
+  min-width: 0;
+}
+.setting-help-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  cursor: pointer;
+  list-style: none;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--muted-fg);
+  user-select: none;
+}
+.setting-help-summary::-webkit-details-marker,
+.setting-help-summary::marker {
+  display: none;
+}
+.setting-help-summary::after {
+  content: "";
+  width: 0.45em;
+  height: 0.45em;
+  border-inline-end: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+  opacity: 0.75;
+  transition: transform var(--motion-fast, 120ms) ease;
+}
+.setting-help[open] > .setting-help-summary::after {
+  transform: rotate(-135deg);
+  margin-top: 0.2em;
+}
+.setting-help-summary:hover,
+.setting-help-summary:focus-visible {
+  color: var(--foreground);
+}
+.setting-help-body {
+  margin: var(--space-1) 0 0;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+.ui-switch-copy > .setting-help,
+.toggle-row .setting-help {
+  margin-top: 0;
+}
 .settings-main {
   display: flex;
   flex-direction: column;
@@ -6075,17 +6126,76 @@ form.settings-form > .actions.sticky-actions,
   background: var(--bg-card);
   isolation: isolate;
 }
-/* Title/close stay outside the scrollport (see panel.js ensureModalScrollShell).
-   Same inline inset as .ui-modal-scroll so the title lines up with the body. */
-.ui-modal-panel[data-scroll-shell="1"] > .ui-modal-head {
-  flex: 0 0 auto;
-  margin: 0;
-  padding: calc(var(--space-3) + var(--modal-scrollbar-room, 8px));
-  /* Extra air under the sticky chrome before scroll content begins */
-  padding-bottom: var(--space-2);
+/* Shared frosted chrome (sticky head + save footer). Same tokens for both. */
+.ui-modal-panel {
+  --modal-frost-bg: color-mix(in srgb, var(--bg-card) 52%, transparent);
+  --modal-frost-bg-fallback: color-mix(in srgb, var(--bg-card) 90%, transparent);
+  --modal-frost-blur: blur(14px) saturate(1.08);
+  --modal-frost-line: color-mix(in srgb, var(--border) 55%, transparent);
+  --modal-frost-pad: calc(var(--space-3) + var(--modal-scrollbar-room, 8px));
+  /* Vertical air around the save button (equal top/bottom) */
+  --modal-save-pad-y: var(--space-2_5);
+  --modal-save-footer-h: calc(var(--modal-save-pad-y) * 2 + var(--btn-h));
+}
+html[data-theme="light"] .ui-modal-panel {
+  --modal-frost-bg: color-mix(in srgb, var(--bg-card) 58%, transparent);
+  --modal-frost-bg-fallback: color-mix(in srgb, var(--bg-card) 94%, transparent);
+}
+/* Shared matte glass for head + footer (identical look). */
+.ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll > .ui-modal-head,
+.ui-modal-panel[data-scroll-shell="1"] > .ui-modal-sticky-save {
+  z-index: 3;
   box-sizing: border-box;
-  background: var(--bg-card);
-  z-index: 1;
+  background: var(--modal-frost-bg);
+  backdrop-filter: var(--modal-frost-blur);
+  -webkit-backdrop-filter: var(--modal-frost-blur);
+}
+.ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll > .ui-modal-head {
+  position: sticky;
+  top: 0;
+  flex: 0 0 auto;
+  /* Bleed into inline scroll padding so the matte bar is edge-to-edge */
+  margin-inline: calc(-1 * var(--modal-frost-pad));
+  margin-block: 0;
+  padding: var(--modal-frost-pad);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--modal-frost-line);
+}
+.ui-modal-panel[data-scroll-shell="1"] > .ui-modal-sticky-save {
+  position: absolute;
+  bottom: 0;
+  inset-inline: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: var(--space-1);
+  width: auto;
+  margin: 0;
+  /* Equal air above/below the button; a bit taller than before */
+  padding-block: var(--modal-save-pad-y);
+  padding-inline: var(--modal-frost-pad);
+  border-top: 1px solid var(--modal-frost-line);
+  border-radius: 0;
+}
+.ui-modal-panel[data-scroll-shell="1"] > .ui-modal-sticky-save > .btn,
+.ui-modal-panel[data-scroll-shell="1"] > .ui-modal-sticky-save > a.btn,
+.ui-modal-panel[data-scroll-shell="1"] > .ui-modal-sticky-save > button {
+  width: 100%;
+  max-width: 100%;
+  flex: 0 0 auto;
+  justify-content: center;
+  box-sizing: border-box;
+}
+html[data-theme="light"] .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll > .ui-modal-head,
+html[data-theme="light"] .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-sticky-save {
+  background: var(--modal-frost-bg);
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll > .ui-modal-head,
+  .ui-modal-panel[data-scroll-shell="1"] > .ui-modal-sticky-save {
+    background: var(--modal-frost-bg-fallback);
+  }
 }
 .ui-modal-scroll {
   flex: 1 1 auto;
@@ -6143,10 +6253,18 @@ form.settings-form > .actions.sticky-actions,
   padding: calc(var(--space-3) + var(--modal-scrollbar-room, 8px));
   box-sizing: border-box;
 }
+/* Re-assert after the shell padding shorthand so sticky chrome clears correctly. */
+.ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll:has(> .ui-modal-head:first-child) {
+  padding-top: 0;
+}
+/* Reserve room under scroll content for the overlay save footer. */
+.ui-modal-panel[data-scroll-shell="1"]:has(> .ui-modal-sticky-save) > .ui-modal-scroll {
+  padding-bottom: calc(var(--modal-save-footer-h) + var(--space-2));
+}
 /* Modal scroll uses shared shell padding (+ --modal-scrollbar-room).
    Extra 14px inset was removed so content width stays consistent while
-   scrollbar-gutter + room keep the thumb off the body. Head stays outside
-   the scrollport (above) with the same inline inset for title alignment. */
+   scrollbar-gutter + room keep the thumb off the body. Sticky head bleeds
+   into that padding so the frosted bar stays edge-aligned. */
 .ui-modal-panel-lg { width: min(720px, 100%); }
 .gift-code-editor { padding-top: var(--space-3); margin-top: var(--space-3); border-top: 1px solid var(--border); }
 .gift-code-editor[hidden] { display: none !important; }
@@ -11432,6 +11550,99 @@ html[data-theme="light"] .panel-status-card {
 .panel-status[data-status="403"] .panel-status-watermark {
   color: color-mix(in srgb, var(--caution, var(--primary)) 10%, transparent);
 }
+
+/* Payment / public outcomes — same stage language as 404, tone by kind */
+.panel-status[data-status="ok"] .panel-status-orb-a {
+  background: color-mix(in srgb, var(--success, #16a34a) 32%, transparent);
+}
+.panel-status[data-status="ok"] .panel-status-orb-b {
+  background: color-mix(in srgb, var(--success, #16a34a) 16%, transparent);
+}
+.panel-status[data-status="ok"] .panel-status-card-accent {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--success, #16a34a) 18%, transparent),
+    var(--success, #16a34a) 50%,
+    color-mix(in srgb, var(--primary) 55%, var(--success, #16a34a)) 100%
+  );
+}
+.panel-status[data-status="ok"] .panel-status-badge {
+  background: color-mix(in srgb, var(--success, #16a34a) 14%, var(--control-bg));
+  color: var(--success, #16a34a);
+  border-color: color-mix(in srgb, var(--success, #16a34a) 32%, var(--border));
+}
+.panel-status[data-status="ok"] .panel-status-watermark {
+  color: color-mix(in srgb, var(--success, #16a34a) 11%, transparent);
+}
+
+.panel-status[data-status="warn"] .panel-status-orb-a,
+.panel-status[data-status="pending"] .panel-status-orb-a {
+  background: color-mix(in srgb, var(--caution, #d97706) 28%, transparent);
+}
+.panel-status[data-status="warn"] .panel-status-orb-b,
+.panel-status[data-status="pending"] .panel-status-orb-b {
+  background: color-mix(in srgb, var(--caution, #d97706) 14%, transparent);
+}
+.panel-status[data-status="warn"] .panel-status-card-accent,
+.panel-status[data-status="pending"] .panel-status-card-accent {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--caution, #d97706) 18%, transparent),
+    var(--caution, #d97706) 50%,
+    color-mix(in srgb, var(--primary) 50%, var(--caution, #d97706)) 100%
+  );
+}
+.panel-status[data-status="warn"] .panel-status-badge,
+.panel-status[data-status="pending"] .panel-status-badge {
+  background: color-mix(in srgb, var(--caution, #d97706) 12%, var(--control-bg));
+  color: var(--caution, #d97706);
+  border-color: color-mix(in srgb, var(--caution, #d97706) 30%, var(--border));
+}
+.panel-status[data-status="warn"] .panel-status-watermark,
+.panel-status[data-status="pending"] .panel-status-watermark {
+  color: color-mix(in srgb, var(--caution, #d97706) 10%, transparent);
+}
+
+.panel-status[data-status="error"] .panel-status-orb-a {
+  background: color-mix(in srgb, var(--destructive) 28%, transparent);
+}
+.panel-status[data-status="error"] .panel-status-orb-b {
+  background: color-mix(in srgb, var(--caution) 18%, transparent);
+}
+.panel-status[data-status="error"] .panel-status-card-accent {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--destructive) 20%, transparent),
+    var(--destructive-fg, var(--destructive)) 50%,
+    color-mix(in srgb, var(--caution) 75%, var(--destructive)) 100%
+  );
+}
+.panel-status[data-status="error"] .panel-status-badge {
+  background: color-mix(in srgb, var(--destructive) 12%, var(--control-bg));
+  color: var(--destructive-fg, var(--destructive));
+  border-color: color-mix(in srgb, var(--destructive) 28%, var(--border));
+}
+.panel-status[data-status="error"] .panel-status-watermark {
+  color: color-mix(in srgb, var(--destructive) 9%, transparent);
+}
+
+.panel-status-body-html {
+  position: relative;
+  margin-top: var(--space-2);
+  font-size: 14.5px;
+  line-height: 1.75;
+}
+.panel-status-body-html form {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-1_5);
+  margin-top: var(--space-1_5);
+}
+.panel-status-body-html .muted {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
 .panel-status-guide {
   position: relative;
   margin-top: var(--space-2_5);
@@ -11530,6 +11741,12 @@ html[data-theme="light"] .panel-status-card {
   flex: 1 1 auto;
   justify-content: center;
   min-width: 7.5rem;
+}
+.panel-status-actions--single .btn,
+.panel-status-actions .panel-status-close-btn {
+  flex: 1 1 100%;
+  width: 100%;
+  min-width: 0;
 }
 .panel-status-foot {
   font-size: 12px;
@@ -11755,6 +11972,22 @@ html[data-theme="light"] .sales-delta.down { color: #b91c1c; }
 .sales-error { display: none; margin: var(--space-1) 0 0; color: #f87171; }
 .home-sales-card.is-error .sales-error { display: block; }
 .home-sales-card.is-loading .sales-plot { opacity: 0.5; }
+.finance-report-methods .finance-method-share { width: 34%; min-width: 120px; }
+.finance-report-methods .finance-method-share .ov-meter-top { margin-bottom: 4px; }
+
+/* Finance reports: two daily charts side by side, and the payment-method share bar. */
+.fin-charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: var(--stack-gap); }
+.fin-legend { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2); font-size: 12px; color: var(--muted-fg); }
+.fin-legend li { display: inline-flex; align-items: center; gap: 6px; }
+.fin-dot { width: 10px; height: 10px; border-radius: 3px; background: color-mix(in srgb, var(--muted-fg) 35%, transparent); }
+.fin-dot.is-ok { background: var(--ok); }
+.fin-share { display: flex; height: 14px; margin-bottom: var(--space-1); border-radius: var(--control-radius); overflow: hidden; background: var(--muted); }
+.fin-share-seg { flex: 0 0 calc(var(--p, 0) * 1%); }
+:is(.fin-share-seg, .fin-dot)[data-tone="1"] { background: var(--brand); }
+:is(.fin-share-seg, .fin-dot)[data-tone="2"] { background: var(--info); }
+:is(.fin-share-seg, .fin-dot)[data-tone="3"] { background: var(--ok); }
+:is(.fin-share-seg, .fin-dot)[data-tone="4"] { background: var(--warn); }
+:is(.fin-share-seg, .fin-dot)[data-tone="5"] { background: var(--muted-fg); }
 .sc-svg { position: absolute; inset: 0; overflow: visible; }
 .sc-line { fill: none; stroke: var(--foreground); stroke-width: 2.25; stroke-linecap: round; stroke-linejoin: round; }
 .sc-area { fill: color-mix(in srgb, var(--foreground) 10%, transparent); stroke: none; }

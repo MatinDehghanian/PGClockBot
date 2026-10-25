@@ -15,7 +15,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.db.models import BotUser, ResellerProfile, Role
+from app.services.miniapp_shop import (
+    PLATFORM_SCOPE,
+    MiniScope,
+    assert_shop_member,
+    assert_shop_route,
+    is_shop_staff,
+    request_scope,
+)
 from app.services.platform_identity import is_bot_platform_admin
+from app.services.users import set_shop_reseller_id
 
 
 # Telegram initData is typically <2KiB; hard-cap stops oversized header DoS.
@@ -76,11 +85,17 @@ def assert_miniapp_feature_enabled() -> None:
 async def load_mini_user(session: AsyncSession, request: Request) -> BotUser:
     """Validate initData and load the BotUser row (must have /start'd).
 
-    Blocked accounts are rejected; end-users must pass force-join
-    (parity with bot ForceJoinMiddleware).
+    A shop's Mini App (``X-Mini-Shop``) is verified with that shop bot's token, admits only
+    the shop's customers and staff, and reaches only the routes opened for shops; the
+    verified scope is left on ``request.state.mini_scope``. Blocked accounts are rejected;
+    end-users must pass force-join and the terms (parity with the bot's middlewares).
     """
     assert_miniapp_feature_enabled()
-    tg_user = validate_webapp_init_data(init_data_from_request(request))
+    # Start every request on the platform: platform settings (the shop-Mini-App switch among
+    # them) must never be read through a shop context left from an earlier request.
+    set_shop_reseller_id(None)
+    scope = await request_scope(session, request)
+    tg_user = validate_webapp_init_data(init_data_from_request(request), bot_token=scope.bot_token or None)
     tg_id = tg_user.get("id")
     result = await session.execute(select(BotUser).where(BotUser.telegram_id == tg_id))
     user = result.scalar_one_or_none()
@@ -88,9 +103,15 @@ async def load_mini_user(session: AsyncSession, request: Request) -> BotUser:
         raise HTTPException(404, "start the bot first")
     if bool(getattr(user, "is_blocked", False)):
         raise HTTPException(403, "دسترسی شما مسدود شده است")
+    await assert_shop_member(session, scope, user)
+    assert_shop_route(scope, request)
     # Parity with bot: users cannot use the app until channel membership is confirmed.
-    await assert_mini_force_join(session, user)
-    await assert_mini_terms_entry(session, user)
+    await assert_mini_force_join(session, user, scope=scope)
+    await assert_mini_terms_entry(session, user, scope=scope)
+    request.state.mini_scope = scope
+    # The order, catalog and wallet services read the shop from the same context the shop
+    # bot sets per update; it is set only after the shop and the person were verified.
+    set_shop_reseller_id(scope.shop_id)
     return user
 
 
@@ -103,12 +124,20 @@ def resolve_mini_persona(user: BotUser) -> str:
     return "user"
 
 
-async def assert_mini_force_join(session: AsyncSession, user: BotUser) -> None:
+def _is_gated_customer(user: BotUser, scope: MiniScope) -> bool:
+    """Customers pass force-join and terms; staff (platform, or this shop's) do not."""
+    if scope.is_shop:
+        return not is_shop_staff(scope, user)
+    return resolve_mini_persona(user) == "user"
+
+
+async def assert_mini_force_join(session: AsyncSession, user: BotUser, *, scope: MiniScope = PLATFORM_SCOPE) -> None:
     """Mirror bot ForceJoinMiddleware for Mini App commerce (users only).
 
-    Admin/reseller personas are not gated (same as Telegram middleware).
+    Admin/reseller personas are not gated (same as Telegram middleware). In a shop's Mini
+    App the shop's channels apply, checked through the shop's bot.
     """
-    if resolve_mini_persona(user) != "user":
+    if not _is_gated_customer(user, scope):
         return
     from aiogram import Bot
 
@@ -120,7 +149,7 @@ async def assert_mini_force_join(session: AsyncSession, user: BotUser) -> None:
         parse_force_join_entries,
     )
 
-    ui = await get_all_settings(session)
+    ui = await get_all_settings(session, reseller_id=scope.shop_id)
     if not on(ui.get("force_join_enabled")):
         return
     raw_channels = ui.get("force_join_channel")
@@ -128,7 +157,7 @@ async def assert_mini_force_join(session: AsyncSession, user: BotUser) -> None:
     if not channels:
         return
     entries = parse_force_join_entries(raw_channels)
-    token = (get_settings().bot_token or "").strip()
+    token = (scope.bot_token or get_settings().bot_token or "").strip()
     if not token:
         raise HTTPException(503, "bot token missing")
     bot = Bot(token=token)
@@ -149,20 +178,20 @@ async def assert_mini_force_join(session: AsyncSession, user: BotUser) -> None:
 
 
 
-async def assert_mini_terms_entry(session: AsyncSession, user: BotUser) -> None:
-    """Mirror bot TermsEntryMiddleware for Mini App (users only)."""
-    if resolve_mini_persona(user) != "user":
+async def assert_mini_terms_entry(session: AsyncSession, user: BotUser, *, scope: MiniScope = PLATFORM_SCOPE) -> None:
+    """Mirror bot TermsEntryMiddleware for Mini App (users only); a shop's own terms in its Mini App."""
+    if not _is_gated_customer(user, scope):
         return
     from app.services.terms import needs_entry_gate
     from app.services.users import get_all_settings
 
-    ui = await get_all_settings(session)
+    ui = await get_all_settings(session, reseller_id=scope.shop_id)
     prompt = await needs_entry_gate(
         session,
         user,
         ui,
         menu_role="user",
-        reseller_owner_id=None,
+        reseller_owner_id=scope.shop_id,
     )
     if prompt is not None:
         from fastapi import HTTPException

@@ -15,7 +15,7 @@ from app.services.customer_backfill import backfill_legacy_customers, backfill_l
 from app.services.home_overview import reseller_shop_summary
 from app.services.integration_customers import CustomerInput, create_or_get_integration_customer
 from app.services.service_ownership import ownership_coverage
-from app.services.service_scope import customer_may_use_service, list_customer_services
+from app.services.service_scope import customer_may_use_service, list_customer_services, page_customer_services
 from app.services.volume_allocation import sum_service_bytes
 from test_integration_customers import database
 
@@ -118,4 +118,31 @@ def test_website_customer_presentation_is_scoped_and_does_not_expose_delivery() 
             assert set(asdict(rows[0])) == {"id", "display_name", "state", "service_count"}
             with pytest.raises(IntegrationError):
                 await website_customer_page(session, STAFF, "intg_wrong")
+    asyncio.run(scenario())
+
+
+def test_paginated_legacy_reader_checks_canonical_owner_shop_and_customer() -> None:
+    async def scenario() -> None:
+        async with database() as (sessions, integration, key), sessions() as session:
+            await web_service(session, integration, key.bearer)
+            session.add(BotUser(id=12, telegram_id=10012, referral_code="page-other"))
+            session.add_all([
+                UserService(bot_user_id=11, pg_username="valid", shop_id=11),
+                UserService(bot_user_id=11, pg_username="foreign-shop", shop_id=12),
+                UserService(bot_user_id=12, pg_username="foreign-customer", shop_id=11),
+            ])
+            await session.commit()
+            await backfill_legacy_customers(session)
+            await backfill_legacy_services(session)
+            await session.commit()
+            valid = await session.scalar(select(UserService).where(UserService.pg_username == "valid"))
+            rows, more = await page_customer_services(session, 11, 11, limit=1)
+            assert [row.id for row in rows] == [valid.id] and not more
+            wrong = Customer()
+            session.add(wrong)
+            await session.flush()
+            valid.customer_id = wrong.id
+            await session.commit()
+            assert await page_customer_services(session, 11, 11, limit=1) == ([], False)
+            assert await page_customer_services(session, 11, 11, limit=1, text="valid") == ([], False)
     asyncio.run(scenario())

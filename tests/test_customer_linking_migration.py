@@ -12,7 +12,7 @@ import sqlalchemy as sa
 import test_customer_identity_migration as identity
 
 connection = identity.connection
-SPEC = importlib.util.spec_from_file_location("linking_migration", Path(__file__).resolve().parents[1] / "alembic/versions/0072_customer_telegram_links.py")
+SPEC = importlib.util.spec_from_file_location("linking_migration", Path(__file__).resolve().parents[1] / "alembic/versions/0076_customer_telegram_links.py")
 MIGRATION = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MIGRATION)
 

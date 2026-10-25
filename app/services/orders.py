@@ -7,6 +7,7 @@ import secrets
 import string
 import time
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import select, update
@@ -31,7 +32,8 @@ from app.db.models import (
     UserService,
     WalletTransaction,
 )
-from app.services.pasarguard import extract_sub_token, get_pg, user_subscription_url
+from app.services.open_psp_checkouts import open_psp_checkouts, reusable_psp_payment
+from app.services.pasarguard import extract_sub_token, get_pg, parse_group_ids, user_subscription_url
 from app.services.purchase_contact import CONTACT_REQUIRED_MESSAGE, purchase_contact_needed, require_purchase_contact
 from app.services.shop_membership import ensure_member
 from app.services.provision_gate import (
@@ -422,6 +424,13 @@ def _shop_reseller_id() -> int | None:
     return int(rid) if rid else None
 
 
+def _legacy_code_shop(order: Order | None) -> int | None:
+    """The shop a legacy ``DiscountCode`` would discount; those codes have no shop and are the platform's."""
+    if order is not None:
+        return int(order.reseller_id) if order.reseller_id else None
+    return _shop_reseller_id()
+
+
 async def apply_discount(session: AsyncSession, code: str | None, amount: int, *, order: Order | None = None) -> tuple[int, str | None]:
     """Read-only discount preview (does not consume uses)."""
     if not code:
@@ -432,6 +441,8 @@ async def apply_discount(session: AsyncSession, code: str | None, amount: int, *
         from app.services.gift_codes import preview_gift_discount
 
         return await preview_gift_discount(session, gift, amount, order=order, shop_id=_shop_reseller_id())
+    if _legacy_code_shop(order) is not None:
+        return 0, None
     result = await session.execute(
         select(DiscountCode).where(DiscountCode.code == normalized, DiscountCode.is_active.is_(True))
     )
@@ -505,6 +516,8 @@ async def _reserve_discount_code(
         if order is None:
             return 0, None
         return await reserve_gift_discount(session, gift, order, amount)
+    if _legacy_code_shop(order) is not None:
+        return 0, None
     result = await session.execute(
         select(DiscountCode).where(DiscountCode.code == normalized, DiscountCode.is_active.is_(True))
     )
@@ -628,6 +641,10 @@ def calc_custom_plan_price(
     return max(0, gb_units * int(price_per_gb) + int(days) * int(price_per_day))
 
 
+CUSTOM_ORDER_NOTE = "custom"
+CUSTOM_PLAN_UNCONFIGURED = "پلن دلخواه فعلاً در دسترس نیست؛ لطفاً یکی از پلن‌های آماده را انتخاب کنید"
+
+
 async def create_custom_order(
     session: AsyncSession,
     *,
@@ -706,6 +723,9 @@ async def create_custom_order(
             raise ValueError(
                 "برای پلن دلخواه، تمپلیت یا گروه پاسارگارد اختصاصی فروشگاه را در تنظیمات مشخص کنید"
             )
+    elif not tpl_id and not parse_group_ids(group_ids):
+        # Delivery needs a template or groups; refuse before payment, not after it.
+        raise ValueError(CUSTOM_PLAN_UNCONFIGURED)
 
     plan = Plan(
         name="پلن دلخواه",
@@ -734,7 +754,7 @@ async def create_custom_order(
         amount=amount,
         discount_amount=0,
         status=OrderStatus.PENDING.value,
-        note="custom",
+        note=CUSTOM_ORDER_NOTE,
     )
     session.add(order)
     await session.flush()
@@ -1327,14 +1347,31 @@ async def start_method_payment(
         )
     if claim.rowcount != 1:
         raise ValueError("این سفارش قابل پرداخت نیست")
-    # Drop older pending payments when switching method
-    old = await session.execute(
-        select(Payment).where(
-            Payment.order_id == order_id,
-            Payment.status == PaymentStatus.PENDING.value,
-        )
+    pending = list(
+        (
+            await session.execute(
+                select(Payment).where(
+                    Payment.order_id == order_id,
+                    Payment.status == PaymentStatus.PENDING.value,
+                )
+            )
+        ).scalars().all()
     )
-    for prev in old.scalars().all():
+    checkouts = await open_psp_checkouts(session, [int(p.id) for p in pending])
+    if method == PaymentMethod.PSP.value:
+        reused = reusable_psp_payment(
+            pending, checkouts, amount=int(order.amount), now=datetime.now(timezone.utc)
+        )
+        if reused is not None:
+            await session.commit()
+            await session.refresh(reused)
+            await session.refresh(order)
+            return reused
+    # Drop older pending payments when switching method, except gateway payments
+    # whose link may still be paid; approve_payment supersedes them if another wins.
+    for prev in pending:
+        if int(prev.id) in checkouts:
+            continue
         prev.status = PaymentStatus.REJECTED.value
         prev.review_note = prev.review_note or "replaced by new payment method"
     payment = Payment(
@@ -1476,16 +1513,22 @@ async def cancel_stale_pending_for_settings(
         include_awaiting_approval=include_aa,
     )
 
-async def attach_receipt(session: AsyncSession, payment: Payment, file_id: str) -> Payment:
-    """Attach receipt only while payment is still pending (never overwrite approved/rejected)."""
+async def attach_receipt(
+    session: AsyncSession, payment: Payment, file_id: str, *, first_only: bool = False
+) -> Payment:
+    """Attach receipt only while payment is still pending (never overwrite approved/rejected).
+
+    ``first_only`` refuses a payment that already has a receipt, so two concurrent
+    uploads cannot both reach the reviewers.
+    """
     payment_id = int(payment.id)
+    conditions = [Payment.id == payment_id, Payment.status == PaymentStatus.PENDING.value]
+    if first_only:
+        conditions.append(Payment.receipt_file_id.is_(None))
     with session.no_autoflush:
         claim = await session.execute(
             update(Payment)
-            .where(
-                Payment.id == payment_id,
-                Payment.status == PaymentStatus.PENDING.value,
-            )
+            .where(*conditions)
             .values(receipt_file_id=file_id, status=PaymentStatus.PENDING.value)
             .execution_options(synchronize_session=False)
         )
@@ -2121,7 +2164,7 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
             except ProvisionError as e:
                 raise ValueError(e.message) from e
 
-        from app.services.pasarguard import build_user_create_payload, parse_group_ids
+        from app.services.pasarguard import build_user_create_payload, build_user_modify_payload, parse_group_ids
 
         group_ids = None
         if not plan.pg_template_id:
@@ -2170,6 +2213,13 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
             pg_uid = pg_user.get("id")
             if pg_uid:
                 created_pg_ids.append(int(pg_uid))
+            if plan.pg_template_id and _order_note(order) == CUSTOM_ORDER_NOTE and pg_uid:
+                # A template brings its own volume and expiry; the buyer paid for the chosen ones.
+                applied = await pg.modify_user_by_id(
+                    int(pg_uid), build_user_modify_payload(data_limit=data_limit, expire_ts=expire)
+                )
+                if isinstance(applied, dict):
+                    pg_user = {**pg_user, **applied}
             # When creating via the shop's own PG admin, ownership is already that admin.
             # set_owner is only needed for the legacy owner-token path (no stored password).
             # With get_pg_for_reseller we skip transfer.
@@ -2263,6 +2313,11 @@ async def deliver_order(session: AsyncSession, order: Order) -> Order:
         raise
 
 
+MIN_TOPUP_AMOUNT = 1000
+# Soft ceiling to prevent absurd pending top-ups / receipt spam.
+MAX_TOPUP_AMOUNT = 500_000_000
+
+
 async def create_wallet_topup(
     session: AsyncSession,
     user_id: int,
@@ -2271,10 +2326,9 @@ async def create_wallet_topup(
     method: str = PaymentMethod.CARD.value,
     wallet_shop_id: int | None = None,
 ) -> Payment:
-    if amount < 1000:
+    if amount < MIN_TOPUP_AMOUNT:
         raise ValueError("حداقل مبلغ شارژ ۱۰۰۰ است")
-    # Soft ceiling to prevent absurd pending top-ups / receipt spam
-    if amount > 500_000_000:
+    if amount > MAX_TOPUP_AMOUNT:
         raise ValueError("مبلغ شارژ بیش از حد مجاز است")
     from app.services.users import current_shop_reseller_id
 

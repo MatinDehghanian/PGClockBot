@@ -12,7 +12,7 @@ import test_customer_identity_migration as identity
 import test_integration_ownership_migration as ownership
 
 connection = identity.connection
-SPEC = importlib.util.spec_from_file_location("read_migration", Path(__file__).resolve().parents[1] / "alembic/versions/0073_integration_read_snapshots.py")
+SPEC = importlib.util.spec_from_file_location("read_migration", Path(__file__).resolve().parents[1] / "alembic/versions/0077_integration_read_snapshots.py")
 MIGRATION = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MIGRATION)
 

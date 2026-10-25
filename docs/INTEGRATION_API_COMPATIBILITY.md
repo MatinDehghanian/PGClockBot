@@ -8,7 +8,7 @@ The table preserves the Phase 2B inventory and its original scope.
 | Boundary | Compatibility behavior |
 |---|---|
 | Construction | Existing delivery, manual provisioning and verified import still dual-write the canonical legacy adapter in their original transaction. The historical 2B slice exposed no API constructor; current execution creates API services in its separately gated durable flow. |
-| Ownership and legacy channels | `service_ownership` checks legacy origins and canonical adapter equality. Customer readers exclude web origins without consulting Telegram links. Existing null canonical fields remain readable only during expansion/backfill; migration 0071 refuses incomplete coverage before changing legacy owner nullability. Production constructors continue to supply canonical IDs. |
+| Ownership and legacy channels | `service_ownership` checks legacy origins and canonical adapter equality. Customer readers exclude web origins without consulting Telegram links. Existing null canonical fields remain readable only during expansion/backfill; migration 0075 refuses incomplete coverage before changing legacy owner nullability. Production constructors continue to supply canonical IDs. |
 | Block/unblock | Explicit existing panel, bot and bulk block transitions synchronize the canonical legacy adapter in the same transaction. They never change web customer state. Backfill alone never reactivates blocked customers. |
 | Panel presentation | Separate `/integrations/{id}/customers` view checks the live owner, fixed shop and customer permission. It returns bounded neutral customer metadata and scoped service counts, without Telegram links, subscription credentials or fake bot identities. Existing bot customer metrics remain bot customer metrics. |
 | Reporting | Dashboard, daily, finance and subordinate service counts no longer require an inner bot-user join. The existing correlated demo exclusion includes neutral web customers while excluding demo legacy buyers. Shop/review predicates are retained. |
@@ -20,7 +20,7 @@ The table preserves the Phase 2B inventory and its original scope.
 
 ## Migration and rollback
 
-`0071_service_channel_ownership` follows 0070. It verifies aggregate adapter and
+`0075_service_channel_ownership` follows 0074. It verifies aggregate adapter and
 legacy service coverage, adds integration/origin references and lookup indexes,
 then permits a missing bot owner only for explicit API-origin rows. Such rows
 require canonical/public IDs, integration, origin, principal, resolved shop and
@@ -28,10 +28,10 @@ empty legacy delivery columns. Cross-table integration/customer/shop/principal
 checks remain mandatory in the scoped API service constructor and each mutation;
 the row constraint alone does not establish that authority.
 
-Run the existing backfill from zero before 0071. Inconsistencies stop the upgrade
+Run the existing backfill from zero before 0075. Inconsistencies stop the upgrade
 without guessing or changing owner/shop/review evidence. SQLite parent-table
 rebuilding requires a dedicated migration connection with foreign keys disabled;
-0071 refuses an enforcing connection before changes and checks foreign-key
+0075 refuses an enforcing connection before changes and checks foreign-key
 integrity after rebuilding. The normal Alembic connection has enforcement off.
 PostgreSQL uses native alteration. Downgrade disables API access and retains all
 associations, nullable legacy ownership and constraints; use a customer-aware

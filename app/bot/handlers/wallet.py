@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot import bbc_checkout_view as bbc_view
 from app.bot import keyboards as kb
 from app.bot.chat_cleanup import keep_message
+from app.bot.handlers.psp_check import psp_check_button
 from app.bot.tg_utils import safe_edit_text
 from app.config import get_settings
 from app.db.models import BotUser, Order, Payment, PaymentMethod, PaymentStatus
@@ -26,6 +27,7 @@ from app.services.receipts import submit_receipt
 from app.services.ux20 import payment_shop_clause
 from app.services.users import current_shop_reseller_id, get_all_settings, on
 from app.services.wallet import list_activity
+from app.services.wallet_topup import TOPUP_METHODS
 from app.services.message_variables import DOMAIN_PAYMENT, render_message_template
 from app.services import bot_feedback_texts as feedback
 from app.services.screen_titles import screen_caption, screen_title_html
@@ -34,13 +36,6 @@ logger = logging.getLogger(__name__)
 
 router = Router(name="wallet")
 
-_TOPUP_METHODS = {
-    "card": ("pay_card_enabled", PaymentMethod.CARD.value),
-    "gateway": ("pay_gateway_enabled", PaymentMethod.GATEWAY.value),
-    "psp": ("pay_psp_enabled", PaymentMethod.PSP.value),
-    "bbc": ("pay_bbc_enabled", PaymentMethod.BBC.value),
-    "crypto": ("pay_crypto_enabled", PaymentMethod.CRYPTO.value),
-}
 
 class WalletStates(StatesGroup):
     topup_amount = State()
@@ -537,7 +532,7 @@ async def wtop_choose_method(
     key = parts[1]
     # wtop:KEY | wtop:KEY:ORDER_ID | wtop:KEY:ORDER_ID:DEST_ID
     dest_id = parts[3] if len(parts) > 3 else None
-    flag, method = _TOPUP_METHODS[key]
+    flag, method = TOPUP_METHODS[key]
     if not on(ui.get(flag)):
         await callback.answer("غیرفعال است", show_alert=True)
         return
@@ -550,15 +545,17 @@ async def wtop_choose_method(
     if key == "psp":
         from app.services.payment_settlement import create_psp_checkout
 
+        # Answer before the gateway call so Telegram does not expire the tap.
+        await callback.answer("در حال آماده‌سازی درگاه…")
         payment = await create_wallet_topup(session, db_user.id, amount, method=method)
         try:
             settlement = await create_psp_checkout(
                 session, payment, description=f"شارژ کیف پول #{payment.id}"
             )
         except ValueError as e:
-            await callback.answer(user_safe_error(e), show_alert=True)
+            if callback.message:
+                await callback.message.answer(user_safe_error(e))
             return
-        await callback.answer()
         amount_txt = format_toman(amount, get_settings().currency)
         try:
             body = render_message_template(
@@ -572,10 +569,17 @@ async def wtop_choose_method(
         except Exception:
             body = f"مبلغ {amount_txt} را از درگاه آنلاین پرداخت کنید."
         body += f"\n\n(پرداخت #{payment.id})"
+        from app.services.payment_settlement import (
+            public_checkout_button_url,
+            with_psp_checkout_guidance,
+        )
+
+        body = with_psp_checkout_guidance(body)
         rows: list[list[InlineKeyboardButton]] = []
-        link = (settlement.checkout_url or "").strip()
+        link = public_checkout_button_url(settlement, ui=ui)
         if link.startswith("http://") or link.startswith("https://"):
             rows.append([InlineKeyboardButton(text="🏦 ورود به درگاه", url=link)])
+            rows.append([psp_check_button(int(settlement.id))])
         rows.append(
             [kb.back_button(ui, "wallet:home")]
         )

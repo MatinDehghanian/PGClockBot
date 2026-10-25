@@ -43,6 +43,9 @@ from app.services.orders import (
 from app.api.guide_media_pages import PLATFORM_BASE as GUIDE_MEDIA_PLATFORM_BASE
 from app.api.guide_media_pages import guides_media_view, register_guide_media_pages
 from app.services.chat_cleanup_config import chat_cleanup_payload
+from app.services.miniapp_shop import PLATFORM_SWITCH as SHOP_MINIAPPS_SWITCH
+from app.services.miniapp_shop import switch_value
+from app.services.reseller_bots import schedule_shop_menu_sync
 from app.services.connection_guides import prune_guide_media, serialize_submitted_guides
 from app.services.list_query import filter_by_search, normalize_search_q
 from app.services.payer_notify import notify_payer
@@ -161,7 +164,7 @@ templates.env.globals["template_variable_specs"] = template_variable_specs
 def render_panel_status(
     request: Request,
     *,
-    code: int,
+    code: int | str,
     title: str,
     message: str,
     ref: str | None = None,
@@ -174,38 +177,37 @@ def render_panel_status(
     code_block: str | None = None,
     guide_note: str | None = None,
     footer: str | None = None,
+    http_status: int | None = None,
+    watermark: str | None = None,
+    kicker: str | None = None,
+    body_html: str = "",
+    show_close_button: bool = False,
+    close_button_label: str = "بستن",
 ):
-    """Shared branded status page (404 / 403 / 500 / setup gate)."""
-    from app.version import __version__ as _ver
+    """Shared branded status page (404 / 403 / 500 / setup gate / payment returns)."""
+    from app.api.status_render import render_status_page
 
-    try:
-        from app.services.pwa import panel_display_name
-
-        pname = panel_display_name()
-    except Exception:
-        pname = "MrClockBot"
-    return templates.TemplateResponse(
+    return render_status_page(
         request,
-        "panel_status.html",
-        {
-            "code": int(code),
-            "title": title,
-            "message": message,
-            "ref": ref,
-            "primary_href": primary_href or "",
-            "primary_label": primary_label,
-            "secondary_href": secondary_href or "",
-            "secondary_label": secondary_label,
-            "guide_heading": guide_heading or "",
-            "guide_steps": guide_steps or [],
-            "code_block": code_block or "",
-            "guide_note": guide_note or "",
-            "footer": footer
-            or "اگر مشکل ادامه داشت، از حساب خارج شوید و دوباره وارد شوید.",
-            "app_version": _ver,
-            "pwa_name": pname,
-        },
-        status_code=int(code),
+        kind=code,
+        title=title,
+        message=message,
+        http_status=http_status,
+        watermark=watermark,
+        kicker=kicker,
+        ref=ref,
+        primary_href=primary_href,
+        primary_label=primary_label,
+        secondary_href=secondary_href,
+        secondary_label=secondary_label,
+        guide_heading=guide_heading,
+        guide_steps=guide_steps,
+        code_block=code_block,
+        guide_note=guide_note,
+        body_html=body_html,
+        footer=footer,
+        show_close_button=show_close_button,
+        close_button_label=close_button_label,
     )
 
 
@@ -1439,6 +1441,8 @@ def create_api_app(lifespan=None) -> FastAPI:
         require_staff=require_staff,
         get_db=get_db,
     )
+    from app.api.reseller_subscription_pages import register_reseller_subscription_pages
+    register_reseller_subscription_pages(app, render=render, require_staff=require_staff, get_db=get_db)
     from app.api.settlement_pages import register_settlement_pages
 
     register_settlement_pages(app, get_db=get_db)
@@ -1503,9 +1507,23 @@ def create_api_app(lifespan=None) -> FastAPI:
         require_staff=require_staff,
         get_db=get_db,
     )
+    from app.api.miniapp_codes import register_miniapp_codes
+    from app.api.miniapp_feeds import register_miniapp_feeds
+    from app.api.miniapp_guides import register_miniapp_guides
+    from app.api.miniapp_loyalty import register_miniapp_loyalty
     from app.api.miniapp_pages import register_miniapp_pages
+    from app.api.miniapp_review import register_miniapp_review
+    from app.api.miniapp_support import register_miniapp_support
+    from app.api.miniapp_topup import register_miniapp_topup
 
     register_miniapp_pages(app, render=render, get_db=get_db)
+    register_miniapp_feeds(app, get_db=get_db)
+    register_miniapp_topup(app, get_db=get_db)
+    register_miniapp_support(app, get_db=get_db)
+    register_miniapp_codes(app, get_db=get_db)
+    register_miniapp_guides(app, get_db=get_db)
+    register_miniapp_loyalty(app, get_db=get_db)
+    register_miniapp_review(app, get_db=get_db)
     from app.api.customer_features import register_customer_features
 
     register_customer_features(app, render=render, require_staff=require_staff, get_db=get_db)
@@ -4201,7 +4219,11 @@ def create_api_app(lifespan=None) -> FastAPI:
         payload["show_miniapp"] = "0"
         if reseller_id is not None:
             payload["show_reseller_apply"] = "0"
+        else:
+            payload[SHOP_MINIAPPS_SWITCH] = switch_value(form, SHOP_MINIAPPS_SWITCH)
         await set_settings_bulk(session, payload, reseller_id=reseller_id)
+        if reseller_id is None:
+            schedule_shop_menu_sync()
 
     @app.get("/settings", response_class=HTMLResponse)
     async def settings_page(

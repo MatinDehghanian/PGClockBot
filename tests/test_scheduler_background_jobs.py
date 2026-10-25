@@ -25,7 +25,9 @@ OPERATIONS = {
     "scheduled_backup",
     "connection_status",
     "bbc_settlement_poll",
+    "psp_settlement_poll",
     "volume_external_sync",
+    "chat_message_purge",
 }
 NOTIFICATIONS = {"service_automation", "expiry", "admin_daily_report", "targeted_campaigns", "cancellation_notifications", "panel_alert_notifications"}
 

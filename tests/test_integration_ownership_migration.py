@@ -11,7 +11,7 @@ import sqlalchemy as sa
 import test_customer_identity_migration as identity
 
 connection = identity.connection
-SPEC = importlib.util.spec_from_file_location("ownership_migration", Path(__file__).resolve().parents[1] / "alembic/versions/0071_service_channel_ownership.py")
+SPEC = importlib.util.spec_from_file_location("ownership_migration", Path(__file__).resolve().parents[1] / "alembic/versions/0075_service_channel_ownership.py")
 MIGRATION = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MIGRATION)
 

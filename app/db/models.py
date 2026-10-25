@@ -380,7 +380,7 @@ class PaymentSettlement(Base):
     # 0 = platform; else reseller user id — for UNIQUE indexes (NULL-safe).
     tenant_key: Mapped[int] = mapped_column(Integer, default=0, index=True)
     channel: Mapped[str] = mapped_column(String(32), index=True)  # psp | card_auto | bbc
-    provider: Mapped[str] = mapped_column(String(32), index=True)  # mock | zarinpal | generic | bezanbecard
+    provider: Mapped[str] = mapped_column(String(32), index=True)  # mock | zarinpal | sunpay | generic | bezanbecard
     status: Mapped[str] = mapped_column(
         String(32), default=SettlementStatus.CREATED.value, index=True
     )
@@ -396,6 +396,10 @@ class PaymentSettlement(Base):
     settled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     # Set by the one caller that sends the delivery of a settled payment (claim, then send).
     notified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # When the PSP poller may re-verify this row next; NULL = not checked yet (due now).
+    next_check_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -596,6 +600,31 @@ class VolumeHold(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class BotChatMessage(Base):
+    """A message the bot may delete later to keep a private chat tidy (see ``app.bot.chat_cleanup``).
+
+    Kept in the database so a restart does not forget what is still on screen. Telegram lets a
+    bot delete a message only for 48 hours, so older rows are useless and purged.
+    """
+
+    __tablename__ = "bot_chat_messages"
+    __table_args__ = (
+        UniqueConstraint("bot_id", "chat_id", "message_id", name="uq_bot_chat_messages_message"),
+        Index("ix_bot_chat_messages_sent_at", "sent_at"),
+        Index("ix_bot_chat_messages_replace", "bot_id", "replace_key"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    bot_id: Mapped[int] = mapped_column(BigInteger)
+    chat_id: Mapped[int] = mapped_column(BigInteger)
+    message_id: Mapped[int] = mapped_column(BigInteger)
+    # "throwaway" (panels, prompts, notices, taps), "home" (a message carrying the main menu) or
+    # "notice" (a system alert that the next alert with the same ``replace_key`` replaces).
+    kind: Mapped[str] = mapped_column(String(16))
+    sent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    replace_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+
+
 class ServiceAutomation(Base):
     """Per-service wallet consent; deleted catalog choices become NULL."""
 
@@ -772,6 +801,8 @@ class ResellerProfile(Base):
     bot_telegram_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True, index=True)
     # Extra Telegram IDs that get reseller panel on THIS shop's dedicated bot only
     bot_admin_ids: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # CSV
+    # Random public key in this shop's Mini App address; the shop bot's token still signs every request.
+    miniapp_key: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, unique=True, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     # --- Unified Billing (PAYG vs fixed package type) ---
     billing_mode: Mapped[str] = mapped_column(String(16), default="fixed")  # fixed | payg

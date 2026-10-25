@@ -24,7 +24,7 @@ def migration(name):
     return module
 
 
-MIGRATIONS = tuple(migration(name) for name in ("0074_integration_operations", "0075_integration_private_delivery", "0076_integration_event_outbox"))
+MIGRATIONS = tuple(migration(name) for name in ("0078_integration_operations", "0079_integration_private_delivery", "0080_integration_event_outbox"))
 
 
 def test_populated_repeat_upgrade_index_repair_and_retaining_downgrade(connection):

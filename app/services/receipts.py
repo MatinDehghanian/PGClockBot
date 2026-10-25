@@ -34,8 +34,11 @@ async def submit_receipt(
     file_id: str,
     file_unique_id: str | None = None,
     user_tg_id: int | None = None,
+    first_only: bool = False,
 ) -> str | None:
     """Attach receipt, record fingerprints, then process (auto-approve or notify).
+
+    ``first_only`` is passed to ``attach_receipt``: the payment must not have a receipt yet.
 
     Duplicate policy (``receipt_dup_policy``):
     - ``warn`` (default): still accept; warn reviewers with earlier payment ids
@@ -69,7 +72,7 @@ async def submit_receipt(
             "اگر اشتباه است با پشتیبانی تماس بگیرید.",
         )
 
-    await attach_receipt(session, payment, file_id)
+    await attach_receipt(session, payment, file_id, first_only=first_only)
     try:
         await store_receipt_fingerprint(
             session,

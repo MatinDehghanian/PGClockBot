@@ -16,7 +16,7 @@ import test_integration_security_migration as security
 
 connection = foundation.connection
 ROOT = Path(__file__).resolve().parents[1]
-SPEC = importlib.util.spec_from_file_location("customer_identity_migration", ROOT / "alembic/versions/0070_customer_identity.py")
+SPEC = importlib.util.spec_from_file_location("customer_identity_migration", ROOT / "alembic/versions/0074_customer_identity.py")
 MIGRATION = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MIGRATION)
 
@@ -168,7 +168,7 @@ def test_actual_alembic_chain_backfill_and_retained_rollback(dialect: str, tmp_p
     configured_url = migration_url.render_as_string(hide_password=False) if schema else str(migration_url)
     config.set_main_option("sqlalchemy.url", configured_url.replace("%", "%%"))
     try:
-        command.upgrade(config, "0069_integration_security")
+        command.upgrade(config, "0073_integration_security")
         with scoped.begin() as connection:
             metadata = sa.MetaData()
             user = sa.Table("bot_users", metadata, autoload_with=connection)
@@ -179,8 +179,8 @@ def test_actual_alembic_chain_backfill_and_retained_rollback(dialect: str, tmp_p
             connection.execute(services.insert(), {"id": 10, "bot_user_id": 10, "pg_user_id": 501,
                 "pg_username": "synthetic", "shop_needs_review": True, "notified_expire": False, "notified_traffic": False})
             connection.execute(settings.insert(), {"key": "integration_api_enabled", "value": "1"})
-        command.upgrade(config, "0070_customer_identity")
-        command.upgrade(config, "0070_customer_identity")
+        command.upgrade(config, "0074_customer_identity")
+        command.upgrade(config, "0074_customer_identity")
         async def backfill() -> None:
             async_url = url.replace("sqlite:", "sqlite+aiosqlite:").replace("postgresql+psycopg:", "postgresql+asyncpg:")
             options = {"connect_args": {"server_settings": {"search_path": schema}}} if schema else {}
@@ -203,7 +203,7 @@ def test_actual_alembic_chain_backfill_and_retained_rollback(dialect: str, tmp_p
             association = connection.execute(sa.text("SELECT id,bot_user_id,customer_id,public_id,pg_user_id,shop_needs_review FROM user_services")).one()
             assert identity.state == "blocked" and identity.legacy_bot_user_id == 10
             assert association.customer_id and association.shop_needs_review
-        command.downgrade(config, "0069_integration_security")
+        command.downgrade(config, "0073_integration_security")
         with scoped.connect() as connection:
             assert connection.scalar(sa.text("SELECT value FROM settings WHERE key='integration_api_enabled'")) == "0"
         command.upgrade(config, "head")

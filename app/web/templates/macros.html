@@ -85,6 +85,10 @@
 </label>
 {%- endmacro %}
 
+{% macro oversell_create_switch() -%}
+{{ switch('allow_volume_oversell', 'اجازه فروش بیش از سقف حجم', checked=false, help='خاموش: فروش این نماینده از سقف حجم اشتراکش بیشتر نمی‌شود. روشن: محدودیتی نیست. برای پلن PAYG اثری ندارد. بعداً از صفحهٔ ویرایش نماینده هم قابل تغییر است.') }}
+{%- endmacro %}
+
 {% macro switch_chip(name, label, checked=false, value='1') -%}
 <label class="ui-switch-chip">
   <span class="ui-switch-copy"><strong>{{ label }}</strong></span>
@@ -263,6 +267,20 @@
   {% endif %}
   {% endif %}
 </div>
+{%- endmacro %}
+
+{# Long field helps collapse behind «راهنما»; short ones stay inline. #}
+{% macro setting_help(help, class_name='') -%}
+{% if help %}
+  {% if help|length > 70 %}
+  <details class="setting-help{% if class_name %} {{ class_name }}{% endif %}">
+    <summary class="setting-help-summary">راهنما</summary>
+    <div class="setting-help-body muted">{{ help }}</div>
+  </details>
+  {% else %}
+  <small class="muted{% if class_name %} {{ class_name }}{% endif %}">{{ help }}</small>
+  {% endif %}
+{% endif %}
 {%- endmacro %}
 
 {# Modal chrome title — same icon-box language as page_title, plus a short caption #}

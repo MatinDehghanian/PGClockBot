@@ -22,6 +22,7 @@ from app.services.formatting import (
     info_block,
     kv_line,
 )
+from app.services.replaceable_notices import replace_notices
 from app.services.users import get_all_settings, on, set_settings_bulk
 
 
@@ -460,8 +461,12 @@ async def _dispatch_dual_notify(
     ticket_reseller_id: object = _TICKET_RID_UNSET,
     platform: bool = True,
     shop: bool = True,
+    replace_key: str | None = None,
 ) -> int:
     """Route staff notifications with hard shop isolation.
+
+    With ``replace_key`` the message replaces the previous one of that key in each chat
+    (``replaceable_notices``) instead of piling up.
 
     Returns the number of successful Telegram deliveries (0 = nobody got it).
 
@@ -477,9 +482,12 @@ async def _dispatch_dual_notify(
     async def _send(send_bot: Bot, targets: list[int]) -> int:
         sent_messages: list[Message] = []
         kwargs = {"markup": markup, "photo": photo}
-        if key == "notify_pending_approval" and payment is not None:
+        if (key == "notify_pending_approval" and payment is not None) or replace_key:
             kwargs["sent_messages"] = sent_messages
         count = await _send_to_chats(send_bot, targets, text, **kwargs)
+        if replace_key:
+            await replace_notices(session, send_bot, replace_key, sent_messages)
+            return count
         if sent_messages:
             from app.services.payment_review_messages import (
                 remember_review_message, sync_review_messages,
@@ -662,8 +670,9 @@ async def notify_new_subscription(
     elif plan_name:
         lines.append(kv_line("💎", "پلن", plan_name))
     if order.payment_method and not addon_details:
-        method = "کیف پول" if order.payment_method == "wallet" else "کارت به کارت"
-        lines.append(kv_line("💳", "پرداخت", method))
+        from app.services.payment_method_labels import payment_method_fa
+
+        lines.append(kv_line("💳", "پرداخت", payment_method_fa(order.payment_method)))
     lines.append(kv_line("📌", "وضعیت", "نیاز به تأیید" if needs_approval else "تحویل‌شده"))
     title = f"➕ {addon_details[0]}" if addon_details else "🆕 اشتراک جدید"
     text = format_message(title, info_block(lines))
@@ -780,17 +789,13 @@ async def _addon_order_detail_lines(
     )
     lines.append(kv_line("🔗", "سرویس", html_mod.escape(service_name)))
     if order.payment_method:
-        methods = {
-            "wallet": "کیف پول",
-            "card": "کارت به کارت",
-            "gateway": "درگاه",
-            "crypto": "رمزارز",
-            "stars": "استارز",
-        }
+        from app.services.payment_method_labels import payment_method_fa
+
         lines.append(
             kv_line(
-                "💳", "روش",
-                html_mod.escape(methods.get(order.payment_method, order.payment_method)),
+                "💳",
+                "روش",
+                html_mod.escape(payment_method_fa(order.payment_method)),
             )
         )
     return label, lines
@@ -895,18 +900,13 @@ async def _pending_order_detail_lines(
             kv_line("📅", "مدت پلن", format_plan_duration_days(plan.duration_days))
         )
     if order.payment_method:
-        method_map = {
-            "wallet": "کیف پول",
-            "card": "کارت به کارت",
-            "gateway": "درگاه",
-            "crypto": "رمزارز",
-            "stars": "استارز",
-        }
+        from app.services.payment_method_labels import payment_method_fa
+
         extras.append(
             kv_line(
                 "💳",
                 "روش",
-                method_map.get(str(order.payment_method), str(order.payment_method)),
+                payment_method_fa(order.payment_method),
             )
         )
     return kind, extras
@@ -1122,6 +1122,7 @@ async def notify_settlement_review(
     *,
     shop_id: int | None,
     reason: str,
+    title: str = "⚠️ پرداخت «بزن به کارت» نیاز به بررسی دارد",
 ) -> int:
     """Staff of the payment's shop (platform admins for the platform): an automatic
     payment needs a person. Never approves or rejects anything itself."""
@@ -1137,7 +1138,7 @@ async def notify_settlement_review(
     ]
     if payment.order_id:
         lines.append(kv_line("🛒", "سفارش", f"#{payment.order_id}"))
-    text = format_message("⚠️ پرداخت «بزن به کارت» نیاز به بررسی دارد", info_block(lines) + f"\n\n{reason}")
+    text = format_message(title, info_block(lines) + f"\n\n{reason}")
     bot = create_bot()
     try:
         # The settlement's shop is passed as the explicit scope, so shop events never reach platform admins.

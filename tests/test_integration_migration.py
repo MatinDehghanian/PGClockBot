@@ -18,7 +18,7 @@ from alembic.operations import Operations
 from sqlalchemy.engine import Connection
 
 ROOT = Path(__file__).resolve().parents[1]
-SPEC = importlib.util.spec_from_file_location("integration_migration", ROOT / "alembic/versions/0067_integration_foundation.py")
+SPEC = importlib.util.spec_from_file_location("integration_migration", ROOT / "alembic/versions/0071_integration_foundation.py")
 MIGRATION = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MIGRATION)
 

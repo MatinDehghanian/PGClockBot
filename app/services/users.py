@@ -1048,11 +1048,15 @@ DEFAULT_SETTINGS = {
     "pay_discount_enabled": "1",
     "psp_provider": "zarinpal",
     "psp_merchant_id": "",
+    "psp_pay_url": "",
+    "psp_sunpay_request_method": "GET",
+    # Telegram «ورود به درگاه»: direct PSP URL (default) or panel /go/ hop.
+    "psp_checkout_link_mode": "direct",
     "psp_sandbox": "1",
     "psp_pay_text": (
         "مبلغ قابل پرداخت: <b>{amount}</b>\n"
         "از دکمه زیر وارد درگاه شوید و پرداخت را تکمیل کنید.\n"
-        "پس از تأیید درگاه، سرویس به‌صورت خودکار تحویل می‌شود."
+        "پس از پرداخت، به همین چت ربات برگردید؛ تأیید و تحویل خودکار است."
     ),
     "btn_pay_psp": "🔵🏦 درگاه آنلاین",
     "bbc_api_key": "",
@@ -1126,6 +1130,9 @@ DEFAULT_SETTINGS = {
     "one_tap_renew_enabled": "1",
     "service_import_enabled": "0",
     "chat_cleanup_enabled": "1",
+    # Shop Mini Apps: platform switch and each shop's own switch, both off until turned on.
+    "miniapp_shops_enabled": "0",
+    "miniapp_shop_enabled": "0",
     "service_import_mode": "instant",
     "service_import_max_per_user": "5",
     "service_import_paths": "",
@@ -1561,7 +1568,12 @@ SETTING_GROUPS = {
         ("pay_wallet_enabled", "کیف پول داخلی", "toggle", "پرداخت از موجودی کیف پول کاربر"),
         ("pay_card_enabled", "کارت به کارت", "toggle", ""),
         ("pay_gateway_enabled", "درگاه پرداخت (لینک + رسید)", "toggle", "لینک درگاه خارجی + ارسال رسید — روش قبلی حفظ می‌شود"),
-        ("pay_psp_enabled", "درگاه آنلاین API", "toggle", "درگاه واقعی request→verify (Mock بدون مرچنت / زرین‌پال با مرچنت)"),
+        (
+            "pay_psp_enabled",
+            "درگاه آنلاین API",
+            "toggle",
+            "درگاه واقعی request→verify (زرین‌پال / سان‌پی / Mock فقط با ALLOW_SETTLEMENT_MOCK)",
+        ),
         (
             "pay_bbc_enabled",
             "بزن به کارت",
@@ -1649,20 +1661,49 @@ SETTING_GROUPS = {
             "psp_provider",
             "ارائه‌دهنده",
             "select",
-            "zarinpal = درگاه واقعی؛ mock فقط با ALLOW_SETTLEMENT_MOCK=1 روی سرور",
-            [("zarinpal", "زرین‌پال"), ("mock", "Mock (فقط تست محلی)")],
+            "zarinpal / sunpay = درگاه واقعی؛ mock فقط با ALLOW_SETTLEMENT_MOCK=1 روی سرور",
+            [
+                ("zarinpal", "زرین‌پال"),
+                ("sunpay", "سان‌پی (SunPay)"),
+                ("mock", "Mock (فقط تست محلی)"),
+            ],
         ),
         (
             "psp_merchant_id",
-            "مرچنت آیدی",
+            "مرچنت / کلید API",
             "password",
-            "خالی بماند = بدون تغییر. برای mock لازم نیست",
+            "زرین‌پال: Merchant ID — سان‌پی: api_key. خالی بماند = بدون تغییر. برای mock لازم نیست",
+        ),
+        (
+            "psp_pay_url",
+            "آدرس پایه درگاه (PAY_URL)",
+            "text",
+            "فقط سان‌پی و فقط https عمومی: مثلاً https://pay.example.com — "
+            "http و localhost/IP خصوصی رد می‌شوند",
+        ),
+        (
+            "psp_sunpay_request_method",
+            "روش درخواست سان‌پی (/api/request)",
+            "select",
+            "پیش‌فرض GET مطابق مستند؛ اگر درگاه بدنهٔ GET را نخواند POST را امتحان کنید "
+            "(تا تأیید با درگاه واقعی نهایی نیست)",
+            [("GET", "GET (مستند)"), ("POST", "POST")],
         ),
         (
             "psp_sandbox",
             "حالت سندباکس",
             "toggle",
-            "روشن = محیط آزمایشی زرین‌پال",
+            "روشن = محیط آزمایشی زرین‌پال (برای سان‌پی اثر ندارد)",
+        ),
+        (
+            "psp_checkout_link_mode",
+            "لینک دکمهٔ درگاه",
+            "select",
+            "اگر برگشت شاپرک گیر کرد، آدرس پنل فروشگاه را انتخاب کنید",
+            [
+                ("direct", "آدرس خود درگاه"),
+                ("panel", "آدرس پنل فروشگاه"),
+            ],
         ),
         (
             "psp_pay_text",

@@ -124,27 +124,69 @@ class ModalScrollLockTests(unittest.TestCase):
             css,
         )
         self.assertNotIn("padding-inline: calc(var(--space-3) + 14px);", css)
-        # Sticky head chrome: title/close outside scroll for every modal panel
-        head_sel = '.ui-modal-panel[data-scroll-shell="1"] > .ui-modal-head {'
+        # Shared frost tokens + sticky frosted head/footer
+        self.assertIn("--modal-frost-bg:", css)
+        self.assertIn("color-mix(in srgb, var(--bg-card) 52%, transparent)", css)
+        self.assertIn("--modal-save-pad-y: var(--space-2_5);", css)
+        shared_sel = (
+            ".ui-modal-panel[data-scroll-shell=\"1\"] > .ui-modal-scroll > .ui-modal-head,\n"
+            ".ui-modal-panel[data-scroll-shell=\"1\"] > .ui-modal-sticky-save {"
+        )
+        self.assertIn(shared_sel, css)
+        shared_block = css.split(shared_sel, 1)[1].split("}", 1)[0]
+        self.assertIn("background: var(--modal-frost-bg);", shared_block)
+        self.assertIn("backdrop-filter: var(--modal-frost-blur);", shared_block)
+        head_sel = (
+            '.ui-modal-panel[data-scroll-shell="1"] > .ui-modal-scroll > .ui-modal-head {'
+        )
         self.assertIn(head_sel, css)
         head_block = css.split(head_sel, 1)[1].split("}", 1)[0]
+        self.assertIn("position: sticky;", head_block)
         self.assertIn("padding-bottom: var(--space-2);", head_block)
-        self.assertIn(
-            "padding: calc(var(--space-3) + var(--modal-scrollbar-room, 8px));",
-            head_block,
+        # Overlay footer (absolute) so content frosts under it like the head
+        save_anchor = (
+            ".ui-modal-panel[data-scroll-shell=\"1\"] > .ui-modal-sticky-save {\n"
+            "  position: absolute;"
         )
+        self.assertIn(save_anchor, css)
+        save_block = css.split(save_anchor, 1)[1].split("}", 1)[0]
+        self.assertIn("display: flex;", save_block)
+        self.assertIn("align-items: stretch;", save_block)
+        self.assertIn("padding-block: var(--modal-save-pad-y);", save_block)
+        self.assertIn("justify-content: center;", save_block)
+        self.assertIn(
+            ".ui-modal-panel[data-scroll-shell=\"1\"]:has(> .ui-modal-sticky-save)"
+            " > .ui-modal-scroll {",
+            css,
+        )
+        btn_sel = (
+            ".ui-modal-panel[data-scroll-shell=\"1\"] > .ui-modal-sticky-save > .btn,\n"
+            ".ui-modal-panel[data-scroll-shell=\"1\"] > .ui-modal-sticky-save > a.btn,\n"
+            ".ui-modal-panel[data-scroll-shell=\"1\"] > .ui-modal-sticky-save > button {"
+        )
+        self.assertIn(btn_sel, css)
+        btn_block = css.split(btn_sel, 1)[1].split("}", 1)[0]
+        self.assertIn("width: 100%;", btn_block)
+        domain = (
+            ROOT / "app/web/templates/_domain_settings_form.html"
+        ).read_text(encoding="utf-8")
+        pending = (
+            ROOT / "app/web/templates/_settings_pending_orders.html"
+        ).read_text(encoding="utf-8")
+        self.assertIn("ui-modal-sticky-save", domain)
+        self.assertNotIn("ui-modal-sticky-save", pending)
         js = JS.read_text(encoding="utf-8")
         self.assertIn('panel.dataset.scrollShell = \'1\'', js)
         self.assertIn("corner clip", js)
+        self.assertIn("function pinModalStickySave", js)
+        self.assertIn("data-save-home", js)
         shell_fn = js.split("ensureModalScrollShell")[1].split("function canScrollInside")[0]
-        self.assertIn("keepOutsideScroll", shell_fn)
-        self.assertIn("ui-modal-head", shell_fn)
-        # Sticky head is universal — no per-modal allow-list
+        self.assertIn("while (panel.firstChild)", shell_fn)
+        self.assertIn("pinModalStickySave", shell_fn)
+        self.assertNotIn("keepOutsideScroll", shell_fn)
         self.assertNotIn("userEditOnly", shell_fn)
-        self.assertNotIn("modal-user-edit", shell_fn)
-        # Must not keep settings flash/tabs outside scroll (only the head)
-        self.assertNotIn("settings-modal-flash", shell_fn)
-        self.assertNotIn("modal-section-tabs", shell_fn)
+        self.assertIn("syncPaySettingsCards", js)
+        self.assertIn("data-pay-settings-for", js)
 
 
 class ModalLayoutPolishTests(unittest.TestCase):

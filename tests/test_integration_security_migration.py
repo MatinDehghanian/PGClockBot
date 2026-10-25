@@ -14,7 +14,7 @@ import test_integration_migration as foundation
 
 connection = foundation.connection
 ROOT = Path(__file__).resolve().parents[1]
-SPEC = importlib.util.spec_from_file_location("integration_security_migration", ROOT / "alembic/versions/0069_integration_security.py")
+SPEC = importlib.util.spec_from_file_location("integration_security_migration", ROOT / "alembic/versions/0073_integration_security.py")
 MIGRATION = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MIGRATION)
 

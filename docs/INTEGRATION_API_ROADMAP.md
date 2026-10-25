@@ -9,6 +9,8 @@ the documented external gates and separate authorization. All activation switche
 remain disabled.
 The focused pre-PR review checkpoint at the end records subsequent repairs and
 final-file verification. Historical evidence is preserved as distinct invocations.
+The submission checkpoint at the end supersedes historical target/migration references:
+feature revisions are now 0071–0080 after upstream `0070_shop_miniapp_key`.
 
 Goal: allow any website's backend to register customers without Telegram accounts
 and delegate service provisioning and lifecycle management to PGClockBot through
@@ -1059,3 +1061,48 @@ future authorized activation. Staging deployment and real Telegram/webhook deliv
 are also deferred / not performed. This candidate is locally verified, is not
 production-verified and remains disabled; runtime live-evidence requirements remain
 in force.
+
+
+### Review submission and current-target integration — 2026-10-25
+
+The reviewed candidate was preserved in commit `bad2eedf`. Its 162 Python files
+matched the recorded runtime/test/migration fingerprint exactly:
+`aa1a51f831856a6379a4eb9f15ee49b9f2ebb094fbd1b588f5e23b95e5fffa36`.
+The 5,660-pass full suite, 3,048-pass security manifest and 55-pass backend matrix
+therefore remain valid evidence for that original candidate. They are historical
+evidence, not verification of the subsequently integrated runtime.
+
+Refreshed upstream `dev` is `ee7de1acbf8690caf1f462ddb2104864fcbf6e11`.
+Its runtime changes and four newly merged migrations required preserving both
+histories and refreshing the clean-dev baseline. Three additive merge conflicts
+retained upstream scheduler imports, Mini App permission and security entries
+alongside all integration entries. No merged upstream migration was edited.
+Only the unmerged feature revisions and their active references were renumbered:
+
+| Original unmerged revision | Final revision |
+|---|---|
+| 0067 foundation | 0071 integration foundation |
+| 0068 administration | 0072 integration administration |
+| 0069 security | 0073 integration security |
+| 0070 identity | 0074 customer identity |
+| 0071 ownership | 0075 service channel ownership |
+| 0072 consent | 0076 customer Telegram links |
+| 0073 reads | 0077 integration read snapshots |
+| 0074 operations | 0078 integration operations |
+| 0075 private delivery | 0079 integration private delivery |
+| 0076 outbox | 0080 integration event outbox |
+
+The new upstream paginated customer-service reader now uses the existing
+`legacy_service_clause`, as the list and search readers do, so canonical-owner
+mismatches cannot appear in Mini App pages. Its regression first failed against
+the merged reader, then verifies canonical ownership, shop/customer isolation and
+filtered pagination with the repair. The security manifest already includes its
+regression module. This is compatibility work required by target integration;
+no new capability, dependency or activation bypass was added.
+
+Current installation procedure: upgrade to `0074_customer_identity`, run the
+bounded canonical backfill from zero and verify coverage, then upgrade to
+`0080_integration_event_outbox`. Retaining downgrade and a compatibility-aware
+binary remain mandatory. Historical checkpoints above use the original numbering.
+
+Final validation and submission details are recorded below after verification.

@@ -10,7 +10,10 @@ Home messages (the welcome and «منوی اصلی» carrying the main menu keyb
 exception to the keyboard rule: a new home replaces the older ones, because the new one
 now carries the keyboard. Only the newest home is ever left on screen.
 
-The list lives in memory and is bounded; after a restart older messages simply stay.
+The list lives in memory for speed and is mirrored to the database
+(``app.services.chat_message_ledger``); after a restart a chat's list is read back on its first
+cleanup, so welcomes and panels sent before the restart are still deleted (within Telegram's
+48-hour delete window).
 """
 
 from __future__ import annotations
@@ -18,6 +21,7 @@ from __future__ import annotations
 import logging
 import time
 from collections import OrderedDict
+from datetime import datetime, timezone
 from collections.abc import Awaitable, Callable
 from contextvars import ContextVar
 from typing import Any
@@ -27,10 +31,12 @@ from aiogram.client.session.middlewares.base import NextRequestMiddlewareType
 from aiogram.exceptions import TelegramAPIError
 from aiogram.methods import SendMessage, TelegramMethod
 from aiogram.types import Message, ReplyKeyboardMarkup, TelegramObject
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.bot.reply_keyboard_state import is_menu_tap
 from app.services import bot_feedback_texts as feedback
 from app.services.chat_cleanup_config import is_chat_cleanup_on
+from app.services.chat_message_ledger import KIND_HOME, KIND_THROWAWAY, StoredMessage, load_chat, writer
 from app.services.users import get_all_settings
 
 logger = logging.getLogger(__name__)
@@ -111,6 +117,41 @@ class ThrowawayLog:
 
 _log = ThrowawayLog()
 _homes = ThrowawayLog(per_chat=TRACKED_HOMES_PER_CHAT)
+# Chats whose stored list was already read back since this process started.
+_loaded: OrderedDict[ChatKey, None] = OrderedDict()
+
+
+def _monotonic_at(sent_at: datetime, now_mono: float, now_utc: datetime) -> float:
+    return now_mono - (now_utc - sent_at).total_seconds()
+
+
+def _restore(key: ChatKey, rows: list[StoredMessage]) -> None:
+    now_mono, now_utc = time.monotonic(), datetime.now(timezone.utc)
+    for row in reversed(rows):  # oldest first, so the per-chat bound keeps the newest
+        target = _homes if row.kind == KIND_HOME else _log
+        target.add(key, row.message_id, _monotonic_at(row.sent_at, now_mono, now_utc))
+
+
+async def _ensure_loaded(key: ChatKey) -> None:
+    """Read the chat's stored list back once per process; a failed read only skips old messages."""
+    if key in _loaded:
+        return
+    _loaded[key] = None
+    while len(_loaded) > TRACKED_CHATS:
+        _loaded.popitem(last=False)
+    try:
+        async with writer.sessions() as session:
+            rows = await load_chat(session, key)
+    except SQLAlchemyError:
+        logger.warning("chat cleanup could not read the stored list chat=%s", key[1], exc_info=True)
+        return
+    _restore(key, rows)
+
+
+def _take(log: ThrowawayLog, key: ChatKey, keep: int | None, now: float) -> list[int]:
+    ids = log.take_except(key, keep, now)
+    writer.remove(key, ids)
+    return ids
 
 
 def is_cleanup_on() -> bool:
@@ -136,6 +177,7 @@ def note_throwaway(message: Message | None, *, reply_markup: Any = None, bot: Bo
     key = chat_key(message, bot)
     if key is not None and getattr(message, "message_id", None) is not None:
         _log.add(key, int(message.message_id), time.monotonic())
+        writer.add(key, int(message.message_id), KIND_THROWAWAY)
 
 
 def keep_message(message: Message | None) -> None:
@@ -143,6 +185,7 @@ def keep_message(message: Message | None) -> None:
     key = chat_key(message) if message is not None else None
     if key is not None and getattr(message, "message_id", None) is not None:
         _log.forget(key, int(message.message_id))
+        writer.remove(key, [int(message.message_id)])
 
 
 async def sweep_above(message: Message | None, *, panel_id: int | None = None) -> None:
@@ -156,7 +199,8 @@ async def sweep_above(message: Message | None, *, panel_id: int | None = None) -
     if key is None:
         return
     keep = panel_id if panel_id is not None else getattr(message, "message_id", None)
-    stale = _log.take_except(key, keep, time.monotonic())
+    await _ensure_loaded(key)
+    stale = _take(_log, key, keep, time.monotonic())
     await delete_messages(message.bot, key[1], stale)
 
 
@@ -174,12 +218,14 @@ async def replace_home(home: Message | None, *, sweep: bool = False) -> None:
     home_id = getattr(home, "message_id", None)
     if key is None or home_id is None:
         return
+    await _ensure_loaded(key)
     now = time.monotonic()
-    stale = set(_homes.take_except(key, None, now))
+    stale = set(_take(_homes, key, None, now))
     if sweep:
-        stale |= set(_log.take_except(key, None, now))
+        stale |= set(_take(_log, key, None, now))
     stale.discard(int(home_id))
     _homes.add(key, int(home_id), now)
+    writer.add(key, int(home_id), KIND_HOME)
     await delete_messages(home.bot, key[1], sorted(stale))
 
 

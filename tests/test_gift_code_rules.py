@@ -573,7 +573,7 @@ class GiftCodeValidationTests(unittest.TestCase):
                         "INSERT INTO wallet_transactions (user_id, amount, balance_after, reason) VALUES (1, 50000, 50000, 'کد هدیه OLD')"
                     )
                 )
-            command.upgrade(cfg, "0070_customer_identity")
+            command.upgrade(cfg, "0074_customer_identity")
 
             async def backfill_fixture() -> None:
                 async_engine = create_async_engine(url.replace("sqlite:", "sqlite+aiosqlite:"))

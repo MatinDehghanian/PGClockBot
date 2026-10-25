@@ -1,5 +1,8 @@
 # PGClockBot Integration API contract — v1
 
+Migration references use the final unmerged feature revisions 0071–0080, after
+upstream `0070_shop_miniapp_key`. Historical test counts are in the roadmap.
+
 Status: Phases 2B, 2C and 3–7 are implemented locally for the conservative v1
 subset described in the [release operating guide](INTEGRATION_API_OPERATIONS.md).
 Phase 8 local preparation and validation are complete; the roadmap records actual
@@ -782,8 +785,8 @@ Phase 1A implements this boundary against refreshed `upstream/dev`
   snapshots, never cached dispatch permits. Existing panel/CSRF/Mini App code is
   unchanged.
 
-Migration `0067_integration_foundation` follows inspected head
-`0066_external_volume_allocation`, creates only the three foundation tables and
+Migration `0071_integration_foundation` follows inspected head
+`0070_shop_miniapp_key`, creates only the three foundation tables and
 indexes and repairs missing indexes on repeat upgrade. Existing customer/service
 columns, wallets and rows are untouched. Required identity/scope fields on new
 empty tables have no invented authority defaults; status/grants/revision have
@@ -924,7 +927,7 @@ tuning; no unbounded catch-up loop is introduced.
 
 #### Administration migration and rollback
 
-`0068_integration_admin_audit` follows the inspected `0067` head. It adds only
+`0072_integration_admin_audit` follows the inspected `0071` head. It adds only
 `integration_management_actions`, `integration_admin_audit` and indexes for scoped
 pagination, credential lists, replay lookup and retention. Repeat upgrade inspects
 tables/indexes and repairs missing indexes on SQLite and PostgreSQL. Existing
@@ -1097,8 +1100,8 @@ maintenance. Do not delete held evidence to catch up.
 
 #### Migration and rollback
 
-The inspected Alembic head was `0068_integration_admin_audit`;
-`0069_integration_security` adds only the counter/evidence tables and indexes.
+The inspected Alembic head was `0072_integration_admin_audit`;
+`0073_integration_security` adds only the counter/evidence tables and indexes.
 Upgrade inspects tables/indexes, repairs missing indexes, and is repeat-safe on
 SQLite and PostgreSQL. Downgrade always sets an existing API enable setting to
 `0`. If either security table contains data, it reports retained schema and keeps
@@ -1121,14 +1124,14 @@ from that phase is included here.
 
 ## Phase 2A implemented boundary (2026-10-21)
 
-Migration `0070_customer_identity` is additive after preserved 0067–0069. It adds
+Migration `0074_customer_identity` is additive after preserved 0071–0073. It adds
 `Customer`/`IntegrationCustomer`, unique public and legacy adapter IDs, the two
 integration mapping uniqueness constraints, nullable canonical service customer
 and stable public service IDs. Legacy bot ownership stays required; no API-origin
 service, operation foreign key, placeholder operation table, linking table or
 secret envelope is added. See the [identity operating procedure](INTEGRATION_CUSTOMER_IDENTITY.md#9-phase-2a-implementation-and-operating-procedure)
 for the explicit committed 500-row backfill, inconsistent-owner handling and exact
-retained-schema 0070↔0069 rollback support. Backfill never changes a stored shop
+retained-schema 0074↔0073 rollback support. Backfill never changes a stored shop
 or its review flag, financial identity, balance, panel ID or principal association.
 
 Internal domain functions are `create_or_get_integration_customer(session, bearer,
