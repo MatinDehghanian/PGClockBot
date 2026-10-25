@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import BotUser, Payment, PaymentMethod, PaymentStatus
 from app.services.delivery import send_delivery_to_user
 from app.services.formatting import format_message
+from app.services.notifications import notify_stars_delivery_failed
 from app.services.orders import approve_payment, reject_payment, stars_amount_for_toman
 from app.services.resellers import reseller_can_review_payment
 from app.services.users import get_all_settings, get_setting
@@ -173,32 +174,20 @@ async def stars_successful_payment(message: Message, session: AsyncSession, db_u
                 "stars post-failure payment update failed id=%s", payment.id
             )
         if refunded:
-            await message.answer(
-                f"پرداخت استارز دریافت شد ولی تحویل ناموفق بود و استارز بازگردانده شد: {e}"
-            )
+            await message.answer("پرداخت استارز دریافت شد ولی تحویل ناموفق بود و استارز بازگردانده شد.")
         else:
             await message.answer(
-                f"پرداخت استارز دریافت شد ولی تحویل ناموفق بود: {e}\n"
+                "پرداخت استارز دریافت شد ولی تحویل ناموفق بود.\n"
                 "بازگشت خودکار ناموفق بود — با پشتیبانی تماس بگیرید؛ شناسه پرداخت ثبت شد."
             )
         try:
-            from app.config import get_settings
-
-            alert = (
-                f"⚠️ تحویل استارز ناموفق\n"
-                f"payment=#{payment.id}\n"
-                f"user_tg={db_user.telegram_id}\n"
-                f"charge={charge_id or '—'}\n"
-                f"refunded={'yes' if refunded else 'NO'}\n"
-                f"error={e}"
+            await notify_stars_delivery_failed(
+                message.bot, session, payment, telegram_id=int(db_user.telegram_id),
+                charge_id=charge_id, refunded=refunded, error=str(e),
             )
-            for aid in get_settings().admin_ids:
-                try:
-                    await message.bot.send_message(aid, alert)
-                except Exception:
-                    pass
         except Exception:
-            pass
+            # Best-effort staff alert: the failure is logged above and stamped on the payment.
+            logging.getLogger(__name__).warning("stars failure alert failed payment=%s", payment.id, exc_info=True)
         return
     from app.bot.menu_nav import buyer_main_reply_keyboard, clear_checkout_nav
 
