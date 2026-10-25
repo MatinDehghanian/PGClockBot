@@ -28,6 +28,7 @@ from app.db.models import Plan
 from app.services.catalog_pricing import annotate_prices, displayed_quote
 from app.services.db_safe import rollback_quiet
 from app.services.miniapp_auth import load_mini_user, load_reseller_profile, resolve_mini_persona
+from app.services.miniapp_shop import mini_scope
 from app.services.receipt_review import may_review_receipts
 from app.services.service_scope import SERVICE_SEARCH_MAX_LENGTH, page_customer_services
 from app.services.users import get_all_settings, on
@@ -98,7 +99,7 @@ def register_miniapp_feeds(app: FastAPI, *, get_db) -> None:
         user = await load_mini_user(session, request)
         _require_commerce(user)
         services, has_more = await page_customer_services(
-            session, int(user.id), None, limit=limit, before_id=before_id, text=q
+            session, int(user.id), mini_scope(request).shop_id, limit=limit, before_id=before_id, text=q
         )
         rows = await _enrich_services(services, session=session)
         for row, svc in zip(rows, services, strict=True):
@@ -123,7 +124,7 @@ def register_miniapp_feeds(app: FastAPI, *, get_db) -> None:
         user = await load_mini_user(session, request)
         _require_commerce(user)
         try:
-            lines = await list_activity(session, int(user.id), limit=limit, shop_id=None)
+            lines = await list_activity(session, int(user.id), limit=limit, shop_id=mini_scope(request).shop_id)
         except SQLAlchemyError:
             await rollback_quiet(session)
             log.exception("miniapp activity failed user=%s", user.id)

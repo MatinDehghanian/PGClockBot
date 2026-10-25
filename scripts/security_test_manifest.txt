@@ -257,3 +257,4 @@ tests/test_reseller_extra_purchase.py
 tests/test_bbc_refusal_reason.py
 tests/test_finance_daily_charts.py
 tests/test_miniapp_shop_scope.py
+tests/test_miniapp_shop_readonly.py

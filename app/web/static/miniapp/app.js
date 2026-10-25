@@ -55,9 +55,23 @@
     return (state.me && state.me.customer) || {};
   }
 
+  /** A shop's Mini App lists the sections it has opened; the platform Mini App has them all. */
+  function can(section) {
+    const sections = state.me && state.me.sections;
+    return !Array.isArray(sections) || sections.includes(section);
+  }
+
   function features() {
     const c = customer();
-    return { walletPay: !!c.wallet_pay_enabled, qr: !!c.qr_enabled };
+    return {
+      walletPay: !!c.wallet_pay_enabled, qr: !!c.qr_enabled, topup: can("topup"), gift: can("codes"),
+      manage: can("manage"), shop: can("shop"),
+    };
+  }
+
+  /** «Buy a service» empty-state button, only where buying is open. */
+  function buyCta(label) {
+    return can("shop") ? { view: "shop", label } : null;
   }
 
   function homeViewId() {
@@ -72,6 +86,9 @@
     ["club", { parent: "account", tab: "account", label: "حساب" }],
     ["ticket", { parent: "support", tab: "account", label: "پشتیبانی" }],
   ]);
+
+  // Sub-screens that belong to a section a shop's Mini App may not have opened yet.
+  const VIEW_SECTIONS = new Map([["support", "support"], ["ticket", "support"], ["club", "club"]]);
 
   /** Receipt review sits under the admin dashboard or the reseller's shop tab. */
   function reviewSubView() {
@@ -92,6 +109,7 @@
   function viewAllowed(view) {
     // The server decides who reviews; the screen shows its answer (including a refusal).
     if (view === "review") return persona() === "admin" || persona() === "reseller";
+    if (VIEW_SECTIONS.has(view) && !can(VIEW_SECTIONS.get(view))) return false;
     if (SUB_VIEWS.has(view)) return commerce();
     return ((state.me && state.me.nav) || []).some((n) => n.id === view);
   }
@@ -320,8 +338,9 @@
   function greetingHtml() {
     const name = (state.me.user && state.me.user.name) || "";
     const roles = { admin: "ادمین", reseller: "نماینده", user: "مشتری" };
+    const shop = state.me.shop && state.me.shop.name;
     return `<header class="view-head">
-      <div><h1>${core.esc(name ? "سلام، " + name : "سلام")}</h1></div>
+      <div><h1>${core.esc(name ? "سلام، " + name : "سلام")}</h1>${shop ? `<span class="muted sm">${core.esc(shop)}</span>` : ""}</div>
       <span class="role-chip">${core.esc(roles[persona()] || "مشتری")}</span>
     </header>`;
   }
@@ -329,7 +348,7 @@
   function myServicesHtml(home) {
     const recent = home.recent || [];
     if (!home.service_count) {
-      return `<section class="card">${R.emptyHtml("هنوز سرویسی ندارید.", { view: "shop", label: "خرید اولین سرویس" })}</section>`;
+      return `<section class="card">${R.emptyHtml("هنوز سرویسی ندارید.", buyCta("خرید اولین سرویس"))}</section>`;
     }
     return `<section class="card" aria-label="سرویس‌های من">
       <div class="card-head"><h2 class="card-title">سرویس‌های من <span class="muted sm">(${core.esc(core.num(home.service_count))})</span></h2>
@@ -353,7 +372,7 @@
     const c = customer();
     const home = c.home || { service_count: 0, attention: [], recent: [] };
     return greetingHtml()
-      + R.walletCardHtml(c, { actions: true })
+      + R.walletCardHtml(c, { actions: true, features: features() })
       + (home.attention || []).map(R.attentionCardHtml).join("")
       + (persona() === "reseller" ? shopPeekHtml() : "")
       + myServicesHtml(home);
@@ -423,7 +442,7 @@
     if (!s.items.length) {
       return s.q
         ? R.emptyHtml("سرویسی با این نام پیدا نشد.")
-        : R.emptyHtml("هنوز سرویسی ندارید.", { view: "shop", label: "خرید سرویس" });
+        : R.emptyHtml("هنوز سرویسی ندارید.", buyCta("خرید سرویس"));
     }
     const more = s.next
       ? `<button type="button" class="btn ghost block" data-action="services-more"${s.status === "loading" ? " disabled" : ""}>${s.status === "loading" ? "در حال دریافت…" : "سرویس‌های بیشتر"}</button>`
@@ -538,14 +557,17 @@
     const body = settled(r, 3, "retry");
     const rows = body || R.activityHtml(r.data.items);
     const canMore = !body && state.activityLimit < ACTIVITY_MORE && (r.data.items || []).length >= state.activityLimit;
-    const topups = resource("topup");
+    const topups = can("topup") ? resource("topup") : null;
+    const links = [
+      can("support") ? `<button type="button" class="list-row" data-action="goto" data-view="support">
+          ${R.icon("chat")}<span class="list-row-label">پشتیبانی و تیکت‌ها</span>${R.icon("chevron", 16)}</button>` : "",
+      can("club") ? `<button type="button" class="list-row" data-action="goto" data-view="club">
+          ${R.icon("gift")}<span class="list-row-label">امتیاز، جوایز و دعوت دوستان</span>${R.icon("chevron", 16)}</button>` : "",
+    ].join("");
     return viewHead(user.name || "حساب من", "حساب")
-      + R.walletCardHtml(customer())
-      + (topups.status === "ready" ? R.recentTopupsHtml(topups.data.recent) : "")
-      + `<section class="card list-card" aria-label="پشتیبانی"><button type="button" class="list-row" data-action="goto" data-view="support">
-          ${R.icon("chat")}<span class="list-row-label">پشتیبانی و تیکت‌ها</span>${R.icon("chevron", 16)}</button>
-          <button type="button" class="list-row" data-action="goto" data-view="club">
-          ${R.icon("gift")}<span class="list-row-label">امتیاز، جوایز و دعوت دوستان</span>${R.icon("chevron", 16)}</button></section>`
+      + R.walletCardHtml(customer(), { features: features() })
+      + (topups && topups.status === "ready" ? R.recentTopupsHtml(topups.data.recent) : "")
+      + (links ? `<section class="card list-card" aria-label="پشتیبانی">${links}</section>` : "")
       + `<section class="card" aria-label="تراکنش‌ها"><h2 class="card-title">تراکنش‌ها</h2>${rows}
           ${canMore ? '<button type="button" class="btn ghost block" data-action="activity-more">تراکنش‌های بیشتر</button>' : ""}</section>`;
   }

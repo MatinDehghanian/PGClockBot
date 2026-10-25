@@ -41,6 +41,9 @@ from app.services.orders import (
 from app.api.guide_media_pages import PLATFORM_BASE as GUIDE_MEDIA_PLATFORM_BASE
 from app.api.guide_media_pages import guides_media_view, register_guide_media_pages
 from app.services.chat_cleanup_config import chat_cleanup_payload
+from app.services.miniapp_shop import PLATFORM_SWITCH as SHOP_MINIAPPS_SWITCH
+from app.services.miniapp_shop import switch_value
+from app.services.reseller_bots import schedule_shop_menu_sync
 from app.services.connection_guides import prune_guide_media, serialize_submitted_guides
 from app.services.list_query import filter_by_search, normalize_search_q
 from app.services.payer_notify import notify_payer
@@ -4206,7 +4209,11 @@ def create_api_app(lifespan=None) -> FastAPI:
         payload["show_miniapp"] = "0"
         if reseller_id is not None:
             payload["show_reseller_apply"] = "0"
+        else:
+            payload[SHOP_MINIAPPS_SWITCH] = switch_value(form, SHOP_MINIAPPS_SWITCH)
         await set_settings_bulk(session, payload, reseller_id=reseller_id)
+        if reseller_id is None:
+            schedule_shop_menu_sync()
 
     @app.get("/settings", response_class=HTMLResponse)
     async def settings_page(

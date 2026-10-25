@@ -97,15 +97,21 @@ def claim_guide_send_slot(user_id: int) -> bool:
 
 
 async def send_guide_to_chat(
-    session: AsyncSession, bot: Bot, *, chat_id: int, guide: dict[str, Any], all_guides: list[dict[str, Any]],
+    session: AsyncSession,
+    bot: Bot,
+    *,
+    chat_id: int,
+    guide: dict[str, Any],
+    all_guides: list[dict[str, Any]],
+    shop_id: int | None = None,
 ) -> None:
-    """The guide's album (if any) and its text, as the bot shows it; platform guides only."""
-    cache = await load_file_id_cache(session, reseller_id=None)
-    album = media_to_send(guide, bot_id=bot.id, cache=cache, reseller_id=None)
+    """The guide's album (if any) and its text, as the bot shows it; ``shop_id``'s guides (None = platform)."""
+    cache = await load_file_id_cache(session, reseller_id=shop_id)
+    album = media_to_send(guide, bot_id=bot.id, cache=cache, reseller_id=shop_id)
     if album:
         learned = await send_guide_album(bot, chat_id, album)
         if learned:
             live = {m["id"] for g in all_guides for m in g.get("media") or []}
-            await remember_file_ids(session, learned, bot_id=bot.id, live_media_ids=live, reseller_id=None)
+            await remember_file_ids(session, learned, bot_id=bot.id, live_media_ids=live, reseller_id=shop_id)
     body = (guide.get("body") or "").strip() or "—"
     await bot.send_message(chat_id, format_message(f"📘 {guide.get('title') or 'آموزش'}", body))
