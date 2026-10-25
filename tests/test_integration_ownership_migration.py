@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import importlib.util
+import sqlite3
 from pathlib import Path
 
 import pytest
 import sqlalchemy as sa
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
 
 import test_customer_identity_migration as identity
 
@@ -39,6 +42,33 @@ def test_incomplete_ownership_is_backfilled_automatically(connection: sa.engine.
     assert service == connection.execute(sa.text("SELECT customer_id,public_id FROM user_services")).one()
     assert connection.scalar(sa.text("SELECT count(*) FROM customers")) == 1
     assert connection.scalar(sa.text("SELECT amount FROM synthetic_orders")) == 999
+
+
+def test_legacy_customer_backfill_respects_sqlite_bind_budget_and_keeps_ids() -> None:
+    engine = sa.create_engine("sqlite:///:memory:")
+    try:
+        with engine.begin() as connection:
+            connection.connection.driver_connection.setlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER, 999)
+            metadata = sa.MetaData()
+            users = sa.Table("bot_users", metadata, sa.Column("id", sa.Integer, primary_key=True),
+                sa.Column("is_blocked", sa.Boolean, nullable=False))
+            customers = sa.Table("customers", metadata, sa.Column("id", sa.Integer, primary_key=True),
+                sa.Column("public_id", sa.String(40), nullable=False, unique=True),
+                sa.Column("legacy_bot_user_id", sa.Integer, unique=True),
+                sa.Column("state", sa.String(16), nullable=False))
+            metadata.create_all(connection)
+            connection.execute(users.insert(), [{"id": n, "is_blocked": n == 1} for n in range(1, 501)])
+            with Operations.context(MigrationContext.configure(connection)):
+                MIGRATION._backfill_customers()
+                connection.execute(customers.update().where(customers.c.legacy_bot_user_id == 2).values(state="blocked"))
+                before = connection.execute(customers.select().order_by(customers.c.id).limit(501)).all()
+                MIGRATION._backfill_customers()
+            assert len(before) == 500
+            assert before == connection.execute(customers.select().order_by(customers.c.id).limit(501)).all()
+            assert connection.scalar(sa.select(customers.c.state).where(customers.c.legacy_bot_user_id == 1)) == "blocked"
+            assert connection.scalar(sa.select(customers.c.state).where(customers.c.legacy_bot_user_id == 2)) == "blocked"
+    finally:
+        engine.dispose()
 
 
 def test_conflicting_ownership_refuses_before_schema_change(connection: sa.engine.Connection) -> None:

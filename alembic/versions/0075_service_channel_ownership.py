@@ -37,10 +37,10 @@ def _backfill_customers() -> None:
     while rows := bind.execute(sa.select(users.c.id, users.c.is_blocked).where(
         users.c.id > after,
     ).order_by(users.c.id).limit(BACKFILL_BATCH_SIZE)).all():
-        bind.execute(insert(customers).values([
+        bind.execute(insert(customers).on_conflict_do_nothing(index_elements=["legacy_bot_user_id"]), [
             {"public_id": f"cus_{uuid4()}", "legacy_bot_user_id": row.id,
              "state": "blocked" if row.is_blocked else "active"} for row in rows
-        ]).on_conflict_do_nothing(index_elements=["legacy_bot_user_id"]))
+        ])
         blocked = [row.id for row in rows if row.is_blocked]
         if blocked:
             bind.execute(customers.update().where(customers.c.legacy_bot_user_id.in_(blocked)).values(state="blocked"))

@@ -26,10 +26,10 @@ async def ensure_legacy_customers(session: AsyncSession, user_ids: list[int]) ->
     if len(users) != len(set(user_ids)):
         raise ValueError("Legacy customer owner is missing")
     insert = sqlite_insert if session.get_bind().dialect.name == "sqlite" else pg_insert
-    await session.execute(insert(Customer).values([
+    await session.execute(insert(Customer).on_conflict_do_nothing(index_elements=["legacy_bot_user_id"]), [
         {"public_id": new_customer_public_id(), "legacy_bot_user_id": user.id,
          "state": "blocked" if user.is_blocked else "active"} for user in users
-    ]).on_conflict_do_nothing(index_elements=["legacy_bot_user_id"]))
+    ])
     blocked_ids = [user.id for user in users if user.is_blocked]
     if blocked_ids:
         await session.execute(update(Customer).where(Customer.legacy_bot_user_id.in_(blocked_ids)).values(state="blocked"))
