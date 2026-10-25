@@ -213,23 +213,27 @@
     }).join("")}</div>`;
   }
 
-  const LOW_BALANCE = `<p class="inline-error">موجودی کیف پول کافی نیست.</p>
-      <button type="button" class="btn ghost block" data-action="topup">شارژ کیف پول</button>`;
+  function lowBalanceHtml(features) {
+    return `<p class="inline-error">موجودی کیف پول کافی نیست.</p>${(features || {}).topup === false ? ""
+      : '<button type="button" class="btn ghost block" data-action="topup">شارژ کیف پول</button>'}`;
+  }
 
-  function checkoutHtml(plan, wallet) {
+  /** ``features`` (from the app) hides the code field and top-up button where a shop has not opened them. */
+  function checkoutHtml(plan, wallet, features) {
     if (!plan) return `<section class="card"><p class="muted">یک پلن را انتخاب کنید.</p></section>`;
+    const f = features || {};
     const price = Number(plan.price) || 0;
     const enough = price <= (Number(wallet) || 0);
     return `<section class="card" aria-label="خلاصهٔ سفارش">
       <div class="sum-row"><span class="muted">پلن</span><span>${esc(plan.name)}</span></div>
       <div class="sum-row"><span class="muted">موجودی کیف پول</span><span>${esc(money(wallet))}</span></div>
       <div class="sum-row is-total"><span>قابل پرداخت</span><span>${priceHtml(plan)}</span></div>
-      ${plan.is_trial ? "" : `<form class="code-form" data-form="discount">
+      ${plan.is_trial || f.gift === false ? "" : `<form class="code-form" data-form="discount">
         <label class="form-field"><span class="muted sm">کد تخفیف (اختیاری)</span>
           <span class="code-line"><input type="text" name="code" maxlength="64" autocomplete="off" dir="ltr" autocapitalize="characters">
           <button type="submit" class="btn ghost">اعمال</button></span></label>
       </form>`}
-      ${enough ? "" : LOW_BALANCE}
+      ${enough ? "" : lowBalanceHtml(f)}
       <button type="button" class="btn block" data-action="buy" data-id="${Number(plan.id) || 0}"${enough ? "" : " disabled"}>${plan.is_trial ? "دریافت سرویس تست" : "پرداخت از کیف پول"}</button>
     </section>`;
   }
@@ -241,7 +245,7 @@
       <div class="sum-row"><span class="muted">قیمت</span><s>${esc(money(checkout.original_amount))}</s></div>
       <div class="sum-row"><span class="muted">تخفیف <bdi dir="ltr">${esc(checkout.code)}</bdi></span><span class="is-plus tx-amt"><span aria-hidden="true">−</span><bdi>${esc(money(checkout.discount))}</bdi></span></div>
       <div class="sum-row is-total"><span>قابل پرداخت</span><span>${esc(money(checkout.amount))}</span></div>
-      ${enough ? "" : LOW_BALANCE}
+      ${enough ? "" : lowBalanceHtml()}
       <div class="btn-col">
         <button type="button" class="btn block" data-action="checkout-pay"${enough ? "" : " disabled"}>پرداخت از کیف پول</button>
         <button type="button" class="btn ghost block" data-action="checkout-cancel">حذف کد و انصراف</button>

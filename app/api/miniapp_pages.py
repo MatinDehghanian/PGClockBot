@@ -60,7 +60,7 @@ from app.services.miniapp_shop import (
 )
 from app.services.pasarguard import get_pg
 from app.services.service_live_info import fetch_subscription_info, service_info_error, validate_service_info
-from app.services.users import get_all_settings, on
+from app.services.users import current_shop_reseller_id, get_all_settings, on
 from app.services.wallet import get_wallet_balance
 
 log = logging.getLogger(__name__)
@@ -105,10 +105,25 @@ def _require_commerce(user: BotUser) -> str:
 
 
 async def _require_commerce_ready(session: AsyncSession, user: BotUser) -> str:
-    """Commerce persona + force-join (users) before mutating wallet/orders."""
+    """Commerce persona + force-join (users) before mutating wallet/orders.
+
+    In a shop's Mini App ``load_mini_user`` already checked that shop's own channels;
+    checking the platform's here would gate shop customers on the wrong channels.
+    """
     persona = _require_commerce(user)
-    await assert_mini_force_join(session, user)
+    if current_shop_reseller_id() is None:
+        await assert_mini_force_join(session, user)
     return persona
+
+
+async def _scope_ui(session: AsyncSession, request: Request) -> dict:
+    """Settings of this Mini App's shop (the platform's outside a shop)."""
+    return await get_all_settings(session, reseller_id=mini_scope(request).shop_id)
+
+
+async def _scope_wallet(session: AsyncSession, user: BotUser, request: Request) -> int:
+    """The purse this Mini App pays from: the shop's in a shop, the platform's otherwise."""
+    return await get_wallet_balance(session, user, shop_id=mini_scope(request).shop_id)
 
 
 async def _owned_service_or_404(
@@ -126,9 +141,9 @@ def _addons_allowed(user: BotUser, svc: UserService) -> bool:
 
 
 async def _addon_service(
-    session: AsyncSession, user: BotUser, service_id: int
+    session: AsyncSession, user: BotUser, service_id: int, *, shop_id: int | None = None
 ) -> UserService:
-    svc = await _owned_service_or_404(session, await session.get(UserService, service_id), user)
+    svc = await _owned_service_or_404(session, await session.get(UserService, service_id), user, shop_id=shop_id)
     if not _addons_allowed(user, svc):
         raise HTTPException(400, "خرید بسته برای این سرویس در مینی‌اپ ممکن نیست")
     return svc
@@ -317,7 +332,7 @@ async def _customer_summary(session: AsyncSession, user: BotUser, *, scope: Mini
         home = _empty_home()
     return {
         "wallet": await get_wallet_balance(session, user, shop_id=scope.shop_id),
-        "wallet_pay_enabled": on(ui.get("pay_wallet_enabled")) and not scope.is_shop,
+        "wallet_pay_enabled": on(ui.get("pay_wallet_enabled")),
         "qr_enabled": on(ui.get("qr_enabled", "1")),
         "commerce_allowed": True,
         "home": home,
@@ -617,8 +632,8 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
 
         user = await load_mini_user(session, request)
         _require_commerce(user)
-        svc = await _addon_service(session, user, service_id)
-        # Category-matched packs for this service (platform shop in miniapp).
+        svc = await _addon_service(session, user, service_id, shop_id=mini_scope(request).shop_id)
+        # Category-matched packs for this service, from the shop that sold it.
         packs = await list_packs_for_service(
             session, svc, active_only=True, kind=kind
         )
@@ -663,12 +678,13 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
             raise HTTPException(400, "سرویس و بسته را انتخاب کنید")
         if kind is not None and kind not in ("volume", "duration"):
             raise HTTPException(400, "نوع بسته نامعتبر است")
-        ui = await get_all_settings(session)
+        shop_id = mini_scope(request).shop_id
+        ui = await _scope_ui(session, request)
         if not on(ui.get("pay_wallet_enabled")):
             raise HTTPException(403, "پرداخت با کیف پول غیرفعال است")
-        svc = await _addon_service(session, user, service_id)
+        svc = await _addon_service(session, user, service_id, shop_id=shop_id)
         pack = await session.get(ServiceAddonPack, pack_id)
-        if not pack_matches_shop(pack, None):
+        if not pack_matches_shop(pack, shop_id):
             raise HTTPException(400, "بسته یافت نشد")
         if kind is not None and pack.kind != kind:
             raise HTTPException(400, "نوع بسته با بخش انتخاب‌شده مطابقت ندارد")
@@ -676,8 +692,8 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
         if not pack_matches_service_category(pack, svc_cat):
             raise HTTPException(400, "این بسته برای دستهٔ پلن این سرویس نیست")
         await session.refresh(user)
-        quote = await quote_product(session, pack, shop_id=None)
-        if quote.price > int(user.wallet_balance or 0):
+        quote = await quote_product(session, pack, shop_id=shop_id)
+        if quote.price > await _scope_wallet(session, user, request):
             raise HTTPException(400, "موجودی کیف پول کافی نیست")
         try:
             order = await create_addon_order(
@@ -699,7 +715,7 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
             {
                 "ok": True,
                 "order_id": order_id,
-                "wallet": int(user.wallet_balance or 0),
+                "wallet": await _scope_wallet(session, user, request),
                 "message": f"افزایش {kind_label(pack.kind)} با موفقیت انجام شد",
             }
         )
@@ -708,7 +724,7 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
             from app.services.notifications import notify_new_subscription
             from app.services.reseller_bots import open_notify_bot_for_user
 
-            bot, should_close = await open_notify_bot_for_user(session, user, shop_id=None)
+            bot, should_close = await open_notify_bot_for_user(session, user, shop_id=shop_id)
             try:
                 await notify_new_subscription(
                     bot, session, order=order, user_tg_id=user.telegram_id
@@ -734,16 +750,16 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
             plan_id = int(body.get("plan_id"))
         except (TypeError, ValueError):
             raise HTTPException(400, "plan_id required")
-        ui = await get_all_settings(session)
+        ui = await _scope_ui(session, request)
         if not on(ui.get("pay_wallet_enabled")):
             raise HTTPException(403, "پرداخت با کیف پول غیرفعال است")
-        # Platform catalog only (get_catalog_plan rejects foreign reseller plans
-        # when shop ContextVar is unset — Mini App never sets shop context).
+        # This Mini App's catalog only: load_mini_user set the shop context, and
+        # get_catalog_plan refuses every plan another shop (or the platform) sells.
         plan = await get_catalog_plan(session, plan_id)
-        if not plan or not plan.is_active or plan.owner_reseller_id is not None:
+        if not plan or not plan.is_active:
             raise HTTPException(400, "پلن یافت نشد")
         await session.refresh(user)
-        if sale_price(plan) > int(user.wallet_balance or 0):
+        if sale_price(plan) > await _scope_wallet(session, user, request):
             raise HTTPException(400, "موجودی کیف پول کافی نیست")
         try:
             order = await create_order(session, user_id=user.id, plan_id=plan_id, expected_price=body.get("price"))
@@ -763,7 +779,7 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
             {
                 "ok": True,
                 "order_id": order.id,
-                "wallet": int(user.wallet_balance or 0),
+                "wallet": await _scope_wallet(session, user, request),
                 "message": "خرید با موفقیت انجام شد",
             }
         )
@@ -806,7 +822,9 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
 
         user = await load_mini_user(session, request)
         await _require_commerce_ready(session, user)
-        svc = await _owned_service_or_404(session, await session.get(UserService, service_id), user)
+        svc = await _owned_service_or_404(
+            session, await session.get(UserService, service_id), user, shop_id=mini_scope(request).shop_id
+        )
         plan = await get_catalog_plan(session, plan_id)
         try:
             return _no_store(await preview_renewal(session, user_id=user.id, service=svc, plan=plan))
@@ -833,10 +851,12 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
             plan_id = int(body.get("plan_id"))
         except (TypeError, ValueError):
             raise HTTPException(400, "service_id and plan_id required")
-        ui = await get_all_settings(session)
+        ui = await _scope_ui(session, request)
         if not on(ui.get("pay_wallet_enabled")):
             raise HTTPException(403, "پرداخت با کیف پول غیرفعال است")
-        svc = await _owned_service_or_404(session, await session.get(UserService, service_id), user)
+        svc = await _owned_service_or_404(
+            session, await session.get(UserService, service_id), user, shop_id=mini_scope(request).shop_id
+        )
         if (svc.remark or "").strip() == "linked":
             raise HTTPException(
                 400,
@@ -847,12 +867,11 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
             not plan
             or not plan.is_active
             or plan.is_trial
-            or plan.owner_reseller_id is not None
         ):
             raise HTTPException(400, "پلن تمدید نامعتبر است")
         await session.refresh(user)
         retrying = await _renewal_already_ordered(session, user, body.get("preview"))
-        if not retrying and sale_price(plan) > int(user.wallet_balance or 0):
+        if not retrying and sale_price(plan) > await _scope_wallet(session, user, request):
             raise HTTPException(400, "موجودی کیف پول کافی نیست")
         try:
             from app.services.service_renewals import renewal_terms
@@ -879,7 +898,7 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
             {
                 "ok": True,
                 "order_id": order.id,
-                "wallet": int(user.wallet_balance or 0),
+                "wallet": await _scope_wallet(session, user, request),
                 "message": "تمدید با موفقیت انجام شد",
             }
         )

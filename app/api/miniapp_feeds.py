@@ -44,13 +44,14 @@ ACTIVITY_MAX = 50
 _ID_MAX = 2**31 - 1
 
 
-async def catalog_plans_payload(session: AsyncSession) -> dict:
-    """Active platform plans (the platform trial first) with their displayed quote.
+async def catalog_plans_payload(session: AsyncSession, *, shop_id: int | None = None) -> dict:
+    """Active plans of this Mini App's shop (its trial first) with their displayed quote.
 
-    Mini App never mounts shop-bot context, so foreign reseller catalogs never appear.
+    ``shop_id`` None is the platform catalog; a shop sees only the plans it sells.
     """
-    ui = await get_all_settings(session)
-    platform = (Plan.is_active.is_(True), Plan.owner_reseller_id.is_(None))
+    ui = await get_all_settings(session, reseller_id=shop_id)
+    owner = Plan.owner_reseller_id.is_(None) if shop_id is None else Plan.owner_reseller_id == int(shop_id)
+    platform = (Plan.is_active.is_(True), owner)
     trial = await session.scalar(
         select(Plan).where(*platform, Plan.is_trial.is_(True)).order_by(Plan.id).limit(1)
     )
@@ -61,7 +62,7 @@ async def catalog_plans_payload(session: AsyncSession) -> dict:
             .order_by(Plan.sort_order, Plan.id)
         )
     )
-    await annotate_prices(session, plans, shop_id=None)
+    await annotate_prices(session, plans, shop_id=shop_id)
     return {
         "wallet_pay_enabled": on(ui.get("pay_wallet_enabled")),
         "plans": [
@@ -113,7 +114,7 @@ def register_miniapp_feeds(app: FastAPI, *, get_db) -> None:
     async def mini_plans(request: Request, session: AsyncSession = Depends(get_db)):
         user = await load_mini_user(session, request)
         _require_commerce(user)
-        return _no_store(await catalog_plans_payload(session))
+        return _no_store(await catalog_plans_payload(session, shop_id=mini_scope(request).shop_id))
 
     @app.get("/api/mini/activity")
     async def mini_activity(

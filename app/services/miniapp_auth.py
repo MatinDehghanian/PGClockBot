@@ -24,6 +24,7 @@ from app.services.miniapp_shop import (
     request_scope,
 )
 from app.services.platform_identity import is_bot_platform_admin
+from app.services.users import set_shop_reseller_id
 
 
 # Telegram initData is typically <2KiB; hard-cap stops oversized header DoS.
@@ -90,6 +91,9 @@ async def load_mini_user(session: AsyncSession, request: Request) -> BotUser:
     end-users must pass force-join and the terms (parity with the bot's middlewares).
     """
     assert_miniapp_feature_enabled()
+    # Start every request on the platform: platform settings (the shop-Mini-App switch among
+    # them) must never be read through a shop context left from an earlier request.
+    set_shop_reseller_id(None)
     scope = await request_scope(session, request)
     tg_user = validate_webapp_init_data(init_data_from_request(request), bot_token=scope.bot_token or None)
     tg_id = tg_user.get("id")
@@ -105,6 +109,9 @@ async def load_mini_user(session: AsyncSession, request: Request) -> BotUser:
     await assert_mini_force_join(session, user, scope=scope)
     await assert_mini_terms_entry(session, user, scope=scope)
     request.state.mini_scope = scope
+    # The order, catalog and wallet services read the shop from the same context the shop
+    # bot sets per update; it is set only after the shop and the person were verified.
+    set_shop_reseller_id(scope.shop_id)
     return user
 
 
