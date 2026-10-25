@@ -6,6 +6,10 @@ the final amount, then pay with the wallet or cancel. A failed code cancels the 
 it was tried on, which releases the reservation. Gift codes that charge the wallet go
 through ``redeem_charge_code``. Failed code attempts are limited per customer so codes
 cannot be guessed through the API.
+
+Each checkout belongs to one shop (``shop_id``, None for the platform): the order is
+created in the current shop context, and later calls reach it only with that same shop,
+so a code reserved in one shop can never be paid or cancelled from another.
 """
 
 from __future__ import annotations
@@ -23,6 +27,7 @@ from app.db.models import BotUser, Order, OrderStatus
 from app.services.db_safe import rollback_quiet
 from app.services.orders import apply_discount_to_order, cancel_order, create_order, pay_with_wallet
 from app.services.ux20 import redeem_charge_code
+from app.services.wallet import get_wallet_balance
 
 CODE_MAX_LENGTH = 64
 # Failed code attempts allowed per customer per window (discount and gift together).
@@ -93,11 +98,15 @@ def _checkout(order: Order) -> Checkout:
     )
 
 
-async def _assert_open_checkout_room(session: AsyncSession, user_id: int) -> None:
+def _shop_orders(shop_id: int | None):
+    return Order.reseller_id.is_(None) if shop_id is None else Order.reseller_id == int(shop_id)
+
+
+async def _assert_open_checkout_room(session: AsyncSession, user_id: int, shop_id: int | None) -> None:
     open_count = await session.scalar(
         select(func.count()).select_from(Order).where(
             Order.user_id == int(user_id),
-            Order.reseller_id.is_(None),
+            _shop_orders(shop_id),
             Order.status == OrderStatus.PENDING.value,
             Order.discount_code.is_not(None),
             Order.created_at >= datetime.now(timezone.utc) - OPEN_CHECKOUT_WINDOW,
@@ -108,12 +117,16 @@ async def _assert_open_checkout_room(session: AsyncSession, user_id: int) -> Non
 
 
 async def start_discounted_checkout(
-    session: AsyncSession, *, user_id: int, plan_id: int, expected_price: object, code: object,
+    session: AsyncSession, *, user_id: int, shop_id: int | None, plan_id: int, expected_price: object, code: object,
 ) -> Checkout:
-    """Create a platform plan order with the code reserved on it; nothing is paid yet."""
+    """Create a plan order of ``shop_id`` with the code reserved on it; nothing is paid yet.
+
+    The caller has set the shop context to ``shop_id``, so ``create_order`` sells only that
+    shop's plans and records the order as that shop's.
+    """
     clean = clean_code(code)
     assert_code_attempts_left(user_id)
-    await _assert_open_checkout_room(session, user_id)
+    await _assert_open_checkout_room(session, user_id, shop_id)
     order = await create_order(session, user_id=int(user_id), plan_id=int(plan_id), expected_price=expected_price)
     order_id = int(order.id)
     try:
@@ -126,12 +139,12 @@ async def start_discounted_checkout(
     return _checkout(order)
 
 
-async def _own_open_order(session: AsyncSession, user_id: int, order_id: int) -> Order:
+async def _own_open_order(session: AsyncSession, user_id: int, shop_id: int | None, order_id: int) -> Order:
     order = await session.get(Order, int(order_id))
     if (
         order is None
         or int(order.user_id) != int(user_id)
-        or order.reseller_id is not None
+        or (int(order.reseller_id) if order.reseller_id else None) != shop_id
         or order.plan_id is None
         or order.service_id is not None
     ):
@@ -139,26 +152,30 @@ async def _own_open_order(session: AsyncSession, user_id: int, order_id: int) ->
     return order
 
 
-async def pay_checkout(session: AsyncSession, *, user: BotUser, order_id: int) -> Order:
-    """Pay the customer's own platform order with the wallet; a repeat returns the same order."""
-    order = await _own_open_order(session, int(user.id), order_id)
+async def pay_checkout(session: AsyncSession, *, user: BotUser, shop_id: int | None, order_id: int) -> Order:
+    """Pay the customer's own order in this shop from this shop's purse; a repeat returns the same order."""
+    order = await _own_open_order(session, int(user.id), shop_id, order_id)
     if order.status == OrderStatus.PENDING.value:
         await session.refresh(user)
-        if int(order.amount) > int(user.wallet_balance or 0):
+        if int(order.amount) > await get_wallet_balance(session, user, shop_id=shop_id):
             raise CodeError("موجودی کیف پول کافی نیست")
     return await pay_with_wallet(session, order, user)
 
 
-async def cancel_checkout(session: AsyncSession, *, user_id: int, order_id: int) -> None:
-    """Cancel the customer's own unpaid order and release its code."""
-    order = await _own_open_order(session, user_id, order_id)
+async def cancel_checkout(session: AsyncSession, *, user_id: int, shop_id: int | None, order_id: int) -> None:
+    """Cancel the customer's own unpaid order in this shop and release its code."""
+    order = await _own_open_order(session, user_id, shop_id, order_id)
     if order.status != OrderStatus.PENDING.value:
         raise CodeError("این سفارش دیگر قابل لغو نیست")
     await cancel_order(session, order, note="mini app checkout cancelled")
 
 
 async def redeem_wallet_code(session: AsyncSession, *, user: BotUser, code: object) -> tuple[int, int]:
-    """Credit the platform wallet from a gift code; returns (amount, new balance)."""
+    """Credit the current shop's purse (the platform's outside a shop) from a gift code.
+
+    ``redeem_charge_code`` accepts only a code of the current shop context; returns
+    (amount, new balance).
+    """
     clean = clean_code(code)
     user_id = int(user.id)
     assert_code_attempts_left(user_id)

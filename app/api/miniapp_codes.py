@@ -1,7 +1,8 @@
 """Mini App codes: discounted checkout (order → pay or cancel) and gift-code wallet credit.
 
 Thin routes over ``app.services.discount_checkout``. The customer comes from
-initData; every order id is re-checked against that customer and the platform.
+initData and the shop from the verified Mini App scope; every order id is re-checked
+against that customer and that shop.
 """
 
 from __future__ import annotations
@@ -11,7 +12,7 @@ import logging
 from fastapi import Depends, FastAPI, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.miniapp_pages import _no_store, _require_commerce_ready
+from app.api.miniapp_pages import _no_store, _require_commerce_ready, _scope_ui, _scope_wallet
 from app.services.db_safe import rollback_quiet
 from app.services.discount_checkout import (
     CodeError,
@@ -21,8 +22,9 @@ from app.services.discount_checkout import (
     start_discounted_checkout,
 )
 from app.services.miniapp_auth import load_mini_user
+from app.services.miniapp_shop import mini_scope
 from app.services.redact import user_safe_error
-from app.services.users import get_all_settings, on
+from app.services.users import on
 
 logger = logging.getLogger(__name__)
 
@@ -45,8 +47,8 @@ def _valid_id(value: object) -> int:
     return value
 
 
-async def _require_wallet_pay(session: AsyncSession) -> None:
-    if not on((await get_all_settings(session)).get("pay_wallet_enabled")):
+async def _require_wallet_pay(session: AsyncSession, request: Request) -> None:
+    if not on((await _scope_ui(session, request)).get("pay_wallet_enabled")):
         raise HTTPException(403, "پرداخت با کیف پول غیرفعال است")
 
 
@@ -55,12 +57,12 @@ def register_miniapp_codes(app: FastAPI, *, get_db) -> None:
     async def mini_checkout(request: Request, session: AsyncSession = Depends(get_db)):
         user = await load_mini_user(session, request)
         await _require_commerce_ready(session, user)
-        await _require_wallet_pay(session)
+        await _require_wallet_pay(session, request)
         user_id = int(user.id)
         body = await _json_object(request)
         try:
             checkout = await start_discounted_checkout(
-                session, user_id=user_id, plan_id=_valid_id(body.get("plan_id")),
+                session, user_id=user_id, shop_id=mini_scope(request).shop_id, plan_id=_valid_id(body.get("plan_id")),
                 expected_price=body.get("price"), code=body.get("code"),
             )
         except ValueError as exc:
@@ -71,10 +73,12 @@ def register_miniapp_codes(app: FastAPI, *, get_db) -> None:
     async def mini_checkout_pay(order_id: int, request: Request, session: AsyncSession = Depends(get_db)):
         user = await load_mini_user(session, request)
         await _require_commerce_ready(session, user)
-        await _require_wallet_pay(session)
+        await _require_wallet_pay(session, request)
         user_id = int(user.id)
         try:
-            order = await pay_checkout(session, user=user, order_id=_valid_id(order_id))
+            order = await pay_checkout(
+                session, user=user, shop_id=mini_scope(request).shop_id, order_id=_valid_id(order_id)
+            )
             await session.refresh(user)
         except ValueError as exc:
             await rollback_quiet(session)
@@ -84,7 +88,7 @@ def register_miniapp_codes(app: FastAPI, *, get_db) -> None:
             logger.exception("mini checkout pay failed user=%s order=%s", user_id, order_id)
             raise HTTPException(500, "پرداخت ناموفق بود") from None
         return _no_store({
-            "ok": True, "order_id": int(order.id), "wallet": int(user.wallet_balance or 0),
+            "ok": True, "order_id": int(order.id), "wallet": await _scope_wallet(session, user, request),
             "message": "خرید با موفقیت انجام شد",
         })
 
@@ -93,7 +97,9 @@ def register_miniapp_codes(app: FastAPI, *, get_db) -> None:
         user = await load_mini_user(session, request)
         await _require_commerce_ready(session, user)
         try:
-            await cancel_checkout(session, user_id=int(user.id), order_id=_valid_id(order_id))
+            await cancel_checkout(
+                session, user_id=int(user.id), shop_id=mini_scope(request).shop_id, order_id=_valid_id(order_id)
+            )
         except ValueError as exc:
             await rollback_quiet(session)
             raise HTTPException(400, user_safe_error(exc, fallback="لغو سفارش ناموفق بود")) from None

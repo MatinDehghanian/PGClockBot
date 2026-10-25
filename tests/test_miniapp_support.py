@@ -52,7 +52,7 @@ class MiniAppSupportTestCase(unittest.IsolatedAsyncioTestCase):
 
         self.patches = [
             patch("app.api.miniapp_support.load_mini_user", AsyncMock(side_effect=load_user)),
-            patch("app.api.miniapp_support.get_all_settings", AsyncMock(return_value={})),
+            patch("app.api.miniapp_pages.get_all_settings", AsyncMock(return_value={})),
             patch("app.api.miniapp_support.open_notify_bot_for_user", AsyncMock(return_value=(self.bot, True))),
             patch("app.services.customer_support.notify_new_ticket", self.notify_new),
             patch("app.services.customer_support.notify_ticket_message", self.notify_message),

@@ -9,7 +9,6 @@ from fastapi import HTTPException
 from sqlalchemy import func, select
 
 from app.db.models import BotUser, Order, Plan, ShopWallet
-from app.services.miniapp_shop import ROUTE_UNAVAILABLE
 from app.services.users import clear_settings_cache, current_shop_reseller_id, set_setting
 from tests.test_miniapp_shop_readonly import CUSTOMER, KEY, OTHER_SHOP, SHOP, ShopFixture
 from tests.test_miniapp_shop_scope import MAIN_TOKEN, SHOP_TOKEN, signed
@@ -101,12 +100,6 @@ class ShopPurchaseTests(ShopFixture):
                            ("/api/mini/addon", {"service_id": 103, "pack_id": 1})):
             with self.subTest(path=path):
                 self.assertEqual((await self.post(path, body)).status_code, 404)
-
-    async def test_discount_and_gift_codes_stay_closed_in_shops(self) -> None:
-        for path in ("/api/mini/checkout", "/api/mini/wallet/redeem"):
-            with self.subTest(path=path):
-                response = await self.post(path, {"plan_id": SHOP_PLAN, "code": "X"})
-                self.assertEqual((response.status_code, response.json()["detail"]), (404, ROUTE_UNAVAILABLE))
 
     async def test_platform_channels_do_not_gate_a_shop_purchase(self) -> None:
         platform_gate = AsyncMock(side_effect=HTTPException(403, "join the platform channel"))

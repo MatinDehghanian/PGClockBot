@@ -91,6 +91,26 @@ async function shopTopupOpensWithItsSection() {
   assert.equal(call.headers["X-Mini-Shop"], KEY, "with the shop key");
 }
 
+async function shopExtrasOpenWithTheirSections() {
+  const me = { ...SHOP_ME, sections: [...SHOP_ME.sections, "support", "codes", "club"] };
+  const env = loadMiniApp({
+    routes: async (_method, url) => (url === "/api/mini/me" ? { status: 200, body: me } : { status: 404, body: { detail: "x" } }),
+    pathname: `/miniapp/s/${KEY}/`,
+  });
+  env.mini.app.start();
+  await settle();
+  env.mini.app.go("account");
+  await settle();
+  const html = env.element("root").innerHTML;
+  for (const shown of ['data-view="support"', 'data-view="club"']) {
+    assert.ok(html.includes(shown), `account offers ${shown}`);
+  }
+  env.mini.app.go("support");
+  await settle();
+  const call = env.calls.find((c) => c.url === "/api/mini/support");
+  assert.ok(call && call.headers["X-Mini-Shop"] === KEY, "support is asked for with the shop key");
+}
+
 (async () => {
   assert.deepEqual([...new Set(await shopHeaders("/miniapp/"))], [undefined], "platform page sends no shop");
   assert.deepEqual([...new Set(await shopHeaders(`/miniapp/s/${KEY}/`))], [KEY]);
@@ -100,5 +120,6 @@ async function shopTopupOpensWithItsSection() {
   }
   await shopScreensHideUnopenedSections();
   await shopTopupOpensWithItsSection();
+  await shopExtrasOpenWithTheirSections();
   console.log("miniapp shop ok");
 })().catch((err) => { console.error(err); process.exit(1); });
