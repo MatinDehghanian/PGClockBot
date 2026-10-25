@@ -47,6 +47,7 @@ from app.services.miniapp_auth import (
     resolve_mini_persona,
 )
 from app.services.miniapp_home import customer_home_summary
+from app.services.miniapp_shop import KEY_PATTERN, SHOP_UNAVAILABLE, resolve_shop_scope
 from app.services.pasarguard import get_pg
 from app.services.service_live_info import fetch_subscription_info, service_info_error, validate_service_info
 from app.services.users import get_all_settings, on
@@ -482,6 +483,18 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
             resp.headers["Cache-Control"] = "no-store"
         except Exception:
             pass
+        return resp
+
+    @app.get("/miniapp/s/{shop_key}/", response_class=HTMLResponse)
+    @app.get("/miniapp/s/{shop_key}", response_class=HTMLResponse)
+    async def miniapp_shop_index(request: Request, shop_key: str, session: AsyncSession = Depends(get_db)):
+        """A shop's Mini App: the same page, served only while that shop's Mini App is on."""
+        assert_miniapp_feature_enabled()
+        if not KEY_PATTERN.fullmatch(shop_key):
+            raise HTTPException(404, SHOP_UNAVAILABLE)
+        await resolve_shop_scope(session, shop_key)
+        resp = render(request, "miniapp.html", {})
+        resp.headers["Cache-Control"] = "no-store"
         return resp
 
     @app.get("/api/mini/me")

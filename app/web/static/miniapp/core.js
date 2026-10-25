@@ -11,6 +11,16 @@
     return (w && w.initData) || "";
   }
 
+  // A shop's Mini App lives at /miniapp/s/<key>/; the key names the shop, and the server
+  // still verifies every request with that shop bot's own signature.
+  const SHOP_PATH = /^\/miniapp\/s\/([A-Za-z0-9_-]{16,32})\/?$/;
+
+  /** The shop key from this page's address, or "" for the platform Mini App. */
+  function shopKey() {
+    const match = SHOP_PATH.exec((root.location && root.location.pathname) || "");
+    return match ? match[1] : "";
+  }
+
   function esc(value) {
     return String(value ?? "").replace(/[&<>"']/g, (c) =>
       ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])
@@ -166,6 +176,7 @@
         method: options.method || "GET",
         headers: {
           "X-Telegram-Init-Data": getInitData(),
+          ...(shopKey() ? { "X-Mini-Shop": shopKey() } : {}),
           ...(contentType ? { "Content-Type": contentType } : {}),
         },
         body: raw || (hasBody ? JSON.stringify(options.body) : undefined),
@@ -262,7 +273,7 @@
   }
 
   const core = Object.freeze({
-    tg, getInitData, esc, safeUrl, safePanelPath, num, money, parseAmount, setCurrency, formatDateTime, formatDate, faDigits,
+    tg, getInitData, shopKey, esc, safeUrl, safePanelPath, num, money, parseAmount, setCurrency, formatDateTime, formatDate, faDigits,
     haptic, toast, confirmAction, openExternal, openTelegramLink, api, ApiError, copyText, markCopied,
     applyTheme, initTelegram,
   });

@@ -35,7 +35,7 @@ function trigger(attrs) {
  * routes: function(method, url, body) -> {status, body} | Promise thereof, or throws
  * to simulate a lost response.
  */
-function loadMiniApp({ routes, initData = "query_id=x&hash=y", confirm = () => true, telegram = true }) {
+function loadMiniApp({ routes, initData = "query_id=x&hash=y", confirm = () => true, telegram = true, pathname = "/miniapp/" }) {
   const elements = new Map();
   const element = (id) => {
     if (!elements.has(id)) elements.set(id, fakeElement(id));
@@ -44,7 +44,7 @@ function loadMiniApp({ routes, initData = "query_id=x&hash=y", confirm = () => t
   const calls = [];
   const back = { visible: false, handler: null };
   const toasts = [];
-  const location = { hash: "" };
+  const location = { hash: "", pathname };
   const doc = {
     documentElement: { attrs: {}, setAttribute(name, value) { this.attrs[name] = String(value); } },
     body: { classList: element("body").classList, appendChild(el) { toasts.push(el); } },
