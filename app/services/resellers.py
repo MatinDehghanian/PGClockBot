@@ -42,6 +42,7 @@ FEATURE_PERMS: list[tuple[str, str]] = [
     ("connection_status", "مشاهدهٔ وضعیت اتصال"),
     ("connection_status_manage", "مدیریت تست اتصال"),
     ("service_import", "تأیید افزودن سرویس قبلی"),
+    ("miniapp", "مینی‌اپ فروشگاه برای مشتریان"),
 ]
 
 DEFAULT_FEATURE_PERMS = "dashboard,plans,orders,payments,tickets,stats,shop_settings,campaigns,loyalty,service_import"

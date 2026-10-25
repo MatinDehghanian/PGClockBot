@@ -757,6 +757,8 @@ class ResellerProfile(Base):
     bot_telegram_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True, index=True)
     # Extra Telegram IDs that get reseller panel on THIS shop's dedicated bot only
     bot_admin_ids: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # CSV
+    # Random public key in this shop's Mini App address; the shop bot's token still signs every request.
+    miniapp_key: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, unique=True, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     # --- Unified Billing (PAYG vs fixed package type) ---
     billing_mode: Mapped[str] = mapped_column(String(16), default="fixed")  # fixed | payg

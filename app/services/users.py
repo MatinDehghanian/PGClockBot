@@ -1125,6 +1125,9 @@ DEFAULT_SETTINGS = {
     "one_tap_renew_enabled": "1",
     "service_import_enabled": "0",
     "chat_cleanup_enabled": "1",
+    # Shop Mini Apps: platform switch and each shop's own switch, both off until turned on.
+    "miniapp_shops_enabled": "0",
+    "miniapp_shop_enabled": "0",
     "service_import_mode": "instant",
     "service_import_max_per_user": "5",
     "service_import_paths": "",
