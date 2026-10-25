@@ -11,6 +11,7 @@ from sqlalchemy import or_, select
 from app.db.models import BotUser, ResellerProfile, UserService
 from app.db.session import SessionLocal
 from app.jobs.cancellation_notifications import run_cancellation_notifications
+from app.jobs.chat_message_purge import run_chat_message_purge
 from app.jobs.connection_status import run_connection_status
 from app.jobs.panel_alert_notifications import run_panel_alert_notifications
 from app.jobs.volume_external_sync import run_volume_external_sync
@@ -817,6 +818,7 @@ def start_background_scheduler() -> None:
         ("psp_settlement_poll", run_psp_settlement_poll, {"seconds": 45}, 90),
         # Ticks often; each shop is recounted on the period set in volume_external_sync_minutes.
         ("volume_external_sync", run_volume_external_sync, {"minutes": 1}, 120),
+        ("chat_message_purge", run_chat_message_purge, {"hours": 1}, 3600),
     )
     for job_id, func, interval, grace in jobs:
         if scheduler.get_job(job_id) is None:

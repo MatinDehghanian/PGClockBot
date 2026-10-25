@@ -22,6 +22,7 @@ from app.db.models import (
     Role,
     UserService,
 )
+from app.services.db_safe import rollback_quiet
 
 logger = logging.getLogger(__name__)
 
@@ -1001,6 +1002,42 @@ async def mark_application_paid(session: AsyncSession, order: Order) -> Reseller
     return app
 
 
+async def _start_new_subscription(
+    session: AsyncSession, plan: ResellerPlan, profile: ResellerProfile, pg_username: str
+) -> None:
+    """Record the package's period and capacity for a just-created admin.
+
+    The admin already carries the package's limits from its creation, so when pushing them again
+    fails (panel timeout) the subscription is still recorded locally; it is never left unlimited
+    and never without an expiry.
+    """
+    # Function-local: pg_admin_subscription imports billing, which imports this module.
+    from app.services.pg_admin_subscription import start_or_refresh_subscription
+
+    try:
+        await start_or_refresh_subscription(
+            session, pg_username=pg_username, plan=plan, reset_extras=True, apply_pg_limits=True,
+        )
+        await session.commit()
+        return
+    except Exception:  # noqa: BLE001 - the admin exists and is limited; record the period below
+        logger.exception("subscription start failed after provision reseller pg=%s", pg_username)
+        await rollback_quiet(session)
+        # The rollback expired them; the retry and the caller still read them.
+        await session.refresh(plan)
+        await session.refresh(profile)
+    try:
+        await start_or_refresh_subscription(
+            session, pg_username=pg_username, plan=plan, reset_extras=True, apply_pg_limits=False,
+        )
+        await session.commit()
+    except Exception:  # noqa: BLE001 - logged for staff; the admin keeps the limits it was created with
+        logger.exception("subscription record failed after provision reseller pg=%s", pg_username)
+        await rollback_quiet(session)
+        await session.refresh(plan)
+        await session.refresh(profile)
+
+
 async def provision_reseller(
     session: AsyncSession,
     *,
@@ -1017,7 +1054,12 @@ async def provision_reseller(
 ) -> dict:
     """Activate reseller: PG admin + web panel creds + optional bot-token setup link."""
     from app.services.pasarguard import get_pg
-    from app.services.pg_admin_subscription import is_current_capacity_plan
+    from app.services.pg_admin_subscription import (
+        assert_new_admin_fits_owner_budget,
+        is_current_capacity_plan,
+        is_subscription_plan,
+        plan_admin_limits,
+    )
     from app.services.web_auth import hash_password
 
     if plan is not None and is_current_capacity_plan(plan):
@@ -1091,6 +1133,11 @@ async def provision_reseller(
             payload["role_id"] = int(role_id)
         else:
             payload["is_sudo"] = False
+        if plan is not None and is_subscription_plan(plan):
+            # Refuse before anything exists, and create the admin with the package's limits:
+            # a PasarGuard admin without ``data_limit`` is unlimited until something sets one.
+            await assert_new_admin_fits_owner_budget(session, plan, pg_username)
+            payload.update(plan_admin_limits(plan))
         try:
             await get_pg().create_admin(payload)
         except Exception as e:
@@ -1131,26 +1178,8 @@ async def provision_reseller(
     await session.commit()
     await session.refresh(profile)
 
-    if plan is not None and pg_username:
-        try:
-            from app.services.pg_admin_subscription import (
-                is_subscription_plan,
-                start_or_refresh_subscription,
-            )
-
-            if is_subscription_plan(plan):
-                await start_or_refresh_subscription(
-                    session,
-                    pg_username=pg_username,
-                    plan=plan,
-                    reset_extras=True,
-                    apply_pg_limits=True,
-                )
-                await session.commit()
-        except Exception:
-            logger.exception(
-                "subscription start failed after provision reseller pg=%s", pg_username
-            )
+    if plan is not None and pg_username and is_subscription_plan(plan):
+        await _start_new_subscription(session, plan, profile, pg_username)
 
     base = (panel_base_url or "").rstrip("/")
     if not base:
