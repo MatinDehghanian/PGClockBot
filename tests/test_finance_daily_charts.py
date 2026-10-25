@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import os
+import re
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
+from html import unescape
 from pathlib import Path
 from unittest.mock import patch
 
@@ -66,33 +69,37 @@ class DailyChartTests(unittest.IsolatedAsyncioTestCase):
         async with self.Session() as session:
             return await finance_charts(session, now=NOW, **kw)
 
-    async def test_platform_days_count_orders_by_outcome_and_real_new_users(self) -> None:
-        charts = await self.charts(reseller_id=None, period="week")
-        days = charts["days"]
+    async def test_platform_days_count_orders_with_delivered_and_real_new_users(self) -> None:
+        charts = await self.charts(reseller_id=None)
+        week = charts["orders"][7]
+        days = week["days"]
         self.assertEqual(len(days), 7)
-        today, yesterday = days[-1], days[-2]
-        self.assertEqual((today["orders"], today["delivered"], today["not_delivered"]), (3, 2, 1))
-        self.assertEqual((yesterday["orders"], yesterday["delivered"]), (1, 0))
-        self.assertEqual(today["delivered_share"], 67)
-        self.assertEqual((today["orders_pct"], yesterday["orders_pct"]), (100, 33))
-        self.assertEqual((charts["total_orders"], charts["total_delivered"]), (4, 2), "9 days ago and demo orders are out")
-        self.assertEqual([d["new_users"] for d in days][-3:], [1, 0, 1], "demo users and shop customers are not counted")
-        self.assertEqual(today["jalali"], "1405/07/25")
+        self.assertEqual((days[-1]["value"], days[-1]["extra"]), (3, 2), "today: 3 orders, 2 delivered")
+        self.assertEqual((days[-2]["value"], days[-2]["extra"]), (1, 0))
+        self.assertEqual(days[-1]["date"], "2026-10-17")
+        self.assertEqual(week["total"], 4, "demo orders are out")
+        users = charts["new_users"][7]
+        self.assertEqual([d["value"] for d in users["days"]][-3:], [1, 0, 1], "demo users and shop customers are out")
+
+    async def test_each_range_is_compared_with_the_period_before(self) -> None:
+        charts = await self.charts(reseller_id=None)
+        week, month = charts["orders"][7], charts["orders"][30]
+        self.assertEqual((week["previous_total"], week["change_pct"]), (1, 300), "the order 9 days ago is last week")
+        self.assertEqual((len(month["days"]), month["total"], month["previous_total"], month["change_pct"]), (30, 5, 0, None))
+        self.assertTrue(week["has_data"])
 
     async def test_a_shop_sees_only_its_own_orders_and_customers(self) -> None:
-        charts = await self.charts(reseller_id=SHOP, period="week")
-        self.assertEqual((charts["total_orders"], charts["total_delivered"], charts["total_new_users"]), (2, 2, 1))
-        empty = await self.charts(reseller_id=99, period="week")
-        self.assertEqual((empty["has_orders"], empty["has_users"]), (False, False))
-
-    async def test_the_month_report_charts_thirty_days(self) -> None:
-        self.assertEqual(len((await self.charts(reseller_id=None, period="month"))["days"]), 30)
-        self.assertEqual(len((await self.charts(reseller_id=None, period="day"))["days"]), 7)
+        charts = await self.charts(reseller_id=SHOP)
+        self.assertEqual((charts["orders"][7]["total"], charts["new_users"][7]["total"]), (2, 1))
+        self.assertEqual(charts["orders"][7]["days"][-1]["extra"], 2)
+        empty = await self.charts(reseller_id=99)
+        self.assertFalse(empty["orders"][30]["has_data"] or empty["new_users"][30]["has_data"])
 
     async def test_a_failed_query_gives_empty_charts(self) -> None:
         with patch("app.services.finance_charts._daily_counts", side_effect=OperationalError("select", {}, Exception("x"))):
-            charts = await self.charts(reseller_id=None, period="week")
-        self.assertEqual((len(charts["days"]), charts["has_orders"]), (7, False))
+            charts = await self.charts(reseller_id=None)
+        self.assertEqual((len(charts["orders"][7]["days"]), charts["orders"][7]["has_data"]), (7, False))
+        self.assertEqual(len(charts["new_users"][30]["days"]), 30)
 
 
 class MethodSegmentTests(unittest.TestCase):
@@ -130,9 +137,12 @@ class ReportsTabChartTests(RoutesHarness):
         cookie = f"session={self.signer.dumps(OWNER_SESSION)}; csrf=token"
         page = await self.client.get("/finance?tab=reports", headers={"cookie": cookie})
         self.assertEqual(page.status_code, 200)
-        self.assertIn("سفارش‌ها در روز", page.text)
-        self.assertIn("کاربران جدید در روز", page.text)
-        self.assertIn("2 سفارش، 2 تحویل‌شده", page.text, "the shop's order is not in the platform chart")
+        cards = re.findall(r"<section[^>]*data-metric=\"value\"[^>]*>", page.text)
+        self.assertEqual(len(cards), 2, "orders and new users use the dashboard chart")
+        orders = json.loads(unescape(re.search(r"data-trend='([^']*)'", cards[0]).group(1)))
+        self.assertEqual(orders["total"], 2, "the shop's order is not in the platform chart")
+        self.assertIn("data-trend-30=", cards[0])
+        self.assertIn('data-extra="extra"', cards[0])
         self.assertIn('class="fin-share"', page.text)
         self.assertEqual(page.text.count('class="fin-share-seg"'), 2)
 

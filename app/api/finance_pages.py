@@ -254,7 +254,7 @@ def register_finance_pages(app, *, render, require_staff, get_db):
             )
             ctx["report_period"] = report_period
             ctx["trend"] = await sales_trend_or_empty(session, reseller_id=rid)
-            ctx["charts"] = await finance_charts(session, reseller_id=rid, period=ctx["report"]["period"])
+            ctx["charts"] = await finance_charts(session, reseller_id=rid)
             ctx["method_segments"] = method_segments(ctx["report"]["payment_methods"])
 
         elif tab == "orders" and can_orders:
