@@ -48,9 +48,15 @@ SHOP_ROUTES: frozenset[str] = frozenset({
     "/api/mini/activity",
     "/api/mini/guides",
     "/api/mini/guides/{guide_id}/send",
+    "/api/mini/plans",
+    "/api/mini/buy",
+    "/api/mini/service/{service_id}/renewal-preview",
+    "/api/mini/renew",
+    "/api/mini/service/{service_id}/addons",
+    "/api/mini/addon",
 })
 # What a shop's Mini App shows so far; the page hides every other section.
-SHOP_SECTIONS = ("services", "guides", "activity")
+SHOP_SECTIONS = ("services", "guides", "activity", "shop")
 SHOP_NAME_SETTING = "bot_tg_name"
 DEFAULT_SHOP_NAME = "فروشگاه"
 
@@ -151,6 +157,7 @@ def shop_nav() -> list[dict[str, str]]:
     return [
         {"id": "home", "label": "خانه", "icon": "home"},
         {"id": "services", "label": "سرویس‌ها", "icon": "svc"},
+        {"id": "shop", "label": "خرید", "icon": "shop"},
         {"id": "account", "label": "حساب", "icon": "account"},
     ]
 

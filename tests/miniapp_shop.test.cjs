@@ -16,10 +16,11 @@ async function shopHeaders(pathname) {
 
 const SHOP_ME = {
   persona: "user", commerce_allowed: true, currency: "تومان", panel_base: "",
-  sections: ["services", "guides", "activity"], shop: { name: "<b>shop</b>" },
-  nav: [{ id: "home", label: "خانه", icon: "home" }, { id: "services", label: "سرویس‌ها", icon: "svc" }, { id: "account", label: "حساب", icon: "account" }],
+  sections: ["services", "guides", "activity", "shop"], shop: { name: "<b>shop</b>" },
+  nav: [{ id: "home", label: "خانه", icon: "home" }, { id: "services", label: "سرویس‌ها", icon: "svc" },
+    { id: "shop", label: "خرید", icon: "shop" }, { id: "account", label: "حساب", icon: "account" }],
   user: { id: 1, name: "a", wallet: 7000 },
-  customer: { wallet: 7000, wallet_pay_enabled: false, qr_enabled: true, commerce_allowed: true,
+  customer: { wallet: 7000, wallet_pay_enabled: true, qr_enabled: true, commerce_allowed: true,
     home: { service_count: 0, attention: [], recent: [] } },
 };
 const SERVICE = { id: 7, username: "svc", status: "active", status_fa: "فعال", traffic_pct: 10, addons_allowed: true,
@@ -30,6 +31,7 @@ async function shopScreensHideUnopenedSections() {
     if (url === "/api/mini/me") return { status: 200, body: SHOP_ME };
     if (url.startsWith("/api/mini/activity")) return { status: 200, body: { items: [] } };
     if (url === "/api/mini/service/7") return { status: 200, body: { service: SERVICE } };
+    if (url === "/api/mini/plans") return { status: 200, body: { wallet_pay_enabled: true, plans: [{ id: 3, name: "big", price: 90000, days: 30, gb: 50, is_trial: false }] } };
     return { status: 404, body: { detail: "پیدا نشد" } };
   };
   const env = loadMiniApp({ routes: shopRoutes, pathname: `/miniapp/s/${KEY}/` });
@@ -37,7 +39,8 @@ async function shopScreensHideUnopenedSections() {
   await settle();
   let html = env.element("root").innerHTML;
   assert.ok(html.includes("&lt;b&gt;shop&lt;/b&gt;"), "shop name is escaped");
-  assert.ok(!html.includes('data-action="topup"') && !html.includes('data-view="shop"'), "no top-up or buy on home");
+  assert.ok(!html.includes('data-action="topup"'), "no top-up on home");
+  assert.ok(html.includes('data-view="shop"'), "buying is open");
   env.mini.app.go("account");
   await settle();
   html = env.element("root").innerHTML;
@@ -48,10 +51,20 @@ async function shopScreensHideUnopenedSections() {
   env.mini.app.go("service", { serviceId: 7 });
   await settle();
   html = env.element("root").innerHTML;
-  for (const hidden of ["renew", "addons", "automation", "cancellation"]) {
+  assert.ok(html.includes('data-action="renew"'), "renewal is open");
+  for (const hidden of ["automation", "cancellation"]) {
     assert.ok(!html.includes(`data-action="${hidden}"`), `service hides ${hidden}`);
   }
   assert.ok(html.includes('data-action="copy-link"') && html.includes('data-action="guides"'));
+  env.mini.app.go("shop");
+  await settle();
+  env.mini.app.go("shop");
+  await settle();
+  html = env.element("root").innerHTML;
+  assert.ok(html.includes("big"), "shop plans are listed");
+  assert.ok(html.includes("موجودی کیف پول کافی نیست"), "the checkout shows the shortfall");
+  assert.ok(!html.includes('data-form="discount"'), "no discount code field before codes open");
+  assert.ok(!html.includes('data-action="topup"'), "no top-up button before top-up opens");
   env.mini.app.go("support");
   await settle();
   assert.ok(!env.calls.some((c) => c.url.startsWith("/api/mini/support")), "support screen does not open");

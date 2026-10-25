@@ -537,7 +537,7 @@
     const wallet = customer().wallet;
     return state.checkout && plan && state.checkout.planId === plan.id
       ? R.discountedCheckoutHtml(state.checkout, plan, wallet)
-      : R.checkoutHtml(plan, wallet);
+      : R.checkoutHtml(plan, wallet, features());
   }
 
   function renderCheckout() {

@@ -136,7 +136,7 @@ class ShopScopeTests(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual(response.json(), {"user": user_id, "shop": SHOP})
 
     async def test_shop_routes_stay_closed_until_opened(self) -> None:
-        for path in (PROBE, "/api/mini/service/1/addons", "/api/mini/service/1/automation", "/api/mini/service/1/cancellation"):
+        for path in (PROBE, "/api/mini/service/1/automation", "/api/mini/service/1/cancellation"):
             with self.subTest(path=path):
                 response = await self.call(signed(SHOP_TOKEN, CUSTOMER), key=KEY, path=path)
                 self.assertEqual((response.status_code, response.json()["detail"]), (404, ROUTE_UNAVAILABLE))

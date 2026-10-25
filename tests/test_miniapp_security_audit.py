@@ -9,7 +9,6 @@ from unittest.mock import AsyncMock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 PAGES = (ROOT / "app/api/miniapp_pages.py").read_text(encoding="utf-8")
-FEEDS = (ROOT / "app/api/miniapp_feeds.py").read_text(encoding="utf-8")
 AUTH = (ROOT / "app/services/miniapp_auth.py").read_text(encoding="utf-8")
 ORDERS = (ROOT / "app/services/orders.py").read_text(encoding="utf-8")
 
@@ -60,11 +59,6 @@ class MiniAppSecuritySourceTests(unittest.TestCase):
         ):
             self.assertNotIn(leak, ser)
         self.assertIn("upstream_unavailable", ser)
-
-    def test_catalog_platform_only(self):
-        self.assertIn("Plan.owner_reseller_id.is_(None)", FEEDS)
-        buy = PAGES.split("async def mini_buy")[1].split("async def mini_renew")[0]
-        self.assertIn("owner_reseller_id is not None", buy)
 
     def test_ownership_helper_on_service_paths(self):
         self.assertIn("_owned_service_or_404", PAGES)

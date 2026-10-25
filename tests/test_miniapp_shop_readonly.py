@@ -13,6 +13,7 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from app.api.miniapp_codes import register_miniapp_codes
 from app.api.miniapp_feeds import register_miniapp_feeds
 from app.api.miniapp_guides import register_miniapp_guides
 from app.api.miniapp_pages import register_miniapp_pages
@@ -103,6 +104,7 @@ class ShopFixture(unittest.IsolatedAsyncioTestCase):
         register_miniapp_pages(app, render=lambda *_a, **_k: HTMLResponse("page"), get_db=get_db)
         register_miniapp_feeds(app, get_db=get_db)
         register_miniapp_guides(app, get_db=get_db)
+        register_miniapp_codes(app, get_db=get_db)
         self.client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test")
 
     async def asyncTearDown(self) -> None:
@@ -121,11 +123,10 @@ class ShopReadOnlyTests(ShopFixture):
     async def test_me_shows_the_shop_purse_services_and_open_sections_only(self) -> None:
         me = (await self.shop_get("/api/mini/me")).json()
         self.assertEqual(me["persona"], "user")
-        self.assertEqual([n["id"] for n in me["nav"]], ["home", "services", "account"])
-        self.assertEqual(me["sections"], ["services", "guides", "activity"])
+        self.assertEqual([n["id"] for n in me["nav"]], ["home", "services", "shop", "account"])
+        self.assertEqual(me["sections"], ["services", "guides", "activity", "shop"])
         self.assertEqual(me["shop"]["name"], "فروشگاه <b>نمونه</b>", "escaped by the page, not the API")
         self.assertEqual((me["customer"]["wallet"], me["user"]["wallet"]), (7_000, 7_000))
-        self.assertFalse(me["customer"]["wallet_pay_enabled"], "no paying until shop purchases open")
         self.assertEqual([s["id"] for s in me["customer"]["home"]["recent"]], [101])
         self.assertEqual(me["panel_base"], "")
 
@@ -162,9 +163,8 @@ class ShopReadOnlyTests(ShopFixture):
         self.assertEqual(opener.await_args.kwargs["shop_id"], SHOP)
         self.assertEqual(sender.await_args.kwargs["shop_id"], SHOP)
 
-    async def test_purchase_topup_support_and_club_stay_closed(self) -> None:
-        for path in ("/api/mini/plans", "/api/mini/service/101/addons", "/api/mini/service/101/automation",
-                     "/api/mini/service/101/cancellation", "/api/mini/ops"):
+    async def test_topup_support_club_and_service_changes_stay_closed(self) -> None:
+        for path in ("/api/mini/service/101/automation", "/api/mini/service/101/cancellation", "/api/mini/ops"):
             with self.subTest(path=path):
                 response = await self.shop_get(path)
                 self.assertEqual((response.status_code, response.json()["detail"]), (404, ROUTE_UNAVAILABLE))
