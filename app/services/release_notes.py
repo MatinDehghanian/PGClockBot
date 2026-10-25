@@ -15,6 +15,11 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.5.3": [
+        "اعلان: رویدادهای فروشگاه نماینده دیگر به ادمین‌های پلتفرم نمی‌رسد (#965)",
+        "ربات: ردیف «شروع مجدد» بعد از خرید روی کیبورد می‌ماند (#966)",
+        "ریستور: backup/dev-pre-v0.5.3 (commit ee7de1ac)",
+    ],
     "0.5.2": [
         "مالی: نمودارهای مدیریت مالی با ظاهر داشبورد (#955)",
         "نماینده: خرید بستهٔ ثابت در پاسارگارد دیگر نامحدود نمی‌ماند (#959)",
