@@ -1,15 +1,18 @@
 """Mini App support: contacts, the customer's tickets, opening a ticket and replying.
 
-Thin routes over ``app.services.customer_support``; the customer comes from initData
-and every ticket id is re-checked against that customer and the platform scope.
+Thin routes over ``app.services.customer_support``; the customer comes from initData,
+the support desk from the verified Mini App scope (a shop's Mini App writes to that shop,
+alerted through its own bot), and every ticket id is re-checked against both.
 """
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import Depends, FastAPI, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.miniapp_pages import _no_store, _require_commerce
+from app.api.miniapp_pages import _no_store, _require_commerce, _scope_ui
 from app.db.models import BotUser, Ticket
 from app.services.customer_support import (
     SupportActor,
@@ -22,8 +25,10 @@ from app.services.customer_support import (
     support_overview,
 )
 from app.services.miniapp_auth import load_mini_user
-from app.services.reseller_bots import open_notify_bot_for_user
-from app.services.users import get_all_settings
+from app.services.miniapp_shop import mini_scope
+from app.services.reseller_bots import ShopBotUnavailable, open_notify_bot_for_user
+
+logger = logging.getLogger(__name__)
 
 _ID_MAX = 2**31 - 1
 
@@ -45,7 +50,12 @@ def _ticket_id(value: int) -> int:
 
 
 async def _alert_staff(session: AsyncSession, user: BotUser, actor: SupportActor, ticket: Ticket, body: str | None) -> None:
-    bot, should_close = await open_notify_bot_for_user(session, user, shop_id=None)
+    try:
+        bot, should_close = await open_notify_bot_for_user(session, user, shop_id=actor.shop_id)
+    except ShopBotUnavailable:
+        # The ticket is saved and listed for the shop's staff; only the alert is lost.
+        logger.warning("mini app ticket alert: shop bot unavailable shop=%s", actor.shop_id, exc_info=True)
+        return
     try:
         await notify_staff(bot, session, actor, ticket, body=body)
     finally:
@@ -58,15 +68,18 @@ def register_miniapp_support(app: FastAPI, *, get_db) -> None:
     async def mini_support(request: Request, session: AsyncSession = Depends(get_db)):
         user = await load_mini_user(session, request)
         _require_commerce(user)
-        ui = await get_all_settings(session)
-        return _no_store({**support_overview(ui), "tickets": await list_customer_tickets(session, int(user.id))})
+        ui = await _scope_ui(session, request)
+        tickets = await list_customer_tickets(session, int(user.id), shop_id=mini_scope(request).shop_id)
+        return _no_store({**support_overview(ui), "tickets": tickets})
 
     @app.get("/api/mini/support/tickets/{ticket_id}")
     async def mini_support_ticket(ticket_id: int, request: Request, session: AsyncSession = Depends(get_db)):
         user = await load_mini_user(session, request)
         _require_commerce(user)
         try:
-            thread = await customer_ticket_thread(session, int(user.id), _ticket_id(ticket_id))
+            thread = await customer_ticket_thread(
+                session, int(user.id), _ticket_id(ticket_id), shop_id=mini_scope(request).shop_id
+            )
         except SupportError as exc:
             raise HTTPException(404, str(exc)) from None
         return _no_store({"ticket": thread})
@@ -75,7 +88,7 @@ def register_miniapp_support(app: FastAPI, *, get_db) -> None:
     async def mini_support_open(request: Request, session: AsyncSession = Depends(get_db)):
         user = await load_mini_user(session, request)
         _require_commerce(user)
-        actor = SupportActor.of(user)
+        actor = SupportActor.of(user, shop_id=mini_scope(request).shop_id)
         body = await _json_object(request)
         try:
             ticket = await open_customer_ticket(session, actor, subject=body.get("subject"), body=body.get("body"))
@@ -88,7 +101,7 @@ def register_miniapp_support(app: FastAPI, *, get_db) -> None:
     async def mini_support_reply(ticket_id: int, request: Request, session: AsyncSession = Depends(get_db)):
         user = await load_mini_user(session, request)
         _require_commerce(user)
-        actor = SupportActor.of(user)
+        actor = SupportActor.of(user, shop_id=mini_scope(request).shop_id)
         payload = await _json_object(request)
         try:
             ticket = await reply_customer_ticket(session, actor, _ticket_id(ticket_id), body=payload.get("body"))

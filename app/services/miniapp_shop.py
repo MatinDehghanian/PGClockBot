@@ -57,9 +57,20 @@ SHOP_ROUTES: frozenset[str] = frozenset({
     "/api/mini/topup",
     "/api/mini/topup/{payment_id}/receipt",
     "/api/mini/topup/check",
+    "/api/mini/support",
+    "/api/mini/support/tickets/{ticket_id}",
+    "/api/mini/support/tickets",
+    "/api/mini/support/tickets/{ticket_id}/messages",
+    "/api/mini/checkout",
+    "/api/mini/checkout/{order_id}/pay",
+    "/api/mini/checkout/{order_id}/cancel",
+    "/api/mini/wallet/redeem",
+    "/api/mini/club",
+    "/api/mini/club/history",
+    "/api/mini/club/rewards/{reward_id}/redeem",
 })
 # What a shop's Mini App shows so far; the page hides every other section.
-SHOP_SECTIONS = ("services", "guides", "activity", "shop", "topup")
+SHOP_SECTIONS = ("services", "guides", "activity", "shop", "topup", "support", "codes", "club")
 SHOP_NAME_SETTING = "bot_tg_name"
 DEFAULT_SHOP_NAME = "فروشگاه"
 

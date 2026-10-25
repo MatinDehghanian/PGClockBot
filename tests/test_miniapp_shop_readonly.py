@@ -128,7 +128,7 @@ class ShopReadOnlyTests(ShopFixture):
         me = (await self.shop_get("/api/mini/me")).json()
         self.assertEqual(me["persona"], "user")
         self.assertEqual([n["id"] for n in me["nav"]], ["home", "services", "shop", "account"])
-        self.assertEqual(me["sections"], ["services", "guides", "activity", "shop", "topup"])
+        self.assertEqual(me["sections"], ["services", "guides", "activity", "shop", "topup", "support", "codes", "club"])
         self.assertEqual(me["shop"]["name"], "فروشگاه <b>نمونه</b>", "escaped by the page, not the API")
         self.assertEqual((me["customer"]["wallet"], me["user"]["wallet"]), (7_000, 7_000))
         self.assertEqual([s["id"] for s in me["customer"]["home"]["recent"]], [101])

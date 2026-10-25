@@ -1,6 +1,8 @@
 """The customer's club outside the bot chat (Mini App): points, tier, invites and rewards.
 
-Everything here is the platform's purse (``shop_id`` None). Redemption goes through
+Everything here is one club's purse: ``shop_id`` is the shop whose Mini App asks (None
+for the platform), and points, rewards, discounts and services are that shop's only.
+Redemption goes through
 ``loyalty.redeem_reward`` with the bot's slot key, so a double tap, a retried request or
 the same reward redeemed from the bot at once still spends the points once.
 """
@@ -91,12 +93,12 @@ def history_entry(tx: PointsTransaction) -> dict:
 
 
 async def points_history_page(
-    session: AsyncSession, user_id: int, *, before_id: int | None = None, limit: int = HISTORY_PAGE_SIZE,
+    session: AsyncSession, user_id: int, *, shop_id: int | None, before_id: int | None = None,
+    limit: int = HISTORY_PAGE_SIZE,
 ) -> tuple[list[dict], bool]:
-    """One page of the customer's platform points entries, newest first (keyset on id)."""
-    query = select(PointsTransaction).where(
-        PointsTransaction.user_id == int(user_id), PointsTransaction.reseller_id.is_(None),
-    )
+    """One page of the customer's points entries in this club, newest first (keyset on id)."""
+    purse = PointsTransaction.reseller_id.is_(None) if shop_id is None else PointsTransaction.reseller_id == int(shop_id)
+    query = select(PointsTransaction).where(PointsTransaction.user_id == int(user_id), purse)
     if before_id:
         query = query.where(PointsTransaction.id < int(before_id))
     rows = list(await session.scalars(query.order_by(PointsTransaction.id.desc()).limit(limit + 1)))
@@ -114,57 +116,63 @@ async def _referral(session: AsyncSession, user: BotUser, bot_username: str) -> 
     }
 
 
-async def club_summary(session: AsyncSession, user: BotUser, *, bot_username: str) -> dict:
-    """What the club screen shows; points and rewards only while the club is on."""
+async def club_summary(session: AsyncSession, user: BotUser, *, shop_id: int | None, bot_username: str) -> dict:
+    """What the club screen shows; points and rewards only while the club is on.
+
+    ``bot_username`` is the club's own bot, so an invite link brings people to that bot.
+    """
     referral = await _referral(session, user, bot_username)
-    if not await loyalty_enabled(session, reseller_id=None):
+    if not await loyalty_enabled(session, reseller_id=shop_id):
         return {"enabled": False, "referral": referral}
-    points = await points_balance(session, user, None)
+    points = await points_balance(session, user, shop_id)
     tier = await get_tier_for_points(session, points)
-    rewards = (await list_active_rewards(session, reseller_id=None))[:REWARD_LIST_LIMIT]
-    history, has_more = await points_history_page(session, int(user.id))
+    rewards = (await list_active_rewards(session, reseller_id=shop_id))[:REWARD_LIST_LIMIT]
+    history, has_more = await points_history_page(session, int(user.id), shop_id=shop_id)
     services: list[dict] = []
     if any(r.reward_type in SERVICE_REWARD_TYPES for r in rewards):
         services = [
             {"id": int(s.id), "name": s.pg_username or f"سرویس #{s.id}"}
-            for s in await list_customer_services(session, int(user.id), None, limit=SERVICE_CHOICE_LIMIT)
+            for s in await list_customer_services(session, int(user.id), shop_id, limit=SERVICE_CHOICE_LIMIT)
         ]
     return {
         "enabled": True,
         "points": points,
         "tier": {"name": tier.name, "points_to_next": tier.points_to_next},
-        "month_points": await month_earned_points(session, int(user.id), shop_id=None),
+        "month_points": await month_earned_points(session, int(user.id), shop_id=shop_id),
         "referral": referral,
         "rewards": [_reward_card(r, points) for r in rewards],
         "services": services,
-        "discounts": [_discount_card(d) for d in await list_available_discounts(session, int(user.id), shop_id=None)],
+        "discounts": [
+            _discount_card(d) for d in await list_available_discounts(session, int(user.id), shop_id=shop_id)
+        ],
         "history": history,
         "history_more": has_more,
     }
 
 
-async def _platform_reward(session: AsyncSession, reward_id: int) -> LoyaltyReward:
+async def _club_reward(session: AsyncSession, reward_id: int, shop_id: int | None) -> LoyaltyReward:
     reward = await session.get(LoyaltyReward, int(reward_id))
-    if reward is None or reward.reseller_id is not None or not reward.enabled or reward.archived:
+    reward_shop = int(reward.reseller_id) if reward is not None and reward.reseller_id else None
+    if reward is None or reward_shop != shop_id or not reward.enabled or reward.archived:
         raise ClubError("این جایزه فعال نیست")
     return reward
 
 
 async def redeem_club_reward(
-    session: AsyncSession, user: BotUser, *, reward_id: int, service_id: int | None,
+    session: AsyncSession, user: BotUser, *, shop_id: int | None, reward_id: int, service_id: int | None,
 ) -> dict:
-    """Spend platform points on one reward; the same tap or retry never spends twice."""
-    if not await loyalty_enabled(session, reseller_id=None):
+    """Spend this club's points on one of its rewards; the same tap or retry never spends twice."""
+    if not await loyalty_enabled(session, reseller_id=shop_id):
         raise ClubError("باشگاه مشتریان فعلاً غیرفعال است")
-    reward = await _platform_reward(session, reward_id)
+    reward = await _club_reward(session, reward_id, shop_id)
     needs_service = reward.reward_type in SERVICE_REWARD_TYPES
     if needs_service and not service_id:
         raise ClubError("یک سرویس فعال انتخاب کنید")
     target_service = int(service_id) if needs_service else None
     user_id = int(user.id)
     key = await next_redemption_key(session, user_id, int(reward.id), target_service)
-    # redeem_reward reads the shop from the request context; the Mini App is the platform.
-    token = set_shop_reseller_id(None)
+    # redeem_reward reads the shop from the request context; pin it to this club.
+    token = set_shop_reseller_id(shop_id)
     try:
         redemption = await redeem_reward(
             session, user, int(reward.id), service_id=target_service, idempotency_key=key,
@@ -189,5 +197,5 @@ async def redeem_club_reward(
         "reward_type": redemption.reward_type,
         "reward_value": int(redemption.reward_value or 0),
         "discount_code": redemption.discount_code or None,
-        "points": await points_balance(session, user, None),
+        "points": await points_balance(session, user, shop_id),
     }

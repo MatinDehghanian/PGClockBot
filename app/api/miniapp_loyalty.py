@@ -1,7 +1,7 @@
 """Mini App club: points, tier, invite link, rewards and points history.
 
 Thin routes over ``app.services.customer_loyalty``. The customer comes from initData and
-only the platform's club is reachable here.
+the club from the verified Mini App scope: a shop's Mini App reaches only that shop's club.
 """
 
 from __future__ import annotations
@@ -15,7 +15,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.miniapp_pages import _no_store, _require_commerce_ready
 from app.config import get_settings
 from app.services.customer_loyalty import ClubError, club_summary, points_history_page, redeem_club_reward
+from app.db.models import ResellerProfile
 from app.services.miniapp_auth import load_mini_user
+from app.services.miniapp_shop import MiniScope, mini_scope
 from app.services.redact import user_safe_error
 from app.services.reseller_bots import open_notify_bot_for_user
 
@@ -52,6 +54,14 @@ async def _platform_bot_username(session: AsyncSession, user) -> str:
     return username
 
 
+async def _club_bot_username(session: AsyncSession, user, scope: MiniScope) -> str:
+    """The @username invite links point to: the shop's own bot in a shop, the main bot otherwise."""
+    if not scope.is_shop:
+        return await _platform_bot_username(session, user)
+    profile = await session.get(ResellerProfile, scope.profile_id)
+    return str(profile.bot_username or "").strip().lstrip("@") if profile is not None else ""
+
+
 async def _json_object(request: Request) -> dict:
     try:
         body = await request.json()
@@ -67,8 +77,9 @@ def register_miniapp_loyalty(app: FastAPI, *, get_db) -> None:
     async def mini_club(request: Request, session: AsyncSession = Depends(get_db)):
         user = await load_mini_user(session, request)
         await _require_commerce_ready(session, user)
-        username = await _platform_bot_username(session, user)
-        return _no_store({"club": await club_summary(session, user, bot_username=username)})
+        scope = mini_scope(request)
+        username = await _club_bot_username(session, user, scope)
+        return _no_store({"club": await club_summary(session, user, shop_id=scope.shop_id, bot_username=username)})
 
     @app.get("/api/mini/club/history")
     async def mini_club_history(request: Request, before: int = 0, session: AsyncSession = Depends(get_db)):
@@ -76,7 +87,9 @@ def register_miniapp_loyalty(app: FastAPI, *, get_db) -> None:
         await _require_commerce_ready(session, user)
         if not 0 <= before <= _ID_MAX:
             raise HTTPException(400, "شناسه نامعتبر است")
-        items, has_more = await points_history_page(session, int(user.id), before_id=before or None)
+        items, has_more = await points_history_page(
+            session, int(user.id), shop_id=mini_scope(request).shop_id, before_id=before or None
+        )
         return _no_store({"items": items, "has_more": has_more})
 
     @app.post("/api/mini/club/rewards/{reward_id}/redeem")
@@ -89,7 +102,9 @@ def register_miniapp_loyalty(app: FastAPI, *, get_db) -> None:
         reward_id = _valid_id(reward_id)
         service_id = None if raw_service_id is None else _valid_id(raw_service_id)
         try:
-            result = await redeem_club_reward(session, user, reward_id=reward_id, service_id=service_id)
+            result = await redeem_club_reward(
+                session, user, shop_id=mini_scope(request).shop_id, reward_id=reward_id, service_id=service_id
+            )
         except ClubError as exc:
             raise HTTPException(400, user_safe_error(exc, fallback="بازخرید ناموفق بود")) from None
         except Exception:
