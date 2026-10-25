@@ -1,7 +1,7 @@
 """Random public key for a shop's Mini App address.
 
-Revision ID: 0068_shop_miniapp_key
-Revises: 0067_settlement_next_check_at
+Revision ID: 0070_shop_miniapp_key
+Revises: 0069_bot_chat_message_replace_key
 
 A shop's Mini App is served at an address carrying this key; the shop is found by it and
 every request is still verified with that shop bot's own token. Existing shops start with
@@ -15,8 +15,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0068_shop_miniapp_key"
-down_revision: Union[str, None] = "0067_settlement_next_check_at"
+revision: str = "0070_shop_miniapp_key"
+down_revision: Union[str, None] = "0069_bot_chat_message_replace_key"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
