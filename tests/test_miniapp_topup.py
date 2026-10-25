@@ -91,7 +91,7 @@ class MiniAppTopupTestCase(unittest.IsolatedAsyncioTestCase):
         self.patches = [
             patch("app.api.miniapp_topup.load_mini_user", AsyncMock(side_effect=load_user)),
             patch("app.api.miniapp_pages.assert_mini_force_join", AsyncMock()),
-            patch("app.api.miniapp_topup.get_all_settings", AsyncMock(side_effect=settings)),
+            patch("app.api.miniapp_pages.get_all_settings", AsyncMock(side_effect=settings)),
             patch("app.api.miniapp_topup.open_notify_bot_for_user", AsyncMock(side_effect=lambda *a, **k: (self.bot, False))),
             patch("app.services.receipts.download_receipt_sha256", AsyncMock(return_value=None)),
             patch("app.services.receipts.notify_pending_approval", self.notify_pending),

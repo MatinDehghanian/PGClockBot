@@ -104,8 +104,12 @@ class ShopFixture(unittest.IsolatedAsyncioTestCase):
         register_miniapp_pages(app, render=lambda *_a, **_k: HTMLResponse("page"), get_db=get_db)
         register_miniapp_feeds(app, get_db=get_db)
         register_miniapp_guides(app, get_db=get_db)
+        self.register_extra_routes(app, get_db)
         register_miniapp_codes(app, get_db=get_db)
         self.client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test")
+
+    def register_extra_routes(self, app: FastAPI, get_db) -> None:
+        """Subclasses add the Mini App routes they test."""
 
     async def asyncTearDown(self) -> None:
         await self.client.aclose()
@@ -124,7 +128,7 @@ class ShopReadOnlyTests(ShopFixture):
         me = (await self.shop_get("/api/mini/me")).json()
         self.assertEqual(me["persona"], "user")
         self.assertEqual([n["id"] for n in me["nav"]], ["home", "services", "shop", "account"])
-        self.assertEqual(me["sections"], ["services", "guides", "activity", "shop"])
+        self.assertEqual(me["sections"], ["services", "guides", "activity", "shop", "topup"])
         self.assertEqual(me["shop"]["name"], "فروشگاه <b>نمونه</b>", "escaped by the page, not the API")
         self.assertEqual((me["customer"]["wallet"], me["user"]["wallet"]), (7_000, 7_000))
         self.assertEqual([s["id"] for s in me["customer"]["home"]["recent"]], [101])

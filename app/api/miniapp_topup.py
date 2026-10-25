@@ -1,8 +1,9 @@
 """Mini App wallet top-up: options, start a payment, upload its receipt, check a gateway.
 
-Thin routes over ``app.services.wallet_topup``. The customer comes from initData,
-top-ups are always the platform wallet, and every payment id is re-checked against
-that customer in the service.
+Thin routes over ``app.services.wallet_topup``. The customer comes from initData and
+the purse from the verified Mini App scope: a shop's Mini App tops up that shop's purse
+with that shop's own cards and gateways, and its receipts go through that shop's bot to
+its reviewers. Every payment id is re-checked against the customer and purse in the service.
 """
 
 from __future__ import annotations
@@ -12,13 +13,13 @@ import logging
 from fastapi import Depends, FastAPI, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.miniapp_pages import _no_store, _require_commerce_ready
+from app.api.miniapp_pages import _no_store, _require_commerce_ready, _scope_ui
 from app.services.miniapp_auth import load_mini_user
+from app.services.miniapp_shop import mini_scope
 from app.services.payment_settlement import check_psp_payment, claim_psp_check_slot
 from app.services.redact import user_safe_error
-from app.services.reseller_bots import open_notify_bot_for_user
+from app.services.reseller_bots import ShopBotUnavailable, open_notify_bot_for_user
 from app.services.security_policy import content_length_ok
-from app.services.users import get_all_settings
 from app.services.wallet_topup import (
     PSP_CHECK_MESSAGES,
     RECEIPT_MAX_BYTES,
@@ -70,8 +71,9 @@ def register_miniapp_topup(app: FastAPI, *, get_db) -> None:
     async def mini_topup_options(request: Request, session: AsyncSession = Depends(get_db)):
         user = await load_mini_user(session, request)
         await _require_commerce_ready(session, user)
-        ui = await get_all_settings(session)
-        return _no_store({**topup_options(ui), "recent": await recent_topups(session, int(user.id))})
+        ui = await _scope_ui(session, request)
+        recent = await recent_topups(session, int(user.id), shop_id=mini_scope(request).shop_id)
+        return _no_store({**topup_options(ui), "recent": recent})
 
     @app.post("/api/mini/topup")
     async def mini_topup_start(request: Request, session: AsyncSession = Depends(get_db)):
@@ -79,10 +81,10 @@ def register_miniapp_topup(app: FastAPI, *, get_db) -> None:
         await _require_commerce_ready(session, user)
         user_id = int(user.id)
         body = await _json_object(request)
-        ui = await get_all_settings(session)
+        ui = await _scope_ui(session, request)
         try:
             start = await start_topup(
-                session, user_id=user_id, amount=body.get("amount"),
+                session, user_id=user_id, shop_id=mini_scope(request).shop_id, amount=body.get("amount"),
                 method=body.get("method"), dest_id=body.get("dest_id"), ui=ui,
             )
         except TopupError as exc:
@@ -98,10 +100,15 @@ def register_miniapp_topup(app: FastAPI, *, get_db) -> None:
         await _require_commerce_ready(session, user)
         payment_id = _valid_id(payment_id)
         image = await _read_capped(request, RECEIPT_MAX_BYTES)
-        bot, should_close = await open_notify_bot_for_user(session, user, shop_id=None)
+        shop_id = mini_scope(request).shop_id
+        try:
+            bot, should_close = await open_notify_bot_for_user(session, user, shop_id=shop_id)
+        except ShopBotUnavailable:
+            logger.warning("mini top-up receipt: shop bot unavailable shop=%s", shop_id, exc_info=True)
+            raise HTTPException(503, "ربات فروشگاه در دسترس نیست؛ کمی بعد دوباره تلاش کنید") from None
         try:
             result = await submit_topup_receipt(
-                session, bot=bot, user_id=int(user.id), telegram_id=int(user.telegram_id),
+                session, bot=bot, user_id=int(user.id), shop_id=shop_id, telegram_id=int(user.telegram_id),
                 payment_id=payment_id, image=image,
             )
         except TopupError as exc:
@@ -120,7 +127,7 @@ def register_miniapp_topup(app: FastAPI, *, get_db) -> None:
             raise HTTPException(429, "چند ثانیه بعد دوباره بزنید")
         try:
             outcome = await check_psp_payment(
-                session, settlement_id=settlement_id, user_id=int(user.id), shop_id=None
+                session, settlement_id=settlement_id, user_id=int(user.id), shop_id=mini_scope(request).shop_id
             )
         except ValueError as exc:
             raise HTTPException(400, user_safe_error(exc, fallback="بررسی پرداخت ناموفق بود")) from None

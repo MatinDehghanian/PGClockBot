@@ -70,6 +70,27 @@ async function shopScreensHideUnopenedSections() {
   assert.ok(!env.calls.some((c) => c.url.startsWith("/api/mini/support")), "support screen does not open");
 }
 
+async function shopTopupOpensWithItsSection() {
+  const me = { ...SHOP_ME, sections: [...SHOP_ME.sections, "topup"] };
+  const topupRoutes = async (_method, url) => {
+    if (url === "/api/mini/me") return { status: 200, body: me };
+    if (url === "/api/mini/topup") {
+      return { status: 200, body: { methods: [{ key: "card", label: "کارت", needs_receipt: true, choices: [] }],
+        presets: [50000], min_amount: 1000, max_amount: 1000000, bot_only: false, recent: [] } };
+    }
+    return { status: 404, body: { detail: "پیدا نشد" } };
+  };
+  const env = loadMiniApp({ routes: topupRoutes, pathname: `/miniapp/s/${KEY}/` });
+  env.mini.app.start();
+  await settle();
+  env.mini.app.go("account");
+  await settle();
+  assert.ok(env.element("root").innerHTML.includes('data-action="topup"'), "the account offers a top-up");
+  const call = env.calls.find((c) => c.url === "/api/mini/topup");
+  assert.ok(call, "the shop's top-up options are requested");
+  assert.equal(call.headers["X-Mini-Shop"], KEY, "with the shop key");
+}
+
 (async () => {
   assert.deepEqual([...new Set(await shopHeaders("/miniapp/"))], [undefined], "platform page sends no shop");
   assert.deepEqual([...new Set(await shopHeaders(`/miniapp/s/${KEY}/`))], [KEY]);
@@ -78,5 +99,6 @@ async function shopScreensHideUnopenedSections() {
     assert.deepEqual([...new Set(await shopHeaders(bad))], [undefined], `no key from ${bad}`);
   }
   await shopScreensHideUnopenedSections();
+  await shopTopupOpensWithItsSection();
   console.log("miniapp shop ok");
 })().catch((err) => { console.error(err); process.exit(1); });
