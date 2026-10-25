@@ -14,6 +14,49 @@ async function shopHeaders(pathname) {
   return env.calls.map((call) => call.headers["X-Mini-Shop"]);
 }
 
+const SHOP_ME = {
+  persona: "user", commerce_allowed: true, currency: "تومان", panel_base: "",
+  sections: ["services", "guides", "activity"], shop: { name: "<b>shop</b>" },
+  nav: [{ id: "home", label: "خانه", icon: "home" }, { id: "services", label: "سرویس‌ها", icon: "svc" }, { id: "account", label: "حساب", icon: "account" }],
+  user: { id: 1, name: "a", wallet: 7000 },
+  customer: { wallet: 7000, wallet_pay_enabled: false, qr_enabled: true, commerce_allowed: true,
+    home: { service_count: 0, attention: [], recent: [] } },
+};
+const SERVICE = { id: 7, username: "svc", status: "active", status_fa: "فعال", traffic_pct: 10, addons_allowed: true,
+  subscription_url: "https://sub.example.com/sub/token", is_cancelled: false, cancellation_pending: false };
+
+async function shopScreensHideUnopenedSections() {
+  const shopRoutes = async (_method, url) => {
+    if (url === "/api/mini/me") return { status: 200, body: SHOP_ME };
+    if (url.startsWith("/api/mini/activity")) return { status: 200, body: { items: [] } };
+    if (url === "/api/mini/service/7") return { status: 200, body: { service: SERVICE } };
+    return { status: 404, body: { detail: "پیدا نشد" } };
+  };
+  const env = loadMiniApp({ routes: shopRoutes, pathname: `/miniapp/s/${KEY}/` });
+  env.mini.app.start();
+  await settle();
+  let html = env.element("root").innerHTML;
+  assert.ok(html.includes("&lt;b&gt;shop&lt;/b&gt;"), "shop name is escaped");
+  assert.ok(!html.includes('data-action="topup"') && !html.includes('data-view="shop"'), "no top-up or buy on home");
+  env.mini.app.go("account");
+  await settle();
+  html = env.element("root").innerHTML;
+  for (const hidden of ['data-action="topup"', 'data-view="support"', 'data-view="club"', 'data-action="gift-code"']) {
+    assert.ok(!html.includes(hidden), `account hides ${hidden}`);
+  }
+  assert.ok(!env.calls.some((c) => c.url === "/api/mini/topup"), "closed sections are never requested");
+  env.mini.app.go("service", { serviceId: 7 });
+  await settle();
+  html = env.element("root").innerHTML;
+  for (const hidden of ["renew", "addons", "automation", "cancellation"]) {
+    assert.ok(!html.includes(`data-action="${hidden}"`), `service hides ${hidden}`);
+  }
+  assert.ok(html.includes('data-action="copy-link"') && html.includes('data-action="guides"'));
+  env.mini.app.go("support");
+  await settle();
+  assert.ok(!env.calls.some((c) => c.url.startsWith("/api/mini/support")), "support screen does not open");
+}
+
 (async () => {
   assert.deepEqual([...new Set(await shopHeaders("/miniapp/"))], [undefined], "platform page sends no shop");
   assert.deepEqual([...new Set(await shopHeaders(`/miniapp/s/${KEY}/`))], [KEY]);
@@ -21,5 +64,6 @@ async function shopHeaders(pathname) {
   for (const bad of ["/miniapp/s/short/", `/miniapp/s/${KEY}/extra`, `/miniapp/s/${KEY}%3Cx/`, "/other/s/" + KEY + "/"]) {
     assert.deepEqual([...new Set(await shopHeaders(bad))], [undefined], `no key from ${bad}`);
   }
+  await shopScreensHideUnopenedSections();
   console.log("miniapp shop ok");
 })().catch((err) => { console.error(err); process.exit(1); });

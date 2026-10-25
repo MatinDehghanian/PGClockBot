@@ -47,10 +47,21 @@ from app.services.miniapp_auth import (
     resolve_mini_persona,
 )
 from app.services.miniapp_home import customer_home_summary
-from app.services.miniapp_shop import KEY_PATTERN, SHOP_UNAVAILABLE, resolve_shop_scope
+from app.services.miniapp_shop import (
+    KEY_PATTERN,
+    PLATFORM_SCOPE,
+    SHOP_SECTIONS,
+    SHOP_UNAVAILABLE,
+    MiniScope,
+    mini_scope,
+    resolve_shop_scope,
+    shop_display_name,
+    shop_nav,
+)
 from app.services.pasarguard import get_pg
 from app.services.service_live_info import fetch_subscription_info, service_info_error, validate_service_info
 from app.services.users import get_all_settings, on
+from app.services.wallet import get_wallet_balance
 
 log = logging.getLogger(__name__)
 
@@ -101,10 +112,10 @@ async def _require_commerce_ready(session: AsyncSession, user: BotUser) -> str:
 
 
 async def _owned_service_or_404(
-    session: AsyncSession, svc: UserService | None, user: BotUser
+    session: AsyncSession, svc: UserService | None, user: BotUser, *, shop_id: int | None = None
 ) -> UserService:
-    """Fail closed: the service must be the Mini App user's and platform-sold."""
-    if not await customer_may_use_service(session, svc, int(user.id), None):
+    """Fail closed: the service must be the Mini App user's and sold by this Mini App's shop."""
+    if not await customer_may_use_service(session, svc, int(user.id), shop_id):
         raise HTTPException(404)
     return svc
 
@@ -290,24 +301,42 @@ async def _enrich_services(services: list[UserService], *, session=None) -> list
     return out
 
 
-async def _customer_summary(session: AsyncSession, user: BotUser) -> dict:
+async def _customer_summary(session: AsyncSession, user: BotUser, *, scope: MiniScope = PLATFORM_SCOPE) -> dict:
     """Light launch payload: wallet, enabled features and the cached home summary.
 
-    Plans, activity and live service usage load on their own screens.
+    Plans, activity and live service usage load on their own screens. In a shop's Mini App
+    everything is that shop's: its services, its purse and its settings, and paying stays
+    off until shop purchases are opened.
     """
-    ui = await get_all_settings(session)
+    ui = await get_all_settings(session, reseller_id=scope.shop_id)
     try:
-        home = (await customer_home_summary(session, int(user.id))).payload()
+        home = (await customer_home_summary(session, int(user.id), shop_id=scope.shop_id)).payload()
     except SQLAlchemyError:
         await rollback_quiet(session)
         log.warning("miniapp home summary failed user=%s", user.id, exc_info=True)
         home = _empty_home()
     return {
-        "wallet": int(user.wallet_balance or 0),
-        "wallet_pay_enabled": on(ui.get("pay_wallet_enabled")),
+        "wallet": await get_wallet_balance(session, user, shop_id=scope.shop_id),
+        "wallet_pay_enabled": on(ui.get("pay_wallet_enabled")) and not scope.is_shop,
         "qr_enabled": on(ui.get("qr_enabled", "1")),
         "commerce_allowed": True,
         "home": home,
+    }
+
+
+async def _shop_me_payload(session: AsyncSession, user: BotUser, scope: MiniScope) -> dict:
+    """``/me`` in a shop's Mini App: everyone is that shop's customer, with its open sections only."""
+    customer = await _customer_summary(session, user, scope=scope)
+    return {
+        "persona": "user",
+        "nav": shop_nav(),
+        "sections": list(SHOP_SECTIONS),
+        "shop": {"name": await shop_display_name(session, scope)},
+        "user": {"id": user.id, "name": user.full_name or "", "role": "user", "wallet": customer["wallet"]},
+        "currency": get_settings().currency or "تومان",
+        "panel_base": "",
+        "commerce_allowed": True,
+        "customer": customer,
     }
 
 
@@ -500,6 +529,9 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
     @app.get("/api/mini/me")
     async def mini_me(request: Request, session: AsyncSession = Depends(get_db)):
         user = await load_mini_user(session, request)
+        scope = mini_scope(request)
+        if scope.is_shop:
+            return _no_store(await _shop_me_payload(session, user, scope))
         persona = resolve_mini_persona(user)
         payload: dict = {
             "persona": persona,
@@ -527,7 +559,8 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
     ):
         user = await load_mini_user(session, request)
         _require_commerce(user)
-        svc = await _owned_service_or_404(session, await session.get(UserService, service_id), user)
+        shop_id = mini_scope(request).shop_id
+        svc = await _owned_service_or_404(session, await session.get(UserService, service_id), user, shop_id=shop_id)
         info = await _fetch_pg_info(_service_sub_token(svc), subscription_url=svc.subscription_url, service_id=svc.id, expected_pg_user_id=svc.pg_user_id)
         if info.get("status") and "expire" in info:
             from app.services.bot_user_admin import sync_service_quota_cache
@@ -547,13 +580,14 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
 
         user = await load_mini_user(session, request)
         _require_commerce(user)
-        svc = await _owned_service_or_404(session, await session.get(UserService, service_id), user)
+        shop_id = mini_scope(request).shop_id
+        svc = await _owned_service_or_404(session, await session.get(UserService, service_id), user, shop_id=shop_id)
         url = absolutize_subscription_url(svc.subscription_url) or (
             (svc.subscription_url or "").strip()
         )
         if not url:
             raise HTTPException(404, "no subscription url")
-        ui = await get_all_settings(session)
+        ui = await get_all_settings(session, reseller_id=shop_id)
         if not on(ui.get("qr_enabled", "1")):
             raise HTTPException(403, "qr disabled")
         bg = (ui.get("qr_background") or "").strip() or None

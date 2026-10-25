@@ -172,9 +172,11 @@
       rows.push(actionRow("addons", id, "plus", "افزایش حجم", { kind: "volume" }));
       rows.push(actionRow("addons", id, "timer", "افزایش زمان", { kind: "duration" }));
     }
-    if (open) rows.push(actionRow("automation", id, "auto", "تمدید خودکار"));
-    rows.push(actionRow("cancellation", id, "cancel", s.is_cancelled || s.cancellation_pending ? "وضعیت درخواست لغو" : "درخواست لغو سرویس", { danger: true }));
-    return `<section class="card list-card" aria-label="عملیات سرویس">${rows.join("")}</section>`;
+    if (features.manage !== false) {
+      if (open) rows.push(actionRow("automation", id, "auto", "تمدید خودکار"));
+      rows.push(actionRow("cancellation", id, "cancel", s.is_cancelled || s.cancellation_pending ? "وضعیت درخواست لغو" : "درخواست لغو سرویس", { danger: true }));
+    }
+    return rows.length ? `<section class="card list-card" aria-label="عملیات سرویس">${rows.join("")}</section>` : "";
   }
 
   function serviceDetailHtml(s, features) {
@@ -339,17 +341,20 @@
     }).join("");
   }
 
-  function walletCardHtml(customer, { actions } = {}) {
+  /** ``features`` (from the app) hides the buttons of sections a shop's Mini App has not opened. */
+  function walletCardHtml(customer, { actions, features } = {}) {
     const c = customer || {};
+    const f = features || {};
+    const buttons = [
+      f.topup !== false ? '<button type="button" class="btn" data-action="topup">شارژ کیف پول</button>' : "",
+      actions
+        ? (f.shop !== false ? '<button type="button" class="btn ghost" data-action="goto" data-view="shop">خرید سرویس</button>' : "")
+        : (f.gift !== false ? '<button type="button" class="btn ghost" data-action="gift-code">کد هدیه</button>' : ""),
+    ].join("");
     return `<section class="card wallet-card" aria-label="کیف پول">
       <div class="card-head"><span class="muted">موجودی کیف پول</span>${badge(c.wallet_pay_enabled ? "پرداخت فعال" : "فقط مشاهده", c.wallet_pay_enabled ? "ok" : "")}</div>
       <p class="wallet-value">${esc(money(c.wallet))}</p>
-      <div class="btn-row">
-        <button type="button" class="btn" data-action="topup">شارژ کیف پول</button>
-        ${actions
-          ? '<button type="button" class="btn ghost" data-action="goto" data-view="shop">خرید سرویس</button>'
-          : '<button type="button" class="btn ghost" data-action="gift-code">کد هدیه</button>'}
-      </div>
+      ${buttons ? `<div class="btn-row">${buttons}</div>` : ""}
     </section>`;
   }
 

@@ -72,8 +72,9 @@ class ResellerBotManager:
                 uname = me.username or ""
                 from app.bot.chat_menu import sync_telegram_menu_button
 
-                # Shop bots never host the platform Mini App (HMAC / token mismatch)
-                await sync_telegram_menu_button(bot, allow_miniapp=False)
+                # A shop bot's «Open» is its own Mini App, and only while the shop has it on.
+                menu_url = await _shop_menu_url(reseller_profile_id)
+                await sync_telegram_menu_button(bot, allow_miniapp=bool(menu_url), url=menu_url or None)
 
                 async with SessionLocal() as session:
                     row = await session.get(ResellerProfile, reseller_profile_id)
@@ -208,6 +209,9 @@ class ResellerBotManager:
     def bot_for_profile_id(self, reseller_profile_id: int) -> Bot | None:
         return self._bots.get(int(reseller_profile_id))
 
+    def running(self) -> list[tuple[int, Bot]]:
+        return list(self._bots.items())
+
     def profile_id_for_bot(self, bot: Bot) -> int | None:
         for rid, b in self._bots.items():
             if b is bot or b.token == bot.token:
@@ -217,6 +221,44 @@ class ResellerBotManager:
 
 def get_reseller_bot_manager() -> ResellerBotManager | None:
     return _manager
+
+
+async def _shop_menu_url(reseller_profile_id: int) -> str:
+    from app.services.miniapp_shop import shop_menu_url
+
+    async with SessionLocal() as session:
+        profile = await session.get(ResellerProfile, int(reseller_profile_id))
+        return await shop_menu_url(session, profile) if profile is not None else ""
+
+
+async def resync_shop_menu_buttons(profile_ids: list[int] | None = None) -> None:
+    """Point each running shop bot's «Open» at its Mini App, or clear it; one shop's failure skips only it."""
+    from app.bot.chat_menu import sync_telegram_menu_button
+
+    manager = get_reseller_bot_manager()
+    if manager is None:
+        return
+    targets = manager.running() if profile_ids is None else [
+        (pid, manager.bot_for_profile_id(pid)) for pid in profile_ids
+    ]
+    for profile_id, bot in targets:
+        if bot is None:
+            continue
+        try:
+            menu_url = await _shop_menu_url(profile_id)
+            await sync_telegram_menu_button(bot, allow_miniapp=bool(menu_url), url=menu_url or None)
+        except Exception:
+            log.warning("shop menu button sync failed profile=%s", profile_id, exc_info=True)
+
+
+_menu_sync_tasks: set[asyncio.Task] = set()
+
+
+def schedule_shop_menu_sync(profile_ids: list[int] | None = None) -> None:
+    """Re-sync menu buttons after a settings change, without holding the request open."""
+    task = asyncio.create_task(resync_shop_menu_buttons(profile_ids), name="shop-menu-sync")
+    _menu_sync_tasks.add(task)
+    task.add_done_callback(_menu_sync_tasks.discard)
 
 
 # Default for ``shop_id``: fall back to the shop the customer is attributed to.

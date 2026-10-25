@@ -20,11 +20,20 @@ from app.services.resellers import (
     SHOP_SETTINGS_DOMAIN_POST_TABS,
     SHOP_SETTINGS_DOMAIN_REDIRECTS,
     complete_reseller_setup,
+    get_reseller_profile,
 )
 from app.api.guide_media_pages import SHOP_BASE, guides_media_view
 from app.services.chat_cleanup_config import chat_cleanup_payload
 from app.services.connection_guides import prune_guide_media, serialize_submitted_guides
 from app.services.secret_box import reveal_bot_token
+from app.services.miniapp_shop import (
+    SHOP_SWITCH,
+    set_shop_miniapp,
+    shop_miniapp_available,
+    shop_miniapp_url,
+    switch_value,
+)
+from app.services.reseller_bots import schedule_shop_menu_sync
 from app.services.settings_button_labels import PLATFORM_ONLY_BTN_KEYS
 from app.services.settings_tab_groups import group_settings_tabs, tabs_with_message_variables
 from app.services.rich_text import merge_rich_settings_on_save, prepare_settings_values_for_web
@@ -38,10 +47,24 @@ from app.services.users import (
     SETTING_GROUPS,
     default_values_for_keys,
     get_all_settings,
+    get_setting,
     keys_for_tab,
     set_settings_bulk,
     should_keep_secret_value,
 )
+
+
+
+async def _miniapp_switch_context(session: AsyncSession, profile: ResellerProfile | None) -> dict:
+    """The shop's Mini App switch: whether it may be turned on, whether it is, and its address."""
+    if profile is None:
+        return {"miniapp_available": False, "miniapp_on": False, "miniapp_url": ""}
+    on_now = (await get_setting(session, SHOP_SWITCH, "0", reseller_id=int(profile.user_id))) == "1"
+    return {
+        "miniapp_available": await shop_miniapp_available(session, profile),
+        "miniapp_on": on_now,
+        "miniapp_url": shop_miniapp_url(profile.miniapp_key or ""),
+    }
 
 
 def register_shop_settings(app, *, render, require_staff, get_db, require_shop_settings=None):
@@ -259,6 +282,7 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
             ctx["bot_status"] = await _bot_token_status(token)
             ctx["bot_token_masked"] = ("••••" + token[-6:]) if len(token) > 8 else ("••••" if token else "")
             ctx["bot_username"] = (profile.bot_username if profile else "") or ""
+            ctx.update(await _miniapp_switch_context(session, profile))
         elif tab == "links":
             from app.services.ux20 import build_magic_links_context
 
@@ -608,6 +632,27 @@ def register_shop_settings(app, *, render, require_staff, get_db, require_shop_s
             + quote("نوتیفیکیشن‌های فروشگاه ذخیره شد"),
             status_code=303,
         )
+
+    @app.post("/shop-settings/miniapp")
+    async def shop_miniapp_save(
+        request: Request,
+        staff: dict = Depends(shop_dep),
+        session: AsyncSession = Depends(get_db),
+    ):
+        """The shop owner turns the shop's Mini App on or off; the shop comes from the session."""
+        if _is_owner_settings_actor(staff):
+            return RedirectResponse("/settings", status_code=303)
+        rid = _rid(staff)
+        profile = await get_reseller_profile(session, rid) if rid else None
+        if profile is None:
+            return _deny_scope()
+        form = await request.form()
+        try:
+            await set_shop_miniapp(session, profile, enabled=switch_value(form, SHOP_SWITCH) == "1")
+        except ValueError as exc:
+            return RedirectResponse(f"/shop-settings?tab=bot&err={quote(str(exc))}", status_code=303)
+        schedule_shop_menu_sync([int(profile.id)])
+        return RedirectResponse("/shop-settings?tab=bot&saved=1", status_code=303)
 
     @app.post("/shop-settings/menu-layout")
     async def shop_menu_layout_save(
