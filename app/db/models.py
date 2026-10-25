@@ -70,6 +70,12 @@ from app.db.integration_read_models import (
 from app.db.integration_read_models import (
     IntegrationServiceSnapshot as IntegrationServiceSnapshot,
 )
+from app.db.integration_webhook_models import IntegrationControlAction as IntegrationControlAction
+from app.db.integration_webhook_models import IntegrationEvent as IntegrationEvent
+from app.db.integration_webhook_models import IntegrationEventAttempt as IntegrationEventAttempt
+from app.db.integration_webhook_models import IntegrationLinkVersion as IntegrationLinkVersion
+from app.db.integration_webhook_models import IntegrationWebhookDestination as IntegrationWebhookDestination
+from app.db.integration_webhook_models import IntegrationWebhookKey as IntegrationWebhookKey
 
 
 class Role(str, Enum):

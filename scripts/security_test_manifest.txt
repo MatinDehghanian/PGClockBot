@@ -302,3 +302,9 @@ tests/test_integration_runtime_settings.py
 tests/test_integration_disabled_paths.py
 tests/test_integration_execution_api.py
 tests/test_integration_operation_migrations.py
+tests/test_bot_reply_kb_persist_c5b5.py
+tests/test_customer_linking.py
+tests/test_customer_linking_bot.py
+tests/test_customer_linking_concurrency.py
+tests/test_integration_webhooks.py
+tests/test_integration_event_concurrency.py

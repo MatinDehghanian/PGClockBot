@@ -24,7 +24,7 @@ def migration(name):
     return module
 
 
-MIGRATIONS = tuple(migration(name) for name in ("0078_integration_operations", "0079_integration_private_delivery"))
+MIGRATIONS = tuple(migration(name) for name in ("0078_integration_operations", "0079_integration_private_delivery", "0080_integration_event_outbox"))
 
 
 def test_populated_repeat_upgrade_index_repair_and_retaining_downgrade(connection):
@@ -45,7 +45,8 @@ def test_populated_repeat_upgrade_index_repair_and_retaining_downgrade(connectio
         module.upgrade()
     tables = {name: identity.reflected(connection, name) for name in (
         "integration_operations", "integration_operation_audit", "integration_native_mutations", "service_mutation_guards",
-        "integration_capacity_commitments", "integration_deliveries", "integration_addon_grants")}
+        "integration_capacity_commitments", "integration_deliveries", "integration_addon_grants", "integration_webhook_destinations",
+        "integration_webhook_keys", "integration_events", "integration_event_attempts", "integration_link_versions", "integration_control_actions")}
     now = datetime.now(timezone.utc)
     connection.execute(tables["integration_operations"].insert(), {"id": 1, "public_id": "op_synthetic", "integration_id": "intg_synthetic",
         "customer_id": 2, "service_id": 2, "accepting_credential_selector": "c"*32, "external_ref": "synthetic-ref",
@@ -55,6 +56,13 @@ def test_populated_repeat_upgrade_index_repair_and_retaining_downgrade(connectio
     connection.execute(tables["service_mutation_guards"].insert(), {"service_id": 2, "operation_id": 1})
     connection.execute(tables["integration_deliveries"].insert(), {"service_id": 2, "url_enc": "synthetic-ciphertext", "url_digest": "u"*64, "validated_at": now})
     connection.execute(tables["integration_addon_grants"].insert(), {"integration_id": "intg_synthetic", "pack_id": 1, "public_id": "pack_synthetic", "enabled": True})
+    connection.execute(tables["integration_webhook_destinations"].insert(), {"integration_id": "intg_synthetic", "url": "https://hooks.example.com/events", "enabled": True})
+    connection.execute(tables["integration_webhook_keys"].insert(), {"id": "whk_synthetic", "integration_id": "intg_synthetic", "secret_enc": "synthetic-ciphertext"})
+    connection.execute(tables["integration_events"].insert(), {"id": 1, "event_id": "evt_synthetic", "integration_id": "intg_synthetic",
+        "type": "operation.updated", "resource_id": "op_synthetic", "customer_id": "cus_web", "resource_version": 3, "body": "{}", "destination_version": 1})
+    connection.execute(tables["integration_event_attempts"].insert(), {"id": "a"*32, "event_id": 1, "key_id": "whk_synthetic", "failure": "timeout"})
+    connection.execute(tables["integration_link_versions"].insert(), {"integration_id": "intg_synthetic", "customer_id": 2, "version": 4})
+    connection.execute(tables["integration_control_actions"].insert(), {"id": "b"*32, "integration_id": "intg_synthetic", "actor_principal_id": 1, "kind": "reconcile"})
     before = {name: connection.execute(table.select()).all() for name, table in tables.items()}
     for module in reversed(MIGRATIONS):
         module.downgrade()

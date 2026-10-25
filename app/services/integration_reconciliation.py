@@ -14,6 +14,7 @@ from app.config import get_settings
 from app.db.integration_operation_models import IntegrationOperation, IntegrationOperationAudit
 from app.services.authz import can_shop
 from app.services.integration_authority import require_pg_evidence
+from app.services.integration_events import operation_event
 from app.services.integration_execution import _seal
 from app.services.integration_execution_policy import accepted_authority
 from app.services.integration_operation_claims import OperationLease
@@ -45,6 +46,7 @@ async def claim_reconciliation(session: AsyncSession, staff: dict, integration_i
         raise IntegrationError("service_busy")
     session.add(IntegrationOperationAudit(operation_id=row.id, kind="reconciliation_read", state=row.state, version=version,
         actor_principal_id=owner.principal_id))
+    await operation_event(session, row.id, row.state, version)
     await session.commit()
     return OperationLease(row.id, integration.id, token, version)
 

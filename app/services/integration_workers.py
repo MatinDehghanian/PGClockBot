@@ -9,9 +9,13 @@ from datetime import datetime, timezone
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.db.integration_models import Integration
+from app.db.integration_webhook_models import IntegrationWebhookDestination
 from app.db.integration_operation_models import IntegrationOperation
+from app.db.integration_webhook_models import IntegrationEvent
 from app.services.integration_execution import execute_integration_operation
 from app.services.integration_operation_claims import QUEUE_TTL, expire_queued_operation, recover_expired_operation
+from app.services.integration_webhooks import deliver_event
 
 logger = logging.getLogger(__name__)
 
@@ -46,5 +50,20 @@ async def _execute_item(sessions: async_sessionmaker[AsyncSession], operation_id
         logger.warning("Integration item needs recovery operation=%s type=%s", operation_id, type(error).__name__)
 
 
+async def run_webhook_batch(sessions: async_sessionmaker[AsyncSession]) -> None:
+    now = datetime.now(timezone.utc)
+    async with sessions() as session:
+        ids = list(await session.scalars(select(IntegrationEvent.id).join(Integration, Integration.id == IntegrationEvent.integration_id)
+            .join(IntegrationWebhookDestination, IntegrationWebhookDestination.integration_id == IntegrationEvent.integration_id)
+            .where(Integration.status == "active", IntegrationWebhookDestination.enabled.is_(True),
+            IntegrationWebhookDestination.version == IntegrationEvent.destination_version, IntegrationEvent.next_attempt_at <= now,
+            or_(IntegrationEvent.state == "pending", (IntegrationEvent.state == "delivering") &
+                (IntegrationEvent.lease_expires_at <= now))).order_by(IntegrationEvent.next_attempt_at, IntegrationEvent.id).limit(8)))
+    await asyncio.gather(*(_deliver_item(sessions, event_id) for event_id in ids))
 
 
+async def _deliver_item(sessions: async_sessionmaker[AsyncSession], event_id: int) -> None:
+    try:
+        await deliver_event(sessions, event_id)
+    except Exception as error:
+        logger.warning("Integration event needs recovery event=%s type=%s", event_id, type(error).__name__)

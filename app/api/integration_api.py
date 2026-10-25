@@ -19,6 +19,9 @@ from app.api.integration_operation_routes import register_operation_routes
 from app.api.integration_routes import IntegrationRoute, idempotency_key
 from app.config import get_settings
 from app.db.session import SessionLocal
+from app.services.customer_linking import (
+    complete_link_challenge, read_link_challenge, start_link_challenge, unlink_website_customer,
+)
 from app.services.integration_authority import IntegrationAuthority
 from app.services.integration_capabilities import CapabilitiesView, integration_capabilities
 from app.services.integration_catalog import CatalogSelection, PlanPage, list_integration_plans
@@ -142,9 +145,37 @@ def register_integration_api(app: FastAPI, *, get_db: Callable,
                       session: AsyncSession = Depends(get_db)) -> ServiceView:
         return await read_integration_service(session, read_access(request, authority), customer_id, service_id)
 
+    @router.post("/customers/{customer_id}/telegram-link-challenges", status_code=201, response_model=LinkStarted)
+    async def link_start(request: Request, customer_id: str, value: EmptyRequest,
+                         authority: IntegrationAuthority = Depends(authenticated("telegram:link", budget=RequestBudget.WRITE)),
+                         session: AsyncSession = Depends(get_db)) -> Response:
+        result = await start_link_challenge(session, bearer(request), customer_id, idempotency_key=idempotency_key(request))
+        data = {"challenge_id": result.challenge_id, "expires_at": result.expires_at}
+        if result.start_token is not None:
+            data["start_token"] = result.start_token
+        return JSONResponse(jsonable_encoder(data), status_code=201 if result.start_token else 200)
 
+    @router.get("/customers/{customer_id}/telegram-link-challenges/{challenge_id}", response_model=LinkStatus)
+    async def link_status(request: Request, customer_id: str, challenge_id: str,
+                          authority: IntegrationAuthority = Depends(authenticated("telegram:link", read_only=True)),
+                          session: AsyncSession = Depends(get_db)) -> dict:
+        result = await read_link_challenge(session, bearer(request), customer_id, challenge_id)
+        return {"challenge_id": result.challenge_id, "state": result.state, "expires_at": result.expires_at}
 
+    @router.post("/customers/{customer_id}/telegram-link-challenges/{challenge_id}/confirm", response_model=LinkResult)
+    async def link_confirm(request: Request, customer_id: str, challenge_id: str, value: LinkConfirmation,
+                           authority: IntegrationAuthority = Depends(authenticated("telegram:link", budget=RequestBudget.WRITE)),
+                           session: AsyncSession = Depends(get_db)) -> dict:
+        await complete_link_challenge(session, bearer(request), customer_id, challenge_id,
+            idempotency_key=idempotency_key(request), confirm=value.confirm)
+        return {"linked": True}
 
+    @router.delete("/customers/{customer_id}/telegram-link", status_code=204)
+    async def link_delete(request: Request, customer_id: str,
+                          authority: IntegrationAuthority = Depends(authenticated("telegram:link", budget=RequestBudget.WRITE)),
+                          session: AsyncSession = Depends(get_db)) -> Response:
+        await unlink_website_customer(session, bearer(request), customer_id, idempotency_key=idempotency_key(request))
+        return Response(status_code=204)
 
     @router.get("/operations/{operation_id}", response_model=OperationView)
     async def operation(request: Request, operation_id: str, customer_id: str,

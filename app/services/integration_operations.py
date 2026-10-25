@@ -19,6 +19,7 @@ from app.db.models import Plan, ResellerSetting, Setting, UserService
 from app.db.integration_models import Integration
 from app.services.integration_catalog import NAMING_KEYS, ResolvedPlan, materialize_plan
 from app.services.billing import BillingError, assert_billing_allows_provision
+from app.services.integration_events import operation_event
 from app.services.integration_credentials import verify_credential
 from app.services.integration_customers import REFERENCE_PATTERN
 from app.services.integration_operation_views import OperationArchived, OperationView, operation_view
@@ -142,6 +143,7 @@ async def submit_integration_operation(session: AsyncSession, access: ReadAccess
             if service is not None:
                 session.add(ServiceMutationGuard(service_id=service.id, operation_id=existing.id))
             session.add(IntegrationOperationAudit(operation_id=existing.id, kind="state", state="queued", version=1))
+            await operation_event(session, existing.id, "queued", 1)
         await bind_replay(session, authority, idempotency_key, binding, resource_kind="operation", resource_id=existing.public_id)
         public_service = await session.scalar(select(UserService.public_id).where(UserService.id == existing.service_id)) if existing.service_id else None
         if existing.archived_at is not None:

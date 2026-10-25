@@ -13,6 +13,7 @@ from app.db.integration_models import Integration
 from app.db.integration_read_models import IntegrationServiceSnapshot
 from app.db.customer_models import Customer, IntegrationCustomer
 from app.db.integration_operation_models import IntegrationCapacityCommitment, IntegrationOperation, IntegrationOperationAudit, ServiceMutationGuard
+from app.services.integration_events import operation_event, service_event
 from app.services.integration_policy import ERROR_MESSAGES, IntegrationError
 
 LEASE_TTL = timedelta(seconds=60)
@@ -61,6 +62,7 @@ async def claim_operation(session: AsyncSession, operation_id: int, *, now: date
         await session.rollback()
         return None
     session.add(IntegrationOperationAudit(operation_id=operation_id, kind="state", state="running", version=version))
+    await operation_event(session, operation_id, "running", version)
     await session.commit()
     return OperationLease(operation_id, integration_id, token, version)
 
@@ -101,6 +103,7 @@ async def transition_operation(session: AsyncSession, lease: OperationLease, sta
             IntegrationCapacityCommitment.operation_id == lease.operation_id,
         ).values(active=False).execution_options(synchronize_session=False))
         await session.execute(delete(ServiceMutationGuard).where(ServiceMutationGuard.operation_id == lease.operation_id))
+    await operation_event(session, lease.operation_id, state, version, code)
     return version
 
 
@@ -127,6 +130,7 @@ async def recover_expired_operation(session: AsyncSession, operation_id: int, *,
     version = result.scalar_one_or_none()
     if version is not None:
         session.add(IntegrationOperationAudit(operation_id=operation_id, kind="state", state=state, version=version))
+        await operation_event(session, operation_id, state, version)
     await session.commit()
     return state if version is not None else None
 
@@ -148,10 +152,13 @@ async def expire_queued_operation(session: AsyncSession, operation_id: int, *, n
             IntegrationCapacityCommitment.operation_id == operation_id,
         ).values(active=False).execution_options(synchronize_session=False))
         await session.execute(delete(ServiceMutationGuard).where(ServiceMutationGuard.operation_id == operation_id))
-        await session.scalar(update(IntegrationServiceSnapshot).where(IntegrationServiceSnapshot.service_id.in_(
+        await operation_event(session, operation_id, "failed", version, "queue_expired")
+        cancelled = await session.scalar(update(IntegrationServiceSnapshot).where(IntegrationServiceSnapshot.service_id.in_(
             select(IntegrationOperation.service_id).where(IntegrationOperation.id == operation_id, IntegrationOperation.kind == "provision")),
             IntegrationServiceSnapshot.state == "provisioning").values(state="cancelled",
                 resource_version=IntegrationServiceSnapshot.resource_version+1).returning(IntegrationServiceSnapshot.service_id)
             .execution_options(synchronize_session=False))
+        if cancelled is not None:
+            await service_event(session, cancelled)
     await session.commit()
     return version is not None

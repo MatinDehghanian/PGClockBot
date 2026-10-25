@@ -19,6 +19,7 @@ from app.db.integration_operation_models import ServiceMutationGuard
 from app.db.integration_read_models import IntegrationServiceSnapshot
 from app.db.models import UserService
 from app.services.integration_credentials import verify_credential
+from app.services.integration_events import service_event
 from app.services.integration_observations import PanelIdentity, observe_service
 from app.services.integration_pg import integration_pg_client
 from app.services.integration_policy import IntegrationError
@@ -85,9 +86,11 @@ async def private_service_access(session: AsyncSession, access: ReadAccess, cust
 async def _review_access(session: AsyncSession, access: ReadAccess, customer_id: str, service_id: str) -> None:
     await verify_credential(session, access.bearer, lock_integration=True)
     _authority, service, snapshot, _delivery = await _private_row(session, access, customer_id, service_id)
-    await session.execute(update(IntegrationServiceSnapshot).where(IntegrationServiceSnapshot.service_id == service.id,
+    result = await session.execute(update(IntegrationServiceSnapshot).where(IntegrationServiceSnapshot.service_id == service.id,
         IntegrationServiceSnapshot.resource_version == snapshot.resource_version,
         IntegrationServiceSnapshot.state == "ready").values(state="review", resource_version=IntegrationServiceSnapshot.resource_version+1))
+    if result.rowcount:
+        await service_event(session, service.id)
     await session.commit()
 
 

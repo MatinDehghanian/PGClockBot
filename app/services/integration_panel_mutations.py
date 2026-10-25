@@ -18,6 +18,7 @@ from app.db.integration_models import Integration
 from app.db.integration_operation_models import IntegrationNativeMutation, IntegrationOperation, ServiceMutationGuard
 from app.db.integration_read_models import IntegrationServiceSnapshot
 from app.db.models import OrgPrincipal, UserService
+from app.services.integration_events import service_event
 from app.services.integration_operation_claims import OperationLease
 from app.services.integration_operation_targets import PanelTarget, lease_condition
 from app.services.integration_policy import IntegrationError
@@ -135,6 +136,7 @@ async def _native_status(client: Any, service_id: int, method: str, path: str, k
             await session.execute(update(IntegrationNativeMutation).where(IntegrationNativeMutation.id == mutation_id).values(state="unknown"))
             await session.execute(update(IntegrationServiceSnapshot).where(IntegrationServiceSnapshot.service_id == service_id).values(
                 state="review", resource_version=IntegrationServiceSnapshot.resource_version+1))
+            await service_event(session, service_id)
             await session.commit()
         raise
     async with sessions() as session:
@@ -143,6 +145,7 @@ async def _native_status(client: Any, service_id: int, method: str, path: str, k
         await session.execute(update(IntegrationServiceSnapshot).where(IntegrationServiceSnapshot.service_id == service_id).values(
             panel_status=status, resource_version=IntegrationServiceSnapshot.resource_version+1))
         await session.execute(delete(ServiceMutationGuard).where(ServiceMutationGuard.native_mutation_id == mutation_id))
+        await service_event(session, service_id)
         await session.commit()
     return result
 

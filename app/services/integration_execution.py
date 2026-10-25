@@ -26,6 +26,7 @@ from app.db.models import OrgPrincipal, UserService
 from app.services.integration_addons import AddonTerms, accepted_addon, addon_target
 from app.services.integration_authority import IntegrationAuthority, require_pg_evidence
 from app.services.integration_catalog import ResolvedPlan
+from app.services.integration_events import operation_event, service_event
 from app.services.integration_execution_policy import ExecutionLimits, accepted_authority, assert_execution_capacity, current_plan
 from app.services.integration_observations import MAX_DURATION_SECONDS, PanelIdentity, observe_service, strict_integer
 from app.services.integration_operation_claims import OperationLease, claim_operation, transition_operation
@@ -170,6 +171,8 @@ async def _prepare(session: AsyncSession, lease: OperationLease, context: Execut
     await save_operation_target(session, lease, target, baseline={"panel_id": info["id"], "used_bytes": info["used_traffic"], "limit_bytes": info["data_limit"],
         "status": info["status"], "expire": info["expire"]} if info else None)
     await session.flush()
+    if context.service_id is None:
+        await service_event(session, operation.service_id)
     await session.commit()
     return target
 
@@ -213,6 +216,7 @@ async def _seal(session: AsyncSession, lease: OperationLease, target: PanelTarge
         await _complete_reconciliation(session, lease)
     else:
         await transition_operation(session, lease, "succeeded")
+    await service_event(session, service.id)
     await session.commit()
 
 
@@ -226,6 +230,7 @@ async def _complete_reconciliation(session: AsyncSession, lease: OperationLease)
     session.add(IntegrationOperationAudit(operation_id=lease.operation_id, kind="state", state="succeeded", version=version))
     await session.execute(update(IntegrationCapacityCommitment).where(IntegrationCapacityCommitment.operation_id == lease.operation_id).values(active=False))
     await session.execute(delete(ServiceMutationGuard).where(ServiceMutationGuard.operation_id == lease.operation_id))
+    await operation_event(session, lease.operation_id, "succeeded", version)
 
 
 async def _record_failure(sessions: async_sessionmaker[AsyncSession], lease: OperationLease, error: BaseException) -> None:
@@ -246,6 +251,7 @@ async def _record_failure(sessions: async_sessionmaker[AsyncSession], lease: Ope
             await session.execute(update(IntegrationServiceSnapshot).where(IntegrationServiceSnapshot.service_id == operation.service_id).values(
                 state="cancelled" if state == "failed" and operation.kind == "provision" else "review",
                 resource_version=IntegrationServiceSnapshot.resource_version+1))
+            await service_event(session, operation.service_id)
         await session.commit()
 
 

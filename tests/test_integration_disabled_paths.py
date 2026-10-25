@@ -8,17 +8,18 @@ import re
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from sqlalchemy import event, func, select
 
 from app.db.customer_models import Customer
 from app.db.models import OrderStatus
+from app.jobs import integration_audit, integration_operations
 from app.services import integration_runtime, pasarguard
 from app.services.integration_runtime import load_integration_runtime
 from app.services.orders import pay_with_wallet
-from app.services.users import clear_settings_cache, get_all_settings
+from app.services.users import clear_settings_cache, get_all_settings, reset_shop_reseller_id, set_shop_reseller_id
 from test_order_delivery_scope import OrderDeliveryScopeTests
 
 TRACE = Path(__file__).parent / "fixtures/integration/disabled_legacy_checkout.json"
@@ -27,6 +28,7 @@ TRACE = Path(__file__).parent / "fixtures/integration/disabled_legacy_checkout.j
 @pytest.mark.parametrize("execution,api", [(False, False), (False, True), (True, False)])
 def test_disabled_checkout_matches_legacy_query_sequence_and_panel_payload(execution: bool, api: bool) -> None:
     async def scenario() -> None:
+        shop_token = set_shop_reseller_id(None)
         case = OrderDeliveryScopeTests()
         await case.asyncSetUp()
         statements: list[list[Any]] = []
@@ -66,6 +68,7 @@ def test_disabled_checkout_matches_legacy_query_sequence_and_panel_payload(execu
         finally:
             clear_settings_cache()
             await case.asyncTearDown()
+            reset_shop_reseller_id(shop_token)
     asyncio.run(scenario())
 
 
@@ -126,8 +129,6 @@ def test_process_disabled_startup_does_not_query_integration_setting() -> None:
 
 
 def test_disabled_execution_worker_does_not_scan_the_database() -> None:
-    from app.jobs import integration_operations
-
     async def scenario() -> None:
         batch = AsyncMock()
         with patch.object(integration_operations, "integration_execution_active", return_value=False), patch.object(
@@ -135,4 +136,16 @@ def test_disabled_execution_worker_does_not_scan_the_database() -> None:
         ), patch.object(integration_operations, "run_operation_batch", batch):
             await integration_operations.run_integration_operations()
         batch.assert_not_awaited()
+    asyncio.run(scenario())
+
+
+def test_disabled_audit_workers_open_no_database_session() -> None:
+    async def scenario() -> None:
+        sessions = MagicMock(side_effect=AssertionError("Inactive audit workers must not open sessions"))
+        with patch.object(integration_audit, "get_settings", return_value=SimpleNamespace(integration_api_routes_enabled=False)), patch.object(
+            integration_audit, "integration_capacity_retained", return_value=False,
+        ), patch.object(integration_audit, "SessionLocal", sessions):
+            await integration_audit.run_integration_audit_retention()
+            await integration_audit.run_integration_security_retention()
+        sessions.assert_not_called()
     asyncio.run(scenario())

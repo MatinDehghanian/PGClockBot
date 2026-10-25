@@ -18,6 +18,7 @@ from app.db.integration_read_models import IntegrationCatalogPlan, IntegrationSe
 from app.db.models import UserService
 from app.services.integration_authority import IntegrationAuthority, IntegrationPGEvidence, resolve_integration_authority
 from app.services.integration_credentials import verify_credential
+from app.services.integration_events import service_event
 from app.services.integration_customers import _customer_query
 from app.services.integration_observations import PanelIdentity, ServiceObservation, observe_service
 from app.services.integration_pagination import CursorBinding, IntegrationCursors, Keyset, page_limit
@@ -218,6 +219,8 @@ async def read_integration_service(session: AsyncSession, access: ReadAccess, cu
             quota_data_limit_bytes=observation.limit_bytes or 0, quota_expire_at=observation.expires_at,
             quota_status=observation.status, quota_synced_at=values["synced_at"],
         ).execution_options(synchronize_session=False))
+    if claimed.rowcount:
+        await service_event(session, internal_service)
     await session.commit()
     row = (await session.execute(scoped_services(authority, internal_customer).where(UserService.public_id == service_id))).one_or_none()
     if row is None:
