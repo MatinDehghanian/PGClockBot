@@ -2,6 +2,7 @@ from __future__ import annotations
 
 """Admin Telegram notification preferences and dispatch."""
 
+import logging
 from typing import Any
 
 from aiogram import Bot
@@ -953,6 +954,13 @@ async def notify_wallet_topup_ok(
     payment: Payment,
     user_tg_id: int | None,
 ) -> None:
+    """Platform admins: a platform wallet top-up was credited.
+
+    The key is platform-only, so a shop's top-up (``wallet_shop_id`` set) is never
+    announced at all; its staff already reviewed or auto-approved it in their own bot.
+    """
+    if payment.wallet_shop_id is not None:
+        return
     if not await notify_enabled(session, "notify_wallet_topup"):
         return
     settings = get_settings()
@@ -1147,6 +1155,33 @@ async def notify_settlement_review(
         )
     finally:
         await bot.session.close()
+
+
+async def notify_stars_delivery_failed(
+    bot: Bot,
+    session: AsyncSession,
+    payment: Payment,
+    *,
+    telegram_id: int,
+    charge_id: str | None,
+    refunded: bool,
+    error: str,
+) -> int:
+    """Staff of the payment's shop (platform admins for the platform): a paid Stars
+    payment could not be delivered; never reaches another shop's or the platform's staff."""
+    import html as html_mod
+
+    text = format_message(
+        "⚠️ تحویل استارز ناموفق",
+        info_block([
+            kv_line("🧾", "پرداخت", f"#{payment.id}"),
+            kv_line("👤", "کاربر", f"<code>{int(telegram_id)}</code>"),
+            kv_line("🔖", "شناسهٔ پرداخت", f"<code>{html_mod.escape(charge_id or '—')}</code>"),
+            kv_line("↩️", "بازگشت استارز", "انجام شد" if refunded else "ناموفق — دستی بررسی شود"),
+        ]) + f"\n\n<code>{html_mod.escape(error[:300])}</code>",
+    )
+    # A delivery failure, not a review request: no approve buttons to keep in sync.
+    return await _dispatch_dual_notify(bot, session, "notify_panel_delivery_failures", text, payment=payment)
 
 
 async def notify_wireguard_missing(bot: Bot, session: AsyncSession, detail: str) -> int:
@@ -1430,18 +1465,40 @@ def format_account_edit_admin(
     return format_message(title, info_block(lines))
 
 
+async def _send_via_shop_bot(session: AsyncSession, shop_id: int, chat_id: int, text: str) -> bool:
+    from app.services.reseller_bots import open_notify_bot_for_reseller
+
+    shop_bot, should_close = await open_notify_bot_for_reseller(session, int(shop_id))
+    if shop_bot is None:
+        return False
+    try:
+        await shop_bot.send_message(chat_id, text, parse_mode="HTML")
+        return True
+    except Exception:
+        logging.getLogger(__name__).warning("account edit notice via shop bot failed shop=%s", shop_id, exc_info=True)
+        return False
+    finally:
+        if should_close:
+            await shop_bot.session.close()
+
+
 async def _send_to_user_chat(
     session: AsyncSession,
     user: BotUser,
     text: str,
+    *,
+    shop_id: int | None = None,
 ) -> bool:
     """Notify the user via main bot and, when available, their shop/reseller bot.
 
     Block / unblock / delete / role messages must reach Telegram even if the person
-    primarily uses a dedicated shop bot — and vice versa.
+    primarily uses a dedicated shop bot — and vice versa. A notice a shop sends
+    (``shop_id``) goes through that shop's bot only.
     """
     if not user.telegram_id:
         return False
+    if shop_id is not None:
+        return await _send_via_shop_bot(session, shop_id, int(user.telegram_id), text)
     from app.bot import create_bot
     from app.services.reseller_bots import open_notify_bot_for_reseller
 
@@ -1507,10 +1564,13 @@ async def notify_account_edit(
     new_role: str | None = None,
     actor: str | None = None,
     notify_subject: bool = True,
+    shop_id: int | None = None,
 ) -> dict[str, bool]:
     """Notify the affected user and (optionally) platform admins.
 
-    Returns ``{"subject": bool, "admins": bool}``.
+    ``shop_id`` is the shop whose staff made the edit: the customer hears it from that
+    shop's bot only and platform admins get no copy, so a shop's customer actions never
+    leave the shop. Returns ``{"subject": bool, "admins": bool}``.
     """
     result = {"subject": False, "admins": False}
     reason = (reason or "").strip() or None
@@ -1531,9 +1591,9 @@ async def notify_account_edit(
     )
 
     if notify_subject:
-        result["subject"] = await _send_to_user_chat(session, user, subject_text)
+        result["subject"] = await _send_to_user_chat(session, user, subject_text, shop_id=shop_id)
 
-    if await notify_enabled(session, "notify_account_edits"):
+    if shop_id is None and await notify_enabled(session, "notify_account_edits"):
         try:
             from app.bot import create_bot
 
