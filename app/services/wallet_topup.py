@@ -1,10 +1,14 @@
-"""Platform wallet top-up outside the bot chat (Mini App): options, start, receipt, status.
+"""Wallet top-up outside the bot chat (Mini App): options, start, receipt, status.
 
 The money rules stay where they already live: ``create_wallet_topup`` creates the
 pending payment, ``create_psp_checkout`` the gateway session, ``submit_receipt``
 reviews or auto-approves a receipt, and approval credits the wallet once. This module
 only chooses a destination, enforces the Mini App's limits and turns an uploaded
 image into the Telegram file the reviewers already work with.
+
+Every function takes the purse's ``shop_id`` (None is the platform's). It is stored on
+the payment at creation, and receipts and status are only ever read back for that same
+purse, so a shop's top-up can never credit, or be shown as, another purse.
 """
 
 from __future__ import annotations
@@ -215,14 +219,18 @@ def _choose_destination(method: str, ui: dict, dest_id: object, seed: str) -> di
     return pick_card(items, seed) if method == "card" and len(items) > 1 else items[0]
 
 
-async def _assert_open_topup_room(session: AsyncSession, user_id: int, now: datetime) -> None:
+def _purse(shop_id: int | None):
+    return Payment.wallet_shop_id.is_(None) if shop_id is None else Payment.wallet_shop_id == int(shop_id)
+
+
+async def _assert_open_topup_room(session: AsyncSession, user_id: int, shop_id: int | None, now: datetime) -> None:
     open_count = await session.scalar(
         select(func.count())
         .select_from(Payment)
         .where(
             Payment.user_id == int(user_id),
             Payment.is_wallet_topup.is_(True),
-            Payment.wallet_shop_id.is_(None),
+            _purse(shop_id),
             Payment.status == PaymentStatus.PENDING.value,
             Payment.receipt_file_id.is_(None),
             Payment.created_at >= now - OPEN_TOPUP_WINDOW,
@@ -250,13 +258,16 @@ async def start_topup(
     session: AsyncSession,
     *,
     user_id: int,
+    shop_id: int | None,
     amount: object,
     method: object,
     dest_id: object,
     ui: dict,
     now: datetime | None = None,
 ) -> TopupStart:
-    """Create one platform top-up payment and return how to pay it.
+    """Create one top-up payment for the ``shop_id`` purse and return how to pay it.
+
+    ``ui`` must be that purse's own settings, so only its cards and gateways are offered.
 
     Raises ``TopupError`` for any rule the customer must see; nothing is created then.
     A ``ValueError`` from preparing the checkout closes the new payment before it is
@@ -269,8 +280,8 @@ async def start_topup(
         raise TopupError("این روش پرداخت غیرفعال است")
     value = _validate_amount(amount)
     destination = None if method == "psp" else _choose_destination(method, ui, dest_id, f"topup:{user_id}:{value}")
-    await _assert_open_topup_room(session, user_id, now or datetime.now(timezone.utc))
-    payment = await create_wallet_topup(session, int(user_id), value, method=payment_method, wallet_shop_id=None)
+    await _assert_open_topup_room(session, user_id, shop_id, now or datetime.now(timezone.utc))
+    payment = await create_wallet_topup(session, int(user_id), value, method=payment_method, wallet_shop_id=shop_id)
     payment_id = int(payment.id)
     try:
         return await _prepare_payment(session, payment, method, destination, ui)
@@ -330,14 +341,15 @@ def receipt_image_kind(data: bytes) -> str | None:
     return None
 
 
-async def _receipt_payment(session: AsyncSession, *, user_id: int, payment_id: int) -> Payment:
-    """The caller's own pending platform top-up that still waits for a receipt."""
+async def _receipt_payment(session: AsyncSession, *, user_id: int, shop_id: int | None, payment_id: int) -> Payment:
+    """The caller's own pending top-up in this purse that still waits for a receipt."""
     payment = await session.get(Payment, int(payment_id))
+    purse = int(payment.wallet_shop_id) if payment is not None and payment.wallet_shop_id else None
     if (
         payment is None
         or int(payment.user_id) != int(user_id)
         or not payment.is_wallet_topup
-        or payment.wallet_shop_id is not None
+        or purse != shop_id
     ):
         raise TopupError("پرداخت پیدا نشد")
     if payment.method not in {TOPUP_METHODS[key][1] for key in RECEIPT_METHODS}:
@@ -360,6 +372,7 @@ async def submit_topup_receipt(
     *,
     bot: Bot,
     user_id: int,
+    shop_id: int | None,
     telegram_id: int,
     payment_id: int,
     image: bytes,
@@ -367,14 +380,15 @@ async def submit_topup_receipt(
     """Send the image to the customer's own chat, then hand the photo to ``submit_receipt``.
 
     The photo in their chat is the customer's copy and gives reviewers the same
-    Telegram file as a receipt sent in the bot. Only the first receipt is accepted.
+    Telegram file as a receipt sent in the bot, so ``bot`` must be the purse's own bot.
+    Only the first receipt is accepted.
     """
     if not image or len(image) > RECEIPT_MAX_BYTES:
         raise TopupError("حجم تصویر رسید باید کمتر از ۸ مگابایت باشد")
     kind = receipt_image_kind(image)
     if kind is None:
         raise TopupError("فقط تصویر JPG یا PNG رسید را بفرستید")
-    payment = await _receipt_payment(session, user_id=user_id, payment_id=payment_id)
+    payment = await _receipt_payment(session, user_id=user_id, shop_id=shop_id, payment_id=payment_id)
     # End the read transaction before talking to Telegram.
     await session.commit()
     try:
@@ -405,14 +419,16 @@ async def submit_topup_receipt(
     return ReceiptResult(status="pending", message="رسید ثبت شد؛ پس از تأیید، کیف پول شارژ می‌شود")
 
 
-async def recent_topups(session: AsyncSession, user_id: int, *, limit: int = RECENT_TOPUP_LIMIT) -> list[dict[str, Any]]:
-    """The caller's latest platform top-ups and where each one stands."""
+async def recent_topups(
+    session: AsyncSession, user_id: int, *, shop_id: int | None, limit: int = RECENT_TOPUP_LIMIT
+) -> list[dict[str, Any]]:
+    """The caller's latest top-ups to this purse and where each one stands."""
     rows = await session.scalars(
         select(Payment)
         .where(
             Payment.user_id == int(user_id),
             Payment.is_wallet_topup.is_(True),
-            Payment.wallet_shop_id.is_(None),
+            _purse(shop_id),
         )
         .order_by(Payment.id.desc())
         .limit(limit)
