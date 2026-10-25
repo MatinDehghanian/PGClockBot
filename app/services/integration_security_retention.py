@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.integration_security_models import IntegrationRateCounter, IntegrationSecurityAudit
 from app.services.integration_admin_audit import AUDIT_RETENTION, RETENTION_BATCH_SIZE
+from app.services.integration_evidence_holds import held_integration_ids
 from app.services.integration_rate_limits import COUNTER_RETENTION_MINUTES, rate_window
 
 
@@ -24,11 +25,13 @@ async def prune_security_records(session: AsyncSession, *, now: datetime | None 
     ).execution_options(synchronize_session=False))
     audit = IntegrationSecurityAudit
     cutoff = now - AUDIT_RETENTION
-    ids = select(audit.id).where(audit.evidence_hold.is_(False), audit.created_at < cutoff).order_by(
+    ids = select(audit.id).where(audit.evidence_hold.is_(False), audit.created_at < cutoff,
+        (audit.integration_id.is_(None) | ~audit.integration_id.in_(held_integration_ids()))).order_by(
         audit.created_at, audit.id,
     ).limit(RETENTION_BATCH_SIZE)
     audit_result = await session.execute(delete(audit).where(
         audit.id.in_(ids), audit.evidence_hold.is_(False), audit.created_at < cutoff,
+        (audit.integration_id.is_(None) | ~audit.integration_id.in_(held_integration_ids())),
     ).execution_options(synchronize_session=False))
     await session.commit()
     return counter_result.rowcount, audit_result.rowcount

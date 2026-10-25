@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.integration_audit_models import IntegrationAdminAudit, IntegrationManagementAction
 from app.db.integration_models import Integration, IntegrationPlan
 from app.services.integration_owners import management_owner
+from app.services.integration_evidence_holds import held_integration_ids
 from app.services.integration_policy import IntegrationError, stored_scopes
 from app.services.integrations import managed_integration
 
@@ -101,6 +102,7 @@ async def prune_management_audit(session: AsyncSession, *, now: datetime | None 
     cutoff = now - AUDIT_RETENTION
     eligible = select(IntegrationAdminAudit.id).where(
         IntegrationAdminAudit.evidence_hold.is_(False), IntegrationAdminAudit.created_at < cutoff,
+        (IntegrationAdminAudit.integration_id.is_(None) | ~IntegrationAdminAudit.integration_id.in_(held_integration_ids())),
     ).order_by(IntegrationAdminAudit.created_at, IntegrationAdminAudit.id).limit(RETENTION_BATCH_SIZE)
     ids = list(await session.scalars(eligible))
     if not ids:
@@ -109,6 +111,7 @@ async def prune_management_audit(session: AsyncSession, *, now: datetime | None 
     result = await session.execute(delete(IntegrationAdminAudit).where(
         IntegrationAdminAudit.id.in_(ids), IntegrationAdminAudit.evidence_hold.is_(False),
         IntegrationAdminAudit.created_at < cutoff,
+        (IntegrationAdminAudit.integration_id.is_(None) | ~IntegrationAdminAudit.integration_id.in_(held_integration_ids())),
     ))
     await session.commit()
     return result.rowcount

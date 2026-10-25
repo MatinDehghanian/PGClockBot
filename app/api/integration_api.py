@@ -3,23 +3,29 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import asdict
 from functools import partial
 from datetime import datetime
 from typing import Literal
 
-from fastapi import APIRouter, Depends, FastAPI, Request
+from fastapi import APIRouter, Depends, FastAPI, Request, Response
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictStr
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.integration_auth import integration_bearer_dependency, register_integration_auth_errors
-from app.api.integration_routes import IntegrationRoute
+from app.api.integration_operation_routes import register_operation_routes
+from app.api.integration_routes import IntegrationRoute, idempotency_key
 from app.config import get_settings
 from app.db.session import SessionLocal
 from app.services.integration_authority import IntegrationAuthority
 from app.services.integration_capabilities import CapabilitiesView, integration_capabilities
 from app.services.integration_catalog import CatalogSelection, PlanPage, list_integration_plans
-from app.services.integration_customers import CustomerView, read_integration_customer
+from app.services.integration_customer_requests import register_customer_request
+from app.services.integration_customers import CustomerInput, CustomerView, read_integration_customer
 from app.services.integration_pagination import IntegrationCursors
+from app.services.integration_operation_views import OperationView, read_integration_operation
 from app.services.integration_pg import fetch_pg_evidence
 from app.services.integration_rate_limits import RequestBudget
 from app.services.integration_service_reads import (
@@ -109,6 +115,13 @@ def register_integration_api(app: FastAPI, *, get_db: Callable,
         return await list_integration_plans(session, read_access(request, authority), CatalogSelection(cursor, limit),
                                             IntegrationCursors(get_settings().web_secret))
 
+    @router.post("/customers", response_model=CustomerView, status_code=201)
+    async def create_customer(request: Request, value: CustomerRequest,
+                              authority: IntegrationAuthority = Depends(authenticated("customers:write", budget=RequestBudget.WRITE)),
+                              session: AsyncSession = Depends(get_db)) -> Response:
+        result = await register_customer_request(session, bearer(request), CustomerInput(value.external_customer_ref, value.display_name),
+                                                idempotency_key=idempotency_key(request))
+        return JSONResponse(jsonable_encoder(asdict(result.customer)), status_code=201 if result.created else 200)
 
     @router.get("/customers/{customer_id}", response_model=CustomerView)
     async def customer(request: Request, customer_id: str,
@@ -133,7 +146,13 @@ def register_integration_api(app: FastAPI, *, get_db: Callable,
 
 
 
+    @router.get("/operations/{operation_id}", response_model=OperationView)
+    async def operation(request: Request, operation_id: str, customer_id: str,
+                        authority: IntegrationAuthority = Depends(authenticated("operations:read")),
+                        session: AsyncSession = Depends(get_db)) -> OperationView:
+        return await read_integration_operation(session, read_access(request, authority), customer_id, operation_id)
 
+    register_operation_routes(router, authenticated, get_db)
     register_integration_auth_errors(app)
     app.include_router(router)
     _configure_openapi(app)

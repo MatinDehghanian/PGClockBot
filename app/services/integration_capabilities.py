@@ -61,7 +61,6 @@ async def integration_capabilities(session: AsyncSession, bearer: str,
     ))
     if not get_settings().integration_execution_enabled:
         scopes -= {"services:provision", "services:renew", "services:addons"}
-    scopes &= {"capabilities:read", "plans:read", "customers:read", "services:read"}
     operations = tuple(kind for kind, scope in (("provision", "services:provision"), ("renew", "services:renew"), ("addon", "services:addons"))
                        if scope in scopes and "operations:read" in scopes)
     return CapabilitiesView("v1", tuple(sorted(scopes)), operations, policy, billing_mode or "fixed",

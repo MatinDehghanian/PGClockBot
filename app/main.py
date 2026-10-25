@@ -18,6 +18,7 @@ from app.db.models import Plan
 from app.db.session import SessionLocal, init_db
 from app.jobs.scheduler import start_background_scheduler, start_scheduler, stop_scheduler
 from app.services.pasarguard import get_pg
+from app.services.integration_runtime import load_integration_runtime
 from app.services.users import ensure_default_settings
 from app.services.web_auth import load_web_admin
 
@@ -36,6 +37,7 @@ logging.getLogger("httpcore").setLevel(logging.WARNING)
 async def seed_demo_plan() -> None:
     async with SessionLocal() as session:
         await ensure_default_settings(session)
+        await load_integration_runtime(session)
         result = await session.execute(select(Plan).limit(1))
         if result.scalar_one_or_none() is None:
             session.add(

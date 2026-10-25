@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.customer_models import Customer, new_customer_public_id
 from app.db.models import BotUser
+from app.services.integration_runtime import integration_execution_active
 
 
 LEGACY_IDENTITY_BATCH_SIZE = 500
@@ -42,11 +43,25 @@ async def ensure_legacy_customer(session: AsyncSession, bot_user_id: int) -> int
     return (await ensure_legacy_customers(session, [bot_user_id]))[bot_user_id]
 
 
+async def optional_legacy_customer(session: AsyncSession, bot_user_id: int) -> int | None:
+    if not integration_execution_active():
+        return None
+    return await ensure_legacy_customer(session, bot_user_id)
+
+
+async def adapt_legacy_user(session: AsyncSession, user: BotUser) -> None:
+    if integration_execution_active():
+        await session.flush()
+        await ensure_legacy_customer(session, user.id)
+
+
 async def set_legacy_customer_blocked(session: AsyncSession, user: BotUser, *, blocked: bool) -> None:
     """Caller authorizes the legacy account; synchronize its adapter in the same unit of work."""
     if type(blocked) is not bool:
         raise ValueError("وضعیت مسدودی معتبر نیست")
     user.is_blocked = blocked
+    if not integration_execution_active():
+        return
     await session.flush()
     customer_id = await ensure_legacy_customer(session, user.id)
     await session.execute(update(Customer).where(

@@ -12,6 +12,7 @@ from sqlalchemy import Select, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.customer_models import Customer, IntegrationCustomer
+from app.db.integration_operation_models import ServiceMutationGuard
 from app.db.integration_models import Integration
 from app.db.integration_read_models import IntegrationCatalogPlan, IntegrationServiceSnapshot
 from app.db.models import UserService
@@ -209,6 +210,7 @@ async def read_integration_service(session: AsyncSession, access: ReadAccess, cu
         IntegrationServiceSnapshot.service_id == internal_service,
         IntegrationServiceSnapshot.service_id.in_(scoped_ids), IntegrationServiceSnapshot.resource_version == version,
         IntegrationServiceSnapshot.state == "ready",
+        ~select(ServiceMutationGuard.service_id).where(ServiceMutationGuard.service_id == internal_service).exists(),
     ).values(**values, resource_version=IntegrationServiceSnapshot.resource_version + 1)
         .execution_options(synchronize_session=False))
     if claimed.rowcount and source == "panel":

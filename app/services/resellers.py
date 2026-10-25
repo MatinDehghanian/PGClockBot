@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.services.customer_identity import adapt_legacy_user
 from app.db.models import (
     BotUser,
     Order,
@@ -30,7 +31,6 @@ logger = logging.getLogger(__name__)
 
 # Single permission set for BOTH web panel and bot (must stay identical).
 FEATURE_PERMS: list[tuple[str, str]] = [
-    *INTEGRATION_FEATURE_PERMS,
     ("dashboard", "خانه / داشبورد"),
     ("plans", "پلن‌های فروش"),
     ("orders", "سفارش‌ها"),
@@ -45,6 +45,7 @@ FEATURE_PERMS: list[tuple[str, str]] = [
     ("connection_status", "مشاهدهٔ وضعیت اتصال"),
     ("connection_status_manage", "مدیریت تست اتصال"),
     ("service_import", "تأیید افزودن سرویس قبلی"),
+    *INTEGRATION_FEATURE_PERMS,
     ("miniapp", "مینی‌اپ فروشگاه برای مشتریان"),
 ]
 
@@ -1729,6 +1730,7 @@ async def get_or_create_pg_linked_bot_user(
     )
     session.add(user)
     await session.flush()
+    await adapt_legacy_user(session, user)
     return user
 
 
