@@ -22,6 +22,7 @@ from app.services.formatting import (
     info_block,
     kv_line,
 )
+from app.services.replaceable_notices import replace_notices
 from app.services.users import get_all_settings, on, set_settings_bulk
 
 
@@ -460,8 +461,12 @@ async def _dispatch_dual_notify(
     ticket_reseller_id: object = _TICKET_RID_UNSET,
     platform: bool = True,
     shop: bool = True,
+    replace_key: str | None = None,
 ) -> int:
     """Route staff notifications with hard shop isolation.
+
+    With ``replace_key`` the message replaces the previous one of that key in each chat
+    (``replaceable_notices``) instead of piling up.
 
     Returns the number of successful Telegram deliveries (0 = nobody got it).
 
@@ -477,9 +482,12 @@ async def _dispatch_dual_notify(
     async def _send(send_bot: Bot, targets: list[int]) -> int:
         sent_messages: list[Message] = []
         kwargs = {"markup": markup, "photo": photo}
-        if key == "notify_pending_approval" and payment is not None:
+        if (key == "notify_pending_approval" and payment is not None) or replace_key:
             kwargs["sent_messages"] = sent_messages
         count = await _send_to_chats(send_bot, targets, text, **kwargs)
+        if replace_key:
+            await replace_notices(session, send_bot, replace_key, sent_messages)
+            return count
         if sent_messages:
             from app.services.payment_review_messages import (
                 remember_review_message, sync_review_messages,

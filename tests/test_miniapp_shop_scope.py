@@ -210,7 +210,7 @@ class ShopKeyMigrationTests(unittest.TestCase):
         from alembic.migration import MigrationContext
         from alembic.operations import Operations
 
-        spec = importlib.util.spec_from_file_location("m0068", ROOT / "alembic/versions/0068_shop_miniapp_key.py")
+        spec = importlib.util.spec_from_file_location("m0070", ROOT / "alembic/versions/0070_shop_miniapp_key.py")
         migration = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(migration)
         engine = sa.create_engine("sqlite:///:memory:")
