@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.services.customer_identity import ensure_legacy_customer
 from app.db.models import (
     BotUser,
     Order,
@@ -22,6 +23,8 @@ from app.db.models import (
     Role,
     UserService,
 )
+
+from app.services.integration_policy import INTEGRATION_FEATURE_PERMS
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +44,7 @@ FEATURE_PERMS: list[tuple[str, str]] = [
     ("connection_status", "مشاهدهٔ وضعیت اتصال"),
     ("connection_status_manage", "مدیریت تست اتصال"),
     ("service_import", "تأیید افزودن سرویس قبلی"),
+    *INTEGRATION_FEATURE_PERMS,
 ]
 
 DEFAULT_FEATURE_PERMS = "dashboard,plans,orders,payments,tickets,stats,shop_settings,campaigns,loyalty,service_import"
@@ -1696,6 +1700,7 @@ async def get_or_create_pg_linked_bot_user(
     )
     session.add(user)
     await session.flush()
+    await ensure_legacy_customer(session, user.id)
     return user
 
 

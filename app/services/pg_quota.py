@@ -12,6 +12,9 @@ another admin's limits.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from app.services.integration_capacity import durable_user_slots
+from app.services.shop_scope import shop_owner_id
+
 from typing import Any, Mapping
 
 from app.services.formatting import format_bytes
@@ -650,7 +653,10 @@ async def assert_can_create_user(
     admin, role = await _load_admin_and_role(staff, session=session, client=client)
     assert_admin_can_write(admin, role)
     limits = merge_role_limits(admin, role)
-    _check_max_users(admin, limits, need=max(1, int(quantity or 1)))
+    reserved_slots = 0
+    if session is not None:
+        reserved_slots = await durable_user_slots(session, shop_id=shop_owner_id(staff), pg_username=staff.get("pg_admin_username"))
+    _check_max_users(admin, limits, need=max(1, int(quantity or 1)) + reserved_slots)
 
     if from_template:
         # PasarGuard: template create only checks max_users (+ write gate).

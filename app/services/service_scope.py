@@ -11,7 +11,9 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
+from app.db.customer_models import Customer
 from app.db.models import UserService
+from app.services.service_ownership import canonical_legacy_owner_matches
 
 SERVICE_OUTSIDE_SHOP_MESSAGE = "این سرویس متعلق به فروشگاه دیگری است و از اینجا قابل مدیریت نیست"
 _OWNER_UNKNOWN_MESSAGE = "مالکیت فروشگاه سرویس مشخص نیست"
@@ -42,7 +44,9 @@ async def customer_may_use_service(
     session: AsyncSession, service: UserService | None, user_id: int, shop_id: int | None
 ) -> bool:
     """True when the service is this customer's and was sold by the bot they are using."""
-    if service is None or int(service.bot_user_id) != int(user_id):
+    if service is None or service.bot_user_id != user_id:
+        return False
+    if not await canonical_legacy_owner_matches(session, service):
         return False
     try:
         return await service_shop_id(session, service) == shop_id
@@ -62,7 +66,11 @@ async def list_customer_services(
     """The customer's services sold by ``shop_id``, newest first."""
     query = (
         select(UserService)
-        .where(UserService.bot_user_id == int(user_id), shop_services_clause(shop_id))
+        .where(UserService.integration_id.is_(None), UserService.bot_user_id == int(user_id),
+            (UserService.customer_id.is_(None) | select(Customer.id).where(
+                Customer.id == UserService.customer_id,
+                Customer.legacy_bot_user_id == UserService.bot_user_id,
+            ).exists()), shop_services_clause(shop_id))
         .order_by(UserService.id.desc())
     )
     if limit:
@@ -83,7 +91,11 @@ async def search_customer_services(
     query = (
         select(UserService)
         .where(
-            UserService.bot_user_id == int(user_id),
+            UserService.integration_id.is_(None), UserService.bot_user_id == int(user_id),
+            (UserService.customer_id.is_(None) | select(Customer.id).where(
+                Customer.id == UserService.customer_id,
+                Customer.legacy_bot_user_id == UserService.bot_user_id,
+            ).exists()),
             shop_services_clause(shop_id),
             func.lower(UserService.pg_username).contains(needle, autoescape=True),
         )

@@ -12,6 +12,8 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.customer_retention import assert_legacy_user_deletable
+from app.services.customer_identity import ensure_legacy_customer
 from app.config import get_settings
 from app.db.models import BotUser, Order, Role, Setting, UserService
 from app.services.button_styles import default_settings as button_style_defaults
@@ -520,6 +522,8 @@ async def get_or_create_user(
     )
     session.add(user)
     try:
+        await session.flush()
+        await ensure_legacy_customer(session, user.id)
         await session.commit()
     except IntegrityError:
         await session.rollback()
@@ -722,6 +726,7 @@ async def set_settings_bulk(
 
 
 DEFAULT_SETTINGS = {
+    "integration_api_enabled": "0",
     "shop_title": "کلاک بات",
     "welcome_text": (
         "سلام {name} 👋\n\n"
@@ -2092,6 +2097,7 @@ async def delete_bot_user(
     if is_protected_admin(user):
         raise ValueError("حذف ادمین مجاز نیست")
 
+    await assert_legacy_user_deletable(session, user_id)
     telegram_id = user.telegram_id
     name = user.full_name or user.username or str(telegram_id)
 
