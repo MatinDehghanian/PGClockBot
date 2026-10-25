@@ -423,6 +423,13 @@ def _shop_reseller_id() -> int | None:
     return int(rid) if rid else None
 
 
+def _legacy_code_shop(order: Order | None) -> int | None:
+    """The shop a legacy ``DiscountCode`` would discount; those codes have no shop and are the platform's."""
+    if order is not None:
+        return int(order.reseller_id) if order.reseller_id else None
+    return _shop_reseller_id()
+
+
 async def apply_discount(session: AsyncSession, code: str | None, amount: int, *, order: Order | None = None) -> tuple[int, str | None]:
     """Read-only discount preview (does not consume uses)."""
     if not code:
@@ -433,6 +440,8 @@ async def apply_discount(session: AsyncSession, code: str | None, amount: int, *
         from app.services.gift_codes import preview_gift_discount
 
         return await preview_gift_discount(session, gift, amount, order=order, shop_id=_shop_reseller_id())
+    if _legacy_code_shop(order) is not None:
+        return 0, None
     result = await session.execute(
         select(DiscountCode).where(DiscountCode.code == normalized, DiscountCode.is_active.is_(True))
     )
@@ -506,6 +515,8 @@ async def _reserve_discount_code(
         if order is None:
             return 0, None
         return await reserve_gift_discount(session, gift, order, amount)
+    if _legacy_code_shop(order) is not None:
+        return 0, None
     result = await session.execute(
         select(DiscountCode).where(DiscountCode.code == normalized, DiscountCode.is_active.is_(True))
     )
