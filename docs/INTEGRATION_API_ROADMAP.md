@@ -1018,7 +1018,7 @@ stopped state was confirmed with escalated local status access. No commit, stage
 push, PR, version change, deployment, feature activation or real notification
 occurred. All prerequisites and unrelated user changes remain preserved.
 
-#### Proposed PR handoff — target `dev`
+#### Historical reviewed PR draft — target `dev`
 
 Title: `feat: add scoped Integration API with durable technical operations`
 
@@ -1105,4 +1105,74 @@ bounded canonical backfill from zero and verify coverage, then upgrade to
 `0080_integration_event_outbox`. Retaining downgrade and a compatibility-aware
 binary remain mandatory. Historical checkpoints above use the original numbering.
 
-Final validation and submission details are recorded below after verification.
+Final verification after all runtime, migration and regression changes:
+
+| Newly executed check | Result |
+|---|---|
+| Initial affected SQLite invocation, before pagination repair | 57 passed, 13 PostgreSQL skips, 35 subtests; superseded by the enabled matrix below |
+| Affected SQLite/PostgreSQL migrations, retained rollback, ownership and concurrency | 73 passed, 11 warnings, 28 subtests, 32.46s; no skips |
+| Security manifest, all 282 files, PostgreSQL enabled | 3393 passed, 33 warnings, 2791 subtests passed in 1020.49s (0:17:00) |
+| Full suite, PostgreSQL URL unset for baseline parity | 11 failed, 6008 passed, 76 skipped, 42 warnings, 6331 subtests passed in 1283.61s (0:21:23) |
+| Refreshed clean-dev baseline, same Python 3.12 environment | 11 failed, 5634 passed, 32 skipped, 26 warnings, 6322 subtests passed in 1093.78s (0:18:13) |
+| Failure-ID comparison | Exactly the same 11 IDs; zero introduced failures |
+| Lint ratchet against refreshed upstream/dev | 162 changed Python files passed using recorded environment Ruff 0.17.1 |
+| Whitespace | `git diff --check upstream/dev` passed |
+| OpenAPI regeneration | Byte-for-byte identical, 17 paths |
+
+Invocations overlap; their counts must not be added. Full-suite PostgreSQL skips
+are not backend passes. The enabled affected matrix and security run provide the
+final PostgreSQL evidence. The original 5,660-pass/eight-failure full suite,
+3,048-pass security manifest and 55-pass backend matrix were fingerprint-verified
+and reused only as historical original-candidate evidence. The new broad runs
+supersede them for the integrated runtime.
+
+All eight original baseline failures remain. Refreshed dev itself adds these
+three pre-existing documentation/UI source-check failures:
+
+- `tests/test_guide_help_docs.py::GuideCatalogTests::test_page_title_macro_has_help`
+- `tests/test_loyalty_page_wheel_context.py::PanelStatusPageTests::test_app_uses_branded_status_not_inline_tahoma`
+- `tests/test_panel_ui_guards.py::FieldHintAndPlaceholderTests::test_settings_field_help_after_control`
+
+The complete current baseline/candidate failure set is:
+
+- `tests/test_bot_ui_default_texts.py::DefaultTextSnapshotTests::test_default_texts_match_reviewed_snapshot`
+- `tests/test_gift_code_rules.py::GiftCodeRulesTests::test_delete_buyer_with_reserved_and_consumed_codes`
+- `tests/test_guide_help_docs.py::GuideCatalogTests::test_page_title_macro_has_help`
+- `tests/test_home_overview.py::HostMetricsTests::test_cpu_percent_samples`
+- `tests/test_home_overview.py::HostMetricsTests::test_host_metrics_shape`
+- `tests/test_home_overview.py::HostMetricsTests::test_memory_stats_linux`
+- `tests/test_loyalty_page_wheel_context.py::PanelStatusPageTests::test_app_uses_branded_status_not_inline_tahoma`
+- `tests/test_panel_ui_guards.py::FieldHintAndPlaceholderTests::test_settings_field_help_after_control`
+- `tests/test_perf_and_correctness_2_5_8.py::ShopOrderAttributionTests::test_create_order_uses_shop_context_not_sticky_reseller`
+- `tests/test_service_quota_cache_list_9_0_3.py::AdminExtendCachesQuotaTests::test_extend_writes_quota_cache`
+- `tests/test_service_quota_cache_list_9_0_3.py::AdminExtendCachesQuotaTests::test_partial_modify_response_still_caches_kwargs`
+
+No existing assertion was weakened, skipped or removed. The pagination regression
+first failed without the repair. An initial PostgreSQL-enabled attempt encountered
+SQL_ASCII driver setup errors (8 failed, 17 errors); the final matrix used a
+separate UTF-8 disposable database. The first lint attempt selected host Ruff
+0.14.10 and reported fixture-reexport F811 findings; the final ratchet used Ruff
+0.17.1 from the original verification environment, without suppressions or code
+changes. These attempts are not relabeled as successful verification.
+
+The final runtime/test/migration fingerprint for 162 Python files is
+`e62ba6de3a619cb48e64b4226fbf5ba3433d9efb3e007e91f4d6f839fa6d1dc5`. It remained unchanged throughout final
+verification; the later completion record changes documentation only. Both
+upstream migration contents and release version/release-note files remain
+identical to refreshed dev. The complete security manifest retains every entry
+from both the reviewed candidate and current dev.
+
+Local logs are `/private/tmp/integration-submit-affected-verified.log`,
+`/private/tmp/integration-submit-security.log`, `/private/tmp/integration-submit-full.log`,
+`/private/tmp/integration-submit-baseline.log`, and
+`/private/tmp/integration-submit-lint-verified.log`; the exact comparison is
+`/private/tmp/integration-submit-comparison.json`. Logs, test databases and local
+tooling are not Git artifacts. Both disposable PostgreSQL clusters were confirmed
+stopped with escalated local process access after verification.
+
+The review submission preserves the original checkout and all feature
+prerequisites, uses the existing fork and targets upstream dev as a draft.
+Only generic integration behavior is included. No private website specification,
+secrets, temporary output, new dependency, release bump, deployment, activation or
+real-panel/staging/external-delivery check is included. All external gates remain
+**deferred / not performed**, and runtime live-evidence requirements remain intact.

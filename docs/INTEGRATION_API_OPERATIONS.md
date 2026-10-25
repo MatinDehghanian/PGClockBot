@@ -4,7 +4,8 @@ This is a locally implemented release candidate for one existing PasarGuard pane
 Local implementation, pre-PR review and handoff are complete. External verification
 is **deferred / not performed** by the user's 2026-10-25 decision. The candidate is
 not production-verified and remains disabled. Use the [roadmap](INTEGRATION_API_ROADMAP.md)
-for the reused local test counts, baseline comparison and completed PR draft.
+for reused and newly executed local test counts, the refreshed baseline comparison
+and the review submission record.
 Historical checkpoint failures and their targeted repairs remain in that document.
 
 ## Supported behavior
