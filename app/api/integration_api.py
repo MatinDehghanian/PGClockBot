@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictStr
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.integration_auth import integration_bearer_dependency, register_integration_auth_errors
+from app.api.integration_openapi import enrich_integration_openapi
 from app.api.integration_operation_routes import register_operation_routes
 from app.api.integration_routes import IntegrationRoute, idempotency_key
 from app.config import get_settings
@@ -88,6 +89,7 @@ def _configure_openapi(app: FastAPI) -> None:
                 for method, operation in methods.items():
                     if method in {"get", "post", "delete", "put", "patch"}:
                         operation["security"] = [{"IntegrationBearer": []}]
+        enrich_integration_openapi(document)
         return document
 
     app.openapi = schema
