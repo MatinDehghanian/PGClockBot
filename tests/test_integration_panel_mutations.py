@@ -10,6 +10,8 @@ from sqlalchemy import select
 
 from app.db.integration_operation_models import IntegrationNativeMutation, ServiceMutationGuard
 from app.db.integration_read_models import IntegrationServiceSnapshot
+from app.services.integration_controls import control_page
+from test_integration_concurrency import STAFF
 from app.services.integration_panel_mutations import panel_mutation
 from app.services.integration_policy import IntegrationError
 from test_integration_service_reads import add_service, read_database
@@ -70,4 +72,6 @@ def test_billing_disabled_path_is_guarded_and_uncertainty_remains_fenced(failure
             assert evidence.state == ("unknown" if failure else "completed")
             assert snapshot.state == ("review" if failure else "ready")
             assert bool(await session.get(ServiceMutationGuard, service.id)) == failure
+            page = await control_page(session, STAFF, integration)
+            assert [row.service_id for row in page.native] == ([service.public_id] if failure else [])
     asyncio.run(scenario())

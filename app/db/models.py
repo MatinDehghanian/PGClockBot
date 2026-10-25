@@ -26,56 +26,40 @@ import app.db.integration_security_models  # noqa: F401 — register shared secu
 from app.db import Base
 from app.db.customer_link_models import (
     CustomerLinkAction as CustomerLinkAction,
-)
-from app.db.customer_link_models import (
     CustomerLinkChallenge as CustomerLinkChallenge,
-)
-from app.db.customer_link_models import (
     CustomerTelegramLink as CustomerTelegramLink,
 )
 from app.db.customer_models import (
     Customer as Customer,
-)
-from app.db.customer_models import (
     IntegrationCustomer as IntegrationCustomer,
-)
-from app.db.customer_models import (
     new_service_public_id,
 )
 from app.db.integration_addon_models import IntegrationAddonGrant as IntegrationAddonGrant
-from app.db.integration_audit_models import IntegrationAdminAudit as IntegrationAdminAudit
-from app.db.integration_audit_models import IntegrationManagementAction as IntegrationManagementAction
+from app.db.integration_audit_models import (
+    IntegrationAdminAudit as IntegrationAdminAudit,
+    IntegrationManagementAction as IntegrationManagementAction,
+)
 from app.db.integration_delivery_models import IntegrationDelivery as IntegrationDelivery
 from app.db.integration_operation_models import (
     IntegrationCapacityCommitment as IntegrationCapacityCommitment,
-)
-from app.db.integration_operation_models import (
     IntegrationNativeMutation as IntegrationNativeMutation,
-)
-from app.db.integration_operation_models import (
     IntegrationOperation as IntegrationOperation,
-)
-from app.db.integration_operation_models import (
     IntegrationOperationAudit as IntegrationOperationAudit,
-)
-from app.db.integration_operation_models import (
     ServiceMutationGuard as ServiceMutationGuard,
 )
 from app.db.integration_read_models import (
     IntegrationCatalogPlan as IntegrationCatalogPlan,
-)
-from app.db.integration_read_models import (
     IntegrationRequestReplay as IntegrationRequestReplay,
-)
-from app.db.integration_read_models import (
     IntegrationServiceSnapshot as IntegrationServiceSnapshot,
 )
-from app.db.integration_webhook_models import IntegrationControlAction as IntegrationControlAction
-from app.db.integration_webhook_models import IntegrationEvent as IntegrationEvent
-from app.db.integration_webhook_models import IntegrationEventAttempt as IntegrationEventAttempt
-from app.db.integration_webhook_models import IntegrationLinkVersion as IntegrationLinkVersion
-from app.db.integration_webhook_models import IntegrationWebhookDestination as IntegrationWebhookDestination
-from app.db.integration_webhook_models import IntegrationWebhookKey as IntegrationWebhookKey
+from app.db.integration_webhook_models import (
+    IntegrationControlAction as IntegrationControlAction,
+    IntegrationEvent as IntegrationEvent,
+    IntegrationEventAttempt as IntegrationEventAttempt,
+    IntegrationLinkVersion as IntegrationLinkVersion,
+    IntegrationWebhookDestination as IntegrationWebhookDestination,
+    IntegrationWebhookKey as IntegrationWebhookKey,
+)
 
 
 class Role(str, Enum):

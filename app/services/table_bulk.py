@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from app.services.customer_identity import set_legacy_customer_blocked
-
 import logging
 from typing import Iterable
 from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
@@ -13,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BotUser, Order, OrderStatus, Payment, PaymentStatus, Ticket
+from app.services.customer_identity import set_legacy_customer_blocked
 from app.services.shop_scope import platform_may_review_payment
 from app.services.ticket_scope import staff_ticket_in_scope
 
