@@ -123,3 +123,16 @@ def test_process_disabled_startup_does_not_query_integration_setting() -> None:
             await load_integration_runtime(session)
         session.scalar.assert_not_awaited()
     asyncio.run(scenario())
+
+
+def test_disabled_execution_worker_does_not_scan_the_database() -> None:
+    from app.jobs import integration_operations
+
+    async def scenario() -> None:
+        batch = AsyncMock()
+        with patch.object(integration_operations, "integration_execution_active", return_value=False), patch.object(
+            integration_operations, "integration_capacity_retained", return_value=False,
+        ), patch.object(integration_operations, "run_operation_batch", batch):
+            await integration_operations.run_integration_operations()
+        batch.assert_not_awaited()
+    asyncio.run(scenario())
