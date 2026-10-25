@@ -767,8 +767,10 @@ def main_reply_keyboard(
             _t(ui, "btn_adm_exit_preview") or "🛠 بازگشت به پنل ادمین"
         ).strip()
         entries.append((preview_exit_action, exit_label))
+    # Only the staff preview (which has its own exit row) drops «شروع مجدد»; the
+    # customer keyboard rebuilt after a purchase or receipt keeps it.
     rows = _pack_reply_rows(
-        entries, ui, footer=[] if as_user else _restart_footer(ui)
+        entries, ui, footer=[] if preview_exit_action else _restart_footer(ui)
     )
     return _reply_markup(rows, placeholder="از منوی پایین انتخاب کنید…")
 
