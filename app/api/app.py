@@ -46,6 +46,7 @@ from app.services.miniapp_shop import switch_value
 from app.services.reseller_bots import schedule_shop_menu_sync
 from app.services.connection_guides import prune_guide_media, serialize_submitted_guides
 from app.services.list_query import filter_by_search, normalize_search_q
+from app.services.user_search import clean_handle, with_search_matches as _with_search_matches
 from app.services.payer_notify import notify_payer
 from app.services.resellers import (
     setup_is_complete,
@@ -3622,6 +3623,8 @@ def create_api_app(lifespan=None) -> FastAPI:
             .limit(fetch_limit)
         )
         users = list(result.scalars().all())
+        if search_q:
+            users = await _with_search_matches(session, users, where, search_q)
         from app.services.wallet import wallet_balances_for_scope
 
         # Scoped purse only — never surface another shop's ShopWallet / platform
@@ -3632,7 +3635,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         if search_q:
             users = filter_by_search(
                 users,
-                search_q,
+                clean_handle(search_q),
                 lambda u: (
                     u.id,
                     u.telegram_id,
