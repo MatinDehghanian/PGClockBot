@@ -84,10 +84,12 @@ async def _set_admin_enabled(pg, username: str, *, enabled: bool) -> None:
     uname = (username or "").strip()
     if not uname:
         return
+    # PasarGuard's admin update has only ``status``; unknown keys are accepted and ignored, so
+    # ``status`` must come first or the admin is never actually disabled or enabled.
     payloads: list[dict[str, Any]] = (
-        [{"enabled": True}, {"is_disabled": False}, {"status": "active"}]
+        [{"status": "active"}, {"enabled": True}, {"is_disabled": False}]
         if enabled
-        else [{"enabled": False}, {"is_disabled": True}, {"status": "disabled"}]
+        else [{"status": "disabled"}, {"enabled": False}, {"is_disabled": True}]
     )
     last_err: Exception | None = None
     for payload in payloads:

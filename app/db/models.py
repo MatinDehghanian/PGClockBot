@@ -556,6 +556,31 @@ class VolumeHold(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class BotChatMessage(Base):
+    """A message the bot may delete later to keep a private chat tidy (see ``app.bot.chat_cleanup``).
+
+    Kept in the database so a restart does not forget what is still on screen. Telegram lets a
+    bot delete a message only for 48 hours, so older rows are useless and purged.
+    """
+
+    __tablename__ = "bot_chat_messages"
+    __table_args__ = (
+        UniqueConstraint("bot_id", "chat_id", "message_id", name="uq_bot_chat_messages_message"),
+        Index("ix_bot_chat_messages_sent_at", "sent_at"),
+        Index("ix_bot_chat_messages_replace", "bot_id", "replace_key"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    bot_id: Mapped[int] = mapped_column(BigInteger)
+    chat_id: Mapped[int] = mapped_column(BigInteger)
+    message_id: Mapped[int] = mapped_column(BigInteger)
+    # "throwaway" (panels, prompts, notices, taps), "home" (a message carrying the main menu) or
+    # "notice" (a system alert that the next alert with the same ``replace_key`` replaces).
+    kind: Mapped[str] = mapped_column(String(16))
+    sent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    replace_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+
+
 class ServiceAutomation(Base):
     """Per-service wallet consent; deleted catalog choices become NULL."""
 

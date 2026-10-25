@@ -264,6 +264,31 @@ def format_renew_invoice_html(invoice: dict[str, Any], *, currency: str = "تو�
     return "\n".join(lines)
 
 
+def plan_admin_limits(plan: ResellerPlan, *, current_overrides: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Panel admin fields for a package's volume and user cap; empty when the package sets none.
+
+    PasarGuard replaces ``permission_overrides`` as a whole, so the admin's other override keys
+    (for example a per-user device cap) are carried over.
+    """
+    return _capacity_payload(
+        int(getattr(plan, "included_gb", 0) or 0),
+        int(getattr(plan, "included_users", 0) or 0),
+        current_overrides,
+    )
+
+
+def _capacity_payload(total_gb: int, total_users: int, current_overrides: dict[str, Any] | None) -> dict[str, Any]:
+    payload: dict[str, Any] = {}
+    if total_gb > 0:
+        payload["data_limit"] = int(total_gb * GB)
+    if total_users > 0:
+        overrides = {k: v for k, v in (current_overrides or {}).items() if v is not None}
+        overrides["max_users"] = int(total_users)
+        payload["max_users"] = int(total_users)
+        payload["permission_overrides"] = overrides
+    return payload
+
+
 async def _apply_pg_capacity(
     pg,
     username: str,
@@ -271,19 +296,31 @@ async def _apply_pg_capacity(
     total_gb: int,
     total_users: int,
 ) -> None:
-    """Set admin data_limit / max_users from local SoT totals."""
+    """Set admin data_limit / max_users from local SoT totals; 0 leaves that limit as it is."""
     uname = normalize_pg_username(username)
     if not uname:
         return
-    payload: dict[str, Any] = {}
-    if total_gb > 0:
-        payload["data_limit"] = int(total_gb * GB)
+    current: dict[str, Any] | None = None
     if total_users > 0:
-        payload["max_users"] = int(total_users)
-        payload["permission_overrides"] = {"max_users": int(total_users)}
+        admin = await pg.get_admin(uname)
+        if isinstance(admin, dict) and isinstance(admin.get("permission_overrides"), dict):
+            current = admin["permission_overrides"]
+    payload = _capacity_payload(total_gb, total_users, current)
     if not payload:
         return
     await pg.modify_admin(uname, payload)
+
+
+async def assert_new_admin_fits_owner_budget(session: AsyncSession, plan: ResellerPlan, pg_username: str) -> None:
+    """Refuse a package for a panel admin about to be created when the owner's panel budget is full."""
+    if not is_subscription_plan(plan) or is_current_capacity_plan(plan):
+        return
+    await _assert_owner_capacity_budget(
+        session,
+        target_pg_username=pg_username,
+        next_total_gb=max(0, int(getattr(plan, "included_gb", 0) or 0)),
+        next_total_users=max(0, int(getattr(plan, "included_users", 0) or 0)),
+    )
 
 
 async def _assert_owner_capacity_budget(
@@ -329,6 +366,10 @@ async def _assert_owner_capacity_budget(
     sold_gb = 0
     sold_users = 0
     target = normalize_pg_username(target_pg_username)
+    if target not in {normalize_pg_username(getattr(row, "pg_username", None)) for row in rows}:
+        # An admin about to be created has no subscription row yet; it still sells its capacity.
+        sold_gb += max(0, int(next_total_gb))
+        sold_users += max(0, int(next_total_users))
     for row in rows:
         uname = normalize_pg_username(getattr(row, "pg_username", None))
         if not uname or uname == owner_username:

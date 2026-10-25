@@ -431,7 +431,8 @@ async def restore_main_reply(
         reseller_owner_id=reseller_owner_id,
         as_user=as_user,
     )
-    await replace_home(await message.answer(text, reply_markup=markup))
+    # The main menu is the whole screen: everything throwaway above it goes too.
+    await replace_home(await message.answer(text, reply_markup=markup), sweep=True)
     return ui
 
 
