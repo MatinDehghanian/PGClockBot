@@ -241,6 +241,7 @@ tests/test_admin_tweaks.py
 tests/test_chat_cleanup.py
 tests/test_chat_cleanup_forms.py
 tests/test_chat_message_ledger.py
+tests/test_replaceable_notices.py
 tests/test_risk_mark.py
 tests/test_overview_redesign.py
 tests/test_backup_retention_telegram.py

@@ -28,6 +28,8 @@ logger = logging.getLogger(__name__)
 
 KIND_THROWAWAY = "throwaway"
 KIND_HOME = "home"
+# Cleanup kinds; ``notice`` rows (``replaceable_notices``) are never swept by a panel or purged.
+CLEANUP_KINDS = (KIND_THROWAWAY, KIND_HOME)
 # Telegram refuses to delete a bot's message after 48 hours; rows older than this are useless.
 DELETE_WINDOW = timedelta(hours=47)
 # Rows read back for one chat; the in-memory list keeps fewer than this per chat anyway.
@@ -132,7 +134,12 @@ async def load_chat(session: AsyncSession, key: ChatKey, *, now: datetime | None
     cutoff = (now or _utcnow()) - DELETE_WINDOW
     rows = await session.execute(
         select(BotChatMessage.message_id, BotChatMessage.kind, BotChatMessage.sent_at)
-        .where(BotChatMessage.bot_id == key[0], BotChatMessage.chat_id == key[1], BotChatMessage.sent_at > cutoff)
+        .where(
+            BotChatMessage.bot_id == key[0],
+            BotChatMessage.chat_id == key[1],
+            BotChatMessage.kind.in_(CLEANUP_KINDS),
+            BotChatMessage.sent_at > cutoff,
+        )
         .order_by(BotChatMessage.message_id.desc())
         .limit(LOAD_LIMIT)
     )
@@ -149,7 +156,10 @@ async def purge_expired(session: AsyncSession, *, now: datetime | None = None, l
     cutoff = (now or _utcnow()) - DELETE_WINDOW
     ids = list(
         await session.scalars(
-            select(BotChatMessage.id).where(BotChatMessage.sent_at <= cutoff).order_by(BotChatMessage.id).limit(limit)
+            select(BotChatMessage.id)
+            .where(BotChatMessage.sent_at <= cutoff, BotChatMessage.kind.in_(CLEANUP_KINDS))
+            .order_by(BotChatMessage.id)
+            .limit(limit)
         )
     )
     if ids:
