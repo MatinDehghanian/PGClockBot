@@ -722,6 +722,7 @@ async def set_settings_bulk(
 
 
 DEFAULT_SETTINGS = {
+    "integration_api_enabled": "0",
     "shop_title": "کلاک بات",
     "welcome_text": (
         "سلام {name} 👋\n\n"

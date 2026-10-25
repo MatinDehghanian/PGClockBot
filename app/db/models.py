@@ -23,6 +23,11 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 import app.db.integration_models  # noqa: F401 — register foundation tables with shared metadata
 import app.db.integration_security_models  # noqa: F401 — register shared security tables
+from app.db.integration_read_models import (
+    IntegrationCatalogPlan as IntegrationCatalogPlan,
+    IntegrationRequestReplay as IntegrationRequestReplay,
+    IntegrationServiceSnapshot as IntegrationServiceSnapshot,
+)
 from app.db import Base
 from app.db.customer_link_models import (
     CustomerLinkAction as CustomerLinkAction,

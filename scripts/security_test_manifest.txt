@@ -273,3 +273,15 @@ tests/test_customer_identity_migration.py
 tests/test_customer_linking_migration.py
 tests/test_integration_ownership_migration.py
 tests/test_integration_startup_upgrade.py
+tests/test_integration_foundation.py
+tests/test_integration_client_ip.py
+tests/test_integration_concurrency.py
+tests/test_integration_pg_evidence.py
+tests/test_integration_security.py
+tests/test_integration_security_concurrency.py
+tests/test_integration_customers.py
+tests/test_integration_catalog.py
+tests/test_integration_pagination.py
+tests/test_integration_service_reads.py
+tests/test_integration_read_api.py
+tests/test_integration_read_migration.py
