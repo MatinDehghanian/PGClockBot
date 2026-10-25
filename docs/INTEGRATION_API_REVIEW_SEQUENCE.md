@@ -5,9 +5,11 @@ and is superseded for review by the following sequence. The first replacement is
 [PR #971](https://github.com/Mrclocks/PGClockBot/pull/971). All pull requests target
 `dev`. Each later branch is based on its predecessor and stays queued until that
 predecessor is merged; opening cumulative PRs against `dev` would recreate the
-large diff. Rebase on the new upstream `dev`, recheck migration numbers and run the
+large diff. Merge the new upstream `dev` into a published queued branch, or create a fresh
+review branch when a squash merge changes ancestry. Never force-push the published
+queue. Recheck migration numbers and run the
 applicable focused, security, lint and full-suite checks before opening each one.
-The agent does not merge its own PRs.
+Each reviewed part is merged through the maintainer workflow.
 
 | Part | Branch | Scope | Migration head |
 |---|---|---|---|
