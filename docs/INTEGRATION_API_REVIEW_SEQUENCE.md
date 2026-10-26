@@ -39,8 +39,8 @@ associations still stop safely rather than guessing ownership.
 
 Native fencing and canonical adapters activate only with both execution and the
 global database API switch enabled. The cold platform wallet checkout regression
-matches clean dev's 22-statement action/table sequence and its exact one panel POST
-payload for all three disabled combinations. Additive ORM fields naturally change
+matches clean dev's 22-statement action/table signatures and its exact one panel POST
+payload (only two adjacent independent owner/plan eager reads are normalized) for all three disabled combinations. Additive ORM fields naturally change
 column lists. Native create/modify/delete paths open no integration sessions while
 disabled. Fresh inactive workers open no integration sessions or queue scans.
 
@@ -54,7 +54,9 @@ Restart every process after an external database/CLI switch change.
 
 ## Executed verification
 
-The exact commands and aggregate results are recorded in the
+The published queue incorporates current dev 0.5.4 through normal merges. The
+explicit migration/concurrency matrix passes all 89 SQLite/PostgreSQL cases without
+skips. The exact commands and aggregate results are recorded in the
 [roadmap revision checkpoint](INTEGRATION_API_ROADMAP.md#review-revision-2026-10-26).
 Matrices overlap and must not be added. A PostgreSQL skip is not a PostgreSQL pass.
 

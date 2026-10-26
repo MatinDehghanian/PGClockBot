@@ -1200,10 +1200,90 @@ writes refresh the process switch; shop overrides and unrelated writes do not.
 
 Intermediate branches retain only their available behavior and dependencies;
 operation/event/management/example tests are added with the corresponding part.
-The assembled final candidate retains the original assertions. No existing test
-was weakened to pass the series.
+The assembled final candidate retains the original assertions. The operation
+snapshot initially included outbox/retention schedule checks before those workers
+existed; those new checks now arrive with the workers in part 4. A separate test
+commit fixes the newly added checkout trace's assumption about independent eager
+read ordering, without changing query counts, mutation ordering or the request
+payload. No existing baseline assertion was weakened to pass the series.
 
-FINAL_REVIEW_VALIDATION_PENDING
+Final review code is based on refreshed `upstream/dev`
+`d250a5736d267a1363d08de09030a4a1d0d00ee1` (0.5.4). Published branches
+incorporate this through ordinary merges. No upstream migration was added after
+0070, and all upstream version/release-note files remain unchanged by the series.
+Both upstream and candidate security-manifest entries are retained. A post-merge
+import placement error was caught during collection and repaired before the
+clean final verification below; that rejected collection is not a successful run.
+
+| Check at the final review source | Result |
+|---|---|
+| Current dev full-suite baseline | **5,647 passed, 32 skipped, 11 failed**; 6,337 subtests |
+| Foundation `f2c2e0bf` full suite | **5,675 passed, 59 skipped, 11 failed**; 6,337 subtests |
+| Foundation security manifest | **2,996 passed, 27 skipped**; 2,796 subtests |
+| Assembled series `fa707267` full suite (four isolated shards) | **6,040 passed, 78 skipped, 11 failed**; 6,346 subtests |
+| Assembled security manifest | **3,412 passed, 46 skipped**; 2,810 subtests |
+| Exact failure-ID comparison with current dev | **Identical to current dev: zero added failures** |
+| SQLite/PostgreSQL migration and concurrency matrix | **89 passed**, no skips; includes populated `init_db`, repeated upgrades/retaining downgrades, the SQLite 999-variable regression and seven concurrent identity/operation/consent/outbox matrices |
+| Disabled checkout/settings, merged user-search/numeric-ID notification behavior, management and API contracts | **56 passed**, 15 subtests |
+| Lint ratchet / whitespace | Passed: **25** foundation and **166** assembled changed Python files |
+| Generated OpenAPI | **17 paths**, exact export comparison unchanged |
+| Queued snapshot matrices: read `40a6dd6a` / operations `ad0f47e9` / outbox `cd0390fc` / management `facae44b` | **183 passed, 3 skipped** / **194 passed, 8 skipped, 8 subtests** / **73 passed, 4 skipped** / **51 passed, 5 skipped, 6 subtests** |
+| Disabled trace across independent hash seeds | **13 passed** on each of seeds 0, 1, 2, 42 and 1234 |
+| GitHub CI for foundation `f2c2e0bf` | All **6 checks successful**: Linux amd64/arm64, PostgreSQL, security, Python 3.10 and 3.11 |
+
+Foundation and dev use `python -m pytest tests -q -p no:cacheprovider`;
+security uses `bash scripts/run_security_tests.sh`. The assembled full suite uses
+four disjoint sets of test modules in independent clean checkouts, each run with
+`pytest -q -p no:cacheprovider`. Its collected inventory contains exactly 6,129
+unique test IDs, assigned once across the four shards. They run in separate clean
+checkouts with `PGCLOCK_TEST_POSTGRES_URL` unset for baseline parity. Database
+skips in those broad runs are not claimed as PostgreSQL passes. The explicit
+89-case matrix sets that variable to a disposable local UTF-8 PostgreSQL database;
+all panel/Telegram/webhook clients in tests remain fake. Focused matrices overlap
+and must not be added to the broad counts. Python is 3.12 with the same pinned
+requirements and Ruff 0.17.1 in all compared environments.
+
+Earlier completed verification against dev `88acca8a`, before its 0.5.4 changes,
+recorded foundation **5,668 passed / 59 skipped / 11 failed** and **2,991 security
+passes / 27 skips**; assembled **6,033 passed / 78 skipped / 11 failed** and
+**3,407 security passes / 46 skips**. Both had exactly the same 11 failure IDs as
+that clean dev baseline (**5,640 passed / 32 skipped / 11 failed**). Those results
+belong to their frozen earlier sources; the table above records refreshed-dev
+verification separately.
+
+The disabled cold checkout benchmark improved from the original combined
+candidate's **26 SQL statements / one panel POST** to **22 / one POST**, matching
+clean dev's statement action/table signatures and exact POST payload. Only the
+adjacent plan/user SELECT pair is normalized: SQLAlchemy may eager-load those
+independent relationships in either order. All other reads, writes and transaction
+positions remain exact, and the count stays 22. Additive ORM
+columns naturally differ. This is checked for each of the three inactive flag
+combinations, and no integration session is opened for direct native
+create/modify/delete or fresh inactive workers. Retained unknown-outcome capacity
+is deliberately still counted after a previously active installation is disabled.
+
+The unchanged current-dev failures are:
+
+- `tests/test_bot_ui_default_texts.py::DefaultTextSnapshotTests::test_default_texts_match_reviewed_snapshot`
+- `tests/test_gift_code_rules.py::GiftCodeRulesTests::test_delete_buyer_with_reserved_and_consumed_codes`
+- `tests/test_guide_help_docs.py::GuideCatalogTests::test_page_title_macro_has_help`
+- `tests/test_home_overview.py::HostMetricsTests::test_cpu_percent_samples`
+- `tests/test_home_overview.py::HostMetricsTests::test_host_metrics_shape`
+- `tests/test_home_overview.py::HostMetricsTests::test_memory_stats_linux`
+- `tests/test_loyalty_page_wheel_context.py::PanelStatusPageTests::test_app_uses_branded_status_not_inline_tahoma`
+- `tests/test_panel_ui_guards.py::FieldHintAndPlaceholderTests::test_settings_field_help_after_control`
+- `tests/test_perf_and_correctness_2_5_8.py::ShopOrderAttributionTests::test_create_order_uses_shop_context_not_sticky_reseller`
+- `tests/test_service_quota_cache_list_9_0_3.py::AdminExtendCachesQuotaTests::test_extend_writes_quota_cache`
+- `tests/test_service_quota_cache_list_9_0_3.py::AdminExtendCachesQuotaTests::test_partial_modify_response_still_caches_kwargs`
+
+Per-file SHA-256 checks cover all **166** changed Python sources. The frozen full
+and security checkouts match the final assembled source; final follow-ups change
+documentation only. Local evidence is outside Git:
+`/private/tmp/pgclock-pr967-refreshed-*.log`,
+`/private/tmp/pgclock-pr967-refreshed-source-fingerprint.json`, and
+`/private/tmp/pgclock-pr967-refreshed-verification.json`. The earlier completion
+logs and comparison remain separate and are not relabeled as refreshed runs.
+
 
 Actual-panel and test-bot evidence remains unavailable. Restored-data and fake-panel
 checks do not establish live panel writes, deliveries or deployment behavior.
