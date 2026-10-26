@@ -39,6 +39,8 @@
     busy: new Set(),
     searchTimer: null,
     backBound: false,
+    // The tab bar as last drawn, so it is redrawn (and animated) only when it changes.
+    nav: { key: "", active: null },
   };
 
   /* ---------- helpers ---------- */
@@ -201,7 +203,26 @@
     state.me = me;
     core.setCurrency(me.currency);
     core.applyBrand(me.brand);
-    els.nav.innerHTML = R.navHtml(me.nav, navTab(state.view));
+    renderNav();
+  }
+
+  /** The platform admin's dashboard already holds every shortcut, so it needs no tab bar. */
+  function hasTabbar() {
+    return persona() !== "admin";
+  }
+
+  /** Draw the tab bar only when the tabs or the current tab change; the old tab animates out. */
+  function renderNav() {
+    const show = hasTabbar();
+    els.nav.hidden = !show;
+    doc.body.classList.toggle("no-tabbar", !show);
+    const nav = show ? state.me.nav || [] : [];
+    const active = navTab(state.view);
+    const key = JSON.stringify(nav);
+    if (key === state.nav.key && active === state.nav.active) return;
+    const previous = key === state.nav.key ? state.nav.active : null;
+    els.nav.innerHTML = R.navHtml(nav, active, previous);
+    state.nav = { key, active };
   }
 
   /** The shop's brand; a shop without a saved brand still shows its own name. */
@@ -241,7 +262,7 @@
       root.history.replaceState(null, "", "#" + hash);
     }
     state.viewSeq += 1;
-    els.nav.innerHTML = R.navHtml(state.me.nav, navTab(state.view));
+    renderNav();
     renderView();
     root.scrollTo(0, 0);
     syncTelegramBackButton();
@@ -1570,6 +1591,7 @@
 
   function showBootError(err) {
     els.nav.innerHTML = "";
+    state.nav = { key: "", active: null };
     els.root.innerHTML = R.errorHtml(bootErrorText(err), "reload");
   }
 

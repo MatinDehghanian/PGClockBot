@@ -138,6 +138,40 @@ test("admin shortcuts offer receipt review only to accounts that may review", as
   assert.ok(!html.includes('data-action="topup"') && !html.includes('data-view="shop"'), "no commerce shortcuts for admin");
 });
 
+test("the platform admin gets no tab bar; everyone else does", async () => {
+  let env = await boot(me("admin"));
+  assert.equal(env.element("nav").hidden, true);
+  assert.equal(env.element("nav").innerHTML, "");
+  assert.ok(env.element("body").classList.contains("no-tabbar"));
+  env = await boot(me("user"));
+  assert.equal(env.element("nav").hidden, false);
+  assert.ok(!env.element("body").classList.contains("no-tabbar"));
+  assert.ok(env.element("nav").innerHTML.includes('class="nav-btn is-active" data-action="goto" data-view="home"'));
+});
+
+test("switching tabs raises the new tab and settles the old one; screens inside a tab keep the bar", async () => {
+  const env = await boot(me("user"));
+  env.mini.app.go("services");
+  const nav = env.element("nav");
+  assert.ok(nav.innerHTML.includes('class="nav-btn is-active" data-action="goto" data-view="services"'));
+  assert.ok(nav.innerHTML.includes('class="nav-btn is-leaving" data-action="goto" data-view="home"'));
+  assert.ok(!nav.innerHTML.includes("is-primary"), "no tab is styled differently by itself");
+  nav.innerHTML = "unchanged";
+  env.mini.app.go("service", { serviceId: 8 });
+  assert.equal(nav.innerHTML, "unchanged", "a service screen stays under the services tab without replaying the animation");
+  env.mini.app.go("shop");
+  assert.ok(nav.innerHTML.includes('class="nav-btn is-leaving" data-action="goto" data-view="services"'));
+});
+
+test("an empty usage ring draws no dot, and amounts keep their own direction", async () => {
+  const env = await boot(me("user"));
+  const R = env.mini.render;
+  assert.ok(!R.ringHtml(0).includes("ring-value"), "0% draws only the track");
+  assert.ok(R.ringHtml(30).includes("ring-value"));
+  const form = R.topupFormHtml({ methods: [{ key: "card", label: "card", needs_receipt: true }], presets: [50000], min_amount: 1000, max_amount: 9000 });
+  assert.equal(form.split("<bdi>").length - 1, 3, "preset, minimum and maximum amounts are isolated");
+});
+
 (async () => {
   for (const [name, fn] of tests) {
     try { await fn(); } catch (err) { console.error("FAILED:", name); throw err; }

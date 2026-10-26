@@ -87,7 +87,7 @@
     const label = value == null ? "مصرف نامشخص" : `${num(value)}٪ حجم مصرف شده`;
     const inner = center != null ? center : value == null ? "—" : esc(num(value) + "٪");
     return `<span class="ring ${tone}" style="width:${px}px;height:${px}px" role="img" aria-label="${esc(label)}">
-      <svg aria-hidden="true" focusable="false" viewBox="0 0 44 44" width="${px}" height="${px}"><circle class="ring-track" cx="22" cy="22" r="${RING_RADIUS}"/><circle class="ring-value" cx="22" cy="22" r="${RING_RADIUS}" stroke-dasharray="${used.toFixed(1)} ${RING_LENGTH.toFixed(1)}"/></svg>
+      <svg aria-hidden="true" focusable="false" viewBox="0 0 44 44" width="${px}" height="${px}"><circle class="ring-track" cx="22" cy="22" r="${RING_RADIUS}"/>${used > 0 ? `<circle class="ring-value" cx="22" cy="22" r="${RING_RADIUS}" stroke-dasharray="${used.toFixed(1)} ${RING_LENGTH.toFixed(1)}"/>` : ""}</svg>
       <span class="ring-center">${inner}</span>
     </span>`;
   }
@@ -484,10 +484,10 @@
     const presets = options.presets || [];
     return `<form class="topup-form" data-form="topup">
       <fieldset class="field-group"><legend>مبلغ شارژ</legend>
-        <div class="chip-grid">${presets.map((n, i) => `<label class="chip"><input type="radio" name="preset" value="${Number(n) || 0}"${i === 0 ? " checked" : ""}><span>${esc(money(n))}</span></label>`).join("")}
+        <div class="chip-grid">${presets.map((n, i) => `<label class="chip"><input type="radio" name="preset" value="${Number(n) || 0}"${i === 0 ? " checked" : ""}><span><bdi>${esc(money(n))}</bdi></span></label>`).join("")}
           <label class="chip"><input type="radio" name="preset" value="custom"${presets.length ? "" : " checked"}><span>مبلغ دلخواه</span></label>
         </div>
-        <label class="form-field"><span class="muted sm">مبلغ دلخواه (${esc(money(options.min_amount))} تا ${esc(money(options.max_amount))})</span>
+        <label class="form-field"><span class="muted sm">مبلغ دلخواه (<bdi>${esc(money(options.min_amount))}</bdi> تا <bdi>${esc(money(options.max_amount))}</bdi>)</span>
           <input type="text" name="custom_amount" inputmode="numeric" autocomplete="off" dir="ltr" maxlength="16"></label>
       </fieldset>
       <fieldset class="field-group"><legend>روش پرداخت</legend>
@@ -547,7 +547,7 @@
     if (!rows || !rows.length) return "";
     return `<section class="card list-card" aria-label="شارژهای اخیر"><h2 class="card-title">شارژهای اخیر</h2>
       ${rows.map((r) => `<div class="list-row">
-        <span class="list-row-label">${esc(money(r.amount))}<span class="muted sm">، ${esc(core.formatDateTime(r.created_at))}</span></span>
+        <span class="list-row-label"><bdi>${esc(money(r.amount))}</bdi><span class="muted sm">، ${esc(core.formatDateTime(r.created_at))}</span></span>
         ${r.waiting_receipt
           ? `<button type="button" class="btn sm" data-action="topup-receipt" data-id="${Number(r.id) || 0}">ارسال رسید</button>`
           : badge(r.status_fa, TOPUP_STATUS_TONES[r.status] || "warn")}
@@ -651,13 +651,12 @@
     return shortcutsHtml(items, title || "میانبرها") + missing;
   }
 
-  // The buy tab stands out in the middle of the bar, like a primary action.
-  const PRIMARY_TAB = "shop";
-
-  function navHtml(nav, active) {
+  /** ``previous`` is the tab just left; it settles back down while the new one rises. */
+  function navHtml(nav, active, previous) {
     return (nav || []).map((item) => {
       const current = item.id === active;
-      const cls = `nav-btn${current ? " is-active" : ""}${item.id === PRIMARY_TAB ? " is-primary" : ""}`;
+      const leaving = !current && previous && item.id === previous;
+      const cls = `nav-btn${current ? " is-active" : ""}${leaving ? " is-leaving" : ""}`;
       return `<button type="button" class="${cls}" data-action="goto" data-view="${esc(item.id)}"${current ? ' aria-current="page"' : ""}><span class="nav-icon">${icon(item.icon, 22)}</span><span>${esc(item.label)}</span></button>`;
     }).join("");
   }
