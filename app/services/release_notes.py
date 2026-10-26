@@ -15,6 +15,10 @@ logger = logging.getLogger(__name__)
 
 # Newest first. Update page shows every version after the installed one through the target.
 RELEASE_NOTES_FA: dict[str, list[str]] = {
+    "0.5.5": [
+        "مینی‌اپ: برند هر فروشگاه (نام، لوگو، رنگ، اعلان) و بازطراحی صفحهٔ خانه برای مشتری، نماینده و ادمین (#973)",
+        "ریستور: backup/dev-pre-v0.5.5 (commit d250a573)",
+    ],
     "0.5.4": [
         "اعلان کارکنان: شناسهٔ عددی تلگرام خریدار در گزارش‌ها دیده می‌شود (#969)",
         "جستجو: پیدا کردن کاربر و نماینده با @username تلگرام (#970)",

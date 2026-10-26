@@ -26,7 +26,20 @@
     close: '<path d="M6 6l12 12M18 6 6 18"/>',
     chat: '<path d="M4 5h16v11H9l-5 4z"/><path d="M8 9h8M8 12h5"/>',
     gift: '<path d="M4 11h16v9H4zM3 7h18v4H3zM12 7v13"/><path d="M12 7c-1.5-3-5-3-5-1s3 1 5 1c2 0 5 1 5-1s-3.5-2-5 1"/>',
+    wallet: '<rect x="3" y="6" width="18" height="14" rx="3"/><path d="M3 10h18"/><path d="M16.5 15h.01"/>',
+    book: '<path d="M3 5h6a3 3 0 0 1 3 3v12a2 2 0 0 0-2-2H3z"/><path d="M21 5h-6a3 3 0 0 0-3 3v12a2 2 0 0 1 2-2h7z"/>',
+    headset: '<path d="M4 13a8 8 0 0 1 16 0"/><path d="M4 13h3v6H5a1 1 0 0 1-1-1z"/><path d="M20 13h-3v6h2a1 1 0 0 0 1-1z"/>',
+    users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 3.5 6"/>',
+    chart: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+    receipt: '<path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/>',
+    megaphone: '<path d="M3 11v2a1 1 0 0 0 1 1h3l7 4V6L7 10H4a1 1 0 0 0-1 1z"/><path d="M18 9a4 4 0 0 1 0 6"/>',
+    tag: '<path d="M3 12V4h8l10 10-8 8z"/><path d="M7.5 8.5h.01"/>',
+    link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
+    external: '<path d="M14 4h6v6M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
   };
+
+  // Shortcut tile colours; each is a CSS class with a light and a dark variant.
+  const TONES = new Set(["brand", "green", "blue", "purple", "teal", "pink", "amber", "sky", "red"]);
 
   function icon(name, size) {
     const s = Number(size) || 20;
@@ -56,10 +69,84 @@
     return "";
   }
 
-  function meterHtml(pct) {
-    if (pct == null || !Number.isFinite(Number(pct))) return "";
-    const value = Math.max(0, Math.min(100, Math.round(Number(pct))));
-    return `<div class="meter${meterTone(value) ? " is-" + meterTone(value) : ""}" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${value}" aria-label="درصد مصرف حجم"><i style="width:${value}%"></i></div>`;
+  /** 0–100 as a whole number, or null when the panel did not report usage. */
+  function clampPct(pct) {
+    if (pct == null || pct === "" || !Number.isFinite(Number(pct))) return null;
+    return Math.max(0, Math.min(100, Math.round(Number(pct))));
+  }
+
+  const RING_RADIUS = 18;
+  const RING_LENGTH = 2 * Math.PI * RING_RADIUS;
+
+  /** Used traffic as a ring; the centre holds ``center`` (markup the caller already escaped) or the percentage. */
+  function ringHtml(pct, { size, center } = {}) {
+    const value = clampPct(pct);
+    const px = Number(size) || 52;
+    const tone = value != null && meterTone(value) ? "is-" + meterTone(value) : "";
+    const used = value == null ? 0 : (RING_LENGTH * value) / 100;
+    const label = value == null ? "مصرف نامشخص" : `${num(value)}٪ حجم مصرف شده`;
+    const inner = center != null ? center : value == null ? "—" : esc(num(value) + "٪");
+    return `<span class="ring ${tone}" style="width:${px}px;height:${px}px" role="img" aria-label="${esc(label)}">
+      <svg aria-hidden="true" focusable="false" viewBox="0 0 44 44" width="${px}" height="${px}"><circle class="ring-track" cx="22" cy="22" r="${RING_RADIUS}"/><circle class="ring-value" cx="22" cy="22" r="${RING_RADIUS}" stroke-dasharray="${used.toFixed(1)} ${RING_LENGTH.toFixed(1)}"/></svg>
+      <span class="ring-center">${inner}</span>
+    </span>`;
+  }
+
+  /* ---------- brand, notice and shortcuts ---------- */
+
+  const LOGO_PATH = /^\/media\/uploads\/[A-Za-z0-9_-]{1,96}\.jpg$/;
+
+  function brandInitial(name) {
+    const first = Array.from(String(name || "").trim())[0];
+    return first || "؟";
+  }
+
+  /** Shop logo: the bot's profile photo when it loads, else the name's first letter. */
+  function brandLogoHtml(brand) {
+    const b = brand || {};
+    const logo = LOGO_PATH.test(String(b.logo_url || "")) ? b.logo_url : "";
+    return `<span class="brand-logo" aria-hidden="true"><span class="brand-initial">${esc(brandInitial(b.name))}</span>${logo ? `<img src="${esc(logo)}" alt="" data-brand-logo="1">` : ""}</span>`;
+  }
+
+  /** Top of every home screen: logo, shop name and caption, then the greeting and role. */
+  function brandHeaderHtml(brand, { greeting, role } = {}) {
+    const b = brand || {};
+    return `<header class="brand-head">
+      <div class="brand-id">${brandLogoHtml(b)}
+        <div class="brand-text"><strong>${esc(b.name || "مینی‌اپ")}</strong>${b.tagline ? `<span class="muted sm">${esc(b.tagline)}</span>` : ""}</div>
+      </div>
+      ${role ? `<span class="role-chip">${esc(role)}</span>` : ""}
+    </header>
+    ${greeting ? `<p class="greeting"><span class="muted sm">خوش آمدید</span><strong>${esc(greeting)}</strong></p>` : ""}`;
+  }
+
+  function noticeBannerHtml(text) {
+    const s = String(text || "").trim();
+    if (!s) return "";
+    return `<section class="promo" aria-label="اطلاعیهٔ فروشگاه">
+      <span class="promo-icon">${icon("megaphone", 22)}</span>
+      <span class="promo-body"><span class="sm">اطلاعیهٔ فروشگاه</span><strong>${esc(s)}</strong></span>
+    </section>`;
+  }
+
+  /** One shortcut tile; ``item.attrs`` are extra data-* pairs for the click handler. */
+  function shortcutHtml(item) {
+    const tone = TONES.has(item.tone) ? item.tone : "brand";
+    const attrs = Object.entries(item.attrs || {})
+      .map(([key, value]) => ` data-${esc(key)}="${esc(value)}"`).join("");
+    return `<button type="button" class="shortcut" data-action="${esc(item.action)}"${attrs}>
+      <span class="shortcut-icon tone-${tone}">${icon(item.icon, 24)}</span>
+      <span class="shortcut-label">${esc(item.label)}</span>
+    </button>`;
+  }
+
+  function shortcutsHtml(items, title) {
+    const list = (items || []).filter(Boolean);
+    if (!list.length) return "";
+    return `<section class="shortcuts-card" aria-label="${esc(title || "دسترسی سریع")}">
+      <h2 class="section-title">${esc(title || "دسترسی سریع")}</h2>
+      <div class="shortcut-grid">${list.map(shortcutHtml).join("")}</div>
+    </section>`;
   }
 
   /** Remaining-time label — never map on_hold + null days to «نامحدود». */
@@ -85,18 +172,24 @@
   function serviceRowHtml(s) {
     const id = Number(s.id) || 0;
     return `<button type="button" class="svc-row" data-action="open-service" data-id="${id}">
-      <span class="svc-row-head"><strong dir="ltr">${esc(s.username || "—")}</strong>${serviceStatusBadge(s)}</span>
-      ${meterHtml(s.traffic_pct)}
-      <span class="svc-row-meta"><span>${esc(faDigits(s.traffic || "—"))}</span><span>${esc(expireDaysLabel(s))}</span></span>
-      ${serviceErrorHtml(s)}
+      ${ringHtml(s.traffic_pct)}
+      <span class="svc-row-body">
+        <span class="svc-row-head"><strong dir="ltr">${esc(s.username || "—")}</strong>${serviceStatusBadge(s)}</span>
+        <span class="svc-row-meta"><span>${esc(faDigits(s.traffic || "—"))}</span><span>${esc(expireDaysLabel(s))}</span></span>
+        ${serviceErrorHtml(s)}
+      </span>
     </button>`;
   }
 
   function glanceRowHtml(g) {
     const id = Number(g.id) || 0;
-    return `<button type="button" class="svc-row" data-action="open-service" data-id="${id}">
-      <span class="svc-row-head"><strong dir="ltr">${esc(g.username || "—")}</strong>${serviceStatusBadge(g)}</span>
-      <span class="svc-row-meta"><span>${esc(faDigits(g.remaining_label || "—"))}</span>${icon("chevron", 16)}</span>
+    const tone = g.is_cancelled ? "danger" : g.cancellation_pending ? "warn" : statusTone(g.status);
+    return `<button type="button" class="svc-row is-glance" data-action="open-service" data-id="${id}">
+      <span class="svc-avatar${tone ? " is-" + tone : ""}">${icon("svc", 22)}</span>
+      <span class="svc-row-body">
+        <span class="svc-row-head"><strong dir="ltr">${esc(g.username || "—")}</strong>${serviceStatusBadge(g)}</span>
+        <span class="svc-row-meta"><span>${esc(faDigits(g.remaining_label || "—"))}</span>${icon("chevron", 16)}</span>
+      </span>
     </button>`;
   }
 
@@ -104,8 +197,8 @@
     const id = Number(g.id) || 0;
     const ended = ["expired", "limited"].includes(String(g.status || "").toLowerCase());
     const title = ended ? "سرویس به پایان رسیده" : "سرویس رو به پایان است";
-    return `<div class="notice is-warn">
-      ${icon("clock", 22)}
+    return `<div class="notice is-warn" role="status">
+      <span class="notice-icon">${icon("clock", 20)}</span>
       <div class="notice-body"><strong>${esc(title)}: <span dir="ltr">${esc(g.username || "—")}</span></strong>
         <span>${esc(faDigits(g.remaining_label || ""))}</span></div>
       <button type="button" class="btn sm is-warn" data-action="open-service" data-id="${id}" data-then="renew">تمدید</button>
@@ -119,10 +212,12 @@
 
   function serviceUsageHtml(s) {
     const fetched = s.info_fetched_at ? core.formatDateTime(s.info_fetched_at) : "";
-    return `<section class="card" aria-label="مصرف سرویس">
+    const pct = clampPct(s.traffic_pct);
+    const center = `<span class="muted sm">مصرف</span><strong>${pct == null ? "—" : esc(num(pct) + "٪")}</strong>`;
+    return `<section class="card usage-card" aria-label="مصرف سرویس">
       <div class="card-head">${serviceStatusBadge(s)}${fetched ? `<span class="muted sm">به‌روز: ${esc(fetched)}</span>` : ""}</div>
+      <div class="usage-ring">${ringHtml(s.traffic_pct, { size: 168, center })}</div>
       <p class="usage-line"><strong>${esc(faDigits(s.traffic || "—"))}</strong></p>
-      ${meterHtml(s.traffic_pct)}
       <div class="tile-grid">
         <div class="tile"><span>زمان باقی‌مانده</span><strong>${esc(expireDaysLabel(s))}</strong></div>
         <div class="tile"><span>انقضا</span><strong>${esc(expireDateText(s))}</strong></div>
@@ -146,20 +241,22 @@
     const url = core.safeUrl(s.subscription_url);
     if (!url) return "";
     return `<section class="card" aria-label="لینک اشتراک">
-      <h2 class="card-title">لینک اشتراک</h2>
-      <div class="link-box" dir="ltr">${esc(maskedUrl(url))}</div>
+      <div class="card-head"><h2 class="card-title">لینک اشتراک</h2>
+        <button type="button" class="link-btn" data-action="guides" data-id="${id}">راهنمای اتصال</button></div>
+      <div class="link-box" dir="ltr">${icon("link", 16)}<span>${esc(maskedUrl(url))}</span></div>
       <div class="btn-row">
         <button type="button" class="btn" data-action="copy-link" data-id="${id}">کپی لینک</button>
         ${features.qr ? `<button type="button" class="btn ghost" data-action="show-qr" data-id="${id}">QR کد</button>` : ""}
         <button type="button" class="btn ghost" data-action="open-link" data-id="${id}">باز کردن</button>
       </div>
-      <button type="button" class="btn ghost block" data-action="guides" data-id="${id}">راهنمای اتصال</button>
     </section>`;
   }
 
   function actionRow(action, id, iconName, label, extra) {
-    return `<button type="button" class="list-row${extra && extra.danger ? " is-danger" : ""}" data-action="${esc(action)}" data-id="${id}"${extra && extra.kind ? ` data-kind="${esc(extra.kind)}"` : ""}>
-      ${icon(iconName)}<span class="list-row-label">${esc(label)}</span>${icon("chevron", 16)}
+    const x = extra || {};
+    const tone = x.danger ? "red" : TONES.has(x.tone) ? x.tone : "brand";
+    return `<button type="button" class="list-row${x.danger ? " is-danger" : ""}" data-action="${esc(action)}" data-id="${id}"${x.kind ? ` data-kind="${esc(x.kind)}"` : ""}>
+      <span class="row-icon tone-${tone}">${icon(iconName)}</span><span class="list-row-label">${esc(label)}</span>${icon("chevron", 16)}
     </button>`;
   }
 
@@ -169,14 +266,14 @@
     const rows = [];
     if (open && features.walletPay) rows.push(actionRow("renew", id, "refresh", "تمدید سرویس"));
     if (open && features.walletPay && s.addons_allowed) {
-      rows.push(actionRow("addons", id, "plus", "افزایش حجم", { kind: "volume" }));
-      rows.push(actionRow("addons", id, "timer", "افزایش زمان", { kind: "duration" }));
+      rows.push(actionRow("addons", id, "plus", "افزایش حجم", { kind: "volume", tone: "blue" }));
+      rows.push(actionRow("addons", id, "timer", "افزایش زمان", { kind: "duration", tone: "purple" }));
     }
     if (features.manage !== false) {
-      if (open) rows.push(actionRow("automation", id, "auto", "تمدید خودکار"));
+      if (open) rows.push(actionRow("automation", id, "auto", "تمدید خودکار", { tone: "teal" }));
       rows.push(actionRow("cancellation", id, "cancel", s.is_cancelled || s.cancellation_pending ? "وضعیت درخواست لغو" : "درخواست لغو سرویس", { danger: true }));
     }
-    return rows.length ? `<section class="card list-card" aria-label="عملیات سرویس">${rows.join("")}</section>` : "";
+    return rows.length ? `<section class="card list-card" aria-label="عملیات سرویس"><h2 class="card-title">مدیریت سرویس</h2>${rows.join("")}</section>` : "";
   }
 
   function serviceDetailHtml(s, features) {
@@ -197,7 +294,7 @@
   function planMetaText(p) {
     const days = p.days ? `${num(p.days)} روز` : "نامحدود";
     const gb = p.gb == null || p.gb === "" ? "حجم نامحدود" : `${num(p.gb)} گیگ`;
-    return `${days} · ${gb}`;
+    return `${days}، ${gb}`;
   }
 
   function planOptionsHtml(plans, selectedId) {
@@ -350,15 +447,28 @@
     const c = customer || {};
     const f = features || {};
     const buttons = [
-      f.topup !== false ? '<button type="button" class="btn" data-action="topup">شارژ کیف پول</button>' : "",
+      f.topup !== false ? `<button type="button" class="btn on-hero" data-action="topup">${icon("plus", 18)}شارژ کیف پول</button>` : "",
       actions
-        ? (f.shop !== false ? '<button type="button" class="btn ghost" data-action="goto" data-view="shop">خرید سرویس</button>' : "")
-        : (f.gift !== false ? '<button type="button" class="btn ghost" data-action="gift-code">کد هدیه</button>' : ""),
+        ? (f.shop !== false ? `<button type="button" class="btn hero-ghost" data-action="goto" data-view="shop">${icon("shop", 18)}خرید سرویس</button>` : "")
+        : (f.gift !== false ? `<button type="button" class="btn hero-ghost" data-action="gift-code">${icon("gift", 18)}کد هدیه</button>` : ""),
     ].join("");
-    return `<section class="card wallet-card" aria-label="کیف پول">
-      <div class="card-head"><span class="muted">موجودی کیف پول</span>${badge(c.wallet_pay_enabled ? "پرداخت فعال" : "فقط مشاهده", c.wallet_pay_enabled ? "ok" : "")}</div>
-      <p class="wallet-value">${esc(money(c.wallet))}</p>
-      ${buttons ? `<div class="btn-row">${buttons}</div>` : ""}
+    return heroHtml({
+      label: "موجودی کیف پول",
+      chip: c.wallet_pay_enabled ? "پرداخت فعال" : "فقط مشاهده",
+      value: money(c.wallet),
+      footer: buttons ? `<div class="btn-row">${buttons}</div>` : "",
+      aria: "کیف پول",
+    });
+  }
+
+  /** The brand-coloured card at the top of a home screen. ``footer`` is trusted markup. */
+  function heroHtml({ label, chip, value, sub, footer, aria }) {
+    return `<section class="hero-card" aria-label="${esc(aria || label)}">
+      <span class="hero-deco" aria-hidden="true"></span>
+      <div class="hero-head"><span>${esc(label)}</span>${chip ? `<span class="hero-chip">${esc(chip)}</span>` : ""}</div>
+      <p class="hero-value"><bdi>${esc(value)}</bdi></p>
+      ${sub ? `<p class="hero-sub">${esc(sub)}</p>` : ""}
+      ${footer || ""}
     </section>`;
   }
 
@@ -418,7 +528,7 @@
       rows.push(`<p class="sm">پرداخت از طریق ${esc(t.gateway_name || "درگاه")}</p>`);
       if (t.gateway_link) rows.push(`<button type="button" class="btn block ghost" data-action="open-topup-link">ورود به ${esc(t.gateway_name || "درگاه")}</button>`);
     } else if (t.method === "crypto") {
-      rows.push(`<p class="sm">${esc(t.crypto_asset || "")}${t.crypto_network ? " · شبکهٔ " + esc(t.crypto_network) : ""}</p>`);
+      rows.push(`<p class="sm">${esc(t.crypto_asset || "")}${t.crypto_network ? "، شبکهٔ " + esc(t.crypto_network) : ""}</p>`);
       rows.push(copyRow("آدرس کیف پول", t.crypto_address || ""));
     } else if (t.method === "psp") {
       rows.push(t.checkout_url
@@ -437,7 +547,7 @@
     if (!rows || !rows.length) return "";
     return `<section class="card list-card" aria-label="شارژهای اخیر"><h2 class="card-title">شارژهای اخیر</h2>
       ${rows.map((r) => `<div class="list-row">
-        <span class="list-row-label">${esc(money(r.amount))}<span class="muted sm"> · ${esc(core.formatDateTime(r.created_at))}</span></span>
+        <span class="list-row-label">${esc(money(r.amount))}<span class="muted sm">، ${esc(core.formatDateTime(r.created_at))}</span></span>
         ${r.waiting_receipt
           ? `<button type="button" class="btn sm" data-action="topup-receipt" data-id="${Number(r.id) || 0}">ارسال رسید</button>`
           : badge(r.status_fa, TOPUP_STATUS_TONES[r.status] || "warn")}
@@ -457,7 +567,7 @@
       </section>
       <section class="card list-card" aria-label="تیکت‌های من"><h2 class="card-title">تیکت‌های من</h2>
         ${tickets.length ? tickets.map((t) => `<button type="button" class="list-row" data-action="open-ticket" data-id="${Number(t.id) || 0}">
-          <span class="list-row-label"><span>${esc(t.subject)}</span><span class="muted sm"> · #${esc(num(t.id))}</span></span>
+          <span class="list-row-label"><span>${esc(t.subject)}</span><span class="muted sm">، #${esc(num(t.id))}</span></span>
           ${badge(t.status_fa, TICKET_TONES[t.status] || "")}
         </button>`).join("") : '<p class="muted sm">هنوز تیکتی ندارید.</p>'}
       </section>`;
@@ -479,7 +589,7 @@
       </header>
       <div class="card-head">${badge(t.status_fa, TICKET_TONES[t.status] || "")}</div>
       <ol class="thread" aria-label="پیام‌ها">${(t.messages || []).map((m) => `<li class="bubble${m.from_staff ? " is-staff" : " is-mine"}">
-        <span class="bubble-who muted sm">${m.from_staff ? "پشتیبانی" : "شما"} · ${esc(core.formatDateTime(m.created_at))}</span>
+        <span class="bubble-who muted sm">${m.from_staff ? "پشتیبانی" : "شما"}، ${esc(core.formatDateTime(m.created_at))}</span>
         <p class="pre-line">${esc(m.body)}</p></li>`).join("")}</ol>
       ${t.is_closed
         ? '<p class="muted sm center">این تیکت بسته شده است؛ برای ادامه، تیکت تازه بسازید.</p>'
@@ -489,43 +599,66 @@
         </form>`}`;
   }
 
+  /** ``keys``: [key, label, isMoney, icon, tone] per tile; money tiles span the row. */
   function statsHtml(stats, keys, { columns } = {}) {
     const s = stats || {};
-    return `<div class="tile-grid${columns === 2 ? " cols-2" : ""}">${keys.map(([key, label, isMoney]) =>
-      `<div class="tile${isMoney ? " is-wide" : ""}"><span>${esc(label)}</span><strong>${esc(isMoney ? money(s[key]) : num(s[key]))}</strong></div>`
+    return `<div class="tile-grid${columns === 2 ? " cols-2" : ""}">${keys.map(([key, label, isMoney, iconName, tone]) =>
+      `<div class="tile stat-tile${isMoney ? " is-wide" : ""}">
+        ${iconName ? `<span class="row-icon tone-${TONES.has(tone) ? tone : "brand"}">${icon(iconName, 18)}</span>` : ""}
+        <span class="stat-text"><strong>${esc(isMoney ? money(s[key]) : num(s[key]))}</strong><span>${esc(label)}</span></span>
+      </div>`
     ).join("")}</div>`;
   }
 
-  /** Counts that need someone to act: an in-app screen when allowed, else the panel page when one exists. */
+  /**
+   * Counts that need someone to act: an in-app screen when allowed, else the panel page when one exists.
+   * ``items``: [statKey, label, panelLinkId, inAppView, icon, tone].
+   */
   function attentionListHtml(stats, links, items, inAppViews) {
     const byId = new Map((links || []).map((l) => [l.id, l]));
     const inApp = inAppViews || new Set();
     const rows = items
       .filter(([key]) => Number((stats || {})[key]) > 0)
-      .map(([key, label, linkId, view]) => {
+      .map(([key, label, linkId, view, iconName, tone]) => {
         const link = byId.get(linkId);
-        const count = `<span class="count">${esc(num(stats[key]))}</span>`;
+        const body = `<span class="row-icon tone-${TONES.has(tone) ? tone : "amber"}">${icon(iconName || "clock")}</span>
+          <span class="list-row-label">${esc(label)}</span><span class="count">${esc(num(stats[key]))}</span>`;
         if (view && inApp.has(view)) {
-          return `<button type="button" class="list-row" data-action="goto" data-view="${esc(view)}"><span class="list-row-label">${esc(label)}</span>${count}</button>`;
+          return `<button type="button" class="list-row" data-action="goto" data-view="${esc(view)}">${body}</button>`;
         }
         return link
-          ? `<button type="button" class="list-row" data-action="open-panel" data-path="${esc(link.path)}"><span class="list-row-label">${esc(label)}</span>${count}</button>`
-          : `<div class="list-row"><span class="list-row-label">${esc(label)}</span>${count}</div>`;
+          ? `<button type="button" class="list-row" data-action="open-panel" data-path="${esc(link.path)}">${body}</button>`
+          : `<div class="list-row">${body}</div>`;
       });
-    if (!rows.length) return '<p class="muted sm">کار معوقی نیست.</p>';
+    if (!rows.length) return `<p class="all-clear">${icon("auto", 18)}<span>کار معوقی نیست.</span></p>`;
     return rows.join("");
   }
 
-  function linksHtml(links) {
-    if (!links || !links.length) return '<p class="muted sm">آدرس پنل در دسترس نیست.</p>';
-    return links.map((l) => `<button type="button" class="list-row" data-action="open-panel" data-path="${esc(l.path)}">
-      <span class="list-row-label">${esc(l.label)}</span>${icon("chevron", 16)}</button>`).join("");
+  // Icon and colour of each web-panel shortcut the server lists (by link id).
+  const PANEL_LINK_LOOKS = {
+    dashboard: ["chart", "sky"], home: ["chart", "sky"], finance: ["wallet", "green"],
+    users: ["users", "blue"], resellers: ["store", "purple"], tickets: ["headset", "pink"], shop: ["ops", "teal"],
+  };
+
+  /** In-app shortcuts (``leading``) first, then one tile per web-panel link from the server. */
+  function panelShortcutsHtml(links, { title, leading } = {}) {
+    const panel = (links || []).map((l) => {
+      const [iconName, tone] = PANEL_LINK_LOOKS[l.id] || ["external", "brand"];
+      return { action: "open-panel", attrs: { path: l.path }, icon: iconName, tone, label: l.label };
+    });
+    const items = (leading || []).concat(panel);
+    const missing = panel.length ? "" : `<section class="card"><p class="muted sm">آدرس پنل وب در دسترس نیست.</p></section>`;
+    return shortcutsHtml(items, title || "میانبرها") + missing;
   }
+
+  // The buy tab stands out in the middle of the bar, like a primary action.
+  const PRIMARY_TAB = "shop";
 
   function navHtml(nav, active) {
     return (nav || []).map((item) => {
       const current = item.id === active;
-      return `<button type="button" class="nav-btn${current ? " is-active" : ""}" data-action="goto" data-view="${esc(item.id)}"${current ? ' aria-current="page"' : ""}>${icon(item.icon, 22)}<span>${esc(item.label)}</span></button>`;
+      const cls = `nav-btn${current ? " is-active" : ""}${item.id === PRIMARY_TAB ? " is-primary" : ""}`;
+      return `<button type="button" class="${cls}" data-action="goto" data-view="${esc(item.id)}"${current ? ' aria-current="page"' : ""}><span class="nav-icon">${icon(item.icon, 22)}</span><span>${esc(item.label)}</span></button>`;
     }).join("");
   }
 
@@ -571,12 +704,13 @@
 
   function clubPointsHtml(club) {
     const tier = club.tier || {};
-    const next = tier.points_to_next == null ? "" : `<p class="muted sm">${esc(pointsText(tier.points_to_next))} تا سطح بعد</p>`;
-    return `<section class="card wallet-card" aria-label="امتیاز شما">
-      <div class="card-head"><span class="muted">امتیاز شما</span>${tier.name ? badge(tier.name, "ok") : ""}</div>
-      <p class="wallet-value"><bdi>${esc(num(club.points))}</bdi></p>
-      ${next}<p class="muted sm">امتیاز این ماه: <bdi>${esc(num(club.month_points))}</bdi></p>
-    </section>`;
+    const next = tier.points_to_next == null ? "" : `<p class="hero-sub">${esc(pointsText(tier.points_to_next))} تا سطح بعد</p>`;
+    return heroHtml({
+      label: "امتیاز شما",
+      chip: tier.name || "",
+      value: num(club.points),
+      footer: `${next}<p class="hero-sub">امتیاز این ماه: <bdi>${esc(num(club.month_points))}</bdi></p>`,
+    });
   }
 
   function clubReferralHtml(ref) {
@@ -599,7 +733,7 @@
     return `<section class="card list-card" aria-label="جوایز"><h2 class="card-title">جوایز</h2>
       ${rows.length ? rows.map((r) => `<div class="list-row">
         <span class="list-row-label"><span>${esc(r.name)}</span>
-          <span class="muted sm"> · ${esc(rewardValueText(r))} · ${esc(pointsText(r.cost))}</span>
+          <span class="muted sm">، ${esc(rewardValueText(r))}، ${esc(pointsText(r.cost))}</span>
           ${r.description ? `<span class="muted sm pre-line reward-desc">${esc(r.description)}</span>` : ""}</span>
         <button type="button" class="btn sm${r.affordable ? "" : " ghost"}" data-action="redeem-reward" data-id="${Number(r.id) || 0}"${r.affordable ? "" : ' disabled aria-disabled="true"'}>${r.affordable ? "دریافت" : "امتیاز کافی نیست"}</button>
       </div>`).join("") : '<p class="muted sm">هنوز جایزه‌ای تعریف نشده است.</p>'}
@@ -611,7 +745,7 @@
     if (Number(d.min_purchase) > 0) parts.push(`خرید از ${money(d.min_purchase)}`);
     if (d.max_discount != null) parts.push(`حداکثر ${money(d.max_discount)}`);
     if (d.expires_at) parts.push(`تا ${core.formatDateTime(d.expires_at)}`);
-    return parts.join(" · ");
+    return parts.join("، ");
   }
 
   function clubDiscountsHtml(discounts) {
@@ -675,8 +809,8 @@
       ${total > items.length ? `<p class="muted sm">${esc(num(items.length))} رسید قدیمی‌تر از ${esc(num(total))} رسید نمایش داده شده است.</p>` : ""}
       ${items.map((r) => `<button type="button" class="list-row" data-action="open-review" data-id="${Number(r.id) || 0}">
         <span class="list-row-label"><span>${esc(money(r.amount))}</span>
-          <span class="muted sm"> · ${esc(reviewKindText(r))}</span>
-          <span class="muted sm reward-desc"><bdi>${esc(r.payer || "—")}</bdi> · ${esc(core.formatDateTime(r.created_at))}</span></span>
+          <span class="muted sm">، ${esc(reviewKindText(r))}</span>
+          <span class="muted sm reward-desc"><bdi>${esc(r.payer || "—")}</bdi>، ${esc(core.formatDateTime(r.created_at))}</span></span>
         ${icon("chevron", 16)}
       </button>`).join("")}
     </section>`;
@@ -714,10 +848,11 @@
   }
 
   root.PGMini.render = Object.freeze({
-    icon, isOnHoldStatus, statusTone, expireDaysLabel, meterHtml, serviceRowHtml, glanceRowHtml,
+    icon, isOnHoldStatus, statusTone, expireDaysLabel, ringHtml, serviceRowHtml, glanceRowHtml,
+    brandHeaderHtml, noticeBannerHtml, shortcutsHtml, panelShortcutsHtml, heroHtml,
     attentionCardHtml, serviceDetailHtml, planOptionsHtml, checkoutHtml, discountedCheckoutHtml, giftFormHtml, renewPlansHtml,
     renewPreviewHtml, addonPacksHtml, automationHtml, cancellationHtml, qrHtml, activityHtml,
-    backBarHtml, guideListHtml, guideHtml, rewardValueText, clubHtml, rewardCodeHtml, rewardServicePickerHtml, reviewQueueHtml, reviewSheetHtml, walletCardHtml, supportHtml, ticketNewFormHtml, ticketThreadHtml, topupFormHtml, topupPayHtml, receiptFormHtml, recentTopupsHtml, statsHtml, attentionListHtml, linksHtml, navHtml, loadingHtml, emptyHtml,
+    backBarHtml, guideListHtml, guideHtml, rewardValueText, clubHtml, rewardCodeHtml, rewardServicePickerHtml, reviewQueueHtml, reviewSheetHtml, walletCardHtml, supportHtml, ticketNewFormHtml, ticketThreadHtml, topupFormHtml, topupPayHtml, receiptFormHtml, recentTopupsHtml, statsHtml, attentionListHtml, navHtml, loadingHtml, emptyHtml,
     errorHtml,
   });
 })(typeof window === "object" ? window : globalThis);

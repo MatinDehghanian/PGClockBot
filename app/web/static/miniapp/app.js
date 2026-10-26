@@ -200,7 +200,15 @@
   function applyMe(me) {
     state.me = me;
     core.setCurrency(me.currency);
+    core.applyBrand(me.brand);
     els.nav.innerHTML = R.navHtml(me.nav, navTab(state.view));
+  }
+
+  /** The shop's brand; a shop without a saved brand still shows its own name. */
+  function brand() {
+    const b = (state.me && state.me.brand) || {};
+    const shop = state.me && state.me.shop;
+    return { ...b, name: b.name || (shop && shop.name) || "" };
   }
 
   /* ---------- routing and back button ---------- */
@@ -335,14 +343,14 @@
     return null;
   }
 
-  function greetingHtml() {
+  const ROLE_LABELS = { admin: "ادمین", reseller: "نماینده", user: "مشتری" };
+
+  function brandHeaderHtml() {
     const name = (state.me.user && state.me.user.name) || "";
-    const roles = { admin: "ادمین", reseller: "نماینده", user: "مشتری" };
-    const shop = state.me.shop && state.me.shop.name;
-    return `<header class="view-head">
-      <div><h1>${core.esc(name ? "سلام، " + name : "سلام")}</h1>${shop ? `<span class="muted sm">${core.esc(shop)}</span>` : ""}</div>
-      <span class="role-chip">${core.esc(roles[persona()] || "مشتری")}</span>
-    </header>`;
+    return R.brandHeaderHtml(brand(), {
+      greeting: name ? "سلام، " + name : "سلام",
+      role: ROLE_LABELS[persona()] || ROLE_LABELS.user,
+    });
   }
 
   function myServicesHtml(home) {
@@ -353,14 +361,18 @@
     return `<section class="card" aria-label="سرویس‌های من">
       <div class="card-head"><h2 class="card-title">سرویس‌های من <span class="muted sm">(${core.esc(core.num(home.service_count))})</span></h2>
         <button type="button" class="link-btn" data-action="goto" data-view="services">همه</button></div>
-      ${recent.map(R.glanceRowHtml).join("")}
+      <div class="svc-list">${recent.map(R.glanceRowHtml).join("")}</div>
     </section>`;
   }
 
+  const SHOP_PEEK_STATS = [
+    ["users", "کاربران", false, "users", "blue"], ["orders", "سفارش‌ها", false, "receipt", "green"],
+    ["pending", "رسید معلق", false, "clock", "amber"], ["tickets", "تیکت باز", false, "headset", "pink"],
+  ];
+
   function shopPeekHtml() {
     const r = resource("ops");
-    const body = settled(r, 1, "retry")
-      || R.statsHtml(r.data.stats, [["users", "کاربران"], ["orders", "سفارش‌ها"], ["pending", "رسید معلق"], ["tickets", "تیکت باز"]], { columns: 2 });
+    const body = settled(r, 1, "retry") || R.statsHtml(r.data.stats, SHOP_PEEK_STATS, { columns: 2 });
     return `<section class="card" aria-label="فروشگاه من">
       <div class="card-head"><h2 class="card-title">فروشگاه من</h2>
         <button type="button" class="link-btn" data-action="goto" data-view="ops">بیشتر</button></div>
@@ -368,54 +380,109 @@
     </section>`;
   }
 
+  /** The service a «renew» or «guide» shortcut acts on: the first one ending soon, else the latest. */
+  function shortcutService(home) {
+    return (home.attention || [])[0] || (home.recent || [])[0] || null;
+  }
+
+  /** Home shortcuts, only for the sections this Mini App has opened. */
+  function customerShortcuts(home) {
+    const f = features();
+    const target = shortcutService(home);
+    const targetId = target ? Number(target.id) || 0 : 0;
+    return [
+      f.shop && { action: "goto", attrs: { view: "shop" }, icon: "shop", tone: "brand", label: "خرید سرویس" },
+      targetId && f.walletPay && { action: "open-service", attrs: { id: targetId, then: "renew" }, icon: "refresh", tone: "green", label: "تمدید سرویس" },
+      { action: "goto", attrs: { view: "services" }, icon: "svc", tone: "blue", label: "سرویس‌های من" },
+      f.topup && { action: "topup", icon: "wallet", tone: "amber", label: "شارژ کیف پول" },
+      can("guides") && { action: "guides", attrs: { id: targetId }, icon: "book", tone: "teal", label: "آموزش اتصال" },
+      can("support") && { action: "goto", attrs: { view: "support" }, icon: "headset", tone: "pink", label: "پشتیبانی" },
+      can("club") && { action: "goto", attrs: { view: "club" }, icon: "gift", tone: "purple", label: "دعوت و جوایز" },
+      f.gift && { action: "gift-code", icon: "tag", tone: "sky", label: "کد هدیه" },
+    ];
+  }
+
   function customerHomeHtml() {
     const c = customer();
     const home = c.home || { service_count: 0, attention: [], recent: [] };
-    return greetingHtml()
+    return brandHeaderHtml()
       + R.walletCardHtml(c, { actions: true, features: features() })
       + (home.attention || []).map(R.attentionCardHtml).join("")
+      + R.noticeBannerHtml(brand().notice)
+      + R.shortcutsHtml(customerShortcuts(home))
       + (persona() === "reseller" ? shopPeekHtml() : "")
       + myServicesHtml(home);
   }
 
   const ADMIN_STATS = [
-    ["revenue", "درآمد", true], ["users", "کاربران"], ["resellers", "نمایندگان"],
-    ["orders", "سفارش‌ها"], ["services", "سرویس‌ها"], ["tickets", "تیکت باز"],
+    ["users", "کاربران", false, "users", "blue"], ["resellers", "نمایندگان", false, "store", "purple"],
+    ["orders", "سفارش‌ها", false, "receipt", "green"], ["services", "سرویس‌ها", false, "svc", "sky"],
   ];
   const RESELLER_STATS = [
-    ["revenue", "درآمد", true], ["users", "کاربران"], ["orders", "سفارش‌ها"],
-    ["services", "سرویس‌ها"], ["plans", "پلن‌ها"], ["tickets", "تیکت باز"],
+    ["users", "کاربران", false, "users", "blue"], ["orders", "سفارش‌ها", false, "receipt", "green"],
+    ["services", "سرویس‌ها", false, "svc", "sky"], ["plans", "پلن‌ها", false, "tag", "purple"],
   ];
   const ATTENTION = [
-    ["pending", "رسیدهای در انتظار تأیید", "finance", "review"],
-    ["tickets", "تیکت‌های باز", "tickets"],
+    ["pending", "رسیدهای در انتظار تأیید", "finance", "review", "receipt", "amber"],
+    ["tickets", "تیکت‌های باز", "tickets", null, "headset", "pink"],
   ];
 
   function inAppAttention(ops) {
     return new Set(ops && ops.can_review ? ["review"] : []);
   }
 
+  function attentionCard(ops) {
+    return `<section class="card list-card" aria-label="نیاز به اقدام">
+      <h2 class="card-title">نیاز به اقدام</h2>
+      ${R.attentionListHtml(ops.stats, ops.panel_links, ATTENTION, inAppAttention(ops))}
+    </section>`;
+  }
+
+  /** In-app operations; receipt review only when the server says this account may review. */
+  function opsShortcuts(ops) {
+    return ops.can_review
+      ? [{ action: "goto", attrs: { view: "review" }, icon: "receipt", tone: "amber", label: "بررسی رسیدها" }]
+      : [];
+  }
+
   function adminHomeHtml() {
     const r = resource("ops");
     const body = settled(r, 3, "retry");
-    if (body) return greetingHtml() + body;
+    if (body) return brandHeaderHtml() + body;
     const ops = r.data;
-    return greetingHtml()
-      + `<section class="card" aria-label="نیاز به اقدام"><h2 class="card-title">نیاز به اقدام</h2>${R.attentionListHtml(ops.stats, ops.panel_links, ATTENTION, inAppAttention(ops))}</section>`
-      + `<section class="card" aria-label="نمای کلی"><h2 class="card-title">نمای کلی پلتفرم</h2>${R.statsHtml(ops.stats, ADMIN_STATS)}</section>`;
+    const s = ops.stats || {};
+    return brandHeaderHtml()
+      + R.heroHtml({
+        label: "درآمد پلتفرم", value: core.money(s.revenue),
+        sub: `${core.num(s.users)} کاربر، ${core.num(s.resellers)} نماینده`,
+      })
+      + attentionCard(ops)
+      + R.panelShortcutsHtml(ops.panel_links, { leading: opsShortcuts(ops) })
+      + `<section class="card" aria-label="نمای کلی"><h2 class="card-title">نمای کلی پلتفرم</h2>${R.statsHtml(s, ADMIN_STATS, { columns: 2 })}</section>`;
+  }
+
+  function resellerHeroHtml(ops) {
+    const shop = ops.shop || {};
+    const billing = shop.billing;
+    const credit = billing
+      ? `<p class="hero-sub">اعتبار فروشگاه (پرداخت به‌ازای مصرف): <bdi>${core.esc(core.money(billing.balance))}</bdi>${billing.suspended ? '، <strong>مسدود</strong>' : ""}</p>`
+      : "";
+    return R.heroHtml({
+      label: "درآمد فروشگاه",
+      chip: shop.active ? "ربات فعال" : "ربات غیرفعال",
+      value: core.money((ops.stats || {}).revenue),
+      footer: credit,
+      aria: "فروشگاه من",
+    });
   }
 
   function resellerOpsHtml(ops) {
     const shop = ops.shop || {};
-    const billing = shop.billing;
     return viewHead("فروشگاه من", shop.bot_username ? "@" + shop.bot_username : "", { subtitleLtr: true })
-      + (billing ? `<section class="card wallet-card" aria-label="اعتبار فروشگاه">
-          <div class="card-head"><span class="muted">اعتبار فروشگاه (پرداخت به‌ازای مصرف)</span>${billing.suspended ? '<span class="badge is-danger">مسدود</span>' : ""}</div>
-          <p class="wallet-value">${core.esc(core.money(billing.balance))}</p>
-        </section>` : "")
-      + `<section class="card" aria-label="نیاز به اقدام"><div class="card-head"><h2 class="card-title">نیاز به اقدام</h2>${shop.active ? '<span class="badge is-ok">ربات فعال</span>' : '<span class="badge is-warn">ربات غیرفعال</span>'}</div>${R.attentionListHtml(ops.stats, ops.panel_links, ATTENTION, inAppAttention(ops))}</section>`
-      + `<section class="card" aria-label="آمار فروشگاه"><h2 class="card-title">آمار فروشگاه</h2>${R.statsHtml(ops.stats, RESELLER_STATS)}</section>`
-      + `<section class="card list-card" aria-label="میانبر پنل"><h2 class="card-title">میانبر پنل وب</h2>${R.linksHtml(ops.panel_links)}</section>`;
+      + resellerHeroHtml(ops)
+      + attentionCard(ops)
+      + R.panelShortcutsHtml(ops.panel_links, { leading: opsShortcuts(ops) })
+      + `<section class="card" aria-label="آمار فروشگاه"><h2 class="card-title">آمار فروشگاه</h2>${R.statsHtml(ops.stats, RESELLER_STATS, { columns: 2 })}</section>`;
   }
 
   function opsViewHtml() {
@@ -423,8 +490,8 @@
     const body = settled(r, 3, "retry");
     if (body) return viewHead(persona() === "admin" ? "میانبرها" : "فروشگاه من") + body;
     if (persona() === "reseller") return resellerOpsHtml(r.data);
-    return viewHead("میانبرهای پنل وب")
-      + `<section class="card list-card">${R.linksHtml(r.data.panel_links)}</section>`;
+    return viewHead("میانبرها")
+      + R.panelShortcutsHtml(r.data.panel_links, { title: "عملیات و پنل وب", leading: opsShortcuts(r.data) });
   }
 
   function servicesViewHtml() {
@@ -1455,7 +1522,15 @@
     }, SEARCH_DEBOUNCE_MS);
   }
 
+  /** A missing or broken shop photo leaves the name's initial showing underneath. */
+  function onImageError(event) {
+    const el = event.target;
+    if (el && el.matches && el.matches("img[data-brand-logo]")) el.remove();
+  }
+
   function bindEvents() {
+    // Image errors do not bubble, so this listens in the capture phase.
+    doc.addEventListener("error", onImageError, true);
     doc.addEventListener("click", onClick);
     doc.addEventListener("change", onChange);
     doc.addEventListener("submit", onSubmit);
