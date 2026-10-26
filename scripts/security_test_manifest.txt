@@ -285,3 +285,4 @@ tests/test_integration_pagination.py
 tests/test_integration_service_reads.py
 tests/test_integration_read_api.py
 tests/test_integration_read_migration.py
+tests/test_user_search.py

@@ -643,6 +643,15 @@ def _approval_markup(
     )
 
 
+def _numeric_id_lines(user: BotUser | None, telegram_id: int | None) -> list[str]:
+    """The buyer's numeric Telegram id for staff reports; nothing for a synthetic id."""
+    from app.services.platform_identity import deliverable_telegram_id
+
+    raw = telegram_id if telegram_id else getattr(user, "telegram_id", None)
+    tid = deliverable_telegram_id(raw) if raw else None
+    return [kv_line("🆔", "آیدی عددی", f"<code>{tid}</code>")] if tid else []
+
+
 async def notify_new_subscription(
     bot: Bot,
     session: AsyncSession,
@@ -655,12 +664,13 @@ async def notify_new_subscription(
 ) -> None:
     """Inform platform admins and/or shop staff that a subscription was delivered."""
     settings = get_settings()
+    user = await session.get(BotUser, order.user_id) if order.user_id else None
     if not user_name:
-        user = await session.get(BotUser, order.user_id) if order.user_id else None
         user_name = format_user_label(user, telegram_id=user_tg_id)
     lines = [
         kv_line("🧾", "سفارش", f"#{order.id}"),
         kv_line("👤", "کاربر", user_name or "—"),
+        *_numeric_id_lines(user, user_tg_id),
         kv_line("💰", "مبلغ", format_toman(order.amount, settings.currency)),
     ]
     addon_details = await _addon_order_detail_lines(session, order)
@@ -705,6 +715,7 @@ async def notify_pending_approval(
         kv_line("🧾", "پرداخت", f"#{payment.id}"),
         kv_line("💰", "مبلغ", format_toman(payment.amount, settings.currency)),
         kv_line("👤", "کاربر", user_label),
+        *_numeric_id_lines(user, user_tg_id),
     ]
 
     if payment.is_wallet_topup:
@@ -923,12 +934,13 @@ async def notify_new_order(
     user_name: str | None = None,
 ) -> None:
     settings = get_settings()
+    user = await session.get(BotUser, order.user_id) if order.user_id else None
     if not user_name:
-        user = await session.get(BotUser, order.user_id) if order.user_id else None
         user_name = format_user_label(user, telegram_id=user_tg_id)
     lines = [
         kv_line("🧾", "سفارش", f"#{order.id}"),
         kv_line("👤", "کاربر", user_name or "—"),
+        *_numeric_id_lines(user, user_tg_id),
         kv_line("💰", "مبلغ", format_toman(order.amount, settings.currency)),
     ]
     addon_details = await _addon_order_detail_lines(session, order)
@@ -972,6 +984,7 @@ async def notify_wallet_topup_ok(
                 kv_line("🧾", "پرداخت", f"#{payment.id}"),
                 kv_line("💵", "مبلغ", format_toman(payment.amount, settings.currency)),
                 kv_line("👤", "کاربر", format_user_label(user, telegram_id=user_tg_id)),
+                *_numeric_id_lines(user, user_tg_id),
                 kv_line("✅", "وضعیت", "تأیید و واریز شد"),
             ]
         ),
@@ -1143,6 +1156,7 @@ async def notify_settlement_review(
         kv_line("🧾", "پرداخت", f"#{payment.id}"),
         kv_line("💰", "مبلغ", format_toman(payment.amount, settings.currency)),
         kv_line("👤", "کاربر", format_user_label(user, telegram_id=getattr(user, "telegram_id", None))),
+        *_numeric_id_lines(user, None),
     ]
     if payment.order_id:
         lines.append(kv_line("🛒", "سفارش", f"#{payment.order_id}"))
@@ -1230,6 +1244,7 @@ async def notify_approved_delivery_stuck(
         kv_line("🧾", "پرداخت", f"#{payment.id}"),
         kv_line("💰", "مبلغ", format_toman(payment.amount, settings.currency)),
         kv_line("👤", "کاربر", user_label),
+        *_numeric_id_lines(user, user_tg_id),
         kv_line("✅", "وضعیت پرداخت", "تأیید شده"),
         kv_line("⚠️", "تشخیص", diag.label_fa),
     ]
