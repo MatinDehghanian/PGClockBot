@@ -251,6 +251,41 @@
     } catch (_) {}
   }
 
+  const ACCENT_HEX = /^#[0-9a-f]{6}$/i;
+  const INK_DARK = "#1c1007";
+  const INK_LIGHT = "#ffffff";
+
+  function luminance(hex) {
+    const channel = (offset) => {
+      const v = parseInt(hex.slice(offset, offset + 2), 16) / 255;
+      return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+    };
+    return 0.2126 * channel(1) + 0.7152 * channel(3) + 0.0722 * channel(5);
+  }
+
+  /** Text colour on a solid accent: whichever of dark ink or white reads better (WCAG contrast). */
+  function inkFor(hex) {
+    const l = luminance(hex);
+    const onWhite = 1.05 / (l + 0.05);
+    const onDark = (l + 0.05) / (luminance(INK_DARK) + 0.05);
+    return onDark >= onWhite ? INK_DARK : INK_LIGHT;
+  }
+
+  /** The shop's accent colour on every button and highlight; "" or anything invalid keeps the default. */
+  function applyBrand(brand) {
+    const doc = root.document;
+    const style = doc && doc.documentElement && doc.documentElement.style;
+    if (!style || typeof style.setProperty !== "function") return;
+    const accent = String((brand && brand.accent) || "");
+    if (ACCENT_HEX.test(accent)) {
+      style.setProperty("--brand-custom", accent);
+      style.setProperty("--accent-ink", inkFor(accent));
+    } else {
+      style.removeProperty("--brand-custom");
+      style.removeProperty("--accent-ink");
+    }
+  }
+
   /** Telegram's top insets apply only in fullscreen; CSS reads data-fullscreen. */
   function applyFullscreen() {
     const doc = root.document;
@@ -275,7 +310,7 @@
   const core = Object.freeze({
     tg, getInitData, shopKey, esc, safeUrl, safePanelPath, num, money, parseAmount, setCurrency, formatDateTime, formatDate, faDigits,
     haptic, toast, confirmAction, openExternal, openTelegramLink, api, ApiError, copyText, markCopied,
-    applyTheme, initTelegram,
+    applyTheme, applyBrand, inkFor, initTelegram,
   });
   root.PGMini = Object.assign(root.PGMini || {}, { core });
 })(typeof window === "object" ? window : globalThis);
