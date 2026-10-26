@@ -32,6 +32,7 @@ from app.services.db_safe import rollback_quiet
 from app.services.service_scope import customer_may_use_service
 from app.services.formatting import (
     expire_remaining_days,
+    format_bytes_left,
     format_bytes_ratio,
     format_expire_short,
     hold_duration_from_info,
@@ -47,6 +48,7 @@ from app.services.miniapp_auth import (
     resolve_mini_persona,
 )
 from app.services.miniapp_branding import platform_brand, shop_brand
+from app.services.miniapp_badges import home_badges
 from app.services.miniapp_home import customer_home_summary
 from app.services.miniapp_shop import (
     KEY_PATTERN,
@@ -259,6 +261,7 @@ def _serialize_service(svc: UserService, info: dict | None = None) -> dict:
         if volume_known
         else "—",
         "traffic_pct": _traffic_pct(used, limit) if volume_known else None,
+        "traffic_left": format_bytes_left(used, limit) if volume_known else "—",
         "expire": format_expire_short(expire, status=status_raw, expire_duration=hold_dur)
         if time_known
         else "—",
@@ -284,7 +287,7 @@ def _unavailable_service_row(svc: UserService) -> dict:
         "is_cancelled": bool(getattr(svc, "is_cancelled", False)),
         "cancellation_pending": bool(getattr(svc, "cancellation_pending", False)),
         "subscription_url": "", "status": "—", "status_fa": "—",
-        "traffic": "—", "traffic_pct": None, "expire": "—", "expire_at": None,
+        "traffic": "—", "traffic_pct": None, "traffic_left": "—", "expire": "—", "expire_at": None,
         "expire_days": None, "expire_days_label": "—", "pending_start": False,
         "online_at": None, "info_fetched_at": None,
         **service_info_error("invalid_response"),
@@ -337,6 +340,7 @@ async def _customer_summary(session: AsyncSession, user: BotUser, *, scope: Mini
         "qr_enabled": on(ui.get("qr_enabled", "1")),
         "commerce_allowed": True,
         "home": home,
+        "badges": (await home_badges(session, user, shop_id=scope.shop_id)).payload(),
     }
 
 

@@ -2030,36 +2030,6 @@
     ],
     "kind": "inline"
   },
-  "inline.custom_confirm": {
-    "inline_keyboard": [
-      [
-        {
-          "callback_data": "shop:custom:buy",
-          "style": "primary",
-          "text": "🟢✅ ادامه خرید"
-        }
-      ],
-      [
-        {
-          "callback_data": "shop:custom:gb:next",
-          "text": "✏️ تغییر روز"
-        }
-      ],
-      [
-        {
-          "callback_data": "shop:custom",
-          "text": "✏️ تغییر حجم"
-        }
-      ],
-      [
-        {
-          "callback_data": "shop:list",
-          "text": "⬅️ بازگشت"
-        }
-      ]
-    ],
-    "kind": "inline"
-  },
   "inline.custom_days": {
     "inline_keyboard": [
       [
@@ -2085,7 +2055,8 @@
       [
         {
           "callback_data": "shop:custom:confirm",
-          "text": "✅ مشاهده قیمت و تأیید"
+          "style": "primary",
+          "text": "🟢✅ ادامه خرید"
         }
       ],
       [
@@ -2998,24 +2969,6 @@
     ],
     "kind": "inline"
   },
-  "inline.wholesale_confirm": {
-    "inline_keyboard": [
-      [
-        {
-          "callback_data": "shop:wholesale:buy",
-          "style": "primary",
-          "text": "✅ تأیید و پرداخت"
-        }
-      ],
-      [
-        {
-          "callback_data": "shop:wholesale:qty",
-          "text": "⬅️ بازگشت"
-        }
-      ]
-    ],
-    "kind": "inline"
-  },
   "inline.wholesale_plans": {
     "inline_keyboard": [
       [
@@ -3069,7 +3022,7 @@
         {
           "callback_data": "shop:wholesale:confirm",
           "style": "primary",
-          "text": "ادامه ← تأیید"
+          "text": "🟢✅ ادامه خرید"
         }
       ],
       [

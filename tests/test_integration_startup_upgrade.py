@@ -5,12 +5,16 @@ from __future__ import annotations
 import asyncio
 import os
 from pathlib import Path
+from shutil import copyfile
 from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
 import sqlalchemy as sa
 from alembic import command
+from alembic.config import Config
+from alembic.script import ScriptDirectory
+from alembic.util import CommandError
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.db import session as database
@@ -38,6 +42,18 @@ def legacy_metadata() -> sa.MetaData:
             for column in table.columns if column.name not in excluded_columns
         ])
     return metadata
+
+
+def legacy_alembic_config(database_url: str, directory: Path) -> Config:
+    config = alembic_config(database_url)
+    scripts = ScriptDirectory.from_config(config)
+    versions = directory / "versions"
+    versions.mkdir(parents=True)
+    copyfile(Path(scripts.dir) / "env.py", directory / "env.py")
+    for revision in scripts.walk_revisions(base="base", head="0070_shop_miniapp_key"):
+        copyfile(revision.path, versions / Path(revision.path).name)
+    config.set_main_option("script_location", str(directory))
+    return config
 
 
 def populate(connection: sa.Connection) -> dict[str, list[sa.Row]]:
@@ -141,4 +157,39 @@ def test_startup_upgrades_0070_with_users_services_and_payments_without_manual_s
         if schema:
             with engine.begin() as connection:
                 connection.execute(sa.schema.DropSchema(schema, cascade=True))
+        engine.dispose()
+
+
+def test_never_activated_rollback_prepares_revision_and_preserves_legacy_service_writes(tmp_path: Path) -> None:
+    url = f"sqlite:///{tmp_path / 'rollback.db'}"
+    config = alembic_config(url)
+    with patch.object(database.Base, "metadata", legacy_metadata()):
+        command.upgrade(config, "0070_shop_miniapp_key")
+    engine = sa.create_engine(url)
+    try:
+        with engine.begin() as connection:
+            before = populate(connection)
+            legacy_tables = {name: sa.Table(name, sa.MetaData(), autoload_with=connection) for name in before}
+        command.upgrade(config, "head")
+        old_config = legacy_alembic_config(url, tmp_path / "old_alembic")
+        with pytest.raises(CommandError, match="Can't locate revision"):
+            command.upgrade(old_config, "head")
+        command.downgrade(config, "0070_shop_miniapp_key")
+        command.upgrade(old_config, "head")
+        assert current_revision(url) == "0070_shop_miniapp_key"
+        with engine.begin() as connection:
+            connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+            assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar() == 1
+            for name, table in legacy_tables.items():
+                assert before[name] == connection.execute(table.select().order_by(*table.primary_key)).all()
+            connection.execute(legacy_tables["user_services"].insert(), {
+                "id": 603, "bot_user_id": 100, "pg_user_id": 1603, "pg_username": "rollback-603",
+                "shop_needs_review": False, "notified_expire": False, "notified_traffic": False,
+            })
+        command.upgrade(config, "head")
+        with engine.connect() as connection:
+            assert connection.scalar(sa.text("SELECT count(*) FROM user_services")) == 504
+            assert connection.scalar(sa.text("SELECT customer_id FROM user_services WHERE id=603")) is not None
+            assert not connection.exec_driver_sql("PRAGMA foreign_key_check").all()
+    finally:
         engine.dispose()

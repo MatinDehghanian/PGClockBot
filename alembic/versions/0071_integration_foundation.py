@@ -74,6 +74,16 @@ def upgrade() -> None:
             op.create_index(name, table, columns)
 
 
+def _has_retained_references(bind: sa.Connection, tables: set[str]) -> bool:
+    inspector = sa.inspect(bind)
+    foundation_tables = set(TABLES)
+    return any(
+        foreign_key["referred_table"] in foundation_tables
+        for table in tables - foundation_tables
+        for foreign_key in inspector.get_foreign_keys(table)
+    )
+
+
 def downgrade() -> None:
     bind = op.get_bind()
     tables = set(sa.inspect(bind).get_table_names())
@@ -84,8 +94,11 @@ def downgrade() -> None:
         bind.scalar(sa.select(sa.literal(1)).select_from(sa.table(table)).limit(1)) is not None
         for table in TABLES if table in tables
     )
-    if populated:
-        notice = "Integration foundation downgrade retains populated schema; API disabled. Re-upgrade is supported."
+    if populated or _has_retained_references(bind, tables):
+        notice = (
+            "Integration foundation downgrade retains populated schema or retained foreign-key dependencies; "
+            "API disabled. Re-upgrade is supported."
+        )
         logger.warning(notice)
         # Alembic's logging reconfiguration can disable a previously loaded revision logger.
         op.get_context().impl.static_output(notice)

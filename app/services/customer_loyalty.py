@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -114,6 +114,26 @@ async def _referral(session: AsyncSession, user: BotUser, bot_username: str) -> 
         "invited": int(stats["qualified"] or stats["total"]),
         "earned_points": int(stats["earned_points"]),
     }
+
+
+async def count_affordable_rewards(session: AsyncSession, user: BotUser, *, shop_id: int | None) -> int:
+    """Rewards in this club the customer can take now; 0 while the club is off."""
+    if not await loyalty_enabled(session, reseller_id=shop_id):
+        return 0
+    points = await points_balance(session, user, shop_id)
+    if points <= 0:
+        return 0
+    club = LoyaltyReward.reseller_id.is_(None) if shop_id is None else LoyaltyReward.reseller_id == int(shop_id)
+    count = await session.scalar(
+        select(func.count(LoyaltyReward.id)).where(
+            club,
+            LoyaltyReward.enabled.is_(True),
+            LoyaltyReward.archived.is_(False),
+            LoyaltyReward.points_cost > 0,
+            LoyaltyReward.points_cost <= points,
+        )
+    )
+    return int(count or 0)
 
 
 async def club_summary(session: AsyncSession, user: BotUser, *, shop_id: int | None, bot_username: str) -> dict:

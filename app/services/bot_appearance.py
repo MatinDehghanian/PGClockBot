@@ -12,6 +12,10 @@ from aiogram.types import BufferedInputFile, InputProfilePhotoStatic
 
 log = logging.getLogger(__name__)
 
+# Shared with bot_profile_photo, which copies a photo set in @BotFather for the Mini App logo.
+PHOTO_SOURCE_SETTING = "bot_tg_photo_source"
+PANEL_PHOTO_SOURCE = "panel"
+
 NAME_MAX = 64
 DESCRIPTION_MAX = 512
 SHORT_DESCRIPTION_MAX = 120
@@ -271,6 +275,7 @@ async def save_appearance_from_form(
 
     if remove_photo and not photo_bytes:
         payload["bot_tg_photo"] = ""
+        payload[PHOTO_SOURCE_SETTING] = ""
     elif photo_bytes:
         uploads = DATA_DIR / "uploads"
         uploads.mkdir(parents=True, exist_ok=True)
@@ -279,6 +284,8 @@ async def save_appearance_from_form(
         dest = uploads / dest_name
         dest.write_bytes(photo_bytes)
         payload["bot_tg_photo"] = f"uploads/{dest_name}"
+        # A panel upload wins over the copy the Mini App logo job takes from Telegram.
+        payload[PHOTO_SOURCE_SETTING] = PANEL_PHOTO_SOURCE
 
     await set_settings_bulk(session, payload, reseller_id=reseller_id)
 
