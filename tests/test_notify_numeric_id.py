@@ -1,4 +1,4 @@
-"""Staff reports about a buyer show the buyer's numeric Telegram id next to their name."""
+"""Staff reports about a buyer show their name, @username and plain numeric Telegram id."""
 
 from __future__ import annotations
 
@@ -28,12 +28,15 @@ class NumericIdInReportsTests(unittest.IsolatedAsyncioTestCase):
         self.session.add_all([
             BotUser(id=1, telegram_id=BUYER_TG, referral_code="b1", role="user", username="buyer"),
             BotUser(id=2, telegram_id=-5, referral_code="b2", role="user", username="synthetic"),
+            BotUser(id=3, telegram_id=987654321, referral_code="b3", role="user", username="farid_g",
+                    full_name="Farid <b>Ghaderi</b>"),
             Order(id=1, user_id=1, amount=5_000),
             Payment(id=1, user_id=1, amount=1_700_000, method="card", status=PaymentStatus.APPROVED.value,
                     is_wallet_topup=True),
             Payment(id=2, user_id=1, amount=5_000, method="card", status=PaymentStatus.PENDING.value, order_id=1),
             Payment(id=3, user_id=2, amount=1_000, method="card", status=PaymentStatus.APPROVED.value,
                     is_wallet_topup=True),
+            Order(id=2, user_id=3, amount=210_000),
         ])
         await self.session.commit()
         self.dispatch = AsyncMock(return_value=1)
@@ -68,12 +71,24 @@ class NumericIdInReportsTests(unittest.IsolatedAsyncioTestCase):
             with self.subTest(report=name):
                 await report
                 text = self.last_text()
-                self.assertIn("@buyer", text)
-                self.assertIn(f"<code>{BUYER_TG}</code>", text)
+                self.assertIn("<b>کاربر:</b> @buyer", text)
+                self.assertIn(f"<b>آیدی:</b> {BUYER_TG}", text, "plain text, so Telegram offers it for copying")
+                self.assertNotIn(f"<code>{BUYER_TG}</code>", text)
+                self.assertNotIn("یوزرنیم", text, "the username is already the buyer's label")
+
+    async def test_name_username_and_id_each_have_a_line_and_the_name_is_escaped(self) -> None:
+        await notify_new_subscription(None, self.session, order=await self.session.get(Order, 2), user_tg_id=None,
+                                      user_name="Farid <b>Ghaderi</b>")
+        text = self.last_text()
+        self.assertIn("<b>کاربر:</b> Farid &lt;b&gt;Ghaderi&lt;/b&gt;", text)
+        self.assertIn("<b>یوزرنیم:</b> @farid_g", text)
+        self.assertIn("<b>آیدی:</b> 987654321", text)
+        self.assertLess(text.index("کاربر"), text.index("یوزرنیم"))
+        self.assertLess(text.index("یوزرنیم"), text.index("آیدی"))
 
     async def test_a_synthetic_id_is_not_shown(self) -> None:
         await notify_wallet_topup_ok(None, self.session, await self.session.get(Payment, 3), None)
-        self.assertNotIn("آیدی عددی", self.last_text())
+        self.assertNotIn("آیدی", self.last_text())
 
 
 if __name__ == "__main__":

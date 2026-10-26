@@ -89,6 +89,33 @@ def test_unused_foundation_removal_and_reupgrade_preserve_existing_rows(connecti
     assert_legacy_preserved(connection)
 
 
+def test_downgrade_keeps_empty_foundation_referenced_by_retained_services(connection: Connection) -> None:
+    MIGRATION.upgrade()
+    metadata = sa.MetaData()
+    sa.Table("bot_users", metadata, autoload_with=connection)
+    sa.Table("integrations", metadata, autoload_with=connection)
+    services = sa.Table(
+        "synthetic_services", metadata,
+        sa.Column("id", sa.Integer, primary_key=True),
+        sa.Column("bot_user_id", sa.Integer, sa.ForeignKey("bot_users.id"), nullable=False),
+        sa.Column("integration_id", sa.String(41), sa.ForeignKey("integrations.id"), nullable=True),
+    )
+    services.create(connection)
+    connection.execute(services.insert(), {"id": 1, "bot_user_id": 1})
+    before = connection.execute(services.select()).all()
+    MIGRATION.downgrade()
+    MIGRATION.downgrade()
+    assert set(MIGRATION.TABLES) <= set(sa.inspect(connection).get_table_names())
+    assert before == connection.execute(services.select()).all()
+    connection.execute(services.insert(), {"id": 2, "bot_user_id": 1})
+    assert connection.scalar(sa.select(sa.func.count()).select_from(services)) == 2
+    assert connection.scalar(sa.text("SELECT value FROM settings WHERE key='integration_api_enabled'")) == "0"
+    MIGRATION.upgrade()
+    MIGRATION.upgrade()
+    assert connection.scalar(sa.select(sa.func.count()).select_from(services)) == 2
+    assert_legacy_preserved(connection)
+
+
 def test_populated_downgrade_retains_all_foundation_data_and_reports_retention(connection: Connection) -> None:
     MIGRATION.upgrade()
     tables = foundation_tables(connection)

@@ -23,11 +23,13 @@ from app.config import get_settings
 from app.db.models import BotUser, Order, PaymentMethod
 from app.services.bbc_settlement import CUSTOMER_UNAVAILABLE, BbcNotReady, ensure_gateway_ready, start_bbc_checkout
 from app.services.redact import user_safe_error
+from app.services.checkout_summary import checkout_summary
 from app.services.delivery import send_delivery_to_user
 from app.services.formatting import (
     format_message,
     format_plan_duration_days,
     format_toman,
+    info_block,
     kv_line,
 )
 from app.services.orders import (
@@ -54,6 +56,8 @@ from app.services.orders import (
 from app.services.users import get_all_settings, on
 from app.services.message_variables import DOMAIN_PAYMENT, render_message_template
 from app.services import bot_feedback_texts as feedback
+
+DISCOUNT_APPLIED = "✅ تخفیف اعمال شد"
 
 router = Router(name="shop")
 logger = logging.getLogger(__name__)
@@ -762,35 +766,11 @@ async def custom_days_entered(
     )
 
 @router.callback_query(F.data == "shop:custom:confirm")
-async def custom_confirm(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
-    ui = await get_all_settings(session)
-    if not await _custom_gate(session, ui, state):
-        await callback.answer("پلن دلخواه در دسترس نیست", show_alert=True)
-        return
-    data = await state.get_data()
-    min_gb, _, min_days, _, price_gb, price_day = _custom_bounds(ui)
-    gb = int(data.get("custom_gb") or min_gb)
-    days = int(data.get("custom_days") or min_days)
-    amount = calc_custom_plan_price(
-        gb=gb, days=days, price_per_gb=price_gb, price_per_day=price_day
-    )
-    quote = quote_price(PriceTarget(amount, kind="custom"), await active_discounts(session, shop_id=current_shop_reseller_id()))
-    await callback.answer()
-    from app.services.formatting import info_block, kv_line
-
-    body = info_block(
-        [
-            kv_line("📦", "حجم", f"<b>{gb}</b> گیگابایت"),
-            kv_line("⏱", "مدت", f"<b>{days}</b> روز"),
-            kv_line("💰", "قیمت", price_html(quote, get_settings().currency)),
-            f"<i>({price_gb:,} ت/گیگابایت + {price_day:,} ت/روز)</i>".replace(",", "٬"),
-        ]
-    )
-    if callback.message:
-        await safe_edit_text(callback.message, 
-            format_message("✨ تأیید پلن دلخواه", body),
-            reply_markup=kb.custom_confirm_keyboard(ui),
-        )
+async def custom_confirm(callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext,
+    reseller_owner_id: int | None = None,
+):
+    """«ادامه خرید» after the days step opens the payment screen; the details are shown there."""
+    await custom_buy(callback, session, db_user, state, reseller_owner_id=reseller_owner_id)
 
 async def _notify_new_order(bot, session, order, db_user, plan_name: str | None):
     try:
@@ -885,11 +865,7 @@ async def custom_buy(callback: CallbackQuery, session: AsyncSession, db_user: Bo
             pass
         return
 
-    text = format_message(
-        f"🧾 سفارش #{order.id}",
-        f"پلن دلخواه — <b>{gb:g}</b> گیگابایت / <b>{days}</b> روز\n"
-        f"{kv_line('💰', 'مبلغ قابل پرداخت', f'<b>{format_toman(order.amount, get_settings().currency)}</b>')}",
-    )
+    text = await checkout_summary(session, order, currency=get_settings().currency)
     if callback.message:
         await _show_order_pay(callback.message, session, db_user, order.id, state, text)
     await _notify_new_order(callback.bot, session, order, db_user, "پلن دلخواه")
@@ -1128,48 +1104,12 @@ async def wholesale_qty_entered(
     _ = (is_reseller_bot, reseller_owner_id)
 
 @router.callback_query(F.data == "shop:wholesale:confirm")
-async def wholesale_confirm(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
-    ui = await get_all_settings(session)
-    if not on(ui.get("wholesale_enabled")):
-        await callback.answer("فروش عمده فعال نیست", show_alert=True)
-        return
-    data = await state.get_data()
-    plan_id = int(data.get("wholesale_plan_id") or 0)
-    plan = await get_catalog_plan(session, plan_id) if plan_id else None
-    if not plan:
-        await callback.answer("ابتدا پلن را انتخاب کنید", show_alert=True)
-        return
-    mn, mx = wholesale_bounds(ui)
-    qty = int(data.get("wholesale_qty") or mn)
-    qty = max(mn, min(mx, qty))
-    await state.update_data(wholesale_qty=qty)
-    tiers = parse_wholesale_tiers(ui.get("wholesale_tiers"))
-    pct = wholesale_tier_percent(qty, tiers)
-    payable, discount = calc_wholesale_price(
-        unit_price=sale_price(plan), quantity=qty, percent=pct
-    )
-    await callback.answer()
-    limit = f"{plan.data_limit_gb:g} گیگابایت" if plan.data_limit_gb is not None else "نامحدود"
-    disc_block = ""
-    if pct:
-        disc_block = (
-            f"\n{kv_line('🏷', 'تخفیف عمده', f'<b>{pct}٪</b> (−{format_toman(discount, get_settings().currency)})')}"
-        )
-    text = format_message(
-        "📦 تأیید فروش عمده",
-        f"{wholesale_description(ui)}\n\n"
-        f"{kv_line('💎', 'پلن', plan.name)}\n"
-        f"{kv_line('📦', 'تعداد', f'<b>{qty}</b>')}\n"
-        f"{kv_line('📅', 'مدت هر سرویس', format_plan_duration_days(plan.duration_days))}\n"
-        f"{kv_line('📶', 'حجم هر سرویس', limit)}\n"
-        f"{kv_line('💰', 'قیمت واحد', format_toman(sale_price(plan), get_settings().currency))}"
-        f"{disc_block}\n"
-        f"{kv_line('💳', 'مبلغ قابل پرداخت', f'<b>{format_toman(payable, get_settings().currency)}</b>')}",
-    )
-    if callback.message:
-        await safe_edit_text(
-            callback.message, text, reply_markup=kb.wholesale_confirm_keyboard(ui)
-        )
+async def wholesale_confirm(
+    callback: CallbackQuery, session: AsyncSession, db_user: BotUser, state: FSMContext,
+    reseller_owner_id: int | None = None,
+):
+    """«ادامه خرید» after the quantity step opens the payment screen; the details are shown there."""
+    await wholesale_buy(callback, session, db_user, state, reseller_owner_id=reseller_owner_id)
 
 @router.callback_query(F.data == "shop:wholesale:buy")
 async def wholesale_buy(
@@ -1224,13 +1164,7 @@ async def wholesale_buy(
     await _record_shop_funnel(
         session, db_user, "pay_start", ui=ui, plan_id=plan_id, order_id=order.id
     )
-    plan = await get_catalog_plan(session, plan_id)
-    plan_name = plan.name if plan else "پلن"
-    text = format_message(
-        f"🧾 سفارش عمده #{order.id}",
-        f"{plan_name} × <b>{order.quantity}</b>\n"
-        f"{kv_line('💰', 'مبلغ قابل پرداخت', f'<b>{format_toman(order.amount, get_settings().currency)}</b>')}",
-    )
+    text = await checkout_summary(session, order, currency=get_settings().currency)
     if callback.message:
         await _show_order_pay(callback.message, session, db_user, order.id, state, text)
     await _notify_new_order(
@@ -1238,7 +1172,15 @@ async def wholesale_buy(
     )
 
 @router.callback_query(F.data.startswith("shop:plan:"))
-async def shop_plan(callback: CallbackQuery, session: AsyncSession, db_user: BotUser):
+async def shop_plan(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+    reseller_owner_id: int | None = None,
+):
+    """A paid plan opens its payment screen directly (its details are shown there);
+    a free plan keeps this details screen, since its «ادامه» delivers at once."""
     ui = await get_all_settings(session)
     if await _answer_shop_maintenance(callback, session, ui):
         return
@@ -1247,11 +1189,11 @@ async def shop_plan(callback: CallbackQuery, session: AsyncSession, db_user: Bot
     if not plan:
         await callback.answer("پلن پیدا نشد", show_alert=True)
         return
-    await callback.answer()
     await _record_shop_funnel(session, db_user, "plan_view", ui=ui, plan_id=plan.id)
+    if sale_price(plan) > 0:
+        await _begin_plan_purchase(callback, session, db_user, state, ui, plan, reseller_owner_id=reseller_owner_id)
+        return
     limit = f"{plan.data_limit_gb:g} گیگابایت" if plan.data_limit_gb is not None else "نامحدود"
-    from app.services.formatting import info_block, kv_line
-
     body = info_block(
         [
             html.escape(plan.description or ""),
@@ -1329,10 +1271,7 @@ async def _complete_shop_buy(
             pass
         return
 
-    text = format_message(
-        f"🧾 سفارش #{order.id}",
-        f"{kv_line('💰', 'مبلغ قابل پرداخت', f'<b>{format_toman(order.amount, get_settings().currency)}</b>')}",
-    )
+    text = await checkout_summary(session, order, currency=get_settings().currency)
     msg = callback.message if callback is not None else message
     if msg is not None:
         await _show_order_pay(msg, session, db_user, order.id, state, text)
@@ -1363,6 +1302,33 @@ async def shop_buy(callback: CallbackQuery, session: AsyncSession, db_user: BotU
     if not plan:
         await callback.answer("پلن پیدا نشد", show_alert=True)
         return
+    await _begin_plan_purchase(
+        callback, session, db_user, state, ui, plan, reseller_owner_id=reseller_owner_id, terms_checked=True
+    )
+
+
+async def _begin_plan_purchase(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    db_user: BotUser,
+    state: FSMContext,
+    ui: dict,
+    plan,
+    *,
+    reseller_owner_id: int | None,
+    terms_checked: bool = False,
+) -> None:
+    """Every gate of «ادامه خرید» (terms, contact, payment methods, trial phone), then the order."""
+    plan_id = int(plan.id)
+    if not terms_checked:
+        from app.bot.handlers.terms import prompt_terms_if_needed
+
+        if await prompt_terms_if_needed(
+            callback, session, db_user, state, ui, "buy_user", reseller_owner_id=reseller_owner_id
+        ):
+            # Accepting the terms resumes «shop:buy:<id>», which lands here again.
+            await state.update_data(terms_resume=f"shop:buy:{plan_id}")
+            return
     if not plan.is_trial and await prompt_purchase_contact_if_needed(callback, session, db_user, state, ui):
         return
     if sale_price(plan) > 0 and not kb.any_checkout_method_enabled(ui):
@@ -1588,11 +1554,8 @@ async def navigate_order_pay_back(
         return
 
     if order.plan_id:
-        await shop_plan(
-            _PayBackCallback(message, f"shop:plan:{int(order.plan_id)}"),
-            session,
-            db_user,
-        )
+        # The plan details live on the payment screen now; back is the plan list.
+        await shop_kind_fixed(_PayBackCallback(message, "shop:kind:fixed"), session, db_user, state)
         return
 
     await shop_list(
@@ -1713,10 +1676,8 @@ async def apply_loyalty_discount_btn(
         return
     await callback.answer("تخفیف اعمال شد ✅")
     if callback.message:
-        summary = (
-            f"🛒 سفارش #{order.id}\n"
-            f"تخفیف اعمال شد ✅\n"
-            f"مبلغ: <b>{format_toman(order.amount, get_settings().currency)}</b>"
+        summary = await checkout_summary(
+            session, order, currency=get_settings().currency, notice=DISCOUNT_APPLIED
         )
         await present_order_pay(
             callback.message,
@@ -1784,10 +1745,8 @@ async def apply_discount_msg(
     try:
         order = await apply_discount_to_order(session, order, code_raw)
     except ValueError as e:
-        summary = (
-            f"🛒 سفارش #{order.id}\n"
-            f"{user_safe_error(e)}\n"
-            f"مبلغ: <b>{format_toman(order.amount, get_settings().currency)}</b>"
+        summary = await checkout_summary(
+            session, order, currency=get_settings().currency, notice=f"⚠️ {html.escape(user_safe_error(e))}"
         )
         await present_order_pay(
             message,
@@ -1801,11 +1760,7 @@ async def apply_discount_msg(
             heal_main=True,
         )
         return
-    summary = (
-        f"🛒 سفارش #{order.id}\n"
-        f"تخفیف اعمال شد ✅\n"
-        f"مبلغ: <b>{format_toman(order.amount, get_settings().currency)}</b>"
-    )
+    summary = await checkout_summary(session, order, currency=get_settings().currency, notice=DISCOUNT_APPLIED)
     await present_order_pay(
         message,
         session,
@@ -2617,10 +2572,7 @@ def _register_shop_cancel_codes() -> None:
         if not is_customer_order_in_current_shop(order, db_user.id):
             await message.answer("این سفارش پیدا نشد.")
             return
-        summary = (
-            f"🛒 سفارش #{order.id}\n"
-            f"مبلغ: <b>{format_toman(order.amount, get_settings().currency)}</b>"
-        )
+        summary = await checkout_summary(session, order, currency=get_settings().currency)
         await present_order_pay(
             message,
             session,

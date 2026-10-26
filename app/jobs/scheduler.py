@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from aiogram import Bot
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -10,6 +10,7 @@ from sqlalchemy import or_, select
 
 from app.db.models import BotUser, ResellerProfile, UserService
 from app.db.session import SessionLocal
+from app.jobs.bot_profile_photo import run_bot_profile_photo_sync
 from app.jobs.cancellation_notifications import run_cancellation_notifications
 from app.jobs.integration_operations import run_integration_operations
 from app.jobs.chat_message_purge import run_chat_message_purge
@@ -809,6 +810,9 @@ async def run_psp_settlement_poll() -> None:
             logger.exception("psp stuck settlement recovery failed")
 
 
+BOT_PHOTO_FIRST_RUN_MINUTES = 2
+
+
 def start_background_scheduler() -> None:
     """Run financial and maintenance jobs as soon as the database is ready."""
     jobs = (
@@ -835,6 +839,13 @@ def start_background_scheduler() -> None:
                 misfire_grace_time=grace,
                 **interval,
             )
+    if scheduler.get_job("bot_profile_photo") is None:
+        # Every 6 hours, but the first copy soon after start so a new logo shows the same day.
+        scheduler.add_job(
+            run_bot_profile_photo_sync, "interval", hours=6, id="bot_profile_photo",
+            next_run_time=datetime.now(timezone.utc) + timedelta(minutes=BOT_PHOTO_FIRST_RUN_MINUTES),
+            max_instances=1, coalesce=True, misfire_grace_time=3600,
+        )
     if not scheduler.running:
         scheduler.start()
         logger.info("Background scheduler started")

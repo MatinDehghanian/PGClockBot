@@ -39,6 +39,8 @@
     busy: new Set(),
     searchTimer: null,
     backBound: false,
+    // The tab bar as last drawn, so it is redrawn (and animated) only when it changes.
+    nav: { key: "", active: null },
   };
 
   /* ---------- helpers ---------- */
@@ -201,7 +203,26 @@
     state.me = me;
     core.setCurrency(me.currency);
     core.applyBrand(me.brand);
-    els.nav.innerHTML = R.navHtml(me.nav, navTab(state.view));
+    renderNav();
+  }
+
+  /** The platform admin's dashboard already holds every shortcut, so it needs no tab bar. */
+  function hasTabbar() {
+    return persona() !== "admin";
+  }
+
+  /** Draw the tab bar only when the tabs or the current tab change; the old tab animates out. */
+  function renderNav() {
+    const show = hasTabbar();
+    els.nav.hidden = !show;
+    doc.body.classList.toggle("no-tabbar", !show);
+    const nav = show ? state.me.nav || [] : [];
+    const active = navTab(state.view);
+    const key = JSON.stringify(nav);
+    if (key === state.nav.key && active === state.nav.active) return;
+    const previous = key === state.nav.key ? state.nav.active : null;
+    els.nav.innerHTML = R.navHtml(nav, active, previous);
+    state.nav = { key, active };
   }
 
   /** The shop's brand; a shop without a saved brand still shows its own name. */
@@ -241,7 +262,7 @@
       root.history.replaceState(null, "", "#" + hash);
     }
     state.viewSeq += 1;
-    els.nav.innerHTML = R.navHtml(state.me.nav, navTab(state.view));
+    renderNav();
     renderView();
     root.scrollTo(0, 0);
     syncTelegramBackButton();
@@ -388,6 +409,7 @@
   /** Home shortcuts, only for the sections this Mini App has opened. */
   function customerShortcuts(home) {
     const f = features();
+    const badges = customer().badges || {};
     const target = shortcutService(home);
     const targetId = target ? Number(target.id) || 0 : 0;
     return [
@@ -396,8 +418,8 @@
       { action: "goto", attrs: { view: "services" }, icon: "svc", tone: "blue", label: "سرویس‌های من" },
       f.topup && { action: "topup", icon: "wallet", tone: "amber", label: "شارژ کیف پول" },
       can("guides") && { action: "guides", attrs: { id: targetId }, icon: "book", tone: "teal", label: "آموزش اتصال" },
-      can("support") && { action: "goto", attrs: { view: "support" }, icon: "headset", tone: "pink", label: "پشتیبانی" },
-      can("club") && { action: "goto", attrs: { view: "club" }, icon: "gift", tone: "purple", label: "دعوت و جوایز" },
+      can("support") && { action: "goto", attrs: { view: "support" }, icon: "headset", tone: "pink", label: "پشتیبانی", badge: badges.support },
+      can("club") && { action: "goto", attrs: { view: "club" }, icon: "gift", tone: "purple", label: "دعوت و جوایز", badge: badges.club },
       f.gift && { action: "gift-code", icon: "tag", tone: "sky", label: "کد هدیه" },
     ];
   }
@@ -441,8 +463,14 @@
   /** In-app operations; receipt review only when the server says this account may review. */
   function opsShortcuts(ops) {
     return ops.can_review
-      ? [{ action: "goto", attrs: { view: "review" }, icon: "receipt", tone: "amber", label: "بررسی رسیدها" }]
+      ? [{ action: "goto", attrs: { view: "review" }, icon: "receipt", tone: "amber", label: "بررسی رسیدها", badge: (ops.stats || {}).pending }]
       : [];
+  }
+
+  /** Open tickets on the panel's tickets tile; receipts show on «بررسی رسیدها» instead when reviewed here. */
+  function opsPanelBadges(ops) {
+    const stats = ops.stats || {};
+    return { tickets: stats.tickets, finance: ops.can_review ? 0 : stats.pending };
   }
 
   function adminHomeHtml() {
@@ -457,7 +485,7 @@
         sub: `${core.num(s.users)} کاربر، ${core.num(s.resellers)} نماینده`,
       })
       + attentionCard(ops)
-      + R.panelShortcutsHtml(ops.panel_links, { leading: opsShortcuts(ops) })
+      + R.panelShortcutsHtml(ops.panel_links, { leading: opsShortcuts(ops), badges: opsPanelBadges(ops) })
       + `<section class="card" aria-label="نمای کلی"><h2 class="card-title">نمای کلی پلتفرم</h2>${R.statsHtml(s, ADMIN_STATS, { columns: 2 })}</section>`;
   }
 
@@ -481,7 +509,7 @@
     return viewHead("فروشگاه من", shop.bot_username ? "@" + shop.bot_username : "", { subtitleLtr: true })
       + resellerHeroHtml(ops)
       + attentionCard(ops)
-      + R.panelShortcutsHtml(ops.panel_links, { leading: opsShortcuts(ops) })
+      + R.panelShortcutsHtml(ops.panel_links, { leading: opsShortcuts(ops), badges: opsPanelBadges(ops) })
       + `<section class="card" aria-label="آمار فروشگاه"><h2 class="card-title">آمار فروشگاه</h2>${R.statsHtml(ops.stats, RESELLER_STATS, { columns: 2 })}</section>`;
   }
 
@@ -491,7 +519,7 @@
     if (body) return viewHead(persona() === "admin" ? "میانبرها" : "فروشگاه من") + body;
     if (persona() === "reseller") return resellerOpsHtml(r.data);
     return viewHead("میانبرها")
-      + R.panelShortcutsHtml(r.data.panel_links, { title: "عملیات و پنل وب", leading: opsShortcuts(r.data) });
+      + R.panelShortcutsHtml(r.data.panel_links, { title: "عملیات و پنل وب", leading: opsShortcuts(r.data), badges: opsPanelBadges(r.data) });
   }
 
   function servicesViewHtml() {
@@ -1068,6 +1096,8 @@
         await core.api(`/api/mini/support/tickets/${id}/messages`, { method: "POST", body: { body } });
         invalidate("support");
         await loadTicket(id);
+        // Replying takes the ticket off «answered», so the support badge drops.
+        refreshBadges();
       } catch (err) {
         core.toast(err.status === 0 ? "نتیجه مشخص نشد؛ گفتگو دوباره خوانده شد." : err.message, "err");
         if (err.status === 0) await loadTicket(id);
@@ -1408,7 +1438,11 @@
   }
 
   const ACTIONS = {
-    goto: (el) => go(el.getAttribute("data-view")),
+    goto: (el) => {
+      // A tab tap gets the same light tick as other selections.
+      if (el.classList && el.classList.contains && el.classList.contains("nav-btn")) core.haptic("select");
+      go(el.getAttribute("data-view"));
+    },
     "open-service": (el) => go("service", { serviceId: intAttr(el, "data-id"), then: el.getAttribute("data-then") }),
     "refresh-service": (el) => refreshService(intAttr(el, "data-id"), el),
     "copy-link": (el) => copyLink(intAttr(el, "data-id"), el),
@@ -1570,6 +1604,7 @@
 
   function showBootError(err) {
     els.nav.innerHTML = "";
+    state.nav = { key: "", active: null };
     els.root.innerHTML = R.errorHtml(bootErrorText(err), "reload");
   }
 
@@ -1589,6 +1624,35 @@
 
   ACTIONS.reload = () => boot();
 
+  /** Re-read /me in the background; the home badges follow it. */
+  function refreshBadges() {
+    reloadMe().then(() => { if (state.view === homeViewId()) renderView(); }).catch(() => {});
+  }
+
+  /** Pull to refresh: drop every cached screen and read /me again, then redraw this screen. */
+  async function refreshScreen() {
+    invalidateCommerce();
+    for (const name of Object.keys(state.resources)) invalidate(name);
+    state.tickets.clear();
+    state.clubHistory = null;
+    try {
+      await reloadMe();
+      core.haptic("ok");
+    } catch (err) {
+      core.toast(err.message, "err");
+    }
+    renderView();
+  }
+
+  function attachPullToRefresh() {
+    const indicator = doc.getElementById("ptr");
+    if (!root.PGMini.pull || !indicator || !indicator.style) return;
+    root.PGMini.pull.attach({
+      doc, indicator, onRefresh: refreshScreen,
+      canStart: () => !!state.me && !state.sheet,
+    });
+  }
+
   function start() {
     els.root = doc.getElementById("root");
     els.nav = doc.getElementById("nav");
@@ -1599,9 +1663,10 @@
     core.initTelegram();
     bindTelegramBackButton();
     bindEvents();
+    attachPullToRefresh();
     boot();
   }
 
-  root.PGMini.app = Object.freeze({ start, state, go, ACTIONS, submitForm, closeSheet, syncTelegramBackButton });
+  root.PGMini.app = Object.freeze({ start, state, go, ACTIONS, submitForm, closeSheet, syncTelegramBackButton, refreshScreen });
   if (root.PGMini.autostart !== false) start();
 })(typeof window === "object" ? window : globalThis);
