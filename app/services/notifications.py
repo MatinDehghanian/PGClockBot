@@ -2,6 +2,7 @@ from __future__ import annotations
 
 """Admin Telegram notification preferences and dispatch."""
 
+import html
 import logging
 from typing import Any
 
@@ -19,7 +20,6 @@ from app.services.formatting import (
     format_expire,
     format_message,
     format_toman,
-    format_user_label,
     info_block,
     kv_line,
 )
@@ -643,13 +643,26 @@ def _approval_markup(
     )
 
 
-def _numeric_id_lines(user: BotUser | None, telegram_id: int | None) -> list[str]:
-    """The buyer's numeric Telegram id for staff reports; nothing for a synthetic id."""
+def _buyer_lines(user: BotUser | None, telegram_id: int | None = None) -> list[str]:
+    """Who the report is about: name, @username and numeric Telegram id, each on its own line.
+
+    Built from the user row and escaped here, so a customer's name can never break the
+    staff message. The id is plain text (no <code>) so Telegram offers it for copying
+    like any other number; a synthetic placeholder id is not shown.
+    """
     from app.services.platform_identity import deliverable_telegram_id
 
+    name = (getattr(user, "full_name", None) or "").strip()
+    username = (getattr(user, "username", None) or "").strip().lstrip("@")
     raw = telegram_id if telegram_id else getattr(user, "telegram_id", None)
     tid = deliverable_telegram_id(raw) if raw else None
-    return [kv_line("🆔", "آیدی عددی", f"<code>{tid}</code>")] if tid else []
+    label = html.escape(name) if name else (f"@{html.escape(username)}" if username else (str(tid) if tid else "—"))
+    lines = [kv_line("👤", "کاربر", label)]
+    if username and name:
+        lines.append(kv_line("🔗", "یوزرنیم", f"@{html.escape(username)}"))
+    if tid:
+        lines.append(kv_line("🆔", "آیدی", str(tid)))
+    return lines
 
 
 async def notify_new_subscription(
@@ -665,12 +678,10 @@ async def notify_new_subscription(
     """Inform platform admins and/or shop staff that a subscription was delivered."""
     settings = get_settings()
     user = await session.get(BotUser, order.user_id) if order.user_id else None
-    if not user_name:
-        user_name = format_user_label(user, telegram_id=user_tg_id)
+    _ = user_name  # kept for callers; the report is built from the user row
     lines = [
         kv_line("🧾", "سفارش", f"#{order.id}"),
-        kv_line("👤", "کاربر", user_name or "—"),
-        *_numeric_id_lines(user, user_tg_id),
+        *_buyer_lines(user, user_tg_id),
         kv_line("💰", "مبلغ", format_toman(order.amount, settings.currency)),
     ]
     addon_details = await _addon_order_detail_lines(session, order)
@@ -709,13 +720,12 @@ async def notify_pending_approval(
 ) -> None:
     settings = get_settings()
     user = await session.get(BotUser, payment.user_id) if payment.user_id else None
-    user_label = user_name or format_user_label(user, telegram_id=user_tg_id)
+    _ = user_name  # kept for callers; the report is built from the user row
 
     lines = [
         kv_line("🧾", "پرداخت", f"#{payment.id}"),
         kv_line("💰", "مبلغ", format_toman(payment.amount, settings.currency)),
-        kv_line("👤", "کاربر", user_label),
-        *_numeric_id_lines(user, user_tg_id),
+        *_buyer_lines(user, user_tg_id),
     ]
 
     if payment.is_wallet_topup:
@@ -935,12 +945,10 @@ async def notify_new_order(
 ) -> None:
     settings = get_settings()
     user = await session.get(BotUser, order.user_id) if order.user_id else None
-    if not user_name:
-        user_name = format_user_label(user, telegram_id=user_tg_id)
+    _ = user_name  # kept for callers; the report is built from the user row
     lines = [
         kv_line("🧾", "سفارش", f"#{order.id}"),
-        kv_line("👤", "کاربر", user_name or "—"),
-        *_numeric_id_lines(user, user_tg_id),
+        *_buyer_lines(user, user_tg_id),
         kv_line("💰", "مبلغ", format_toman(order.amount, settings.currency)),
     ]
     addon_details = await _addon_order_detail_lines(session, order)
@@ -983,8 +991,7 @@ async def notify_wallet_topup_ok(
             [
                 kv_line("🧾", "پرداخت", f"#{payment.id}"),
                 kv_line("💵", "مبلغ", format_toman(payment.amount, settings.currency)),
-                kv_line("👤", "کاربر", format_user_label(user, telegram_id=user_tg_id)),
-                *_numeric_id_lines(user, user_tg_id),
+                *_buyer_lines(user, user_tg_id),
                 kv_line("✅", "وضعیت", "تأیید و واریز شد"),
             ]
         ),
@@ -1155,8 +1162,7 @@ async def notify_settlement_review(
     lines = [
         kv_line("🧾", "پرداخت", f"#{payment.id}"),
         kv_line("💰", "مبلغ", format_toman(payment.amount, settings.currency)),
-        kv_line("👤", "کاربر", format_user_label(user, telegram_id=getattr(user, "telegram_id", None))),
-        *_numeric_id_lines(user, None),
+        *_buyer_lines(user),
     ]
     if payment.order_id:
         lines.append(kv_line("🛒", "سفارش", f"#{payment.order_id}"))
@@ -1223,7 +1229,6 @@ async def notify_approved_delivery_stuck(
 
     settings = get_settings()
     user = await session.get(BotUser, payment.user_id) if payment.user_id else None
-    user_label = format_user_label(user, telegram_id=user_tg_id)
     order = (
         await session.get(Order, int(payment.order_id)) if payment.order_id else None
     )
@@ -1243,8 +1248,7 @@ async def notify_approved_delivery_stuck(
     lines = [
         kv_line("🧾", "پرداخت", f"#{payment.id}"),
         kv_line("💰", "مبلغ", format_toman(payment.amount, settings.currency)),
-        kv_line("👤", "کاربر", user_label),
-        *_numeric_id_lines(user, user_tg_id),
+        *_buyer_lines(user, user_tg_id),
         kv_line("✅", "وضعیت پرداخت", "تأیید شده"),
         kv_line("⚠️", "تشخیص", diag.label_fa),
     ]
