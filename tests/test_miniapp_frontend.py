@@ -40,6 +40,9 @@ class MiniAppFrontendTests(unittest.TestCase):
     def test_receipt_review_behavior(self) -> None:
         self.run_node("miniapp_review.test.cjs")
 
+    def test_brand_and_shortcuts_behavior(self) -> None:
+        self.run_node("miniapp_brand.test.cjs")
+
 
 if __name__ == "__main__":
     unittest.main()
