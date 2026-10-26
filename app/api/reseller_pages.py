@@ -260,12 +260,13 @@ def register_reseller_pages(app, *, render, require_admin, get_db, require_staff
         search_q = ""
         try:
             from app.services.list_query import filter_by_search, normalize_search_q
+            from app.services.user_search import clean_handle
 
             search_q = normalize_search_q(request.query_params.get("q"))
             if search_q:
                 rows = filter_by_search(
                     rows,
-                    search_q,
+                    clean_handle(search_q),
                     lambda pair: (
                         pair[0].id,
                         pair[0].telegram_id,

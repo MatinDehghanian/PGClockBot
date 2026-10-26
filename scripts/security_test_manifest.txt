@@ -302,3 +302,4 @@ tests/test_integration_runtime_settings.py
 tests/test_integration_disabled_paths.py
 tests/test_integration_execution_api.py
 tests/test_integration_operation_migrations.py
+tests/test_user_search.py
