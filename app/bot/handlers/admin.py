@@ -33,6 +33,7 @@ from app.services.reseller_wallet import load_reseller_profile
 from app.services.pasarguard import get_pg
 from app.services.tickets import get_ticket, reply_ticket
 from app.services.updates import local_version
+from app.services.user_search import clean_handle, find_bot_user
 from app.services.users import get_all_settings, get_setting, on, set_setting
 from app.services.billing import is_payg
 from app.services.volume_allocation import set_shop_oversell
@@ -2327,7 +2328,7 @@ async def adm_users_search_start(callback: CallbackQuery, state: FSMContext, db_
     await ask_text(
         callback,
         state,
-        prompt="آیدی عددی تلگرام کاربر را بفرستید:",
+        prompt="آیدی عددی یا یوزرنیم تلگرام کاربر یا نماینده را بفرستید:\n<code>123456789</code> یا <code>@username</code>",
         cancel_code="adm_usr",
         return_to="adm:users",
         fsm_state=AdminStates.user_search,
@@ -2357,25 +2358,18 @@ async def adm_users_search(
             clear_state=True,
         )
         return
-    try:
-        tg_id = int((message.text or "").strip())
-    except ValueError:
-        await message.answer("فقط آیدی عددی تلگرام را بفرستید؛ مثلاً <code>123456789</code>.")
+    query = clean_handle(message.text)
+    if not query or " " in query:
+        await message.answer("آیدی عددی یا یوزرنیم تلگرام را بفرستید؛ مثلاً <code>123456789</code> یا <code>@username</code>.")
         return
-    result = await session.execute(
-        select(BotUser).where(
-            BotUser.telegram_id == tg_id,
-            BotUser.reseller_id.is_(None),
-        )
-    )
-    user = result.scalar_one_or_none()
+    user = await find_bot_user(session, query, scope=BotUser.reseller_id.is_(None))
     await state.clear()
     # cancel_reply() replaced the submenu — restore on a *lasting* message.
     # Tip-delete seeding drops the custom keyboard on many mobile clients.
     users_kb = kb.admin_users_reply_keyboard()
     if not user:
         await message.answer(
-            "کاربری با این آیدی در فروشگاه پلتفرم یافت نشد.",
+            "کاربری با این آیدی یا یوزرنیم در فروشگاه پلتفرم یافت نشد.",
             reply_markup=users_kb,
         )
         return

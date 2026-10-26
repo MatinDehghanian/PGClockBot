@@ -108,6 +108,7 @@ from app.services.setup_wizard import (
 )
 from app.services.shop_scope import is_platform_admin, payment_shop_id
 from app.services.updates import local_version
+from app.services.user_search import clean_handle, with_search_matches as _with_search_matches
 from app.services.users import (
     PANEL_SETTINGS_KEYS,
     PANEL_SETTINGS_TABS,
@@ -1563,6 +1564,7 @@ def create_api_app(lifespan=None) -> FastAPI:
     async def health_detail(staff: dict = Depends(require_admin)):
         from app.runtime import BOOT_AT, BOOT_ID, PID
         from app.services.updates import local_version
+from app.services.user_search import clean_handle, with_search_matches as _with_search_matches
 
         creds = load_web_admin()
         settings = get_settings()
@@ -3629,6 +3631,8 @@ def create_api_app(lifespan=None) -> FastAPI:
             .limit(fetch_limit)
         )
         users = list(result.scalars().all())
+        if search_q:
+            users = await _with_search_matches(session, users, where, search_q)
         from app.services.wallet import wallet_balances_for_scope
 
         # Scoped purse only — never surface another shop's ShopWallet / platform
@@ -3639,7 +3643,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         if search_q:
             users = filter_by_search(
                 users,
-                search_q,
+                clean_handle(search_q),
                 lambda u: (
                     u.id,
                     u.telegram_id,
@@ -3960,6 +3964,7 @@ def create_api_app(lifespan=None) -> FastAPI:
         from app.runtime import BOOT_ID, PID
         from app.services.panel_update import resolve_stale_update_status
         from app.services.updates import local_version
+from app.services.user_search import clean_handle, with_search_matches as _with_search_matches
 
         st = resolve_stale_update_status()
         st["current_version"] = local_version()

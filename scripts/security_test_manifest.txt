@@ -313,3 +313,4 @@ tests/test_integration_management.py
 tests/test_integration_management_concurrency.py
 tests/test_integration_management_pages.py
 tests/test_integration_evidence_retention.py
+tests/test_user_search.py
