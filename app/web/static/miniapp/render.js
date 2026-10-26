@@ -169,13 +169,28 @@
     return `<p class="inline-error" role="status">${esc(s.error_message || "دریافت اطلاعات سرویس ناموفق بود؛ دوباره تلاش کنید.")}</p>`;
   }
 
+  const DAYS_DANGER = 1;
+  const DAYS_WARN = 3;
+
+  /** Colour for the days left: red on the last day, amber within three days. */
+  function daysTone(days) {
+    if (days == null || days === "" || !Number.isFinite(Number(days))) return "";
+    if (Number(days) <= DAYS_DANGER) return "danger";
+    return Number(days) <= DAYS_WARN ? "warn" : "";
+  }
+
+  function daysHtml(text, days) {
+    const tone = daysTone(days);
+    return `<span class="days${tone ? " is-" + tone : ""}">${esc(text)}</span>`;
+  }
+
   function serviceRowHtml(s) {
     const id = Number(s.id) || 0;
     return `<button type="button" class="svc-row" data-action="open-service" data-id="${id}">
       ${ringHtml(s.traffic_pct)}
       <span class="svc-row-body">
         <span class="svc-row-head"><strong dir="ltr">${esc(s.username || "—")}</strong>${serviceStatusBadge(s)}</span>
-        <span class="svc-row-meta"><span>${esc(faDigits(s.traffic || "—"))}</span><span>${esc(expireDaysLabel(s))}</span></span>
+        <span class="svc-row-meta"><span>${esc(faDigits(s.traffic || "—"))}</span>${daysHtml(expireDaysLabel(s), s.expire_days)}</span>
         ${serviceErrorHtml(s)}
       </span>
     </button>`;
@@ -188,7 +203,7 @@
       <span class="svc-avatar${tone ? " is-" + tone : ""}">${icon("svc", 22)}</span>
       <span class="svc-row-body">
         <span class="svc-row-head"><strong dir="ltr">${esc(g.username || "—")}</strong>${serviceStatusBadge(g)}</span>
-        <span class="svc-row-meta"><span>${esc(faDigits(g.remaining_label || "—"))}</span>${icon("chevron", 16)}</span>
+        <span class="svc-row-meta">${daysHtml(faDigits(g.remaining_label || "—"), g.days_left)}${icon("chevron", 16)}</span>
       </span>
     </button>`;
   }
@@ -213,15 +228,20 @@
   function serviceUsageHtml(s) {
     const fetched = s.info_fetched_at ? core.formatDateTime(s.info_fetched_at) : "";
     const pct = clampPct(s.traffic_pct);
-    const center = `<span class="muted sm">مصرف</span><strong>${pct == null ? "—" : esc(num(pct) + "٪")}</strong>`;
+    // What people check first is what is left; the line below shows the usage.
+    const left = s.traffic_left && s.traffic_left !== "—" ? faDigits(s.traffic_left) : "";
+    const center = left
+      ? `<span class="muted sm">باقی‌مانده</span><strong class="usage-left">${esc(left)}</strong>`
+      : `<span class="muted sm">مصرف</span><strong>${pct == null ? "—" : esc(num(pct) + "٪")}</strong>`;
+    const usedLine = `مصرف: ${faDigits(s.traffic || "—")}${left && pct != null ? ` (${num(pct)}٪)` : ""}`;
     return `<section class="card usage-card" aria-label="مصرف سرویس">
       <div class="card-head">${serviceStatusBadge(s)}${fetched ? `<span class="muted sm">به‌روز: ${esc(fetched)}</span>` : ""}</div>
       <div class="usage-ring">${ringHtml(s.traffic_pct, { size: 168, center })}</div>
-      <p class="usage-line"><strong>${esc(faDigits(s.traffic || "—"))}</strong></p>
+      <p class="usage-line">${esc(usedLine)}</p>
       <div class="tile-grid">
-        <div class="tile"><span>زمان باقی‌مانده</span><strong>${esc(expireDaysLabel(s))}</strong></div>
+        <div class="tile"><span>زمان باقی‌مانده</span><strong>${daysHtml(expireDaysLabel(s), s.expire_days)}</strong></div>
         <div class="tile"><span>انقضا</span><strong>${esc(expireDateText(s))}</strong></div>
-        <div class="tile"><span>آخرین اتصال</span><strong>${esc(core.formatDateTime(s.online_at) || "—")}</strong></div>
+        <div class="tile"><span>آخرین اتصال</span><strong title="${esc(core.formatDateTime(s.online_at))}">${esc(core.formatRelative(s.online_at) || "—")}</strong></div>
       </div>
       ${serviceErrorHtml(s)}
     </section>`;
@@ -567,7 +587,7 @@
       </section>
       <section class="card list-card" aria-label="تیکت‌های من"><h2 class="card-title">تیکت‌های من</h2>
         ${tickets.length ? tickets.map((t) => `<button type="button" class="list-row" data-action="open-ticket" data-id="${Number(t.id) || 0}">
-          <span class="list-row-label"><span>${esc(t.subject)}</span><span class="muted sm">، #${esc(num(t.id))}</span></span>
+          <span class="list-row-label"><span>${esc(t.subject)}</span><span class="muted sm">، <bdi>#${esc(num(t.id))}</bdi></span></span>
           ${badge(t.status_fa, TICKET_TONES[t.status] || "")}
         </button>`).join("") : '<p class="muted sm">هنوز تیکتی ندارید.</p>'}
       </section>`;
@@ -584,7 +604,7 @@
   function ticketThreadHtml(t) {
     const id = Number(t.id) || 0;
     return `<header class="view-head">
-        <div><span class="muted sm">تیکت #${esc(num(id))}</span><h1>${esc(t.subject)}</h1></div>
+        <div><span class="muted sm">تیکت <bdi>#${esc(num(id))}</bdi></span><h1>${esc(t.subject)}</h1></div>
         <button type="button" class="icon-btn" data-action="refresh-ticket" data-id="${id}" aria-label="به‌روزرسانی گفتگو">${icon("refresh")}</button>
       </header>
       <div class="card-head">${badge(t.status_fa, TICKET_TONES[t.status] || "")}</div>
@@ -701,6 +721,16 @@
     return r.type_label || "";
   }
 
+  /** The reward's amount alone («۵ گیگ», «۵۰,۰۰۰ تومان»): its name already says what it is. */
+  function rewardAmountText(r) {
+    const value = Number(r.value) || 0;
+    if (r.type === "traffic_gb") return `${num(value)} گیگ`;
+    if (r.type === "time_days") return `${num(value)} روز`;
+    if (r.type === "wallet_credit") return money(value);
+    if (r.type === "discount_percent") return `${num(value)}٪`;
+    return r.type_label || "";
+  }
+
   function clubPointsHtml(club) {
     const tier = club.tier || {};
     const next = tier.points_to_next == null ? "" : `<p class="hero-sub">${esc(pointsText(tier.points_to_next))} تا سطح بعد</p>`;
@@ -732,7 +762,7 @@
     return `<section class="card list-card" aria-label="جوایز"><h2 class="card-title">جوایز</h2>
       ${rows.length ? rows.map((r) => `<div class="list-row">
         <span class="list-row-label"><span>${esc(r.name)}</span>
-          <span class="muted sm">، ${esc(rewardValueText(r))}، ${esc(pointsText(r.cost))}</span>
+          <span class="muted sm reward-desc"><bdi>${esc(rewardAmountText(r))}</bdi>، ${esc(pointsText(r.cost))}</span>
           ${r.description ? `<span class="muted sm pre-line reward-desc">${esc(r.description)}</span>` : ""}</span>
         <button type="button" class="btn sm${r.affordable ? "" : " ghost"}" data-action="redeem-reward" data-id="${Number(r.id) || 0}"${r.affordable ? "" : ' disabled aria-disabled="true"'}>${r.affordable ? "دریافت" : "امتیاز کافی نیست"}</button>
       </div>`).join("") : '<p class="muted sm">هنوز جایزه‌ای تعریف نشده است.</p>'}

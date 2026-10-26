@@ -1429,7 +1429,11 @@
   }
 
   const ACTIONS = {
-    goto: (el) => go(el.getAttribute("data-view")),
+    goto: (el) => {
+      // A tab tap gets the same light tick as other selections.
+      if (el.classList && el.classList.contains && el.classList.contains("nav-btn")) core.haptic("select");
+      go(el.getAttribute("data-view"));
+    },
     "open-service": (el) => go("service", { serviceId: intAttr(el, "data-id"), then: el.getAttribute("data-then") }),
     "refresh-service": (el) => refreshService(intAttr(el, "data-id"), el),
     "copy-link": (el) => copyLink(intAttr(el, "data-id"), el),

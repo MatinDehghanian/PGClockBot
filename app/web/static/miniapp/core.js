@@ -89,6 +89,30 @@
     }
   }
 
+  const MINUTE_MS = 60 * 1000;
+  const RELATIVE_STEPS = [
+    [60 * MINUTE_MS, MINUTE_MS, "minute"],
+    [24 * 60 * MINUTE_MS, 60 * MINUTE_MS, "hour"],
+    [7 * 24 * 60 * MINUTE_MS, 24 * 60 * MINUTE_MS, "day"],
+  ];
+
+  /** A past moment as «۵ دقیقه پیش» / «دیروز»; a week or more back, the Persian date. */
+  function formatRelative(iso, now) {
+    if (!iso) return "";
+    const d = new Date(iso);
+    if (!Number.isFinite(d.getTime())) return "";
+    const ago = (Number(now) || Date.now()) - d.getTime();
+    if (ago < MINUTE_MS) return "همین حالا";
+    const step = RELATIVE_STEPS.find(([limit]) => ago < limit);
+    if (!step) return formatDate(iso);
+    const amount = Math.floor(ago / step[1]);
+    try {
+      return new Intl.RelativeTimeFormat("fa", { numeric: "auto" }).format(-amount, step[2]);
+    } catch (_) {
+      return formatDate(iso);
+    }
+  }
+
   function haptic(kind) {
     if (!tg || !tg.HapticFeedback) return;
     try {
@@ -308,7 +332,7 @@
   }
 
   const core = Object.freeze({
-    tg, getInitData, shopKey, esc, safeUrl, safePanelPath, num, money, parseAmount, setCurrency, formatDateTime, formatDate, faDigits,
+    tg, getInitData, shopKey, esc, safeUrl, safePanelPath, num, money, parseAmount, setCurrency, formatDateTime, formatDate, formatRelative, faDigits,
     haptic, toast, confirmAction, openExternal, openTelegramLink, api, ApiError, copyText, markCopied,
     applyTheme, applyBrand, inkFor, initTelegram,
   });
