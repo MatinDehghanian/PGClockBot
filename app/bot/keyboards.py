@@ -1366,7 +1366,7 @@ def wholesale_qty_keyboard(
         ],
         [
             _ikb(
-                "ادامه ← تأیید",
+                _t(ui, "btn_buy_continue") or "🟢✅ ادامه خرید",
                 callback_data="shop:wholesale:confirm",
                 style=_style(ui, "buy_continue", fallback="primary") or kind_style,
             )
@@ -1382,23 +1382,6 @@ def wholesale_qty_keyboard(
         ],
     ]
     return InlineKeyboardMarkup(inline_keyboard=rows)
-
-
-def wholesale_confirm_keyboard(
-    ui: dict | None = None,
-) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                _ikb(
-                    "✅ تأیید و پرداخت",
-                    callback_data="shop:wholesale:buy",
-                    style=_style(ui, "buy_continue", fallback="primary"),
-                )
-            ],
-            [back_button(ui, "shop:wholesale:qty")],
-        ]
-    )
 
 
 def custom_gb_keyboard(
@@ -1430,28 +1413,16 @@ def custom_days_keyboard(
                 InlineKeyboardButton(text="➕", callback_data="shop:custom:days:+"),
             ],
             [InlineKeyboardButton(text="✏️ ورود دستی روز", callback_data="shop:custom:days:input")],
-            [InlineKeyboardButton(text="✅ مشاهده قیمت و تأیید", callback_data="shop:custom:confirm")],
-            [back_button(ui, "shop:custom")],
-        ]
-    )
-
-
-def custom_confirm_keyboard(ui: dict | None = None) -> InlineKeyboardMarkup:
-    buy_label = _t(ui, "btn_buy_continue") or "🟢✅ ادامه خرید"
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
             [
                 _ikb(
-                    buy_label,
-                    callback_data="shop:custom:buy",
+                    _t(ui, "btn_buy_continue") or "🟢✅ ادامه خرید",
+                    callback_data="shop:custom:confirm",
                     style_id="buy_continue", style_fallback="primary",
                     ui=ui,
                     label_key="btn_buy_continue",
                 )
             ],
-            [InlineKeyboardButton(text="✏️ تغییر روز", callback_data="shop:custom:gb:next")],
-            [InlineKeyboardButton(text="✏️ تغییر حجم", callback_data="shop:custom")],
-            [back_button(ui, "shop:list")],
+            [back_button(ui, "shop:custom")],
         ]
     )
 
