@@ -1128,6 +1128,9 @@ DEFAULT_SETTINGS = {
     # Shop Mini Apps: platform switch and each shop's own switch, both off until turned on.
     "miniapp_shops_enabled": "0",
     "miniapp_shop_enabled": "0",
+    # Mini App brand: "" keeps the default accent colour and shows no notice.
+    "miniapp_accent_color": "",
+    "miniapp_notice": "",
     "service_import_mode": "instant",
     "service_import_max_per_user": "5",
     "service_import_paths": "",
