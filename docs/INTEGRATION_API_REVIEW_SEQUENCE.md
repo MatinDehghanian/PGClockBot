@@ -1,26 +1,29 @@
 # Integration API review sequence
 
-The large [candidate #967](https://github.com/Mrclocks/PGClockBot/pull/967) is Draft
-and is superseded for review by the following sequence. The first replacement is
-[PR #971](https://github.com/Mrclocks/PGClockBot/pull/971). All pull requests target
-`dev`. Each later branch is based on its predecessor and stays queued until that
-predecessor is merged; opening cumulative PRs against `dev` would recreate the
-large diff. Merge the new upstream `dev` into a published queued branch, or create a fresh
-review branch when a squash merge changes ancestry. Never force-push the published
-queue. Recheck migration numbers and run the
-applicable focused, security, lint and full-suite checks before opening each one.
-Each reviewed part is merged through the maintainer workflow.
+The large [candidate #967](https://github.com/Mrclocks/PGClockBot/pull/967) remains
+Draft and is superseded for review by the six pull requests below. All target
+`dev`. At the operator's request, all six are open now: **#971 is ready for review**;
+**#978–#982 remain Draft** until their immediate prerequisite has merged.
 
-| Part | Branch | Scope | Migration head |
-|---|---|---|---|
-| 1 | `codex/integration-customer-foundation` | Canonical/fixed-shop identity and retained schemas; automatic startup backfill; legacy deletion compatibility. No routes, workers or delivery adapters. | `0076_customer_telegram_links` |
-| 2 | `codex/integration-read-api` | Default-off GET endpoints, backend authentication/admission, scoped catalog/customer/service readers and snapshots. No HTTP mutation, consent or operation routes. | `0077_integration_read_snapshots` |
-| 3 | `codex/integration-technical-operations` | Customer registration; durable provision/renew/add-on intents; private access; native ownership/fencing adapters and capacity accounting. No outbox or consent delivery. | `0079_integration_private_delivery` |
-| 4 | `codex/integration-webhooks-outbox` | Transactional signed outbox, protected retries/transport, retained evidence and dual-proof Telegram consent. | `0080_integration_event_outbox` |
-| 5 | `codex/integration-management-pages` | Authorized administration/customer/audit pages and CSRF/action-ticket controls; integration import grouping. | unchanged |
-| 6 | `codex/integration-documentation` | Actual generated OpenAPI enrichment/export, backend example, compatibility/operation/rollback guides and this review index. | unchanged |
+Each branch contains its predecessors. Its GitHub diff against dev is therefore
+cumulative until those predecessors merge; use the isolated comparisons below to
+review one logical part at a time. Merge in the listed order. After each merge,
+incorporate current upstream dev into the next published branch with a normal
+merge, resolve any conflicts, recheck migration numbers, run focused/security/lint
+and full-suite checks, and mark that next PR ready. This also handles squash
+merges without force-pushing published history. Merging remains a maintainer action;
+marking a PR ready does not deploy or activate integration.
 
-The branches are reviewable individually through these comparisons after push:
+| Part / PR | Prerequisite / state | Branch | Scope | Migration head |
+|---|---|---|---|---|
+| [1 — #971](https://github.com/Mrclocks/PGClockBot/pull/971) | None; **Ready** | `codex/integration-customer-foundation` | Canonical/fixed-shop identity and retained schemas; automatic startup backfill; legacy deletion compatibility. No routes, workers or delivery adapters. | `0076_customer_telegram_links` |
+| [2 — #978](https://github.com/Mrclocks/PGClockBot/pull/978) | #971; **Draft** | `codex/integration-read-api` | Default-off GET endpoints, backend authentication/admission, scoped catalog/customer/service readers and snapshots. No HTTP mutation, consent or operation routes. | `0077_integration_read_snapshots` |
+| [3 — #979](https://github.com/Mrclocks/PGClockBot/pull/979) | #978; **Draft** | `codex/integration-technical-operations` | Customer registration; durable provision/renew/add-on intents; private access; native ownership/fencing adapters and capacity accounting. No outbox or consent delivery. | `0079_integration_private_delivery` |
+| [4 — #980](https://github.com/Mrclocks/PGClockBot/pull/980) | #979; **Draft** | `codex/integration-webhooks-outbox` | Transactional signed outbox, protected retries/transport, retained evidence and dual-proof Telegram consent. | `0080_integration_event_outbox` |
+| [5 — #981](https://github.com/Mrclocks/PGClockBot/pull/981) | #980; **Draft** | `codex/integration-management-pages` | Authorized administration/customer/audit pages and CSRF/action-ticket controls; integration import grouping. | unchanged |
+| [6 — #982](https://github.com/Mrclocks/PGClockBot/pull/982) | #981; **Draft** | `codex/integration-documentation` | Actual generated OpenAPI enrichment/export, backend example, compatibility/operation/rollback guides and this review index. | unchanged |
+
+Each part has a separate review comparison:
 
 - [Read API](https://github.com/MatinDehghanian/PGClockBot/compare/codex%2Fintegration-customer-foundation...codex%2Fintegration-read-api)
 - [Technical operations](https://github.com/MatinDehghanian/PGClockBot/compare/codex%2Fintegration-read-api...codex%2Fintegration-technical-operations)
@@ -54,7 +57,14 @@ Restart every process after an external database/CLI switch change.
 
 ## Executed verification
 
-The published queue incorporates current dev 0.5.4 through normal merges. The
+The published branches incorporate dev 0.5.5 (`98749f49`) through normal merges.
+After that synchronization, the foundation migration/import/branding/frontend
+checks passed **106 tests, no skips, 19 subtests**, and the assembled
+disabled/settings/API/management/scheduler/branding checks passed **73 tests and
+19 subtests**. The lint ratchet passed for 25 foundation and 166 assembled changed
+Python files; inherited Mini App branding Node checks passed all 8 cases. These
+focused checks do not relabel earlier broad results as new-head verification.
+The
 explicit migration/concurrency matrix passes all 89 SQLite/PostgreSQL cases without
 skips. The exact commands and aggregate results are recorded in the
 [roadmap revision checkpoint](INTEGRATION_API_ROADMAP.md#review-revision-2026-10-26).
@@ -70,8 +80,10 @@ Actual test-bot/PasarGuard creation and renewal, live Telegram/webhook delivery,
 proxy retry/quiescence, TLS/DNS/egress, evidence restore and worker lifecycle proof
 remain **not performed**. The operator currently has no staging panel available.
 A restored database proves migration compatibility; it does not prove external
-panel behavior. Keep the mutating parts Draft and disabled until that separate
-verification is available. No deployment or production activation was performed.
+panel behavior. Keep dependent parts Draft until their prerequisites merge. Before merging the
+mutating parts, obtain the separate live acceptance evidence; marking them ready
+for review does not establish it. Runtime activation remains disabled. No
+deployment or production activation was performed.
 
 The [Persian rollback guide](INTEGRATION_API_ROLLBACK_FA.md) separates installations
 that never activated integration from those that may have sent a panel request.

@@ -1287,3 +1287,39 @@ logs and comparison remain separate and are not relabeled as refreshed runs.
 
 Actual-panel and test-bot evidence remains unavailable. Restored-data and fake-panel
 checks do not establish live panel writes, deliveries or deployment behavior.
+
+
+## Open dependent PRs 2026-10-26
+
+The operator requested opening the entire review sequence now. This supersedes the
+earlier choice to wait before creating each later PR. Every PR still targets dev:
+[#971](https://github.com/Mrclocks/PGClockBot/pull/971) is ready for review;
+[#978](https://github.com/Mrclocks/PGClockBot/pull/978),
+[#979](https://github.com/Mrclocks/PGClockBot/pull/979),
+[#980](https://github.com/Mrclocks/PGClockBot/pull/980),
+[#981](https://github.com/Mrclocks/PGClockBot/pull/981), and
+[#982](https://github.com/Mrclocks/PGClockBot/pull/982) are Draft and depend on the
+previous PR in this list. The combined #967 remains Draft. After each prerequisite
+merges, incorporate dev into the next branch without force-pushing, verify it,
+and mark that next PR ready. No automatic merge or runtime activation is included.
+
+All branches incorporated dev `98749f49c8e28b954559694d88f15a408487bea6` (0.5.5)
+through ordinary merges before the new Drafts were opened. Upstream migration head
+remains 0070; feature migration numbering is unchanged. Release/version files match
+dev and were not bumped by this feature. Current validation after that sync:
+
+- Foundation `dd915c09`: **106 passed, no skips, 19 subtests**, including the
+  SQLite/PostgreSQL migration/startup matrix, imported-service deletion and
+  inherited Mini App branding/frontend behavior; 25-file lint ratchet passed.
+- Assembled `256d43dd`: **73 passed, 19 subtests**, covering disabled checkout,
+  settings, API/example contracts, management, scheduler and inherited branding;
+  166-file lint ratchet passed. The inherited Mini App brand Node test passed
+  all **8 checks**.
+
+The completed full/security/CI counts in the previous checkpoint belong to their
+recorded pre-0.5.5 sources. They have not been relabeled as a new full/security run
+on these merged heads. Current-head CI runs on the published PRs; before each
+later Draft is marked ready, recheck its own validation against the merged dev.
+The original checkout, restored local preview and production bot/panel were not
+changed by this PR-publication step. Real test-bot/PasarGuard acceptance remains
+unperformed because staging is unavailable.
