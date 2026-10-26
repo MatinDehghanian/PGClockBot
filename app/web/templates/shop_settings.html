@@ -60,6 +60,8 @@
   {% elif tab == 'appearance' %}
     {% set settings_action = '/shop-settings?tab=appearance' %}
     {% include "_settings_appearance.html" %}
+    {% set miniapp_brand_action = '/shop-settings/miniapp-brand' %}
+    {% include "_miniapp_brand_form.html" %}
 
   {% elif tab == 'menu' %}
     <div class="card menu-layout-intro">
