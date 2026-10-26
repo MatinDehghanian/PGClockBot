@@ -46,6 +46,7 @@ from app.services.miniapp_auth import (
     load_mini_user,
     resolve_mini_persona,
 )
+from app.services.miniapp_branding import platform_brand, shop_brand
 from app.services.miniapp_home import customer_home_summary
 from app.services.miniapp_shop import (
     KEY_PATTERN,
@@ -342,11 +343,14 @@ async def _customer_summary(session: AsyncSession, user: BotUser, *, scope: Mini
 async def _shop_me_payload(session: AsyncSession, user: BotUser, scope: MiniScope) -> dict:
     """``/me`` in a shop's Mini App: everyone is that shop's customer, with its open sections only."""
     customer = await _customer_summary(session, user, scope=scope)
+    name = await shop_display_name(session, scope)
+    brand = await shop_brand(session, shop_id=int(scope.shop_id), name=name)
     return {
         "persona": "user",
         "nav": shop_nav(),
         "sections": list(SHOP_SECTIONS),
-        "shop": {"name": await shop_display_name(session, scope)},
+        "shop": {"name": name},
+        "brand": brand.payload(),
         "user": {"id": user.id, "name": user.full_name or "", "role": "user", "wallet": customer["wallet"]},
         "currency": get_settings().currency or "تومان",
         "panel_base": "",
@@ -560,6 +564,7 @@ def register_miniapp_pages(app: FastAPI, *, render, get_db) -> None:
             "currency": get_settings().currency or "تومان",
             "panel_base": _mini_panel_base(),
             "commerce_allowed": commerce_allowed(persona),
+            "brand": (await platform_brand(session)).payload(),
         }
         if commerce_allowed(persona):
             payload["customer"] = await _customer_summary(session, user)

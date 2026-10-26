@@ -1468,6 +1468,11 @@ def create_api_app(lifespan=None) -> FastAPI:
     register_guide_media_pages(
         app, require_admin=require_admin, require_shop_settings=require_perm("shop_settings"), get_db=get_db
     )
+    from app.api.miniapp_brand_pages import register_miniapp_brand_pages
+
+    register_miniapp_brand_pages(
+        app, require_admin=require_admin, require_shop_settings=require_perm("shop_settings"), get_db=get_db
+    )
     from app.api.loyalty_pages import register_loyalty_pages
 
     register_loyalty_pages(
