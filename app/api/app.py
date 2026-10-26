@@ -17,27 +17,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.api.bot_overview_pages import register_bot_overview_pages
-from app.api.catalog_discounts import register_catalog_discounts
-from app.api.connection_status_pages import register_connection_status_pages
-from app.api.dashboard_trend_pages import register_dashboard_trend_pages
-from app.api.funnel_pages import register_funnel_pages
-from app.api.gift_code_pages import legacy_gift_modal_redirect, register_gift_code_pages
-from app.api.guide_media_pages import PLATFORM_BASE as GUIDE_MEDIA_PLATFORM_BASE
-from app.api.guide_media_pages import guides_media_view, register_guide_media_pages
-from app.api.home_pages import register_home_pages
-from app.api.integration_api import register_integration_api
-from app.api.integration_customer_pages import register_integration_customer_pages
-from app.api.integration_management_pages import register_integration_management_pages
-from app.api.login_guard import (
-    client_ip as _client_ip,
-    login_blocked as _login_blocked,
-    login_fail as _login_fail,
-    login_success as _login_success,
-)
-from app.api.panel_connection import PanelConnectionMiddleware, finish_panel_authentication
-from app.api.pg_pages import register_pg_pages
-from app.api.service_import_pages import register_service_import_pages
 from app.config import DATA_DIR, get_settings, normalize_pg_base_url, normalize_pg_subscription_path
 from app.db.models import (
     BotUser,
@@ -49,18 +28,11 @@ from app.db.models import (
     ResellerProfile,
     Role,
 )
+from app.api.integration_api import register_integration_api
+from app.api.integration_customer_pages import register_integration_customer_pages
+from app.api.integration_management_pages import register_integration_management_pages
 from app.db.session import SessionLocal
-from app.services.formatting import format_bytes, format_bytes_ratio, format_gb, format_money, format_number, format_expire_short, order_status_fa, ticket_status_fa
-from app.api.safe_next import safe_internal_next
-from app.services.backup_settings import apply_backup_retention, normalize_backup_payload
-from app.services.bbc_settlement import bbc_enable_error
-from app.services.chat_cleanup_config import chat_cleanup_payload
-from app.services.connection_guides import prune_guide_media, serialize_submitted_guides
 from app.services.customer_identity import set_legacy_customer_blocked
-from app.services.list_query import filter_by_search, normalize_search_q
-from app.services.message_variables import template_variable_specs
-from app.services.miniapp_shop import PLATFORM_SWITCH as SHOP_MINIAPPS_SWITCH
-from app.services.miniapp_shop import switch_value
 from app.services.orders import (
     approve_payment,
     cancel_order,
@@ -70,21 +42,20 @@ from app.services.orders import (
     reject_order,
     reject_payment,
 )
-from app.services.panel_assets import get_panel_asset_cache_key
-from app.services.payer_notify import notify_payer
+from app.api.guide_media_pages import PLATFORM_BASE as GUIDE_MEDIA_PLATFORM_BASE
+from app.api.guide_media_pages import guides_media_view, register_guide_media_pages
+from app.services.chat_cleanup_config import chat_cleanup_payload
+from app.services.miniapp_shop import PLATFORM_SWITCH as SHOP_MINIAPPS_SWITCH
+from app.services.miniapp_shop import switch_value
 from app.services.reseller_bots import schedule_shop_menu_sync
+from app.services.connection_guides import prune_guide_media, serialize_submitted_guides
+from app.services.list_query import filter_by_search, normalize_search_q
+from app.services.user_search import clean_handle, with_search_matches as _with_search_matches
+from app.services.payer_notify import notify_payer
 from app.services.resellers import (
-    DEFAULT_FEATURE_PERMS,
     setup_is_complete,
+    DEFAULT_FEATURE_PERMS,
 )
-from app.services.security_policy import (
-    PUBLIC_FORM_MAX_BODY_BYTES,
-    UnsafePgUrlError,
-    assert_safe_pg_base_url,
-    content_length_ok,
-    request_host_allowed,
-)
-from app.services.settings_tab_groups import group_settings_tabs, tabs_with_message_variables
 from app.services.setup_wizard import (
     begin_setup,
     current_setup_values,
@@ -95,27 +66,36 @@ from app.services.setup_wizard import (
     mark_setup_complete,
     normalize_webhook_base_url,
     normalize_webhook_path,
-    parse_admin_ids,
     resolve_bot_update_mode,
+    setup_finish_login_url,
+    setup_pg_access_audit,
+    wizard_panel_url_hint,
+    parse_admin_ids,
     revoke_setup_gate,
     rotate_setup_gate_token,
-    setup_finish_login_url,
     setup_gate_cookie_max_age,
     setup_gate_ok,
-    setup_pg_access_audit,
     update_env_keys,
-    wizard_panel_url_hint,
 )
-from app.services.shop_scope import is_platform_admin, payment_shop_id
+from app.services.security_policy import (
+    UnsafePgUrlError,
+    assert_safe_pg_base_url,
+    PUBLIC_FORM_MAX_BODY_BYTES,
+    content_length_ok,
+    request_host_allowed,
+)
 from app.services.updates import local_version
-from app.services.user_search import clean_handle, with_search_matches as _with_search_matches
+from app.services.message_variables import template_variable_specs
+from app.services.panel_assets import get_panel_asset_cache_key
+from app.services.shop_scope import is_platform_admin, payment_shop_id
+from app.services.settings_tab_groups import group_settings_tabs, tabs_with_message_variables
 from app.services.users import (
+    SETTINGS_DOMAIN_REDIRECTS,
+    SETTING_GROUPS,
+    SETTINGS_TABS,
     PANEL_SETTINGS_KEYS,
     PANEL_SETTINGS_TABS,
     RESETTABLE_SETTINGS_TABS,
-    SETTING_GROUPS,
-    SETTINGS_DOMAIN_REDIRECTS,
-    SETTINGS_TABS,
     TAB_SETTING_GROUPS,
     get_all_settings,
     set_setting,
@@ -129,10 +109,29 @@ from app.services.web_auth import (
     verify_password_hash,
     verify_web_admin,
 )
+from app.api.catalog_discounts import register_catalog_discounts
+from app.api.connection_status_pages import register_connection_status_pages
+from app.api.funnel_pages import register_funnel_pages
+from app.api.gift_code_pages import legacy_gift_modal_redirect, register_gift_code_pages
+from app.api.bot_overview_pages import register_bot_overview_pages
+from app.api.dashboard_trend_pages import register_dashboard_trend_pages
+from app.services.backup_settings import apply_backup_retention, normalize_backup_payload
+from app.services.bbc_settlement import bbc_enable_error
+from app.api.home_pages import register_home_pages
+from app.api.pg_pages import register_pg_pages
+from app.api.service_import_pages import register_service_import_pages
+from app.api.panel_connection import PanelConnectionMiddleware, finish_panel_authentication
+from app.api.login_guard import (
+    client_ip as _client_ip,
+    login_blocked as _login_blocked,
+    login_fail as _login_fail,
+    login_success as _login_success,
+)
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 templates = Jinja2Templates(directory=str(WEB_DIR / "templates"))
 
+from app.services.formatting import format_bytes, format_bytes_ratio, format_gb, format_money, format_number, format_expire_short, order_status_fa, ticket_status_fa
 
 templates.env.filters["bytes"] = format_bytes
 templates.env.filters["bytes_ratio"] = format_bytes_ratio
@@ -350,6 +349,7 @@ def render(request: Request, name: str, context: dict | None = None, status_code
     return response
 
 
+from app.api.safe_next import safe_internal_next
 
 
 def _settings_next(request: Request, fallback: str) -> str:

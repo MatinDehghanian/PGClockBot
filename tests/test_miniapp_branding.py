@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.api.miniapp_brand_pages import register_miniapp_brand_pages
 from app.api.miniapp_pages import register_miniapp_pages
-from app.db.models import Base, BotUser, ResellerProfile
+from app.db.models import Base, BotUser, ResellerProfile, Ticket
 from app.services.miniapp_branding import (
     ACCENT_SETTING,
     NOTICE_MAX,
@@ -188,6 +188,16 @@ class BrandScopeTests(unittest.IsolatedAsyncioTestCase):
             "name": "Nova", "tagline": "always on",
             "logo_url": "/media/uploads/r5_bot_tg_photo_bbbb.jpg", "accent": "#2563eb", "notice": "shop sale",
         })
+
+    async def test_launch_badges_count_only_this_shops_tickets(self) -> None:
+        async with self.Session() as session:
+            session.add_all([Ticket(user_id=10, reseller_id=SHOP, subject="s", status="answered"),
+                             Ticket(user_id=10, reseller_id=None, subject="s", status="answered"),
+                             Ticket(user_id=10, reseller_id=None, subject="s", status="answered")])
+            await session.commit()
+        headers = {"X-Telegram-Init-Data": signed(SHOP_TOKEN, CUSTOMER), "X-Mini-Shop": KEY}
+        body = (await self.client.get("/api/mini/me", headers=headers)).json()
+        self.assertEqual(body["customer"]["badges"]["support"], 1)
 
     async def test_a_shop_without_a_brand_never_inherits_the_platform_or_another_shop(self) -> None:
         brand = await self.me(OTHER_SHOP_TOKEN, OTHER_CUSTOMER, OTHER_KEY)
