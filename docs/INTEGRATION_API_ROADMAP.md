@@ -1323,3 +1323,110 @@ later Draft is marked ready, recheck its own validation against the merged dev.
 The original checkout, restored local preview and production bot/panel were not
 changed by this PR-publication step. Real test-bot/PasarGuard acceptance remains
 unperformed because staging is unavailable.
+
+
+## Publication review follow-up
+
+All six replacement branches now incorporate upstream dev
+`55286d733f7a1b0a16641b0e6289c5f6f137fe85` (0.5.6) through ordinary merges.
+The combined #967 is closed as superseded. #971 remains ready for review;
+#978–#982 remain dependent Drafts. Review/merge order and the original-concern
+checklist are in the [review index](INTEGRATION_API_REVIEW_SEQUENCE.md).
+
+Migration 0071 now retains empty foundation tables when surviving tables still
+reference them. Previously, a retaining downgrade could leave `user_services`
+with a foreign key to a dropped `integrations` table and reject a new legacy
+service insert. The regression covers repeated downgrade/re-upgrade, retained
+rows and FK-enforced writes. The pre-feature migration-tree regression rejects a database still stamped at
+0080; it does not substitute for executing the selected older application.
+The Persian rollback guide now prepares migration state using current code before
+rehearsing a never-activated installation's old binary on a stopped copy. Website
+services and uncertain external effects still require a customer-aware binary
+or a separately reconciled preactivation restore; physical schema removal is
+not implied. No merged migration was edited and no new revision was needed:
+upstream still ends at 0070.
+
+The unrelated `app/api/app.py` import reorder is removed. Its remaining feature
+diff contains the required imports, registration calls and customer-block
+synchronization. Canonical ownership validation remains active: lists use one
+SELECT with an indexed EXISTS; a loaded service's owner check may add one indexed
+lookup. Disabling that guard would weaken cross-channel isolation. Optional
+native fencing/adapters and fresh workers remain gated, with the 22-statement /
+one-POST disabled checkout regression intact.
+
+The API provides technical customer/service operations; website retail payments,
+refunds and customer wallet charging remain outside scope. Cookie/Origin checks
+are not a universal browser detector, and bounded detailed authentication evidence
+has aggregate overflow. All activation controls remain off by default. Required
+live test-bot/PasarGuard, Telegram/webhook, proxy/TLS/DNS and worker lifecycle
+acceptance remains not performed; local databases and fake transports do not
+establish those external behaviors.
+
+### Current source and focused verification
+
+The reviewed foundation code is `57040cf1`; the assembled Python source is
+`58d42e28`, with subsequent edits restricted to documentation. Fingerprints cover
+all 166 changed Python files. The generated 17-path OpenAPI export remains
+byte-identical. Release/version files match dev and dependency files are unchanged.
+
+| Check / source | Result |
+|---|---|
+| Foundation SQLite/PostgreSQL migration/startup matrix, `57040cf1` | **58 passed, no skips** |
+| Assembled SQLite/PostgreSQL migration/startup matrix, `58d42e28` | **62 passed, no skips** |
+| Assembled SQLite/PostgreSQL concurrency matrix, `58d42e28` | **34 passed, no skips** |
+| Read stage `276ade2c`, API/auth/security/catalog/read matrix | **181 passed, 1 PostgreSQL skip** |
+| Operations stage `eb9feb6b`, disabled/ownership/isolation plus execution matrix | **65 passed, 1 PostgreSQL skip** across two disjoint file sets |
+| Outbox stage `0779d854`, events/consent/webhooks/scheduler matrix | **48 passed, 3 PostgreSQL skips** |
+| Management stage `dc937aca`, management/control/disabled/scheduler matrix | **41 passed, no skips** |
+| Default-off/runtime/Cookie/Origin/TLS focused check, assembled | **7 passed, no skips** |
+| Inherited Mini App branding and pull/badge Node suites | **16 + 5 passed** |
+| Lint ratchets, foundation/read/operations/outbox/management/assembled | Passed for **25 / 70 / 135 / 150 / 163 / 166** changed Python files |
+
+Focused matrices overlap; do not add them to the broad suite counts. The two
+assembled database matrices are disjoint and total 96 passing cases. Their
+PostgreSQL 16.14 database was synthetic, used a private Unix socket with TCP
+disabled, and was stopped/removed after validation. Its URL was scoped to those
+processes. The SQLite regression exercises the pre-feature migration tree and legacy-shaped
+writes. Rehearsing the selected application binary on a database copy remains
+required, and the documented destination must have migration head 0070. The
+referenced-empty-foundation regression runs on both dialects.
+
+The migration modules and concurrency modules are respectively:
+
+```bash
+python -m pytest tests/test_integration_startup_upgrade.py tests/test_integration_ownership_migration.py tests/test_customer_identity_migration.py tests/test_integration_migration.py tests/test_integration_admin_migration.py tests/test_integration_security_migration.py tests/test_customer_linking_migration.py tests/test_integration_read_migration.py tests/test_integration_operation_migrations.py -q -p no:cacheprovider
+python -m pytest tests/test_integration_concurrency.py tests/test_integration_operation_concurrency.py tests/test_customer_linking_concurrency.py tests/test_integration_event_concurrency.py tests/test_customer_identity_concurrency.py tests/test_integration_management_concurrency.py tests/test_integration_security_concurrency.py -q -p no:cacheprovider
+```
+
+### Current broad verification
+
+| Source / check | Result |
+|---|---|
+| Clean dev `55286d73` full suite | **5,696 passed, 32 skipped, 11 failed** |
+| Foundation `57040cf1` full suite | **5,726 passed, 60 skipped, 11 failed** |
+| Assembled `58d42e28` full suite | **6,091 passed, 79 skipped, 11 failed** |
+| Assembled security manifest | **3,447 passed, 47 skipped, 0 failed** |
+| Exact full-suite failure-ID comparison | **Both foundation and assembled exactly match the same 11 dev failures; zero added failures** |
+
+All broad runs used the same Python 3.12 dependency environment in separate
+checkouts with `PGCLOCK_TEST_POSTGRES_URL` unset. Full runs used
+`python -m pytest tests -q -p no:cacheprovider --tb=short`; security used
+`bash scripts/run_security_tests.sh -p no:cacheprovider --tb=short`.
+PostgreSQL skips in these broad runs are not passes; the separate 96-case
+SQLite/PostgreSQL matrices above provide executed database evidence.
+All 166 changed Python file hashes still match the tested assembled source.
+Only documentation changed after that source was frozen.
+
+The unchanged failure IDs are:
+
+- `tests/test_bot_ui_default_texts.py::DefaultTextSnapshotTests::test_default_texts_match_reviewed_snapshot`
+- `tests/test_gift_code_rules.py::GiftCodeRulesTests::test_delete_buyer_with_reserved_and_consumed_codes`
+- `tests/test_guide_help_docs.py::GuideCatalogTests::test_page_title_macro_has_help`
+- `tests/test_home_overview.py::HostMetricsTests::test_cpu_percent_samples`
+- `tests/test_home_overview.py::HostMetricsTests::test_host_metrics_shape`
+- `tests/test_home_overview.py::HostMetricsTests::test_memory_stats_linux`
+- `tests/test_loyalty_page_wheel_context.py::PanelStatusPageTests::test_app_uses_branded_status_not_inline_tahoma`
+- `tests/test_panel_ui_guards.py::FieldHintAndPlaceholderTests::test_settings_field_help_after_control`
+- `tests/test_perf_and_correctness_2_5_8.py::ShopOrderAttributionTests::test_create_order_uses_shop_context_not_sticky_reseller`
+- `tests/test_service_quota_cache_list_9_0_3.py::AdminExtendCachesQuotaTests::test_extend_writes_quota_cache`
+- `tests/test_service_quota_cache_list_9_0_3.py::AdminExtendCachesQuotaTests::test_partial_modify_response_still_caches_kwargs`
