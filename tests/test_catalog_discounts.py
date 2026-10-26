@@ -40,7 +40,7 @@ from app.services.gift_codes import expiry_input
 from app.services.orders import create_custom_order, create_order, create_wholesale_order, get_catalog_plan, renew_service_with_plan
 from app.services.service_addons import create_addon_order
 from app.services.service_automation import automation_settings
-from app.bot.handlers import shop
+from app.services.checkout_summary import checkout_summary
 from app.services.shop_scope import ShopScopeError
 from app.services.users import _SETTINGS_CACHE, reset_shop_reseller_id, set_shop_reseller_id
 
@@ -364,18 +364,14 @@ class CatalogDiscountTests(unittest.IsolatedAsyncioTestCase):
                 await call
         self.assertEqual(await self.session.scalar(select(func.count()).select_from(Order)), 0)
 
-    async def test_bot_plan_details_show_crossed_price_and_escape_catalog_text(self) -> None:
+    async def test_bot_payment_screen_shows_crossed_price_and_escapes_catalog_text(self) -> None:
         await self.create(notify=False)
         self.plan.name = "<img src=x>"
         self.plan.description = "<script>unsafe</script>"
+        order = Order(id=91, user_id=self.user.id, plan_id=1, amount=80)
+        self.session.add(order)
         await self.session.commit()
-        callback = SimpleNamespace(data="shop:plan:1", answer=AsyncMock(), message=SimpleNamespace())
-        with patch.object(shop, "get_all_settings", AsyncMock(return_value={})), \
-             patch.object(shop, "_answer_shop_maintenance", AsyncMock(return_value=False)), \
-             patch.object(shop, "_record_shop_funnel", AsyncMock()), \
-             patch.object(shop, "safe_edit_text", AsyncMock()) as edit:
-            await shop.shop_plan(callback, self.session, self.user)
-        message = edit.call_args.args[1]
+        message = await checkout_summary(self.session, order, currency="تومان")
         self.assertIn("<s>", message)
         self.assertIn("تخفیف تا", message)
         self.assertIn("&lt;img", message)
