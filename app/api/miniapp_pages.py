@@ -32,6 +32,7 @@ from app.services.db_safe import rollback_quiet
 from app.services.service_scope import customer_may_use_service
 from app.services.formatting import (
     expire_remaining_days,
+    format_bytes_left,
     format_bytes_ratio,
     format_expire_short,
     hold_duration_from_info,
@@ -259,6 +260,7 @@ def _serialize_service(svc: UserService, info: dict | None = None) -> dict:
         if volume_known
         else "—",
         "traffic_pct": _traffic_pct(used, limit) if volume_known else None,
+        "traffic_left": format_bytes_left(used, limit) if volume_known else "—",
         "expire": format_expire_short(expire, status=status_raw, expire_duration=hold_dur)
         if time_known
         else "—",
@@ -284,7 +286,7 @@ def _unavailable_service_row(svc: UserService) -> dict:
         "is_cancelled": bool(getattr(svc, "is_cancelled", False)),
         "cancellation_pending": bool(getattr(svc, "cancellation_pending", False)),
         "subscription_url": "", "status": "—", "status_fa": "—",
-        "traffic": "—", "traffic_pct": None, "expire": "—", "expire_at": None,
+        "traffic": "—", "traffic_pct": None, "traffic_left": "—", "expire": "—", "expire_at": None,
         "expire_days": None, "expire_days_label": "—", "pending_start": False,
         "online_at": None, "info_fetched_at": None,
         **service_info_error("invalid_response"),
