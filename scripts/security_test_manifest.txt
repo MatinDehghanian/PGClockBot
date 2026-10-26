@@ -273,3 +273,4 @@ tests/test_customer_identity_migration.py
 tests/test_customer_linking_migration.py
 tests/test_integration_ownership_migration.py
 tests/test_integration_startup_upgrade.py
+tests/test_user_search.py
