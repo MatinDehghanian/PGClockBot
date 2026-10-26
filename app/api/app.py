@@ -1564,7 +1564,6 @@ def create_api_app(lifespan=None) -> FastAPI:
     async def health_detail(staff: dict = Depends(require_admin)):
         from app.runtime import BOOT_AT, BOOT_ID, PID
         from app.services.updates import local_version
-from app.services.user_search import clean_handle, with_search_matches as _with_search_matches
 
         creds = load_web_admin()
         settings = get_settings()
@@ -3964,7 +3963,6 @@ from app.services.user_search import clean_handle, with_search_matches as _with_
         from app.runtime import BOOT_ID, PID
         from app.services.panel_update import resolve_stale_update_status
         from app.services.updates import local_version
-from app.services.user_search import clean_handle, with_search_matches as _with_search_matches
 
         st = resolve_stale_update_status()
         st["current_version"] = local_version()
