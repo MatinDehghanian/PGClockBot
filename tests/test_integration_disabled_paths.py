@@ -24,6 +24,16 @@ from test_order_delivery_scope import OrderDeliveryScopeTests
 TRACE = Path(__file__).parent / "fixtures/integration/disabled_legacy_checkout.json"
 
 
+def _normalize_eager_reads(statements: list[list[Any]]) -> list[list[Any]]:
+    # SQLAlchemy may load these two independent relationships in either order.
+    result = list(statements)
+    reversed_reads = [["SELECT", ["plans"]], ["SELECT", ["bot_users"]]]
+    for index in range(len(result) - 1):
+        if result[index:index + 2] == reversed_reads:
+            result[index:index + 2] = list(reversed(reversed_reads))
+    return result
+
+
 @pytest.mark.parametrize("execution,api", [(False, False), (False, True), (True, False)])
 def test_disabled_checkout_matches_legacy_query_sequence_and_panel_payload(execution: bool, api: bool) -> None:
     async def scenario() -> None:
@@ -60,7 +70,7 @@ def test_disabled_checkout_matches_legacy_query_sequence_and_panel_payload(execu
             ):
                 result = await pay_with_wallet(case.session, case.order, case.buyer)
             assert result.status == "delivered"
-            assert {"queries": statements, "requests": requests} == json.loads(TRACE.read_text())
+            assert {"queries": _normalize_eager_reads(statements), "requests": requests} == json.loads(TRACE.read_text())
             assert len(statements) == 22 and len(requests) == 1
             assert await case.session.scalar(select(func.count()).select_from(Customer)) == 0
         finally:
