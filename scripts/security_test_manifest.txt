@@ -308,3 +308,4 @@ tests/test_customer_linking_bot.py
 tests/test_customer_linking_concurrency.py
 tests/test_integration_webhooks.py
 tests/test_integration_event_concurrency.py
+tests/test_user_search.py
