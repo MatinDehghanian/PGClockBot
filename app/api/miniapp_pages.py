@@ -48,6 +48,7 @@ from app.services.miniapp_auth import (
     resolve_mini_persona,
 )
 from app.services.miniapp_branding import platform_brand, shop_brand
+from app.services.miniapp_badges import home_badges
 from app.services.miniapp_home import customer_home_summary
 from app.services.miniapp_shop import (
     KEY_PATTERN,
@@ -339,6 +340,7 @@ async def _customer_summary(session: AsyncSession, user: BotUser, *, scope: Mini
         "qr_enabled": on(ui.get("qr_enabled", "1")),
         "commerce_allowed": True,
         "home": home,
+        "badges": (await home_badges(session, user, shop_id=scope.shop_id)).payload(),
     }
 
 

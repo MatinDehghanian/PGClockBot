@@ -323,6 +323,11 @@
       tg.ready();
       tg.expand();
     } catch (_) {}
+    try {
+      // Pulling down at the top refreshes the screen (pull.js) instead of collapsing the app;
+      // the app still closes or collapses from Telegram's own header.
+      if (typeof tg.disableVerticalSwipes === "function") tg.disableVerticalSwipes();
+    } catch (_) {}
     applyTheme();
     applyFullscreen();
     try {

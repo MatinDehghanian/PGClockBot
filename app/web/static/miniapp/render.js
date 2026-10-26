@@ -130,12 +130,22 @@
   }
 
   /** One shortcut tile; ``item.attrs`` are extra data-* pairs for the click handler. */
+  const BADGE_MAX = 99;
+
+  /** A count on a tile («۳», or «۹۹+»); nothing for zero or a bad value. */
+  function badgeCountHtml(count) {
+    const n = Math.floor(Number(count));
+    if (!Number.isFinite(n) || n <= 0) return "";
+    const text = n > BADGE_MAX ? num(BADGE_MAX) + "+" : num(n);
+    return `<span class="shortcut-badge" aria-hidden="true">${esc(text)}</span><span class="visually-hidden">، ${esc(text)} مورد</span>`;
+  }
+
   function shortcutHtml(item) {
     const tone = TONES.has(item.tone) ? item.tone : "brand";
     const attrs = Object.entries(item.attrs || {})
       .map(([key, value]) => ` data-${esc(key)}="${esc(value)}"`).join("");
     return `<button type="button" class="shortcut" data-action="${esc(item.action)}"${attrs}>
-      <span class="shortcut-icon tone-${tone}">${icon(item.icon, 24)}</span>
+      <span class="shortcut-icon tone-${tone}">${icon(item.icon, 24)}${badgeCountHtml(item.badge)}</span>
       <span class="shortcut-label">${esc(item.label)}</span>
     </button>`;
   }
@@ -661,10 +671,12 @@
   };
 
   /** In-app shortcuts (``leading``) first, then one tile per web-panel link from the server. */
-  function panelShortcutsHtml(links, { title, leading } = {}) {
+  /** ``badges`` maps a panel link id to a count shown on its tile (open tickets, for one). */
+  function panelShortcutsHtml(links, { title, leading, badges } = {}) {
+    const counts = badges || {};
     const panel = (links || []).map((l) => {
       const [iconName, tone] = PANEL_LINK_LOOKS[l.id] || ["external", "brand"];
-      return { action: "open-panel", attrs: { path: l.path }, icon: iconName, tone, label: l.label };
+      return { action: "open-panel", attrs: { path: l.path }, icon: iconName, tone, label: l.label, badge: counts[l.id] };
     });
     const items = (leading || []).concat(panel);
     const missing = panel.length ? "" : `<section class="card"><p class="muted sm">آدرس پنل وب در دسترس نیست.</p></section>`;

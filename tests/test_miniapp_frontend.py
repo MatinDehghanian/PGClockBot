@@ -43,6 +43,9 @@ class MiniAppFrontendTests(unittest.TestCase):
     def test_brand_and_shortcuts_behavior(self) -> None:
         self.run_node("miniapp_brand.test.cjs")
 
+    def test_pull_to_refresh_and_badges_behavior(self) -> None:
+        self.run_node("miniapp_pull_badges.test.cjs")
+
 
 if __name__ == "__main__":
     unittest.main()
