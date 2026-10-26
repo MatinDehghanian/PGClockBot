@@ -210,6 +210,21 @@ def format_bytes_ratio_parts(
     }
 
 
+UNLIMITED_TRAFFIC_LABEL = "نامحدود"
+
+
+def format_bytes_left(used: int | float | None, limit: int | float | None) -> str:
+    """Traffic still left, e.g. «6.4 گیگ»; «نامحدود» without a limit, «0 بایت» when used up."""
+    try:
+        lim = float(limit) if limit is not None else 0.0
+        u = float(used or 0)
+    except (TypeError, ValueError):
+        return "—"
+    if lim <= 0:
+        return UNLIMITED_TRAFFIC_LABEL
+    return format_bytes(max(0.0, lim - abs(u)))
+
+
 def format_count_ratio(used: int | float | None, limit: int | float | None) -> str:
     """Integer used/limit without spaces: «۱۲/۲۰»."""
     if limit is None:

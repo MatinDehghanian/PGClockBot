@@ -89,6 +89,16 @@ async def list_customer_tickets(
     return [_ticket_row(t) for t in rows]
 
 
+async def count_answered_tickets(session: AsyncSession, user_id: int, *, shop_id: int | None) -> int:
+    """The customer's tickets at this desk that staff answered and that wait on the customer."""
+    count = await session.scalar(
+        select(func.count(Ticket.id)).where(
+            _customer_ticket_clause(user_id, shop_id), Ticket.status == TicketStatus.ANSWERED.value,
+        )
+    )
+    return int(count or 0)
+
+
 async def _own_ticket(session: AsyncSession, user_id: int, shop_id: int | None, ticket_id: int) -> Ticket:
     ticket = await session.scalar(
         select(Ticket).where(Ticket.id == int(ticket_id), _customer_ticket_clause(user_id, shop_id))
